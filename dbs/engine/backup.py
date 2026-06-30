@@ -1,11 +1,3 @@
-"""Backup path: collect -> pack -> compress -> encrypt -> frame -> verify.
-
-The final verify-after-write step re-reads the bytes we just produced through
-the full restore pipeline. That matters precisely because the threat model is
-non-ECC RAM: a bit can flip *while we build the file*, and we would rather fail
-loudly at backup time than discover it during a future restore.
-"""
-
 from __future__ import annotations
 
 import datetime
@@ -119,7 +111,6 @@ def create_backup(
 
 
 def _verify_after_write(container: bytes, passphrase: str, payload_sha: str) -> None:
-    # Imported lazily to avoid a circular import (restore imports nothing here).
     from .restore import read_payload
 
     result = read_payload(container, passphrase)

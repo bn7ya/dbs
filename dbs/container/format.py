@@ -1,20 +1,3 @@
-"""On-disk container format with layered redundancy.
-
-Layout::
-
-    [ header  (64 bytes) ]            offset 0
-    [ manifest JSON      ]            offset 64
-    [ manifest JSON copy ]            offset 64 + manifest_len
-    [ copy A (encoded)   ]            offset 64 + 2*manifest_len
-    [ copy B (encoded)   ]            immediately after copy A
-    [ header  (64 bytes) ]            last 64 bytes (mirror of the first)
-
-The header is written twice (head and tail) and the manifest is written twice,
-so that the *metadata* enjoys the same redundancy as the payload blocks. The
-header records the manifest's offset, length and BLAKE2b hash; the reader falls
-back to the duplicate / tail copies whenever a hash check fails.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -24,7 +7,7 @@ import struct
 from ..exceptions import ContainerError
 
 MAGIC = b"DBSCON01"
-HEADER_STRUCT = struct.Struct(">8sHHIQQQ16s8x")  # 64 bytes
+HEADER_STRUCT = struct.Struct(">8sHHIQQQ16s8x")
 HEADER_SIZE = HEADER_STRUCT.size
 FORMAT_VERSION = 1
 
@@ -76,7 +59,6 @@ def _parse_header(raw: bytes) -> dict | None:
 
 
 def write_container(manifest: dict, copy_a: bytes, copy_b: bytes, *, flags: int) -> bytes:
-    """Serialise a manifest plus the two encoded copies into container bytes."""
     manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
     manifest_len = len(manifest_bytes)
     manifest_offset = HEADER_SIZE
@@ -95,10 +77,10 @@ def write_container(manifest: dict, copy_a: bytes, copy_b: bytes, *, flags: int)
         [
             header,
             manifest_bytes,
-            manifest_bytes,  # redundant manifest copy
+            manifest_bytes,
             copy_a,
             copy_b,
-            header,  # mirrored tail header
+            header,
         ]
     )
 
@@ -116,11 +98,6 @@ def _read_manifest(data: bytes, header: dict) -> dict:
 
 
 def copy_offsets(data: bytes) -> tuple[int, int, int]:
-    """Return ``(copy_a_offset, copy_b_offset, copy_len)`` for a container.
-
-    Exposed for tooling/tests that need to address the two payload copies (for
-    example to inject corruption into exactly one copy).
-    """
     header = _parse_header(data[:HEADER_SIZE]) or _parse_header(data[-HEADER_SIZE:])
     if header is None:
         raise ContainerError("Not a DBS container (magic header missing or corrupted).")
@@ -131,11 +108,6 @@ def copy_offsets(data: bytes) -> tuple[int, int, int]:
 
 
 def read_container(data: bytes) -> tuple[dict, bytes, bytes]:
-    """Parse container bytes into ``(manifest, copy_a, copy_b)``.
-
-    Tries the head header first and falls back to the tail header so a damaged
-    head still yields a readable file.
-    """
     header = _parse_header(data[:HEADER_SIZE])
     if header is None and len(data) >= HEADER_SIZE:
         header = _parse_header(data[-HEADER_SIZE:])

@@ -1,5 +1,10 @@
 # DBS — Django Backup Solution
 
+> 🚧 **Under development.** DBS is in active development and its API may change.
+>
+> Created by **Sudum Technology — Research and Development sector**.
+> Our very tiny contribution to this world.
+
 A backup library you drop into a Django project's source. It reads your models,
 relations and files and writes **one encrypted file** that is *redundant* and
 *self-healing*: every backup stores **two copies** of the data plus
@@ -12,19 +17,13 @@ io  ──►  security (Argon2id + AES-256-GCM)  ──►  integrity (2 copies
 hashes · Reed-Solomon)  ──►  data (models · relations · files)
 ```
 
-## Why not django-dbbackup?
+## Features
 
-`django-dbbackup` is great for "dump the DB + media and ship it somewhere".
-DBS targets a different need:
-
-| | django-dbbackup | **DBS** |
-|---|---|---|
-| Two self-healing copies in one file | ✗ | ✅ |
-| Reed-Solomon FEC for bit-rot | ✗ | ✅ |
-| Per-field mapping (value / file / file-path) | ✗ | ✅ |
-| Passphrase-derived key, **never stored** (Argon2id) | ✗ (GPG keys) | ✅ |
-| Per-file + per-block integrity hashes | partial | ✅ |
-| CLI · admin-UI download · SFTP | CLI · remote storages | ✅ |
+* **Two self-healing copies in one file** plus Reed-Solomon parity for bit-rot.
+* **Per-field mapping**: value, embedded file, or file-path.
+* **Passphrase-derived key, never stored** (Argon2id).
+* **Per-file and per-block integrity hashes.**
+* CLI · admin-UI download · SFTP.
 
 ## Install
 

@@ -1,5 +1,3 @@
-"""Shared helpers for the management commands (passphrase resolution, etc.)."""
-
 from __future__ import annotations
 
 import getpass
@@ -11,11 +9,6 @@ ENV_VAR = "DBS_PASSPHRASE"
 
 
 def resolve_passphrase(option_value: str | None, *, confirm: bool = False) -> str:
-    """Resolve a passphrase from the CLI option, the environment, or a prompt.
-
-    Order: explicit ``--passphrase`` > ``$DBS_PASSPHRASE`` > interactive prompt.
-    When ``confirm`` is set (backups), an interactive prompt asks twice.
-    """
     if option_value:
         return option_value
     env_value = os.environ.get(ENV_VAR)

@@ -1,12 +1,3 @@
-"""The plaintext payload: a JSON document followed by concatenated file bytes.
-
-Keeping file bytes *out* of the JSON (rather than base64 inside it) avoids a 33%
-size blow-up and keeps large media affordable. The JSON ``files`` list carries an
-``offset``/``length`` pointing into the trailing blob region.
-
-    [ MAGIC (8) ][ uint32 json_len ][ json bytes ][ file bytes ... ]
-"""
-
 from __future__ import annotations
 
 import json
@@ -19,7 +10,6 @@ _LEN = struct.Struct(">I")
 
 
 def pack_payload(doc_meta: dict, records: list[dict], files: list[tuple[FileEntry, bytes]]) -> bytes:
-    """Build the plaintext payload from records and ``(entry, bytes)`` pairs."""
     blob_parts: list[bytes] = []
     files_meta: list[dict] = []
     offset = 0
@@ -39,7 +29,6 @@ def pack_payload(doc_meta: dict, records: list[dict], files: list[tuple[FileEntr
 
 
 def unpack_payload(payload: bytes) -> tuple[dict, list[dict], list[tuple[FileEntry, bytes]]]:
-    """Reverse :func:`pack_payload` into ``(document, records, [(entry, bytes)])``."""
     if payload[:8] != MAGIC:
         from ..exceptions import ContainerError
 

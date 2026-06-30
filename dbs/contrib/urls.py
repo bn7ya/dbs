@@ -1,5 +1,3 @@
-"""URL patterns for the optional DBS admin views."""
-
 from django.urls import path
 
 from .admin import backup_download, restore_upload

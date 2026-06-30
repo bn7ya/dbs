@@ -1,11 +1,3 @@
-"""Integrity check that never touches the database or filesystem.
-
-Without a passphrase it reports the *structural* health of the container: which
-blocks are intact, which were healed, and whether anything is unrecoverable.
-With a passphrase it additionally confirms the payload decrypts and matches its
-stored hash end-to-end.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,7 +12,7 @@ from ..exceptions import DBSError
 class ValidationResult:
     ok: bool
     repair_report: RepairReport | None = None
-    decrypted_ok: bool | None = None  # None when no passphrase was supplied
+    decrypted_ok: bool | None = None
     stats: dict = field(default_factory=dict)
     messages: list = field(default_factory=list)
 

@@ -1,16 +1,3 @@
-"""Block framing, per-block hashing, Reed-Solomon FEC and the dual-copy repair.
-
-Why both two copies *and* Reed-Solomon? They cover different failure modes:
-
-* A block destroyed wholesale in one copy is restored from the other copy.
-* A handful of flipped bits (the realistic non-ECC-RAM "bit rot" case) in a
-  block is corrected in-place by Reed-Solomon, even if *both* copies are hit,
-  as long as the damage stays within the parity budget.
-
-Every recovered block is verified against a stored BLAKE2b hash of the clean
-ciphertext, so a Reed-Solomon mis-correction can never slip through unnoticed.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -18,11 +5,8 @@ from dataclasses import dataclass, field
 
 from reedsolo import RSCodec, ReedSolomonError
 
-# Plaintext (ciphertext) bytes per full block before Reed-Solomon expansion.
 DEFAULT_BLOCK_SIZE = 65536
 
-# Reed-Solomon parity bytes per 255-byte codeword. 16 parity bytes corrects up
-# to 8 corrupted bytes per 255-byte codeword (~6.7% size overhead).
 DEFAULT_NSYM = 16
 
 
@@ -32,17 +16,12 @@ def _hash(data: bytes) -> str:
 
 @dataclass
 class BlockPlan:
-    """Metadata describing how one encrypted copy is framed into blocks.
-
-    The two stored copies are byte-identical, so a single plan describes both.
-    """
-
     block_size: int
     nsym: int
     ciphertext_len: int
     enc_lens: list[int] = field(default_factory=list)
-    enc_hashes: list[str] = field(default_factory=list)  # hash of stored encoded block
-    data_hashes: list[str] = field(default_factory=list)  # hash of clean ciphertext block
+    enc_hashes: list[str] = field(default_factory=list)
+    data_hashes: list[str] = field(default_factory=list)
 
     @property
     def copy_len(self) -> int:
@@ -76,12 +55,10 @@ class BlockPlan:
 
 @dataclass
 class RepairReport:
-    """Outcome of reassembling the encrypted stream from the two copies."""
-
     total_blocks: int = 0
-    blocks_direct: int = 0       # at least one copy stored the block intact
-    blocks_rs_corrected: int = 0  # stored bytes were corrupt, RS recovered them
-    blocks_used_b: int = 0       # primary copy A was bad, fell back to copy B
+    blocks_direct: int = 0
+    blocks_rs_corrected: int = 0
+    blocks_used_b: int = 0
     failed_blocks: list[int] = field(default_factory=list)
 
     @property
@@ -90,7 +67,6 @@ class RepairReport:
 
     @property
     def healed(self) -> bool:
-        """True when corruption was present but fully repaired."""
         return self.ok and (self.blocks_rs_corrected or self.blocks_used_b)
 
     def summary(self) -> str:
@@ -114,11 +90,6 @@ def encode_copy(
     block_size: int = DEFAULT_BLOCK_SIZE,
     nsym: int = DEFAULT_NSYM,
 ) -> tuple[bytes, BlockPlan]:
-    """Frame ``ciphertext`` into Reed-Solomon protected blocks.
-
-    Returns the bytes for *one* stored copy plus a :class:`BlockPlan`. The
-    caller writes the returned bytes twice (copy A and copy B).
-    """
     rsc = RSCodec(nsym)
     plan = BlockPlan(block_size=block_size, nsym=nsym, ciphertext_len=len(ciphertext))
     parts: list[bytes] = []
@@ -133,15 +104,12 @@ def encode_copy(
 
 
 def _decode_block(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:
-    """Reed-Solomon decode ``encoded`` and verify it against ``data_hash``."""
     try:
         decoded = rsc.decode(encoded)
     except ReedSolomonError:
         return None
-    except Exception:  # defensive: malformed/short input can raise other errors -> miss
+    except Exception:
         return None
-    # reedsolo returns a (msg, msg_ecc, errata) tuple on newer versions and a
-    # bare bytearray on very old ones; normalise to the message bytes.
     data = bytes(decoded[0]) if isinstance(decoded, tuple) else bytes(decoded)
     return data if _hash(data) == data_hash else None
 
@@ -151,12 +119,6 @@ def repair_copies(
     copy_b: bytes,
     plan: BlockPlan,
 ) -> tuple[bytes | None, RepairReport]:
-    """Reassemble the clean ciphertext from the two (possibly damaged) copies.
-
-    Returns ``(ciphertext, report)``. ``ciphertext`` is ``None`` when at least
-    one block could not be recovered from either copy or by Reed-Solomon; the
-    report names the offending block indices.
-    """
     rsc = RSCodec(plan.nsym)
     report = RepairReport(total_blocks=plan.n_blocks)
     chunks: list[bytes] = []
@@ -197,6 +159,6 @@ def repair_copies(
         return None, report
 
     ciphertext = b"".join(chunks)
-    if len(ciphertext) != plan.ciphertext_len:  # defensive truncation
+    if len(ciphertext) != plan.ciphertext_len:
         ciphertext = ciphertext[: plan.ciphertext_len]
     return ciphertext, report

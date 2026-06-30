@@ -1,12 +1,3 @@
-"""Restore path: container -> repair -> decrypt -> decompress -> load.
-
-The reusable :func:`read_payload` walks the entire read pipeline (including the
-self-healing block repair and the end-to-end integrity check) without touching
-the database or filesystem. ``create_backup``'s verify-after-write step and the
-``validate`` command both lean on it, so what we verify is exactly what we'd
-restore.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -29,7 +20,7 @@ class ReadResult:
     manifest: dict
     document: dict
     records: list
-    files: list  # list[tuple[FileEntry, bytes]]
+    files: list
     repair_report: RepairReport
 
 
@@ -46,7 +37,6 @@ class RestoreResult:
 
 
 def read_payload(data: bytes, passphrase: str) -> ReadResult:
-    """Decode + repair + decrypt a container into its payload, verifying integrity."""
     manifest, copy_a, copy_b = read_container(data)
     plan = BlockPlan.from_dict(manifest["blocks"])
 

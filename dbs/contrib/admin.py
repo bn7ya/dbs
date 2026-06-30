@@ -1,5 +1,3 @@
-"""Staff-only views to download and upload/restore a DBS backup."""
-
 from __future__ import annotations
 
 import datetime
@@ -38,16 +36,12 @@ def _render(request, title, fields, *, enctype="", message=""):
 
 
 def _superuser_required(view):
-    # Redirects unauthenticated / non-superusers to settings.LOGIN_URL. We avoid
-    # admin's staff_member_required so the views don't require the admin app's
-    # URL namespace to be installed.
     return user_passes_test(lambda u: u.is_active and u.is_superuser)(view)
 
 
 @_superuser_required
 @require_http_methods(["GET", "POST"])
 def backup_download(request):
-    """GET shows a passphrase form; POST streams the encrypted backup file."""
     fields = (
         '<label>Passphrase</label><input type="password" name="passphrase" required>'
         '<label>Confirm passphrase</label><input type="password" name="passphrase2" required>'
@@ -75,7 +69,6 @@ def backup_download(request):
 @_superuser_required
 @require_http_methods(["GET", "POST"])
 def restore_upload(request):
-    """GET shows an upload form; POST restores the uploaded backup."""
     fields = (
         '<label>Backup file (.dbs)</label><input type="file" name="backup" required>'
         '<label>Passphrase</label><input type="password" name="passphrase" required>'

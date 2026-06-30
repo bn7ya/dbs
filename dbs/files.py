@@ -1,16 +1,3 @@
-"""Reading file bytes for backup and writing them back on restore.
-
-Three kinds of file references are supported, matching the three file-ish
-:class:`~dbs.registry.FieldType` values plus extra non-model roots:
-
-* ``storage`` -- a ``FileField``/``ImageField``; bytes come from the field's
-  Django ``Storage`` and are restored to the same storage + name.
-* ``path``    -- a string column holding a filesystem path; bytes come from that
-  path and are restored to the same path.
-* ``root``    -- a whole directory tree registered via ``file_roots``; every file
-  underneath is embedded and restored relative to that root.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -25,17 +12,15 @@ from .registry import FieldType
 
 @dataclass
 class FileEntry:
-    """A backed-up file's metadata (the bytes are stored separately)."""
-
-    kind: str            # "storage" | "path" | "root"
+    kind: str
     size: int
     sha256: str
     model: str | None = None
     pk: object | None = None
     field: str | None = None
-    name: str | None = None   # storage name, absolute path, or relpath under root
-    root: str | None = None   # base directory for kind == "root"
-    offset: int = 0           # position of the bytes in the payload blob
+    name: str | None = None
+    root: str | None = None
+    offset: int = 0
     length: int = 0
 
     def to_dict(self) -> dict:
@@ -62,7 +47,6 @@ def _sha256(data: bytes) -> str:
 
 
 def collect_instance_files(instance, file_field_types: dict[str, FieldType]):
-    """Yield ``(FileEntry, bytes)`` for the file-bearing fields of ``instance``."""
     label = f"{instance._meta.app_label}.{instance._meta.model_name}"
     for field_name, ftype in file_field_types.items():
         if ftype is FieldType.FILE:
@@ -97,7 +81,6 @@ def collect_instance_files(instance, file_field_types: dict[str, FieldType]):
 
 
 def collect_root_files(root: str):
-    """Yield ``(FileEntry, bytes)`` for every file under directory ``root``."""
     root = os.path.abspath(root)
     if not os.path.isdir(root):
         return
@@ -120,7 +103,6 @@ def collect_root_files(root: str):
 
 
 def restore_file(entry: FileEntry, data: bytes) -> None:
-    """Write ``data`` back to the location described by ``entry``."""
     if _sha256(data) != entry.sha256:
         from .exceptions import CorruptionError
 
@@ -138,7 +120,7 @@ def restore_file(entry: FileEntry, data: bytes) -> None:
         _write_path(entry.name, data)
     elif entry.kind == "root":
         _write_path(os.path.join(entry.root, entry.name), data)
-    else:  # pragma: no cover - guarded by construction
+    else:
         from .exceptions import RestoreError
 
         raise RestoreError(f"Unknown file entry kind: {entry.kind!r}")

@@ -1,5 +1,3 @@
-"""``manage.py dbs_validate`` -- check a backup's integrity without restoring."""
-
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError

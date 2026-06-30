@@ -1,16 +1,3 @@
-"""Envelope encryption built on AES-256-GCM.
-
-The data is encrypted with a random Data Encryption Key (DEK). The DEK is then
-*wrapped* (encrypted) with a Key Encryption Key (KEK) derived from the user's
-memorized passphrase. The backup stores only:
-
-    salt, argon2 params, wrapped DEK (+ its nonce), data nonce
-
-Never the passphrase and never the raw DEK. Supplying the wrong passphrase makes
-the GCM authentication tag check fail when unwrapping the DEK, which we surface
-as :class:`InvalidPassphrase` rather than silently producing garbage.
-"""
-
 from __future__ import annotations
 
 import os
@@ -22,22 +9,14 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from ..exceptions import InvalidPassphrase
 from .kdf import KDFParams, SALT_LENGTH, derive_key
 
-# AES-GCM standard nonce length.
 NONCE_LENGTH = 12
 
-# Authenticated-but-not-encrypted context strings bound into each GCM operation.
 _DEK_AAD = b"dbs/dek-wrap/v1"
 _DATA_AAD = b"dbs/data/v1"
 
 
 @dataclass
 class EnvelopeMaterial:
-    """Everything (besides the ciphertext) needed to decrypt, given a passphrase.
-
-    None of these fields are secret on their own -- the security rests entirely
-    on the passphrase, which is absent here by design.
-    """
-
     salt: bytes
     kdf_params: KDFParams
     wrapped_dek: bytes
@@ -72,7 +51,6 @@ class EnvelopeMaterial:
 
 
 def generate_dek() -> bytes:
-    """Return a fresh random 256-bit data encryption key."""
     return AESGCM.generate_key(bit_length=256)
 
 
@@ -82,7 +60,6 @@ def encrypt_payload(
     *,
     kdf_params: KDFParams | None = None,
 ) -> tuple[bytes, EnvelopeMaterial]:
-    """Encrypt ``plaintext`` and return ``(ciphertext, material)``."""
     params = kdf_params or KDFParams()
     salt = os.urandom(SALT_LENGTH)
     kek = derive_key(_as_bytes(passphrase), salt, params)
@@ -109,7 +86,6 @@ def decrypt_payload(
     passphrase: str | bytes,
     material: EnvelopeMaterial,
 ) -> bytes:
-    """Reverse :func:`encrypt_payload`. Raises :class:`InvalidPassphrase`."""
     kek = derive_key(_as_bytes(passphrase), material.salt, material.kdf_params)
     try:
         dek = AESGCM(kek).decrypt(material.dek_nonce, material.wrapped_dek, _DEK_AAD)
@@ -120,8 +96,6 @@ def decrypt_payload(
     try:
         return AESGCM(dek).decrypt(material.data_nonce, ciphertext, _DATA_AAD)
     except InvalidTag as exc:
-        # The DEK unwrapped cleanly, so the passphrase was right; the ciphertext
-        # body itself failed authentication (corruption past repair).
         raise InvalidPassphrase(
             "Data key was valid but the ciphertext failed authentication (corrupted)."
         ) from exc

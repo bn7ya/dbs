@@ -1,22 +1,3 @@
-"""Ship backups to another server over SFTP using paramiko.
-
-Connection *profiles* live in ``settings.DBS_SSH_TARGETS`` and reference a private
-key by path (or rely on an agent) rather than embedding secrets:
-
-    DBS_SSH_TARGETS = {
-        "offsite": {
-            "host": "backups.example.com",
-            "username": "deploy",
-            "key_filename": "/home/deploy/.ssh/id_ed25519",
-            "remote_dir": "/var/backups/myproject",
-            "known_hosts": "/home/deploy/.ssh/known_hosts",
-        }
-    }
-
-The default host-key policy is :class:`paramiko.RejectPolicy`, so an unknown
-host fails closed instead of silently trusting a possible man-in-the-middle.
-"""
-
 from __future__ import annotations
 
 import io
@@ -35,10 +16,10 @@ class SSHTarget:
     username: str
     port: int = 22
     key_filename: str | None = None
-    password: str | None = None  # discouraged; prefer key_filename / agent
+    password: str | None = None
     known_hosts: str | None = None
     remote_dir: str = "."
-    auto_add_host_key: bool = False  # set True only for trusted/first-run setups
+    auto_add_host_key: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "SSHTarget":
