@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "django-dbs"
+version = "0.1.0"
+description = "Redundant, self-healing, encrypted single-file backup for Django projects."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "bn7ya" }]
+keywords = ["django", "backup", "restore", "encryption", "reed-solomon", "redundancy"]
+classifiers = [
+    "Framework :: Django",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Archiving :: Backup",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = [
+    "Django>=4.2",
+    "cryptography>=41",
+    "argon2-cffi>=21.3",
+    "reedsolo>=1.7",
+]
+
+[project.optional-dependencies]
+ssh = ["paramiko>=3"]
+dev = ["pytest>=7", "pytest-django>=4", "paramiko>=3"]
+
+[project.urls]
+Homepage = "https://github.com/bn7ya/dbs"
+
+[tool.setuptools.packages.find]
+include = ["dbs*"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+python_files = "test_*.py"
+testpaths = ["tests"]
