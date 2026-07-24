@@ -58,6 +58,21 @@ def _parse_header(raw: bytes) -> dict | None:
     }
 
 
+def _resolve_header(data: bytes) -> dict:
+    front = _parse_header(data[:HEADER_SIZE])
+    back = _parse_header(data[-HEADER_SIZE:]) if len(data) >= HEADER_SIZE else None
+    candidates = [header for header in (front, back) if header is not None]
+    if not candidates:
+        raise ContainerError("Not a DBS container (magic header missing or corrupted).")
+    for header in candidates:
+        if header["version"] == FORMAT_VERSION:
+            return header
+    raise ContainerError(
+        f"Unsupported container format version {candidates[0]['version']}; "
+        f"this build of DBS reads version {FORMAT_VERSION}."
+    )
+
+
 def write_container(manifest: dict, copy_a: bytes, copy_b: bytes, *, flags: int) -> bytes:
     manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
     manifest_len = len(manifest_bytes)
@@ -98,9 +113,7 @@ def _read_manifest(data: bytes, header: dict) -> dict:
 
 
 def copy_offsets(data: bytes) -> tuple[int, int, int]:
-    header = _parse_header(data[:HEADER_SIZE]) or _parse_header(data[-HEADER_SIZE:])
-    if header is None:
-        raise ContainerError("Not a DBS container (magic header missing or corrupted).")
+    header = _resolve_header(data)
     manifest = _read_manifest(data, header)
     copy_len = int(manifest["copy_len"])
     copy_a_offset = header["manifest_offset"] + 2 * header["manifest_len"]
@@ -108,12 +121,7 @@ def copy_offsets(data: bytes) -> tuple[int, int, int]:
 
 
 def read_container(data: bytes) -> tuple[dict, bytes, bytes]:
-    header = _parse_header(data[:HEADER_SIZE])
-    if header is None and len(data) >= HEADER_SIZE:
-        header = _parse_header(data[-HEADER_SIZE:])
-    if header is None:
-        raise ContainerError("Not a DBS container (magic header missing or corrupted).")
-
+    header = _resolve_header(data)
     manifest = _read_manifest(data, header)
 
     copy_len = int(manifest["copy_len"])

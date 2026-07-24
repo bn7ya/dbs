@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 from dataclasses import dataclass
 
 from django.apps import apps
+from django.conf import settings
 from django.core.files.base import ContentFile
 
 from .registry import FieldType
+
+logger = logging.getLogger("dbs")
 
 
 @dataclass
@@ -46,7 +50,9 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def collect_instance_files(instance, file_field_types: dict[str, FieldType]):
+def collect_instance_files(
+    instance, file_field_types: dict[str, FieldType], skipped: list[str]
+):
     label = f"{instance._meta.app_label}.{instance._meta.model_name}"
     for field_name, ftype in file_field_types.items():
         if ftype is FieldType.FILE:
@@ -57,6 +63,7 @@ def collect_instance_files(instance, file_field_types: dict[str, FieldType]):
                 with fobj.storage.open(fobj.name, "rb") as fh:
                     data = fh.read()
             except (FileNotFoundError, OSError):
+                skipped.append(f"{label}.{field_name}: {fobj.name}")
                 continue
             yield (
                 FileEntry(
@@ -67,10 +74,14 @@ def collect_instance_files(instance, file_field_types: dict[str, FieldType]):
             )
         elif ftype is FieldType.FILE_PATH:
             path = getattr(instance, field_name, None)
-            if not path or not os.path.isfile(path):
+            if not path:
                 continue
-            with open(path, "rb") as fh:
-                data = fh.read()
+            try:
+                with open(path, "rb") as fh:
+                    data = fh.read()
+            except OSError:
+                skipped.append(f"{label}.{field_name}: {path}")
+                continue
             yield (
                 FileEntry(
                     kind="path", size=len(data), sha256=_sha256(data),
@@ -80,7 +91,7 @@ def collect_instance_files(instance, file_field_types: dict[str, FieldType]):
             )
 
 
-def collect_root_files(root: str):
+def collect_root_files(root: str, skipped: list[str]):
     root = os.path.abspath(root)
     if not os.path.isdir(root):
         return
@@ -92,6 +103,7 @@ def collect_root_files(root: str):
                 with open(abspath, "rb") as fh:
                     data = fh.read()
             except OSError:
+                skipped.append(abspath)
                 continue
             yield (
                 FileEntry(
@@ -107,15 +119,11 @@ def restore_file(entry: FileEntry, data: bytes) -> None:
         from .exceptions import CorruptionError
 
         raise CorruptionError(
-            f"File '{entry.name}' failed its integrity hash after extraction."
+            f"File {entry.name!r} failed its integrity hash after extraction."
         )
 
     if entry.kind == "storage":
-        model = apps.get_model(entry.model)
-        storage = model._meta.get_field(entry.field).storage
-        if storage.exists(entry.name):
-            storage.delete(entry.name)
-        storage.save(entry.name, ContentFile(data))
+        _restore_storage_file(entry, data)
     elif entry.kind == "path":
         _write_path(entry.name, data)
     elif entry.kind == "root":
@@ -126,7 +134,45 @@ def restore_file(entry: FileEntry, data: bytes) -> None:
         raise RestoreError(f"Unknown file entry kind: {entry.kind!r}")
 
 
+def _restore_storage_file(entry: FileEntry, data: bytes) -> None:
+    model = apps.get_model(entry.model)
+    storage = model._meta.get_field(entry.field).storage
+    safety_name = storage.save(entry.name + ".dbs-restore", ContentFile(data))
+    if storage.exists(entry.name):
+        storage.delete(entry.name)
+    storage.save(entry.name, ContentFile(data))
+    storage.delete(safety_name)
+
+
+def _restore_roots() -> list[str]:
+    configured = getattr(settings, "DBS_RESTORE_ROOTS", None)
+    if configured is None:
+        configured = getattr(settings, "DBS_FILE_ROOTS", []) or []
+    return [os.path.realpath(root) for root in configured]
+
+
+def _confined_path(path: str) -> str:
+    target = os.path.realpath(path)
+    for root in _restore_roots():
+        try:
+            if os.path.commonpath([target, root]) == root:
+                return target
+        except ValueError:
+            continue
+    from .exceptions import RestoreError
+
+    raise RestoreError(
+        f"Refusing to write {path!r}: the target resolves outside every "
+        "configured restore root (DBS_RESTORE_ROOTS or DBS_FILE_ROOTS)."
+    )
+
+
 def _write_path(path: str, data: bytes) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "wb") as fh:
+    target = _confined_path(path)
+    os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+    partial = target + ".dbs-tmp"
+    with open(partial, "wb") as fh:
         fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(partial, target)
