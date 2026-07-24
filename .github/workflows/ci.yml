@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -33,4 +34,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]" "Django~=${{ matrix.django }}.0"
-      - run: pytest --cov=dbs --cov-report=term-missing
+      - run: python -m pytest --cov=dbs --cov-report=term-missing
