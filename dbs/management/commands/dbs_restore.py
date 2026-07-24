@@ -12,7 +12,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("input", help="Path to the .dbs backup file.")
-        parser.add_argument("--passphrase", help="Encryption passphrase (else $DBS_PASSPHRASE or prompt).")
+        parser.add_argument("--passphrase", help="Encryption passphrase; visible to other local processes, prefer $DBS_PASSPHRASE or the interactive prompt.")
         parser.add_argument("--database", default="default", help="Database alias to restore into.")
         parser.add_argument("--no-data", action="store_true", help="Do not load database rows.")
         parser.add_argument("--no-files", action="store_true", help="Do not write files back.")

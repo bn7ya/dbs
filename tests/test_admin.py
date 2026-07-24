@@ -57,3 +57,13 @@ def test_download_rejects_mismatched_passphrase(admin_client):
     response = admin_client.post("/dbs/backup/", {"passphrase": "a", "passphrase2": "b"})
     assert response.status_code == 200
     assert b"do not match" in response.content
+
+
+@pytest.mark.django_db
+def test_upload_larger_than_limit_is_rejected(admin_client, settings):
+    settings.DBS_MAX_UPLOAD_BYTES = 16
+    upload = io.BytesIO(b"x" * 64)
+    upload.name = "big.dbs"
+    response = admin_client.post("/dbs/restore/", {"backup": upload, "passphrase": "p"})
+    assert response.status_code == 200
+    assert b"byte limit" in response.content

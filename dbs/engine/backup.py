@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import logging
+import os
 import zlib
 
 import django
 from django.conf import settings
+from django.db import transaction
 
 from .. import introspect
 from ..container import DEFAULT_BLOCK_SIZE, DEFAULT_NSYM, encode_copy, write_container
@@ -18,6 +21,8 @@ from ..introspect import _label
 from ..registry import backup_registry
 from ..serialize import serialize_model
 from .payload import pack_payload
+
+logger = logging.getLogger("dbs")
 
 
 def create_backup(
@@ -39,34 +44,46 @@ def create_backup(
     """
     registry = registry or backup_registry
     model_list = models or introspect.discover_models(registry)
+    logger.info("backup started: %d models", len(model_list))
 
     records_all: list[dict] = []
     files_all: list = []
     stats_models: list[dict] = []
+    skipped_files: list[str] = []
     seen_roots: set[str] = set()
 
-    for model in model_list:
-        config = introspect.config_for(registry, model)
-        excluded = introspect.excluded_fields(model, config)
-        file_field_types = introspect.file_fields(model, config)
+    with transaction.atomic(using=using):
+        for model in model_list:
+            config = introspect.config_for(registry, model)
+            excluded = introspect.excluded_fields(model, config)
+            file_field_types = introspect.file_fields(model, config)
 
-        records = serialize_model(model, config, excluded)
-        records_all.extend(records)
-        stats_models.append({"model": _label(model), "count": len(records)})
+            records = serialize_model(model, config, excluded)
+            records_all.extend(records)
+            stats_models.append({"model": _label(model), "count": len(records)})
 
-        if file_field_types:
-            for instance in config.get_queryset(model).iterator():
-                files_all.extend(collect_instance_files(instance, file_field_types))
+            if file_field_types:
+                for instance in config.get_queryset(model).iterator():
+                    files_all.extend(
+                        collect_instance_files(instance, file_field_types, skipped_files)
+                    )
 
-        for root in config.file_roots or []:
+            for root in config.file_roots or []:
+                if root not in seen_roots:
+                    seen_roots.add(root)
+                    files_all.extend(collect_root_files(root, skipped_files))
+
+        for root in getattr(settings, "DBS_FILE_ROOTS", []) or []:
             if root not in seen_roots:
                 seen_roots.add(root)
-                files_all.extend(collect_root_files(root))
+                files_all.extend(collect_root_files(root, skipped_files))
 
-    for root in getattr(settings, "DBS_FILE_ROOTS", []) or []:
-        if root not in seen_roots:
-            seen_roots.add(root)
-            files_all.extend(collect_root_files(root))
+    if skipped_files:
+        logger.warning(
+            "backup skipped %d unreadable source files: %s",
+            len(skipped_files),
+            ", ".join(skipped_files),
+        )
 
     created = datetime.datetime.now(datetime.timezone.utc).isoformat()
     doc_meta = {
@@ -77,6 +94,7 @@ def create_backup(
             "models": stats_models,
             "records": len(records_all),
             "files": len(files_all),
+            "skipped_files": skipped_files,
         },
     }
 
@@ -84,6 +102,7 @@ def create_backup(
     payload_sha = hashlib.sha256(payload).hexdigest()
 
     body = zlib.compress(payload, 6) if compress else payload
+    kdf_params = kdf_params or _kdf_params_from_settings()
     ciphertext, material = encrypt_payload(body, passphrase, kdf_params=kdf_params)
     encoded, plan = encode_copy(ciphertext, block_size=block_size, nsym=nsym)
 
@@ -101,13 +120,42 @@ def create_backup(
     flags = FLAG_ENCRYPTED | FLAG_FEC | (FLAG_COMPRESSED if compress else 0)
     container = write_container(manifest, encoded, encoded, flags=flags)
 
-    if verify:
+    if output:
+        _write_atomic(output, container)
+        if verify:
+            with open(output, "rb") as fh:
+                _verify_after_write(fh.read(), passphrase, payload_sha)
+    elif verify:
         _verify_after_write(container, passphrase, payload_sha)
 
-    if output:
-        with open(output, "wb") as fh:
-            fh.write(container)
+    logger.info(
+        "backup complete: %d records, %d files, %d bytes",
+        len(records_all),
+        len(files_all),
+        len(container),
+    )
     return container
+
+
+def _kdf_params_from_settings() -> KDFParams:
+    return KDFParams(
+        time_cost=int(getattr(settings, "DBS_KDF_TIME_COST", KDFParams.time_cost)),
+        memory_cost=int(
+            getattr(settings, "DBS_KDF_MEMORY_COST", KDFParams.memory_cost)
+        ),
+        parallelism=int(
+            getattr(settings, "DBS_KDF_PARALLELISM", KDFParams.parallelism)
+        ),
+    )
+
+
+def _write_atomic(path: str, data: bytes) -> None:
+    partial = f"{path}.tmp"
+    with open(partial, "wb") as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(partial, path)
 
 
 def _verify_after_write(container: bytes, passphrase: str, payload_sha: str) -> None:

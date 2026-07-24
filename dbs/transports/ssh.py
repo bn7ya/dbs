@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import posixpath
 from dataclasses import dataclass
 
@@ -8,6 +9,8 @@ import paramiko
 from django.conf import settings
 
 from ..exceptions import ConfigurationError, DBSError
+
+logger = logging.getLogger("dbs")
 
 
 @dataclass
@@ -82,6 +85,9 @@ def push_backup(data_or_path: bytes | str, remote_name: str, target: SSHTarget) 
         _ensure_remote_dir(sftp, target.remote_dir)
         remote_path = posixpath.join(target.remote_dir, remote_name)
         sftp.putfo(io.BytesIO(data), remote_path)
+        logger.info(
+            "pushed %d bytes to %s:%s", len(data), target.host, remote_path
+        )
         return remote_path
     except OSError as exc:
         raise DBSError(f"SFTP upload failed: {exc}") from exc
@@ -97,7 +103,11 @@ def pull_backup(remote_name: str, target: SSHTarget) -> bytes:
         remote_path = posixpath.join(target.remote_dir, remote_name)
         buffer = io.BytesIO()
         sftp.getfo(remote_path, buffer)
-        return buffer.getvalue()
+        data = buffer.getvalue()
+        logger.info(
+            "pulled %d bytes from %s:%s", len(data), target.host, remote_path
+        )
+        return data
     except OSError as exc:
         raise DBSError(f"SFTP download failed: {exc}") from exc
     finally:

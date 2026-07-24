@@ -145,13 +145,50 @@ rather than producing silently wrong data.
 * A wrong passphrase fails the GCM tag check and is reported as such; it can
   never yield partial/garbage data.
 
+## Restore semantics
+
+* The database load runs in a **single transaction**: if anything fails midway,
+  every row is rolled back and the database is left untouched.
+* Backup collection also runs in a transaction, so a backup is a consistent
+  snapshot even while the application keeps writing.
+* Writing a `.dbs` file is **atomic and durable** (temp file + fsync + rename),
+  and verify-after-write re-reads the bytes that actually landed on disk.
+* File restores are **confined**: `FILE_PATH` and file-root entries are only
+  written when the target resolves under a directory listed in
+  `DBS_RESTORE_ROOTS` (or, if unset, `DBS_FILE_ROOTS`). Anything else raises
+  `RestoreError`. Configure the allow-list before restoring backups that embed
+  external files.
+* Restoring merges by primary key into the target database; rows created after
+  the backup was taken are not deleted.
+
+## Observability
+
+DBS logs to the `dbs` logger: backup/restore start and finish, skipped source
+files, SFTP transfers, and — most importantly — a `WARNING` whenever silent
+corruption was detected and healed. Route that logger to your monitoring so a
+degrading disk is noticed before both copies are damaged:
+
+```python
+LOGGING = {
+    "version": 1,
+    "loggers": {"dbs": {"handlers": ["console"], "level": "INFO"}},
+}
+```
+
+Files that could not be read during a backup are also recorded in the
+manifest (`validate_backup(...).stats["skipped_files"]`).
+
 ## Settings reference
 
 | Setting | Purpose |
 |---|---|
 | `DBS_EXCLUDE_MODELS` | `["app.Model", ...]` to skip (defaults skip contenttypes, permissions, admin log, sessions). |
 | `DBS_FILE_ROOTS` | Extra directories embedded in every backup. |
+| `DBS_RESTORE_ROOTS` | Directories file restores may write into (falls back to `DBS_FILE_ROOTS`). |
 | `DBS_SSH_TARGETS` | Named SFTP connection profiles. |
+| `DBS_MAX_UPLOAD_BYTES` | Admin restore upload size cap (default 1 GiB). |
+| `DBS_MAX_PAYLOAD_BYTES` | Decompressed payload size cap on restore (default 4 GiB). |
+| `DBS_KDF_TIME_COST` / `DBS_KDF_MEMORY_COST` / `DBS_KDF_PARALLELISM` | Default Argon2id cost parameters for new backups. |
 
 ## Development
 

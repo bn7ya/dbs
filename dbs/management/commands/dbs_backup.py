@@ -13,7 +13,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("output", help="Path to write the .dbs backup file to.")
-        parser.add_argument("--passphrase", help="Encryption passphrase (else $DBS_PASSPHRASE or prompt).")
+        parser.add_argument("--passphrase", help="Encryption passphrase; visible to other local processes, prefer $DBS_PASSPHRASE or the interactive prompt.")
         parser.add_argument("--database", default="default", help="Database alias to back up.")
         parser.add_argument("--no-compress", action="store_true", help="Disable zlib compression.")
         parser.add_argument("--no-verify", action="store_true", help="Skip the verify-after-write check.")

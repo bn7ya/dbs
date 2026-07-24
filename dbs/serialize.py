@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from django.core import serializers
-from django.db import connections
+from django.db import connections, transaction
 
 
 def serialize_model(model, config, excluded: set[str]) -> list[dict]:
@@ -24,11 +24,12 @@ def load_records(records: list[dict], *, using: str = "default") -> int:
         return 0
     connection = connections[using]
     saved = 0
-    with connection.constraint_checks_disabled():
-        for obj in serializers.deserialize(
-            "json", json.dumps(records), using=using, ignorenonexistent=True
-        ):
-            obj.save(using=using)
-            saved += 1
-    connection.check_constraints()
+    with transaction.atomic(using=using):
+        with connection.constraint_checks_disabled():
+            for obj in serializers.deserialize(
+                "json", json.dumps(records), using=using, ignorenonexistent=True
+            ):
+                obj.save(using=using)
+                saved += 1
+        connection.check_constraints()
     return saved

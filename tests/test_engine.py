@@ -44,7 +44,8 @@ def _wipe(book, sidecar):
 
 
 @pytest.mark.django_db
-def test_backup_restore_roundtrip(tmp_path):
+def test_backup_restore_roundtrip(tmp_path, settings):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     cover_name = book.cover.name
 
@@ -70,7 +71,8 @@ def test_backup_restore_roundtrip(tmp_path):
 
 
 @pytest.mark.django_db
-def test_restore_heals_corruption_in_one_copy(tmp_path):
+def test_restore_heals_corruption_in_one_copy(tmp_path, settings):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     container = create_backup(PASS, kdf_params=FAST_KDF)
 
