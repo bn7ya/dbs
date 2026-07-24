@@ -10,6 +10,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "dbs",
     "tests.testapp",
+    "tests.complexapp",
 ]
 
 MIDDLEWARE = [
