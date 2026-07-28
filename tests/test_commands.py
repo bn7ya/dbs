@@ -5,6 +5,7 @@ from io import StringIO
 import pytest
 from django.core.files.base import ContentFile
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from tests.testapp.models import Author, Book, Tag
 
@@ -41,3 +42,34 @@ def test_cli_backup_restore_validate(tmp_path):
     call_command("dbs_restore", str(backup_file), passphrase=PASS, stdout=rout)
     assert "Restored" in rout.getvalue()
     assert Book.objects.get(title="Command Line").author.name == "Grace"
+
+
+@pytest.mark.django_db
+def test_passphrase_can_arrive_on_stdin(tmp_path, monkeypatch):
+    Author.objects.create(name="Hopper")
+    backup_file = tmp_path / "stdin.dbs"
+
+    monkeypatch.setattr("sys.stdin", StringIO(f"{PASS}\n"))
+    call_command(
+        "dbs_backup", str(backup_file),
+        passphrase_stdin=True, kdf_time=1, kdf_memory=8192, stdout=StringIO(),
+    )
+    assert backup_file.exists()
+
+    Author.objects.all().delete()
+
+    monkeypatch.setattr("sys.stdin", StringIO(f"{PASS}\n"))
+    call_command(
+        "dbs_restore", str(backup_file), passphrase_stdin=True, stdout=StringIO()
+    )
+    assert Author.objects.filter(name="Hopper").exists()
+
+
+@pytest.mark.django_db
+def test_an_empty_stdin_passphrase_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr("sys.stdin", StringIO(""))
+    with pytest.raises(CommandError):
+        call_command(
+            "dbs_backup", str(tmp_path / "no.dbs"),
+            passphrase_stdin=True, kdf_time=1, kdf_memory=8192, stdout=StringIO(),
+        )

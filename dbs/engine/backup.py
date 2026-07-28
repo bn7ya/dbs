@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 import hashlib
 import logging
-import os
 import zlib
 
 import django
@@ -17,6 +16,7 @@ from ..crypto import encrypt_payload
 from ..crypto.kdf import KDFParams
 from ..exceptions import CorruptionError
 from ..files import collect_instance_files, collect_root_files
+from ..io import write_atomic
 from ..introspect import _label
 from ..registry import backup_registry
 from ..serialize import serialize_model
@@ -121,7 +121,7 @@ def create_backup(
     container = write_container(manifest, encoded, encoded, flags=flags)
 
     if output:
-        _write_atomic(output, container)
+        write_atomic(output, container)
         if verify:
             with open(output, "rb") as fh:
                 _verify_after_write(fh.read(), passphrase, payload_sha)
@@ -147,15 +147,6 @@ def _kdf_params_from_settings() -> KDFParams:
             getattr(settings, "DBS_KDF_PARALLELISM", KDFParams.parallelism)
         ),
     )
-
-
-def _write_atomic(path: str, data: bytes) -> None:
-    partial = f"{path}.tmp"
-    with open(partial, "wb") as fh:
-        fh.write(data)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(partial, path)
 
 
 def _verify_after_write(container: bytes, passphrase: str, payload_sha: str) -> None:

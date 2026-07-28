@@ -4,9 +4,77 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-07
+
+### Added
+
+- A standalone `dbs-client` command, installed by the new `[client]` extra. It
+  connects to a server running django-dbs over SSH, triggers a backup there and
+  downloads it, all on one connection. Subcommands: `init`, `test-connection`,
+  `list`, `backup`, `pull`, `push`, `prune`, `schedule`, `validate`. It is
+  configured by a TOML file discovered from `--config`, `$DBS_CLIENT_CONFIG`,
+  `./dbs-client.toml` or `~/.config/dbs/client.toml`, and runs with no Django
+  settings configured.
+- `manage.py dbs_schedule`: unattended backups on a repeating interval with
+  local retention and an optional push to a `DBS_SSH_TARGETS` entry plus remote
+  retention. `--once` runs a single cycle. `SIGTERM` and `SIGINT` end the loop
+  immediately, and a failing cycle is logged without stopping the schedule.
+- SSH targets accept every authentication route: a `.pem` or OpenSSH key file,
+  an encrypted key with `key_passphrase`, a password, or ssh-agent. Any secret
+  may be read from an environment variable with a `_env` suffixed key. `~` is
+  expanded in `key_filename` and `known_hosts`, and `connect_timeout` bounds the
+  handshake.
+- `--passphrase-stdin` on `dbs_backup` and `dbs_restore`, reading the passphrase
+  from the first line of standard input so it never appears in argv.
+- Transport additions: `SSHSession` and `open_session` for reusing one
+  connection, `pull_backup_to` for streaming a download straight to disk,
+  `list_backup_details`, `delete_backup` and `check_connection`.
+- A shared backup filename convention (`prefix-YYYYMMDD-HHMMSSZ.dbs`, UTC) and
+  retention helpers that only ever consider names matching that convention and
+  the configured prefix, and that refuse to keep fewer than one backup.
+- Settings: `DBS_BACKUP_DIR`, `DBS_BACKUP_PREFIX`, `DBS_SCHEDULE_INTERVAL`,
+  `DBS_SCHEDULE_KEEP`, `DBS_SCHEDULE_PUSH_TARGET`, `DBS_SCHEDULE_KEEP_REMOTE`.
+- Logging throughout under the `dbs` logger: backup/restore start and finish,
+  healed-corruption warnings, skipped files, SFTP transfers, scheduled cycles
+  and retention.
+- Settings: `DBS_RESTORE_ROOTS`, `DBS_MAX_UPLOAD_BYTES`,
+  `DBS_MAX_PAYLOAD_BYTES`, `DBS_KDF_TIME_COST`, `DBS_KDF_MEMORY_COST`,
+  `DBS_KDF_PARALLELISM`.
+- CI workflow running lint and the test suite across Python 3.9–3.12 and
+  Django 4.2/5.x on every push and pull request.
+- `SECURITY.md` with a private vulnerability reporting channel.
+
+### Changed
+
+- `paramiko` is imported lazily, so `dbs.transports` can be imported and SSH
+  targets parsed without the optional extra installed.
+- Uploads and downloads land atomically: bytes go to a `.part` file that is
+  renamed into place only once the transfer completes.
+- `list_backups` returns only files matching the backup filename convention;
+  pass `pattern_only=False` for the previous behaviour.
+- The admin download filename now uses the shared convention in UTC rather than
+  the server's local time.
+- Unknown keys in an SSH target or a client config are rejected instead of
+  ignored, so a typo cannot silently disable host key checking.
+- Settings are read through a helper that tolerates unconfigured Django, so
+  validating a backup no longer requires a Django project.
+- `dbs.engine` resolves its members lazily, matching `dbs`.
+- Restoring `path`/`root` file entries now requires configuring
+  `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS`); unconfigured projects restoring
+  such entries will get a `RestoreError` until a root is allow-listed.
+- Django dependency is capped below 6.
 
 ### Security
+
+- The backup passphrase is never passed as a command-line argument. When the
+  client triggers a backup it is written to the remote process over the
+  encrypted SSH channel's standard input, appearing in neither the remote
+  argv nor the remote environment. A legacy `passphrase_transport = "env"` mode
+  is available for servers still on 0.1.x and is documented as the weaker option.
+- `dbs_schedule` reads the passphrase only from `$DBS_PASSPHRASE` and refuses to
+  start without it, rather than blocking on a prompt no operator can see.
+- A client config holding a literal secret must not be readable by other users,
+  and a config writable by other users is refused regardless of its contents.
 
 - Restored files are now confined to allow-listed directories. `path` and
   `root` file entries are only written when the resolved target lies under a
@@ -41,24 +109,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   logged as warnings.
 - Containers and manifests with an unknown format version are rejected with a
   clear error instead of being misparsed.
-
-### Added
-
-- Logging throughout under the `dbs` logger: backup/restore start and finish,
-  healed-corruption warnings, skipped files, and SFTP transfers.
-- Settings: `DBS_RESTORE_ROOTS`, `DBS_MAX_UPLOAD_BYTES`,
-  `DBS_MAX_PAYLOAD_BYTES`, `DBS_KDF_TIME_COST`, `DBS_KDF_MEMORY_COST`,
-  `DBS_KDF_PARALLELISM`.
-- CI workflow running lint and the test suite across Python 3.9–3.12 and
-  Django 4.2/5.x on every push and pull request.
-- `SECURITY.md` with a private vulnerability reporting channel.
-
-### Changed
-
-- Restoring `path`/`root` file entries now requires configuring
-  `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS`); unconfigured projects restoring
-  such entries will get a `RestoreError` until a root is allow-listed.
-- Django dependency is capped below 6.
 
 ## [0.1.3] - 2026-07
 

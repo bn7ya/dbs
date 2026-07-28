@@ -5,8 +5,7 @@ import logging
 import zlib
 from dataclasses import dataclass, field
 
-from django.conf import settings
-
+from ..conf import setting
 from ..container import repair_copies
 from ..container.blocks import BlockPlan, RepairReport
 from ..container.format import read_container
@@ -80,7 +79,7 @@ def read_payload(data: bytes, passphrase: str) -> ReadResult:
 
 
 def _decompress_bounded(body: bytes) -> bytes:
-    limit = getattr(settings, "DBS_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES)
+    limit = setting("DBS_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES)
     decompressor = zlib.decompressobj()
     payload = decompressor.decompress(body, limit + 1)
     if len(payload) <= limit:

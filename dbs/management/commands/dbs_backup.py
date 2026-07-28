@@ -14,6 +14,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("output", help="Path to write the .dbs backup file to.")
         parser.add_argument("--passphrase", help="Encryption passphrase; visible to other local processes, prefer $DBS_PASSPHRASE or the interactive prompt.")
+        parser.add_argument("--passphrase-stdin", action="store_true", help="Read the passphrase from the first line of standard input.")
         parser.add_argument("--database", default="default", help="Database alias to back up.")
         parser.add_argument("--no-compress", action="store_true", help="Disable zlib compression.")
         parser.add_argument("--no-verify", action="store_true", help="Skip the verify-after-write check.")
@@ -22,7 +23,11 @@ class Command(BaseCommand):
         parser.add_argument("--kdf-memory", type=int, default=None, help="Argon2 memory cost (KiB).")
 
     def handle(self, *args, **options):
-        passphrase = resolve_passphrase(options.get("passphrase"), confirm=True)
+        passphrase = resolve_passphrase(
+            options.get("passphrase"),
+            confirm=True,
+            from_stdin=options["passphrase_stdin"],
+        )
 
         kdf_params = None
         if options["kdf_time"] or options["kdf_memory"]:
