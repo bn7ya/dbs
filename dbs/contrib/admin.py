@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import datetime
-
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
 from django.http import HttpResponse
@@ -11,6 +9,7 @@ from django.views.decorators.http import require_http_methods
 
 from ..engine import create_backup, restore_backup
 from ..exceptions import DBSError
+from ..naming import backup_filename
 
 DEFAULT_MAX_UPLOAD_BYTES = 1024 ** 3
 
@@ -69,9 +68,8 @@ def backup_download(request):
     except DBSError as exc:
         return _render(request, "Backup", fields, message=str(exc))
 
-    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     response = HttpResponse(container, content_type="application/octet-stream")
-    response["Content-Disposition"] = f'attachment; filename="backup-{stamp}.dbs"'
+    response["Content-Disposition"] = f'attachment; filename="{backup_filename()}"'
     return response
 
 

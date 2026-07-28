@@ -25,20 +25,40 @@ Re-exported from `dbs/__init__.py`:
 `create_backup`, `restore_backup`, `validate_backup`.
 
 Re-exported from `dbs/transports/__init__.py`:
-`SSHTarget`, `push_backup`, `pull_backup`, `list_backups`.
+`SSHTarget`, `SSHSession`, `RemoteBackup`, `RemoteResult`, `open_session`,
+`push_backup`, `pull_backup`, `pull_backup_to`, `list_backups`,
+`list_backup_details`, `delete_backup`, `check_connection`.
+
+Re-exported from `dbs/client/__init__.py`:
+`ClientConfig`, `ServerProfile`, `load_client_config`, `resolve_client_passphrase`,
+`BackupOptions`, `FetchResult`, `backup_and_fetch`.
 
 Everything else (internal functions, classes, modules) carries no docstring and no
-inline comments.
+inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
+`dbs/scheduling.py`, `dbs/io.py`, `dbs/conf.py`, `dbs/client/cli.py` and
+`dbs/client/remote.py`.
 
 ## Layout
 
 - `dbs/engine/` — backup, restore, validate, payload assembly.
 - `dbs/container/` — on-disk container format and blocks.
 - `dbs/crypto/` — Argon2id KDF and AES-256-GCM envelope.
-- `dbs/transports/` — optional SSH/SFTP transport.
-- `dbs/management/commands/` — `dbs_backup`, `dbs_restore`, `dbs_validate`.
+- `dbs/transports/` — optional SSH/SFTP transport and remote command execution.
+- `dbs/client/` — the standalone `dbs-client` command (config, remote, cli).
+- `dbs/management/commands/` — `dbs_backup`, `dbs_restore`, `dbs_validate`,
+  `dbs_schedule`.
 - `dbs/contrib/` — admin UI download/upload.
-- `tests/` — pytest suite (pytest-django).
+- `dbs/naming.py`, `dbs/retention.py`, `dbs/scheduling.py`, `dbs/io.py`,
+  `dbs/conf.py` — Django-free helpers shared by the server and the client.
+- `tests/` — pytest suite (pytest-django); `tests/fake_ssh.py` is the paramiko
+  stand-in used by the transport and client tests.
+
+## Client constraint
+
+`dbs/client/` must import and run with **no Django settings configured**. Never
+import `dbs.engine` at client module import time, and read settings through
+`dbs.conf.setting` — plain `getattr(settings, ...)` raises `ImproperlyConfigured`
+when Django is unconfigured.
 
 ## Test
 
