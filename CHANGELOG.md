@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-31
+
+### Added
+
+- Django 6.0 and Python 3.13 support: the dependency range widens to
+  `Django>=4.2,<7`, and CI runs the suite on Python 3.13 with Django 6.0.
+- README: a "Signals during restore" section. Restore saves rows with
+  `raw=True` the way `loaddata` does; receivers that run business side
+  effects must return early on raw saves or a restore replays them against
+  a half-loaded database.
+
+### Fixed
+
+- README showed a `-p` short flag on `dbs_validate` that the command never
+  had; the example now uses `--passphrase`.
+
 ## [0.2.0] - 2026-07-29
 
 ### Added

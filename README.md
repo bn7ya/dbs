@@ -79,7 +79,7 @@ class InvoiceBackup(ModelBackup):
 ```bash
 python manage.py dbs_backup   backup.dbs            # prompts for a passphrase
 python manage.py dbs_validate backup.dbs            # structural check, no passphrase
-python manage.py dbs_validate backup.dbs -p secret  # + verify decryption
+python manage.py dbs_validate backup.dbs --passphrase secret  # + verify decryption
 python manage.py dbs_restore  backup.dbs            # restore rows + files
 ```
 
@@ -89,6 +89,21 @@ which keeps it out of the process's command line:
 
 ```bash
 printf '%s\n' "$SECRET" | python manage.py dbs_backup backup.dbs --passphrase-stdin
+```
+
+### Signals during restore
+
+`dbs_restore` saves each row the same way `loaddata` does: with `raw=True`.
+A `pre_save`/`post_save` receiver that re-runs business side effects — awarding
+points, sending notifications, recomputing derived state — must return early on
+raw saves, or a restore replays those effects against a half-loaded database:
+
+```python
+@receiver(post_save, sender=Order)
+def on_order_saved(sender, instance, created, **kwargs):
+    if kwargs.get("raw"):
+        return
+    ...
 ```
 
 ## 3. Automatic backups on a schedule
