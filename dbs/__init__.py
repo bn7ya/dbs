@@ -1,6 +1,6 @@
 from .registry import BackupRegistry, FieldType, ModelBackup, backup_registry
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "backup_registry",
