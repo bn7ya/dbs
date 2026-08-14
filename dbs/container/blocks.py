@@ -59,6 +59,7 @@ class RepairReport:
     blocks_direct: int = 0
     blocks_rs_corrected: int = 0
     blocks_used_b: int = 0
+    copies_available: int = 2
     failed_blocks: list[int] = field(default_factory=list)
 
     @property
@@ -67,7 +68,11 @@ class RepairReport:
 
     @property
     def healed(self) -> bool:
-        return self.ok and (self.blocks_rs_corrected or self.blocks_used_b)
+        return self.ok and bool(
+            self.blocks_rs_corrected
+            or self.blocks_used_b
+            or self.copies_available < 2
+        )
 
     def summary(self) -> str:
         if not self.ok:
@@ -77,10 +82,18 @@ class RepairReport:
                 f"{'...' if len(self.failed_blocks) > 10 else ''})"
             )
         if self.healed:
+            details = [
+                f"{self.blocks_rs_corrected} Reed-Solomon corrected",
+                f"{self.blocks_used_b} restored from the second copy",
+            ]
+            if self.copies_available < 2:
+                details.append(
+                    "one payload copy lost to truncation; "
+                    "recovered from the surviving copy"
+                )
             return (
                 f"REPAIRED: {self.total_blocks} blocks intact after healing "
-                f"({self.blocks_rs_corrected} Reed-Solomon corrected, "
-                f"{self.blocks_used_b} restored from the second copy)"
+                f"({', '.join(details)})"
             )
         return f"CLEAN: all {self.total_blocks} blocks verified, no repair needed"
 
@@ -115,25 +128,27 @@ def _decode_block(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:
 
 
 def repair_copies(
-    copy_a: bytes,
-    copy_b: bytes,
+    copy_a: bytes | None,
+    copy_b: bytes | None,
     plan: BlockPlan,
 ) -> tuple[bytes | None, RepairReport]:
+    sources = [
+        (label, source)
+        for label, source in (("a", copy_a), ("b", copy_b))
+        if source is not None
+    ]
     rsc = RSCodec(plan.nsym)
-    report = RepairReport(total_blocks=plan.n_blocks)
+    report = RepairReport(total_blocks=plan.n_blocks, copies_available=len(sources))
     chunks: list[bytes] = []
     offset = 0
     for index, (enc_len, enc_hash, data_hash) in enumerate(
         zip(plan.enc_lens, plan.enc_hashes, plan.data_hashes)
     ):
-        a = copy_a[offset : offset + enc_len]
-        b = copy_b[offset : offset + enc_len]
-        offset += enc_len
-
         chosen: bytes | None = None
         used_b = False
         needed_rs = False
-        for label, encoded in (("a", a), ("b", b)):
+        for label, source in sources:
+            encoded = source[offset : offset + enc_len]
             stored_intact = _hash(encoded) == enc_hash
             data = _decode_block(rsc, encoded, data_hash)
             if data is not None:
@@ -141,6 +156,7 @@ def repair_copies(
                 used_b = label == "b"
                 needed_rs = not stored_intact
                 break
+        offset += enc_len
 
         if chosen is None:
             report.failed_blocks.append(index)

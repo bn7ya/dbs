@@ -19,10 +19,14 @@ def _label(model) -> str:
 
 
 def _excluded_labels() -> set[str]:
-    configured = getattr(settings, "DBS_EXCLUDE_MODELS", None)
-    if configured is None:
-        return set(DEFAULT_EXCLUDES)
-    return {label.lower() for label in configured}
+    excluded = set(DEFAULT_EXCLUDES)
+    for label in getattr(settings, "DBS_EXCLUDE_MODELS", None) or ():
+        normalized = label.lower()
+        if normalized.startswith("-"):
+            excluded.discard(normalized[1:])
+        else:
+            excluded.add(normalized)
+    return excluded
 
 
 def discover_models(registry: BackupRegistry) -> list[type]:

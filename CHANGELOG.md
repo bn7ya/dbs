@@ -4,6 +4,65 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-14
+
+### Added
+
+- `restore_backup` accepts `dry_run`, surfaced as `dbs_restore --dry-run`. It
+  runs the real load inside a transaction it rolls back and writes no files, so
+  a restore can be rehearsed against the target it will actually run on.
+- `restore_backup` accepts `flush`, surfaced as `dbs_restore --flush`. It clears
+  the backed-up models — auto-created many-to-many tables included, children
+  first — in the same transaction as the load, so the restore replaces rather
+  than merges and a failure leaves the database untouched.
+- A restore onto a database that already holds rows for the backed-up models
+  logs a warning naming them. Merging stays the default; the warning makes the
+  blend visible instead of silent.
+- Backups record the applied migration per app, and a restore compares that
+  against the target and warns when the two have drifted, naming the apps and
+  the direction. Rows for models and fields the target does not know are
+  discarded on load, so this makes a previously silent loss visible. Backups
+  written before this release carry no migration state and restore unchanged.
+- `RestoreResult` reports `records_would_load`, `files_would_write`,
+  `records_flushed` and `preexisting_models`.
+- The test suite runs against PostgreSQL with `DBS_TEST_DB=postgres`, and CI
+  exercises it on every push. Sequence handling is backend specific and was not
+  observable on SQLite.
+
+### Fixed
+
+- Restoring rows that carry explicit primary keys now resets the database
+  sequences afterwards, the way `loaddata` does. Without it, every sequence on
+  PostgreSQL stayed at its starting value while the restored rows occupied much
+  higher primary keys, so the first row a project created after a restore failed
+  with a duplicate key error. A restore of a seven-user database left every
+  sequence at 1.
+- A container truncated so that the second payload copy is short or missing now
+  restores from the surviving first copy instead of being refused outright.
+  Truncation is the most common way a stored file degrades, and the second copy
+  occupies the whole tail of the container, so this was the one case redundancy
+  most needed to cover. A file truncated into the first copy still raises
+  `ContainerError`, and `RepairReport` reports the recovery through its new
+  `copies_available` field rather than presenting it as an untouched read.
+
+### Changed
+
+- `DBS_EXCLUDE_MODELS` now extends the default exclusions
+  (`contenttypes.contenttype`, `auth.permission`, `admin.logentry`,
+  `sessions.session`) instead of replacing them. Previously, listing a single
+  custom model silently re-enabled backup of all four defaults — models that
+  are rebuilt by migrations on the restore target, where restoring stale rows
+  corrupts generic relations and permission grants. A developer who
+  deliberately wants to back up a default-excluded model prefixes its label
+  with `-`, e.g. `DBS_EXCLUDE_MODELS = ["-sessions.Session"]`. Projects that
+  relied on the old replacement behaviour must switch to the `-` prefix.
+- The restore-semantics documentation no longer describes a backup as a
+  consistent snapshot taken while the application keeps writing. Collection runs
+  in a transaction, but where the connection's isolation level is READ COMMITTED
+  each statement takes its own snapshot, so a backup spanning many models can
+  read some of them before a concurrent change and others after it. The README
+  now states that and how to avoid it.
+
 ## [0.2.1] - 2026-07-31
 
 ### Added

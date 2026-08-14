@@ -120,7 +120,12 @@ def copy_offsets(data: bytes) -> tuple[int, int, int]:
     return copy_a_offset, copy_a_offset + copy_len, copy_len
 
 
-def read_container(data: bytes) -> tuple[dict, bytes, bytes]:
+def _complete_copy(data: bytes, offset: int, copy_len: int) -> bytes | None:
+    candidate = data[offset : offset + copy_len]
+    return candidate if len(candidate) == copy_len else None
+
+
+def read_container(data: bytes) -> tuple[dict, bytes | None, bytes | None]:
     header = _resolve_header(data)
     manifest = _read_manifest(data, header)
 
@@ -128,8 +133,10 @@ def read_container(data: bytes) -> tuple[dict, bytes, bytes]:
     copy_a_offset = header["manifest_offset"] + 2 * header["manifest_len"]
     copy_b_offset = copy_a_offset + copy_len
 
-    copy_a = data[copy_a_offset : copy_a_offset + copy_len]
-    copy_b = data[copy_b_offset : copy_b_offset + copy_len]
-    if len(copy_a) != copy_len or len(copy_b) != copy_len:
-        raise ContainerError("Container is truncated; payload copies are incomplete.")
+    copy_a = _complete_copy(data, copy_a_offset, copy_len)
+    copy_b = _complete_copy(data, copy_b_offset, copy_len)
+    if copy_a is None and copy_b is None:
+        raise ContainerError(
+            "Container is truncated; both payload copies are incomplete."
+        )
     return manifest, copy_a, copy_b

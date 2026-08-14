@@ -7,7 +7,8 @@ import zlib
 
 import django
 from django.conf import settings
-from django.db import transaction
+from django.db import connections, transaction
+from django.db.migrations.recorder import MigrationRecorder
 
 from .. import introspect
 from ..container import DEFAULT_BLOCK_SIZE, DEFAULT_NSYM, encode_copy, write_container
@@ -90,6 +91,7 @@ def create_backup(
         "version": 1,
         "created": created,
         "django_version": django.get_version(),
+        "migrations": migration_state(connections[using]),
         "stats": {
             "models": stats_models,
             "records": len(records_all),
@@ -135,6 +137,16 @@ def create_backup(
         len(container),
     )
     return container
+
+
+def migration_state(connection) -> dict[str, str]:
+    recorder = MigrationRecorder(connection)
+    if not recorder.has_table():
+        return {}
+    state: dict[str, str] = {}
+    for app, name in sorted(recorder.applied_migrations()):
+        state[app] = name
+    return state
 
 
 def _kdf_params_from_settings() -> KDFParams:

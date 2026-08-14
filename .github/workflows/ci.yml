@@ -37,3 +37,34 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]" "Django~=${{ matrix.django }}.0"
       - run: python -m pytest --cov=dbs --cov-report=term-missing
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dbs
+          POSTGRES_PASSWORD: dbs
+          POSTGRES_DB: dbs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dbs"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DBS_TEST_DB: postgres
+      DBS_TEST_PG_NAME: dbs_test
+      DBS_TEST_PG_USER: dbs
+      DBS_TEST_PG_PASSWORD: dbs
+      DBS_TEST_PG_HOST: localhost
+      DBS_TEST_PG_PORT: "5432"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]" "psycopg[binary]>=3"
+      - run: python -m pytest

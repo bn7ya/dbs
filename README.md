@@ -81,6 +81,8 @@ python manage.py dbs_backup   backup.dbs            # prompts for a passphrase
 python manage.py dbs_validate backup.dbs            # structural check, no passphrase
 python manage.py dbs_validate backup.dbs --passphrase secret  # + verify decryption
 python manage.py dbs_restore  backup.dbs            # restore rows + files
+python manage.py dbs_restore  backup.dbs --dry-run  # rehearse, change nothing
+python manage.py dbs_restore  backup.dbs --flush    # replace instead of merge
 ```
 
 The passphrase comes from `--passphrase`, then `$DBS_PASSPHRASE`, then a prompt.
@@ -426,8 +428,12 @@ rather than producing silently wrong data.
 
 * The database load runs in a **single transaction**: if anything fails midway,
   every row is rolled back and the database is left untouched.
-* Backup collection also runs in a transaction, so a backup is a consistent
-  snapshot even while the application keeps writing.
+* Backup collection also runs in a transaction. Where the connection's isolation
+  level is READ COMMITTED, every statement takes its own snapshot, so a backup
+  that spans many models while the application keeps writing can read some of
+  them before a concurrent change and others after it. Set the connection to
+  REPEATABLE READ, or back up during a quiet window, when consistency across
+  models matters.
 * Writing a `.dbs` file is **atomic and durable** (temp file + fsync + rename),
   and verify-after-write re-reads the bytes that actually landed on disk. Uploads
   and downloads land the same way, via a `.part` file that is renamed on success.
@@ -437,7 +443,16 @@ rather than producing silently wrong data.
   `RestoreError`. Configure the allow-list before restoring backups that embed
   external files.
 * Restoring merges by primary key into the target database; rows created after
-  the backup was taken are not deleted.
+  the backup was taken are not deleted. When the target already holds rows for
+  the backed-up models, the restore says so in a warning. `--flush` clears those
+  models first so the restore replaces instead, and `--dry-run` rehearses the
+  whole load in a transaction it rolls back.
+* Rows carrying explicit primary keys leave the database sequences reset behind
+  them, so the next row the project creates does not collide with a restored one.
+* A restore compares the backup's recorded migration state against the target's
+  and warns when they have drifted. Fields and models the target does not know
+  are discarded as the rows load, so it is worth reading that warning before
+  treating the restore as complete.
 * `dbs-client` never restores into a server's database. Use `push` to place a
   file there, then run `dbs_restore` on the server deliberately.
 
@@ -464,7 +479,7 @@ read during a backup are also recorded in the manifest
 
 | Setting | Purpose |
 |---|---|
-| `DBS_EXCLUDE_MODELS` | `["app.Model", ...]` to skip (defaults skip contenttypes, permissions, admin log, sessions). |
+| `DBS_EXCLUDE_MODELS` | `["app.Model", ...]` skipped in addition to the defaults (contenttypes, permissions, admin log, sessions). Prefix a label with `-` (e.g. `"-sessions.Session"`) to back up a model the defaults skip. |
 | `DBS_FILE_ROOTS` | Extra directories embedded in every backup. |
 | `DBS_RESTORE_ROOTS` | Directories file restores may write into (falls back to `DBS_FILE_ROOTS`). |
 | `DBS_SSH_TARGETS` | Named SFTP connection profiles. |

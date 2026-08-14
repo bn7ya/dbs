@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 from dbs.container import encode_copy, repair_copies, write_container, read_container
 from dbs.container.blocks import DEFAULT_BLOCK_SIZE
 from dbs.container.format import (
@@ -10,6 +12,7 @@ from dbs.container.format import (
     HEADER_SIZE,
     copy_offsets,
 )
+from dbs.exceptions import ContainerError
 
 
 def _manifest(plan):
@@ -90,3 +93,40 @@ def test_copy_offsets_addresses_the_right_bytes():
     a_off, b_off, copy_len = copy_offsets(blob)
     assert blob[a_off : a_off + copy_len] == enc
     assert blob[b_off : b_off + copy_len] == enc
+
+
+def test_truncation_that_removes_copy_b_recovers_from_copy_a():
+    data = os.urandom(200_000)
+    enc, plan = encode_copy(data)
+    blob = write_container(_manifest(plan), enc, enc, flags=FLAG_ENCRYPTED | FLAG_FEC)
+    _a_off, b_off, _copy_len = copy_offsets(blob)
+    manifest, a, b = read_container(blob[:b_off])
+    assert manifest["copy_len"] == plan.copy_len
+    assert a == enc and b is None
+    recovered, report = repair_copies(a, b, plan)
+    assert recovered == data
+    assert report.ok and report.healed
+    assert report.copies_available == 1
+    assert report.blocks_rs_corrected == 0 and report.blocks_used_b == 0
+    assert "truncation" in report.summary()
+
+
+def test_truncation_mid_copy_b_recovers_from_copy_a():
+    data = os.urandom(200_000)
+    enc, plan = encode_copy(data)
+    blob = write_container(_manifest(plan), enc, enc, flags=FLAG_ENCRYPTED | FLAG_FEC)
+    _a_off, b_off, copy_len = copy_offsets(blob)
+    manifest, a, b = read_container(blob[: b_off + copy_len // 2])
+    assert a == enc and b is None
+    recovered, report = repair_copies(a, b, plan)
+    assert recovered == data
+    assert report.healed and report.copies_available == 1
+
+
+def test_truncation_into_copy_a_raises():
+    data = os.urandom(200_000)
+    enc, plan = encode_copy(data)
+    blob = write_container(_manifest(plan), enc, enc, flags=FLAG_ENCRYPTED | FLAG_FEC)
+    a_off, _b_off, copy_len = copy_offsets(blob)
+    with pytest.raises(ContainerError, match="truncated"):
+        read_container(blob[: a_off + copy_len // 2])
