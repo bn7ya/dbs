@@ -8,6 +8,16 @@ import dbs
 PYPROJECT = pathlib.Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 
+def read_pyproject():
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+
+    with open(PYPROJECT, "rb") as handle:
+        return tomllib.load(handle)
+
+
 def test_pyproject_and_package_agree():
     match = re.search(r'^version = "([^"]+)"', PYPROJECT.read_text(), re.MULTILINE)
     assert match, "pyproject.toml has no version line"
@@ -15,10 +25,7 @@ def test_pyproject_and_package_agree():
 
 
 def test_the_wheel_would_carry_the_data_files():
-    import tomllib
-
-    with open(PYPROJECT, "rb") as handle:
-        config = tomllib.load(handle)
+    config = read_pyproject()
 
     patterns = config["tool"]["setuptools"]["package-data"]["dbs"]
     for needed in (
@@ -33,10 +40,7 @@ def test_the_wheel_would_carry_the_data_files():
 
 
 def test_scikit_learn_is_declared():
-    import tomllib
-
-    with open(PYPROJECT, "rb") as handle:
-        config = tomllib.load(handle)
+    config = read_pyproject()
 
     assert any(
         dependency.startswith("scikit-learn")
