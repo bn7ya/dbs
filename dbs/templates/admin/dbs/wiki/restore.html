@@ -1,0 +1,15 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Restoring</h1>
+<h2>Rehearse first</h2>
+<p><em>Dry run</em> performs the real load inside a transaction it rolls back, and writes no
+files. It reports what would be restored and changes nothing.</p>
+<h2>Merge or replace</h2>
+<p>By default a restore merges into existing rows. <em>Replace instead of merge</em> clears
+the backed-up models first — children before parents, in the same transaction as the load —
+so a failure leaves the database untouched.</p>
+<h2>Migration drift</h2>
+<p>Backups record the applied migration per app. If the target has drifted, the restore warns
+and names the apps. Rows for models and fields the target does not know are discarded.</p>
+{% endblock %}

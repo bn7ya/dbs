@@ -1,0 +1,34 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>Set up DBS security</h1>
+<p class="dbs-lede">The DBS panel can download and overwrite this project's entire database,
+so it watches who is using it. This takes a minute and you can change it later.</p>
+
+<form method="post" id="dbs-setup-form" class="dbs-form">{% csrf_token %}
+  {{ form.as_p }}
+  {% if geolocation %}
+  <p><button type="button" id="dbs-locate" class="button">Use my current location</button>
+     <span id="dbs-locate-status"></span></p>
+  <p class="help">A location can only raise a risk score, never lower one, and it is stored
+     rounded to about a kilometre. Declining changes nothing else.</p>
+  {% endif %}
+  <p><button type="submit" class="default">Save and continue</button></p>
+</form>
+
+{% if geolocation %}
+<script>
+document.getElementById("dbs-locate").addEventListener("click", function () {
+  var status = document.getElementById("dbs-locate-status");
+  if (!navigator.geolocation) { status.textContent = "This browser offers no location."; return; }
+  status.textContent = "asking…";
+  navigator.geolocation.getCurrentPosition(function (position) {
+    document.getElementById("id_latitude").value = position.coords.latitude.toFixed(2);
+    document.getElementById("id_longitude").value = position.coords.longitude.toFixed(2);
+    document.getElementById("id_collect_location").checked = true;
+    status.textContent = "captured";
+  }, function () { status.textContent = "declined or unavailable"; });
+});
+</script>
+{% endif %}
+{% endblock %}

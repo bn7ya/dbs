@@ -1,0 +1,17 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>What the guard collects</h1>
+<p>For each request through the admin, DBS stores the IP address, the network prefix, a hash
+of the user agent, the numeric feature vector, and the resulting score.</p>
+<h2>Browser location</h2>
+<p>Off unless <code>DBS_GEOLOCATION = True</code> and the person opted in during setup. When
+on, the browser is asked for a fix and the coordinates are rounded to about a kilometre before
+being stored. Declining costs nothing: an absent location is neutral, never an anomaly.</p>
+<p>A location can only raise a risk score and never lower one, because it comes from the
+client and can be forged. Its real value is impossible travel — two fixes that cannot both be
+genuine.</p>
+<h2>Retention</h2>
+<p>Telemetry older than <code>DBS_SECURITY_RETENTION_DAYS</code> (default 90) is removed by
+<code>python manage.py dbs security purge</code>.</p>
+{% endblock %}

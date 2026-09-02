@@ -7,6 +7,8 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from dbs.engine import validate_backup
+from dbs.keys import default_passphrase
 from dbs.naming import backup_filename, is_backup_name
 from tests.testapp.models import Author
 
@@ -35,8 +37,23 @@ def test_once_writes_a_convention_named_backup(tmp_path, passphrase_env):
 
 
 @pytest.mark.django_db
-def test_missing_passphrase_refuses_to_start(tmp_path, monkeypatch):
+def test_without_an_environment_passphrase_it_derives_one(tmp_path, monkeypatch):
     monkeypatch.delenv("DBS_PASSPHRASE", raising=False)
+    Author.objects.create(name="Grace")
+
+    call_command("dbs_schedule", "--once", output_dir=str(tmp_path), **FAST)
+
+    written = list(tmp_path.iterdir())
+    assert len(written) == 1
+    validate_backup(written[0].read_bytes(), default_passphrase()).ok
+
+
+@pytest.mark.django_db
+def test_no_passphrase_and_no_secret_key_refuses_to_start(
+    tmp_path, monkeypatch, settings
+):
+    monkeypatch.delenv("DBS_PASSPHRASE", raising=False)
+    settings.SECRET_KEY = ""
     with pytest.raises(CommandError) as excinfo:
         call_command("dbs_schedule", "--once", output_dir=str(tmp_path), **FAST)
     assert "DBS_PASSPHRASE" in str(excinfo.value)

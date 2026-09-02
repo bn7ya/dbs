@@ -1,0 +1,9 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>Take a backup</h1>
+<form method="post" class="dbs-form">{% csrf_token %}
+  {{ form.as_p }}
+  <p><button type="submit" class="default">Take the backup</button></p>
+</form>
+{% endblock %}

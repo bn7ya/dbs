@@ -1,0 +1,16 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Scheduled backups</h1>
+<pre><code>python manage.py dbs schedule --interval 6h --output-dir /var/backups \
+    --keep 14 --push offsite --keep-remote 7</code></pre>
+<p><code>SIGTERM</code> stops the loop immediately rather than after the current interval, so
+<code>systemctl restart</code> and container shutdowns are prompt. Use <code>--once</code>
+from cron for a single cycle.</p>
+<h2>Settings that supply the defaults</h2>
+<ul>
+  <li><code>DBS_BACKUP_DIR</code>, <code>DBS_BACKUP_PREFIX</code></li>
+  <li><code>DBS_SCHEDULE_INTERVAL</code>, <code>DBS_SCHEDULE_KEEP</code></li>
+  <li><code>DBS_SCHEDULE_PUSH_TARGET</code>, <code>DBS_SCHEDULE_KEEP_REMOTE</code></li>
+</ul>
+{% endblock %}

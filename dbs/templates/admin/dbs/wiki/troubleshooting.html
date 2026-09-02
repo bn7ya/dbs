@@ -1,0 +1,16 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Troubleshooting</h1>
+<h2>"Credential cannot be read with the current SECRET_KEY"</h2>
+<p>The target's stored secret was encrypted under a different key. Add the old key to
+<code>SECRET_KEY_FALLBACKS</code>, or re-enter the credential.</p>
+<h2>The panel logged me out</h2>
+<p>Run <code>python manage.py dbs security unlock USERNAME</code>, then add your network to the
+trusted list in setup.</p>
+<h2>A restore merged when I wanted it to replace</h2>
+<p>Tick <em>Replace instead of merge</em>, or pass <code>--flush</code> on the command line.</p>
+<h2>The scheduler will not start</h2>
+<p>It needs an output directory: pass <code>--output-dir</code> or set
+<code>DBS_BACKUP_DIR</code>.</p>
+{% endblock %}

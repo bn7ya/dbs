@@ -1,0 +1,62 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>Console — {{ target.name }}</h1>
+<p class="dbs-lede">{{ target.username }}@{{ target.host }}:{{ target.port }} in {{ target.remote_dir }}</p>
+
+<div class="dbs-console">
+  <div class="dbs-actions">
+    {% for key, label in actions.items %}
+    <button type="button" class="button dbs-action" data-action="{{ key }}">{{ label }}</button>
+    {% endfor %}
+  </div>
+
+  <pre id="dbs-output" class="dbs-output">Pick an action to run it on the server.</pre>
+
+  <form id="dbs-shell" {% if not shell_enabled %}class="dbs-disabled"{% endif %}>
+    <input type="text" id="dbs-command" placeholder="command"
+           {% if not shell_enabled %}disabled{% endif %}>
+    <button type="submit" class="button" {% if not shell_enabled %}disabled{% endif %}>Run</button>
+  </form>
+  {% if not shell_enabled %}
+  <p class="help">Free-form commands are off. Setting <code>DBS_ADMIN_CONSOLE_SHELL = True</code>
+     gives every superuser arbitrary command execution on this server from a browser.</p>
+  {% endif %}
+</div>
+
+<script src="{% url 'admin:dbs_console' target.pk %}" data-noop hidden></script>
+<script>
+(function () {
+  var output = document.getElementById("dbs-output");
+  var token = document.querySelector("[name=csrfmiddlewaretoken]");
+  function post(body) {
+    output.textContent = "running…";
+    fetch(window.location.pathname, {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": token ? token.value : "",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: body
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      output.textContent = data.output;
+      output.className = "dbs-output " + (data.ok ? "ok" : "bad");
+    }).catch(function (err) { output.textContent = String(err); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".dbs-action"), function (button) {
+    button.addEventListener("click", function () {
+      post("action=" + encodeURIComponent(button.dataset.action));
+    });
+  });
+  document.getElementById("dbs-shell").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var field = document.getElementById("dbs-command");
+    if (!field.disabled && field.value.trim()) {
+      post("command=" + encodeURIComponent(field.value.trim()));
+    }
+  });
+})();
+</script>
+<form style="display:none">{% csrf_token %}</form>
+{% endblock %}

@@ -1,0 +1,30 @@
+# django-dbs
+
+> Redundant, self-healing, encrypted single-file backup for Django projects. One command
+> writes an encrypted container holding two copies of the payload plus Reed-Solomon parity,
+> so silent corruption is detected and repaired on restore.
+
+Install: `pip install django-dbs`, add `"dbs"` to `INSTALLED_APPS`, run `manage.py migrate`.
+
+## Commands
+- `manage.py dbs backup OUTPUT` — write an encrypted backup
+- `manage.py dbs restore INPUT [--dry-run] [--flush]` — restore; merges unless flushed
+- `manage.py dbs validate INPUT` — check structure, blocks and decryption
+- `manage.py dbs schedule --interval 6h --output-dir DIR` — repeating backups with retention
+- `manage.py dbs key --show` — print the passphrase derived from SECRET_KEY
+- `manage.py dbs security unlock USER` — clear an anomaly lockout
+- `manage.py dbs ai` — install these instructions for AI coding assistants
+
+## Key facts
+- The passphrase comes from `settings.SECRET_KEY` unless `DBS_PASSPHRASE` overrides it.
+  `SECRET_KEY_FALLBACKS` is tried on restore.
+- The admin panel is mounted automatically at `/admin/dbs/` for superusers only.
+- SFTP target credentials are encrypted at rest under a key derived from `SECRET_KEY`.
+- Admin sessions are scored by an IsolationForest; a high score ends the session.
+
+## Documentation
+- Skill for AI assistants: `dbs/ai/SKILL.md` inside the installed package
+- Settings: `dbs/ai/reference/settings.md`
+- Commands: `dbs/ai/reference/commands.md`
+- Transports: `dbs/ai/reference/transports.md`
+- Session guard: `dbs/ai/reference/security.md`

@@ -1,0 +1,15 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>DBS</h1>
+<p>DBS reads this project's models, relations and files and writes one encrypted,
+redundant, self-healing file. Every backup stores two copies plus Reed-Solomon parity, so
+silent corruption is detected and repaired on restore.</p>
+<h2>Where to start</h2>
+<ul>
+  <li><a href="{% url 'admin:dbs_wiki' 'getting-started' %}">Getting started</a> — take your first backup.</li>
+  <li><a href="{% url 'admin:dbs_wiki' 'passphrases' %}">Passphrases</a> — how the key is derived and what happens if it changes.</li>
+  <li><a href="{% url 'admin:dbs_wiki' 'restore' %}">Restoring</a> — merge, replace, and the dry run.</li>
+  <li><a href="{% url 'admin:dbs_wiki' 'security' %}">The session guard</a> — why this panel might log you out.</li>
+</ul>
+{% endblock %}

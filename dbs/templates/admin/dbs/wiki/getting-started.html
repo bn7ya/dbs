@@ -1,0 +1,19 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Getting started</h1>
+<h2>Declare what to back up</h2>
+<p>DBS backs up every model it finds. To narrow that, add a <code>dbs.py</code> to an app:</p>
+<pre><code>from dbs import backup_registry, ModelBackup
+from myapp.models import Invoice
+
+@backup_registry.register
+class InvoiceBackup(ModelBackup):
+    model = Invoice</code></pre>
+<h2>Take a backup</h2>
+<p>From this panel, use <em>Take a backup</em>. From a shell:</p>
+<pre><code>python manage.py dbs backup /var/backups/app.dbs</code></pre>
+<h2>Keep taking them</h2>
+<pre><code>python manage.py dbs schedule --interval 6h --output-dir /var/backups --keep 14</code></pre>
+<p>Run one scheduler per output directory. Two loops sharing a directory race on retention.</p>
+{% endblock %}

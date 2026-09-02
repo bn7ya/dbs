@@ -1,0 +1,60 @@
+<p class="dbs-lede">Encrypted, redundant, self-healing backups for this project.</p>
+
+<div class="dbs-grid">
+  <section class="dbs-card">
+    <h2>Backups</h2>
+    {% if records %}
+    <table>
+      <tr><th>File</th><th>Taken</th><th>Size</th><th>Where</th></tr>
+      {% for record in records %}
+      <tr>
+        <td>{{ record.filename }}</td>
+        <td>{{ record.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ record.size_bytes|filesizeformat }}</td>
+        <td>{% if record.target %}{{ record.target.name }}{% else %}local{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p>No backups recorded yet.</p>
+    {% endif %}
+    <p><a class="button" href="{% url 'admin:dbs_backup_create' %}">Take a backup</a>
+       <a class="button" href="{% url 'admin:dbs_backup_restore' %}">Restore from a file</a></p>
+  </section>
+
+  <section class="dbs-card">
+    <h2>SFTP targets</h2>
+    {% if targets %}
+    <ul>
+      {% for target in targets %}
+      <li>
+        <strong>{{ target.name }}</strong> — {{ target.username }}@{{ target.host }}:{{ target.port }}
+        <a href="{% url 'admin:dbs_console' target.pk %}">console</a>
+        {% if target.has_unreadable_secret %}<span class="dbs-warn">stored credential unreadable</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No targets yet.</p>
+    {% endif %}
+    {% if settings_targets %}
+    <h3>From DBS_SSH_TARGETS</h3>
+    <ul>{% for name, entry in settings_targets %}<li>{{ name }} — {{ entry.host }} <em>(read-only, defined in settings)</em></li>{% endfor %}</ul>
+    {% endif %}
+    <p><a class="button" href="{% url 'admin:dbs_backuptarget_add' %}">Add a target</a></p>
+  </section>
+
+  <section class="dbs-card">
+    <h2>Guard</h2>
+    <p>Security level: <strong>{{ policy.get_level_display }}</strong>.
+       Warn at {{ policy.warn_threshold }}, log out at {{ policy.logout_threshold }}.</p>
+    <p>Browser location: {% if geolocation %}enabled{% else %}off (set <code>DBS_GEOLOCATION = True</code>){% endif %}.</p>
+    {% if anomalies %}
+    <ul>{% for event in anomalies %}<li>{{ event.created_at|date:"Y-m-d H:i" }} — {{ event.user }} — {{ event.action_taken }} ({{ event.score }})</li>{% endfor %}</ul>
+    {% else %}
+    <p>Nothing anomalous recorded.</p>
+    {% endif %}
+    <p><a class="button" href="{% url 'admin:dbs_security' %}">Security detail</a>
+       <a class="button" href="{% url 'admin:dbs_setup' %}">Change setup</a></p>
+  </section>
+</div>

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from dbs._cli import resolve_passphrase
+from dbs._cli import resolve_read_passphrase
 from dbs.engine import restore_backup
 from dbs.exceptions import DBSError
+from dbs.keys import with_passphrase
 
 
 class Command(BaseCommand):
@@ -21,7 +22,7 @@ class Command(BaseCommand):
         parser.add_argument("--flush", action="store_true", help="Delete existing rows of the backed-up models before loading, so the restore replaces instead of merges.")
 
     def handle(self, *args, **options):
-        passphrase = resolve_passphrase(
+        passphrase = resolve_read_passphrase(
             options.get("passphrase"), from_stdin=options["passphrase_stdin"]
         )
         try:
@@ -31,14 +32,17 @@ class Command(BaseCommand):
             raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
 
         try:
-            result = restore_backup(
-                data,
+            result = with_passphrase(
+                lambda secret: restore_backup(
+                    data,
+                    secret,
+                    using=options["database"],
+                    load_data=not options["no_data"],
+                    write_files=not options["no_files"],
+                    dry_run=options["dry_run"],
+                    flush=options["flush"],
+                ),
                 passphrase,
-                using=options["database"],
-                load_data=not options["no_data"],
-                write_files=not options["no_files"],
-                dry_run=options["dry_run"],
-                flush=options["flush"],
             )
         except DBSError as exc:
             raise CommandError(f"Restore failed: {exc}") from exc

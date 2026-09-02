@@ -1,0 +1,16 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<div class="dbs-wiki">
+  <nav>
+    <h2>Wiki</h2>
+    <ul>
+      {% for slug, label in pages.items %}
+      <li>{% if slug == current %}<strong>{{ label }}</strong>
+          {% else %}<a href="{% url 'admin:dbs_wiki' slug %}">{{ label }}</a>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </nav>
+  <article>{% block wiki %}{% endblock %}</article>
+</div>
+{% endblock %}

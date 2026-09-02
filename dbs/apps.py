@@ -1,5 +1,7 @@
 from django.apps import AppConfig
 
+HYPHEN_ALIASES = ("django-dbs",)
+
 
 class DbsConfig(AppConfig):
     name = "dbs"
@@ -10,3 +12,31 @@ class DbsConfig(AppConfig):
         from django.utils.module_loading import autodiscover_modules
 
         autodiscover_modules("dbs")
+        install_hyphen_aliases()
+
+
+def install_hyphen_aliases():
+    from django.core import management
+
+    if getattr(management, "_dbs_hyphen_aliases", False):
+        return
+
+    original_get_commands = management.get_commands
+    original_load = management.load_command_class
+
+    def get_commands():
+        commands = original_get_commands()
+        for alias in HYPHEN_ALIASES:
+            module = alias.replace("-", "_")
+            if module in commands:
+                commands.setdefault(alias, commands[module])
+        return commands
+
+    def load_command_class(app_name, name):
+        if name in HYPHEN_ALIASES:
+            name = name.replace("-", "_")
+        return original_load(app_name, name)
+
+    management.get_commands = get_commands
+    management.load_command_class = load_command_class
+    management._dbs_hyphen_aliases = True

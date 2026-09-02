@@ -22,7 +22,7 @@ Follow these for every change:
 
 Re-exported from `dbs/__init__.py`:
 `backup_registry`, `BackupRegistry`, `FieldType`, `ModelBackup`,
-`create_backup`, `restore_backup`, `validate_backup`.
+`create_backup`, `restore_backup`, `validate_backup`, `default_passphrase`.
 
 Re-exported from `dbs/transports/__init__.py`:
 `SSHTarget`, `SSHSession`, `RemoteBackup`, `RemoteResult`, `open_session`,
@@ -35,8 +35,9 @@ Re-exported from `dbs/client/__init__.py`:
 
 Everything else (internal functions, classes, modules) carries no docstring and no
 inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
-`dbs/scheduling.py`, `dbs/io.py`, `dbs/conf.py`, `dbs/client/cli.py` and
-`dbs/client/remote.py`.
+`dbs/scheduling.py`, `dbs/io.py`, `dbs/conf.py`, `dbs/keys.py`, `dbs/models.py`,
+`dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`, everything under `dbs/security/`,
+`dbs/client/cli.py` and `dbs/client/remote.py`.
 
 ## Layout
 
@@ -45,13 +46,40 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 - `dbs/crypto/` — Argon2id KDF and AES-256-GCM envelope.
 - `dbs/transports/` — optional SSH/SFTP transport and remote command execution.
 - `dbs/client/` — the standalone `dbs-client` command (config, remote, cli).
-- `dbs/management/commands/` — `dbs_backup`, `dbs_restore`, `dbs_validate`,
-  `dbs_schedule`.
-- `dbs/contrib/` — admin UI download/upload.
+- `dbs/management/commands/` — the `dbs` umbrella and its `django_dbs` alias, plus
+  `dbs_backup`, `dbs_restore`, `dbs_validate`, `dbs_schedule`, `dbs_key`,
+  `dbs_security`, `dbs_ai`.
+- `dbs/contrib/` — the original standalone download/upload views, kept working.
+- `dbs/models.py`, `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`,
+  `dbs/templates/admin/dbs/`, `dbs/static/dbs/` — the control panel mounted at
+  `/admin/dbs/`. Superusers only, enforced in `dbs/security/decorators.py` and in
+  every `ModelAdmin`.
+- `dbs/security/` — the session guard: feature extraction, the IsolationForest
+  detector, the shipped base model, geolocation, verdicts, session termination and
+  the middleware.
+- `dbs/ai/` — the instructions shipped for AI coding assistants, installed by
+  `manage.py dbs ai`.
 - `dbs/naming.py`, `dbs/retention.py`, `dbs/scheduling.py`, `dbs/io.py`,
   `dbs/conf.py` — Django-free helpers shared by the server and the client.
 - `tests/` — pytest suite (pytest-django); `tests/fake_ssh.py` is the paramiko
   stand-in used by the transport and client tests.
+
+## Security invariants
+
+Changes to `dbs/security/` must preserve these:
+
+- **Never pickle or unpickle a model.** Estimators are refit from stored feature
+  rows. Persisting a fitted estimator would put a deserialization sink in the layer
+  that exists to catch intrusions.
+- **Client-supplied signals may only add risk, never subtract it.** Browser
+  geolocation above all: a forged "I am at the office" fix must never lower a score
+  or suppress another signal. An absent signal is neutral.
+- **Enforcement is server-side.** The polling endpoint is a convenience for an open
+  tab; `DBSSecurityMiddleware` is the boundary.
+- **A shell always beats the detector.** `manage.py dbs security unlock` must keep
+  working no matter what the guard decided.
+- **The console's named actions take no user-supplied command string.** Free-form
+  commands stay behind `DBS_ADMIN_CONSOLE_SHELL`, default off.
 
 ## Client constraint
 

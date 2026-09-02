@@ -1,0 +1,15 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Command reference</h1>
+<pre><code>python manage.py dbs backup OUTPUT
+python manage.py dbs restore INPUT [--dry-run] [--flush]
+python manage.py dbs validate INPUT [--passphrase]
+python manage.py dbs schedule [--interval 6h] [--once]
+python manage.py dbs key --show
+python manage.py dbs security status|unlock USER|retrain|purge
+python manage.py dbs ai [--agents] [--check]</code></pre>
+<p><code>python manage.py django-dbs</code> is the same command under its old name.
+The original <code>dbs_backup</code>, <code>dbs_restore</code>, <code>dbs_validate</code> and
+<code>dbs_schedule</code> commands still work unchanged.</p>
+{% endblock %}

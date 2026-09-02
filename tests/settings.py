@@ -9,6 +9,9 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django.contrib.admin",
     "dbs",
     "tests.testapp",
     "tests.complexapp",
@@ -18,6 +21,8 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "dbs.security.middleware.DBSSecurityMiddleware",
 ]
 
 ROOT_URLCONF = "tests.urls"
@@ -31,6 +36,8 @@ TEMPLATES = [
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.template.context_processors.csrf",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ]
         },
     }
@@ -63,3 +70,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 MEDIA_ROOT = tempfile.mkdtemp(prefix="dbs-media-")
 
 USE_TZ = True
+
+STATIC_URL = "/static/"

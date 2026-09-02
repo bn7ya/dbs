@@ -1,0 +1,12 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Working with AI assistants</h1>
+<p>DBS ships instructions that teach a coding assistant how to use it correctly — the settings,
+the commands, the restore semantics, and the mistakes that cost data.</p>
+<pre><code>python manage.py dbs ai            # writes .claude/skills/django-dbs/
+python manage.py dbs ai --agents   # also appends a section to AGENTS.md
+python manage.py dbs ai --check    # CI: fail if the installed copy has drifted</code></pre>
+<p>The source of truth lives inside the installed package under <code>dbs/ai/</code>, so it
+travels with the version you actually have.</p>
+{% endblock %}
