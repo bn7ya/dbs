@@ -1,0 +1,9 @@
+{% extends "admin/dbs/base.html" %}
+{% load dbs_admin %}
+
+{% block dbs_breadcrumb %}{% endblock %}
+
+{% block dbs_content %}
+<h1>DBS</h1>
+{% dbs_dashboard %}
+{% endblock %}

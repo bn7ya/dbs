@@ -1,0 +1,38 @@
+.dbs-nav { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0 0 1.5rem; padding: .6rem 0;
+  border-bottom: 1px solid var(--hairline-color, #e0e0e0); }
+.dbs-nav a { font-weight: 600; }
+.dbs-lede { color: var(--body-quiet-color, #666); max-width: 60ch; }
+.dbs-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); }
+.dbs-card { background: var(--darkened-bg, #f8f8f8); border: 1px solid var(--hairline-color, #e0e0e0);
+  border-radius: 6px; padding: 1rem 1.2rem; }
+.dbs-card h2 { margin-top: 0; font-size: 1.05rem; }
+.dbs-card table { width: 100%; border-collapse: collapse; }
+.dbs-card th, .dbs-card td { text-align: left; padding: .3rem .4rem;
+  border-bottom: 1px solid var(--hairline-color, #eee); }
+.dbs-card ul { padding-left: 1.1rem; }
+.dbs-warn { color: var(--error-fg, #ba2121); font-weight: 600; }
+.dbs-console { max-width: 60rem; }
+.dbs-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.dbs-output { background: #1b1b1b; color: #e6e6e6; padding: 1rem; border-radius: 6px;
+  min-height: 10rem; max-height: 30rem; overflow: auto; white-space: pre-wrap; }
+.dbs-output.bad { color: #ffb4b4; }
+.dbs-console form { display: flex; gap: .5rem; margin-top: 1rem; }
+.dbs-console input[type=text] { flex: 1; padding: .4rem; font-family: monospace; }
+.dbs-disabled { opacity: .55; }
+.dbs-wiki { display: grid; grid-template-columns: 16rem 1fr; gap: 2rem; align-items: start; }
+.dbs-wiki nav ul { list-style: none; padding: 0; }
+.dbs-wiki nav li { margin: .3rem 0; }
+.dbs-wiki article { max-width: 68ch; }
+.dbs-wiki article h2 { margin-top: 1.6rem; }
+@media (max-width: 60rem) { .dbs-wiki { grid-template-columns: 1fr; } }
+.dbs-form { max-width: 44rem; }
+.dbs-form p { margin: 0 0 1.1rem; }
+.dbs-form label { display: block; font-weight: 600; margin-bottom: .25rem; }
+.dbs-form input[type=text], .dbs-form input[type=password], .dbs-form input[type=number],
+.dbs-form textarea, .dbs-form select { width: 100%; max-width: 34rem; box-sizing: border-box; }
+.dbs-form input[type=checkbox] { margin-right: .4rem; }
+.dbs-form .helptext { display: block; margin-top: .3rem; font-size: .85em;
+  color: var(--body-quiet-color, #666); }
+.dbs-form ul { list-style: none; padding: 0; margin: 0; }
+.dbs-form ul li label { font-weight: 400; }
+.dbs-form .errorlist { color: var(--error-fg, #ba2121); padding-left: 0; list-style: none; }

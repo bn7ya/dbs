@@ -32,6 +32,7 @@ _TARGET_KEYS = {
     "auto_add_host_key",
     "use_agent",
     "connect_timeout",
+    "private_key",
 }
 
 
@@ -83,6 +84,7 @@ class SSHTarget:
     port: int = 22
     key_filename: str | None = None
     key_passphrase: str | None = None
+    private_key: str | None = None
     password: str | None = None
     known_hosts: str | None = None
     remote_dir: str = "."
@@ -93,10 +95,16 @@ class SSHTarget:
     def __post_init__(self):
         self.key_filename = _expand(self.key_filename)
         self.known_hosts = _expand(self.known_hosts)
-        if not self.key_filename and not self.password and not self.use_agent:
+        if (
+            not self.key_filename
+            and not self.private_key
+            and not self.password
+            and not self.use_agent
+        ):
             raise ConfigurationError(
                 f"SSH target {self.host!r} has no way to authenticate: set a "
-                "key_filename, a password, or leave use_agent enabled."
+                "key_filename, a private_key, a password, or leave use_agent "
+                "enabled."
             )
 
     @classmethod
@@ -120,6 +128,7 @@ class SSHTarget:
                 _from_env(data.get("key_passphrase_env"))
                 or data.get("key_passphrase")
             ),
+            private_key=data.get("private_key"),
             password=_from_env(data.get("password_env")) or data.get("password"),
             known_hosts=data.get("known_hosts"),
             remote_dir=data.get("remote_dir", "."),
@@ -140,6 +149,23 @@ class SSHTarget:
         return "auto-add" if self.auto_add_host_key else "reject-unknown"
 
 
+def _load_private_key(paramiko, target: SSHTarget):
+    if not target.private_key:
+        return None
+    try:
+        return paramiko.PKey.from_private_key(
+            io.StringIO(target.private_key), password=target.key_passphrase
+        )
+    except paramiko.PasswordRequiredException as exc:
+        raise ConfigurationError(
+            "The stored private key is encrypted; set its key passphrase too."
+        ) from exc
+    except paramiko.SSHException as exc:
+        raise ConfigurationError(
+            f"The stored private key could not be read: {exc}"
+        ) from exc
+
+
 def _connect(target: SSHTarget):
     paramiko = _paramiko()
     client = paramiko.SSHClient()
@@ -155,6 +181,7 @@ def _connect(target: SSHTarget):
     client.set_missing_host_key_policy(
         paramiko.AutoAddPolicy() if target.auto_add_host_key else paramiko.RejectPolicy()
     )
+    pkey = _load_private_key(paramiko, target)
     try:
         client.connect(
             hostname=target.host,
@@ -162,9 +189,10 @@ def _connect(target: SSHTarget):
             username=target.username,
             password=target.password,
             key_filename=target.key_filename,
+            pkey=pkey,
             passphrase=target.key_passphrase,
             allow_agent=target.use_agent,
-            look_for_keys=target.key_filename is None,
+            look_for_keys=target.key_filename is None and pkey is None,
             timeout=target.connect_timeout,
             banner_timeout=target.connect_timeout,
             auth_timeout=target.connect_timeout,

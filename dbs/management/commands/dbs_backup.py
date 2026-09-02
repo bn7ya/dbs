@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from dbs._cli import resolve_passphrase
+from dbs._cli import passphrase_source, resolve_passphrase
 from dbs.crypto.kdf import KDFParams
 from dbs.engine import create_backup
 from dbs.exceptions import DBSError
@@ -55,9 +55,13 @@ class Command(BaseCommand):
         except DBSError as exc:
             raise CommandError(f"Backup failed: {exc}") from exc
 
+        source = passphrase_source(
+            options.get("passphrase"), from_stdin=options["passphrase_stdin"]
+        )
         self.stdout.write(
             self.style.SUCCESS(
                 f"Wrote {options['output']} ({len(container):,} bytes), "
                 "verified, two redundant copies + Reed-Solomon parity."
             )
         )
+        self.stdout.write(f"Passphrase came from {source}.")

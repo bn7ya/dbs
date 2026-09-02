@@ -11,6 +11,11 @@ DEFAULT_EXCLUDES = {
     "auth.permission",
     "admin.logentry",
     "sessions.session",
+    "dbs.backuprecord",
+    "dbs.auditevent",
+    "dbs.sessionevent",
+    "dbs.anomalyevent",
+    "dbs.lockout",
 }
 
 

@@ -24,10 +24,18 @@ hashes · Reed-Solomon)  ──►  data (models · relations · files)
 * **Passphrase-derived key, never stored** (Argon2id).
 * **Per-file and per-block integrity hashes.**
 * **Scheduled backups** on the server, with retention.
+* **A control panel in the Django admin** at `/admin/dbs/`, mounted automatically:
+  take, download, upload and restore backups, manage SFTP targets, reach a server
+  over SSH, and read the built-in wiki.
+* **A session guard** on that panel: superusers only, every request scored by an
+  anomaly detector, automatic logout, and a shell command that always lets you back in.
+* **Nothing to configure**: the backup key is derived from Django's `SECRET_KEY`.
 * **A `dbs-client` command** that pulls backups off your server over SSH.
-* CLI · admin-UI download · SFTP.
+* CLI · admin panel · SFTP.
 
 ## Install
+
+DBS ships database models from 0.3.0, so run `python manage.py migrate` after upgrading.
 
 ```bash
 pip install django-dbs              # on the server: the library + management commands
@@ -37,8 +45,16 @@ pip install "django-dbs[client]"    # on your machine: the dbs-client command
 Add the app on the server:
 
 ```python
-INSTALLED_APPS = [..., "dbs"]
+INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
+MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
 ```
+
+```bash
+python manage.py migrate
+```
+
+`django.contrib.admin` and the middleware are what mount and guard the control
+panel. DBS's commands work without either.
 
 The `[client]` extra adds `paramiko` (SSH/SFTP) and, on Python 3.9/3.10, a TOML
 parser. `[ssh]` remains available as the server-side SFTP extra.
@@ -76,26 +92,44 @@ class InvoiceBackup(ModelBackup):
 
 ## 2. Back up / restore / validate from the CLI
 
+Everything is under one command:
+
 ```bash
-python manage.py dbs_backup   backup.dbs            # prompts for a passphrase
-python manage.py dbs_validate backup.dbs            # structural check, no passphrase
-python manage.py dbs_validate backup.dbs --passphrase secret  # + verify decryption
-python manage.py dbs_restore  backup.dbs            # restore rows + files
-python manage.py dbs_restore  backup.dbs --dry-run  # rehearse, change nothing
-python manage.py dbs_restore  backup.dbs --flush    # replace instead of merge
+python manage.py dbs                       # overview
+python manage.py dbs backup OUTPUT
+python manage.py dbs restore INPUT [--dry-run] [--flush]
+python manage.py dbs validate INPUT
+python manage.py dbs schedule --interval 6h --output-dir DIR
+python manage.py dbs key --show
+python manage.py dbs security status|unlock USER|retrain|purge
+python manage.py dbs ai
 ```
 
-The passphrase comes from `--passphrase`, then `$DBS_PASSPHRASE`, then a prompt.
-`--passphrase-stdin` reads it from the first line of standard input instead,
-which keeps it out of the process's command line:
+`python manage.py django-dbs` is the same command under its old name. The original
+`dbs_backup`, `dbs_restore`, `dbs_validate` and `dbs_schedule` commands still work and are
+not deprecated.
 
 ```bash
-printf '%s\n' "$SECRET" | python manage.py dbs_backup backup.dbs --passphrase-stdin
+python manage.py dbs backup   backup.dbs            # uses the SECRET_KEY passphrase
+python manage.py dbs validate backup.dbs            # structural check, no passphrase
+python manage.py dbs validate backup.dbs --passphrase  # + verify decryption
+python manage.py dbs restore  backup.dbs            # restore rows + files
+python manage.py dbs restore  backup.dbs --dry-run  # rehearse, change nothing
+python manage.py dbs restore  backup.dbs --flush    # replace instead of merge
+```
+
+The passphrase comes from `--passphrase`, then `$DBS_PASSPHRASE`, then the
+`DBS_PASSPHRASE` setting, then Django's `SECRET_KEY`. `--passphrase-stdin` reads
+it from the first line of standard input, which keeps it out of the process's
+command line:
+
+```bash
+printf '%s\n' "$SECRET" | python manage.py dbs backup backup.dbs --passphrase-stdin
 ```
 
 ### Signals during restore
 
-`dbs_restore` saves each row the same way `loaddata` does: with `raw=True`.
+`dbs restore` saves each row the same way `loaddata` does: with `raw=True`.
 A `pre_save`/`post_save` receiver that re-runs business side effects — awarding
 points, sending notifications, recomputing derived state — must return early on
 raw saves, or a restore replays those effects against a half-loaded database:
@@ -110,7 +144,7 @@ def on_order_saved(sender, instance, created, **kwargs):
 
 ## 3. Automatic backups on a schedule
 
-`dbs_schedule` runs backups on a repeating interval, prunes old ones, and can
+`dbs schedule` runs backups on a repeating interval, prunes old ones, and can
 push each backup to another host in the same cycle.
 
 ```bash
@@ -166,16 +200,54 @@ credential, over a passphrase in a shell profile.
 **cron / Docker:** use `--once` from cron for a single cycle, or run the loop as
 the container's main process.
 
-## 4. Download / upload from the admin UI
+## 4. The control panel at `/admin/dbs/`
+
+Add `"dbs"` to `INSTALLED_APPS` alongside `django.contrib.admin`, run `migrate`, and the
+panel is there. No `urls.py` change.
 
 ```python
-# urls.py
-urlpatterns += [path("dbs/", include("dbs.contrib.urls"))]
+INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
+MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
 ```
 
-Superusers can then visit `/dbs/backup/` to download an encrypted backup and
-`/dbs/restore/` to upload one. The passphrase is entered in the form and never
-stored server-side.
+It wears the admin's own theme and gives you:
+
+- a dashboard of recent backups, SFTP targets and guard state
+- **Take a backup** — download it, or push it straight to a target
+- **Restore** — upload a `.dbs` file, with a dry run that rehearses in a rolled-back
+  transaction
+- **SFTP targets** — add and edit servers; credentials are encrypted at rest under a key
+  derived from `SECRET_KEY` and never shown again
+- a **console** per target: check the connection, create the remote directory, list and pull
+  backups, run a backup on the server
+- a **wiki** covering passphrases, restore semantics, the guard and troubleshooting
+
+**Superusers only.** There is no grantable permission for it — the panel can download and
+overwrite the whole database.
+
+### The session guard
+
+On first login a wizard asks which networks you log in from and how strict to be. After that
+every admin request is scored by an IsolationForest (shipped pre-trained on a synthetic
+corpus, then refitted on your own history) plus rules for a new network prefix, a new
+browser, implied travel speed, and destructive actions from unrecognised networks. A high
+enough score ends every session for that account.
+
+You can always get back in from a shell:
+
+```bash
+python manage.py dbs security unlock alice
+```
+
+Requests from `DBS_TRUSTED_NETWORKS` are scored and recorded but never enforced against, and
+`DBS_ANOMALY_ENFORCE = False` turns enforcement off entirely.
+
+Setting `DBS_GEOLOCATION = True` adds browser location as a signal — distance from a known
+location and impossible travel. It is opt-in, stored rounded to about a kilometre, and can
+only ever raise a risk score, never lower one: it comes from the client and can be forged.
+Declining the browser prompt changes nothing.
+
+The earlier `include("dbs.contrib.urls")` pages still work unchanged.
 
 ## 5. Ship a backup to another server (SFTP)
 
@@ -338,6 +410,22 @@ use the system host keys. `auto_add_host_key = true` trusts whatever key the
 server presents on first contact — `test-connection` always prints which policy
 is in effect so this doesn't get left on by accident.
 
+## Passphrases
+
+DBS derives the backup passphrase from Django's `SECRET_KEY`, so there is nothing to set up.
+The derivation is domain separated: the backup key is never the same bytes Django uses for
+sessions, CSRF and password-reset tokens.
+
+Resolution order: an explicit `--passphrase` or `--passphrase-stdin`, then `$DBS_PASSPHRASE`,
+then the `DBS_PASSPHRASE` setting, then `SECRET_KEY`.
+
+```bash
+python manage.py dbs key --show    # archive this somewhere safe
+```
+
+**A backup encrypted under a `SECRET_KEY` you later lose cannot be opened.** When you rotate,
+keep the old value in `SECRET_KEY_FALLBACKS`; DBS tries every fallback on restore.
+
 ## Passphrases in unattended runs
 
 The backup passphrase never appears in a command line — not locally, and not on
@@ -489,9 +577,36 @@ read during a backup are also recorded in the manifest
 | `DBS_SCHEDULE_KEEP` | Default local retention count (default 7). |
 | `DBS_SCHEDULE_PUSH_TARGET` | Default `DBS_SSH_TARGETS` entry to push to. |
 | `DBS_SCHEDULE_KEEP_REMOTE` | Default retention count for pushed backups. |
+| `DBS_PASSPHRASE` | Explicit passphrase, overriding the one derived from `SECRET_KEY`. |
 | `DBS_MAX_UPLOAD_BYTES` | Admin restore upload size cap (default 1 GiB). |
 | `DBS_MAX_PAYLOAD_BYTES` | Decompressed payload size cap on restore (default 4 GiB). |
 | `DBS_KDF_TIME_COST` / `DBS_KDF_MEMORY_COST` / `DBS_KDF_PARALLELISM` | Default Argon2id cost parameters for new backups. |
+| `DBS_ADMIN_CONSOLE_SHELL` | Allow free-form SSH commands from the admin console. Default `False`. |
+| `DBS_ANOMALY_ENFORCE` | Whether a blocking verdict ends sessions. Default `True`. |
+| `DBS_ANOMALY_DETECTOR` | Dotted path to a replacement detector class. |
+| `DBS_ANOMALY_MIN_ROWS` | Events before a per-user model is fitted (default 50). |
+| `DBS_TRUSTED_NETWORKS` | CIDRs scored but never enforced against. |
+| `DBS_GUARD_POLL_SECONDS` | How often an open admin page re-checks authorization (default 15). |
+| `DBS_GUARD_EVERYWHERE` | Extend the guard poller to the whole admin. Default `False`. |
+| `DBS_GEOLOCATION` | Collect browser location as an anomaly signal. Default `False`. |
+| `DBS_SECURITY_RETENTION_DAYS` | Telemetry retention for `dbs security purge` (default 90). |
+| `DBS_SETUP_WIZARD` | Redirect superusers to the setup wizard until configured. Default `True`. |
+| `DBS_TRUST_FORWARDED_FOR` | Read the client IP from `X-Forwarded-For`. Only behind a proxy that overwrites it. Default `False`. |
+| `DBS_TRUSTED_PROXIES` | How many proxies sit in front, so the client IP is counted from the right-hand end of `X-Forwarded-For` (default 1). |
+
+## Working with AI assistants
+
+DBS ships instructions that teach a coding assistant how to use it — the settings, the
+commands, the restore semantics and the mistakes that lose data.
+
+```bash
+python manage.py dbs ai            # writes .claude/skills/django-dbs/
+python manage.py dbs ai --agents   # also appends a section to AGENTS.md
+python manage.py dbs ai --check    # CI: fail if the installed copy has drifted
+```
+
+The source of truth lives inside the installed package under `dbs/ai/`, so it travels with
+the version you actually have.
 
 ## Development
 

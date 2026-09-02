@@ -34,3 +34,44 @@ time for a fix and coordinated disclosure before publishing details.
   process's environment instead, which is readable by root and by the same user.
 - Remote transfers verify host keys and reject unknown hosts by default. Setting
   `auto_add_host_key` trusts whatever key a server first presents.
+
+## The admin control panel
+
+The panel at `/admin/dbs/` can download and overwrite the whole database. It is
+restricted to superusers, and there is deliberately no grantable permission for it.
+
+Credentials for SFTP targets are encrypted at rest with AES-256-GCM under a key
+derived from `SECRET_KEY` by HKDF-SHA256, and are never re-displayed. They live in the
+database, which means they are inside any backup taken of that database; those
+containers are themselves encrypted.
+
+`DBS_ADMIN_CONSOLE_SHELL` is off by default. Turning it on gives every superuser
+arbitrary command execution on the target server from a browser.
+
+## The session guard
+
+Every admin request is scored and the outcome is enforced server-side in
+`DBSSecurityMiddleware`. The polling endpoint an open page uses is a convenience, not
+the boundary. Browser geolocation, when enabled, is client-supplied and therefore may
+only raise a risk score, never lower one.
+
+Anomaly models are always refit from stored feature rows. DBS never pickles or
+unpickles an estimator.
+
+If the guard locks out the only superuser, recovery is from a shell:
+`python manage.py dbs security unlock USERNAME`.
+
+## What the panel does not defend against
+
+A superuser is trusted with the database by definition, so the guard raises the cost of a
+*hijacked* session rather than constraining a legitimate one. In particular:
+
+- A superuser who edits a password-authenticated SFTP target to point at a host they control
+  and then runs the connection check will receive that password. This is inherent to
+  password authentication; prefer a key file.
+- `DBS_TRUST_FORWARDED_FOR` puts the client IP under the control of whatever sets that
+  header. Enable it only behind a proxy you control, and set `DBS_TRUSTED_PROXIES` to the
+  number of hops so the address is read from the correct end.
+- Sessions held in a cache or signed-cookie backend cannot be deleted server-side. A lockout
+  is checked on every request instead, so such a session stops at its next request rather
+  than instantly.

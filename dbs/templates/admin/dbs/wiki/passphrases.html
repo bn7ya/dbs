@@ -1,0 +1,20 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Passphrases and SECRET_KEY</h1>
+<p>DBS derives its backup passphrase from Django's <code>SECRET_KEY</code>, so there is
+nothing to configure. The derivation is domain separated, meaning the backup key is never the
+same bytes Django uses for sessions, CSRF and password-reset tokens.</p>
+<h2>Order of precedence</h2>
+<ol>
+  <li>An explicit <code>--passphrase</code>, <code>--passphrase-stdin</code>, or the form field.</li>
+  <li>The <code>DBS_PASSPHRASE</code> environment variable.</li>
+  <li>The <code>DBS_PASSPHRASE</code> setting.</li>
+  <li>Derived from <code>SECRET_KEY</code>.</li>
+</ol>
+<h2>Rotating SECRET_KEY</h2>
+<p><strong>A backup encrypted under a SECRET_KEY you later lose cannot be opened.</strong>
+When you rotate, keep the old value in <code>SECRET_KEY_FALLBACKS</code>; DBS tries every
+fallback on restore. To archive the derived passphrase somewhere safe:</p>
+<pre><code>python manage.py dbs key --show</code></pre>
+{% endblock %}

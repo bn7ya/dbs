@@ -1,0 +1,11 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>Restore from an uploaded backup</h1>
+<p class="dbs-lede">A restore writes into this project's database and file storage.
+Leave <strong>Dry run</strong> ticked to rehearse it first.</p>
+<form method="post" enctype="multipart/form-data" class="dbs-form">{% csrf_token %}
+  {{ form.as_p }}
+  <p><button type="submit" class="default">Restore</button></p>
+</form>
+{% endblock %}

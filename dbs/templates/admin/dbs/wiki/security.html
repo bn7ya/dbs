@@ -1,0 +1,20 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>The session guard</h1>
+<p>This panel can download and overwrite the whole database, so only superusers reach it and
+every request through it is scored.</p>
+<h2>What is scored</h2>
+<p>Time of day, how fast requests are arriving, how risky the attempted action is, session
+age, whether the network prefix and browser are ones this account has used before, and — when
+enabled — distance from a known location and implied travel speed.</p>
+<h2>The model</h2>
+<p>An IsolationForest, shipped pre-trained on a synthetic corpus so it works from the first
+request, joined by a forest fitted to your own history once there is enough of it. Nothing is
+ever pickled or unpickled: models are refit from stored feature rows.</p>
+<h2>Getting back in</h2>
+<p>A locked-out account is cleared from a shell, which always beats the detector:</p>
+<pre><code>python manage.py dbs security unlock alice</code></pre>
+<p>Requests from <code>DBS_TRUSTED_NETWORKS</code> are scored and recorded but never enforced
+against, and <code>DBS_ANOMALY_ENFORCE = False</code> turns enforcement off entirely.</p>
+{% endblock %}

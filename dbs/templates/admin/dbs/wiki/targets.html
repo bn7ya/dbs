@@ -1,0 +1,17 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>SFTP targets and the console</h1>
+<p>A target holds everything needed to reach one server. Credentials are encrypted at rest
+under a key derived from <code>SECRET_KEY</code> and are never shown again after saving.</p>
+<h2>Host keys</h2>
+<p>Give a <code>known_hosts</code> file, or tick auto-add to accept an unknown host key on
+first contact. Auto-add trades away detection of a machine-in-the-middle on that first
+connection.</p>
+<h2>The console</h2>
+<p>The named actions — check the connection, create the remote directory, list backups —
+run fixed commands with no free-form input. Setting
+<code>DBS_ADMIN_CONSOLE_SHELL = True</code> also enables an open command box, which gives
+every superuser arbitrary command execution on that server from a browser. It is off by
+default for that reason. Every console action is written to the audit log.</p>
+{% endblock %}

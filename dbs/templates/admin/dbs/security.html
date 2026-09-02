@@ -1,0 +1,41 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>DBS security</h1>
+<section class="dbs-card">
+  <h2>Policy</h2>
+  <p>Level <strong>{{ policy.get_level_display }}</strong>, warn at {{ policy.warn_threshold }},
+     log out at {{ policy.logout_threshold }}, learning period {{ policy.learning_logins }} events.</p>
+  <p>Trusted networks: {{ policy.trusted_networks|default:"none" }}</p>
+  <p>Browser location: {% if geolocation %}{{ policy.collect_location|yesno:"in use,available but off" }}{% else %}disabled in settings{% endif %}</p>
+  <p><a class="button" href="{% url 'admin:dbs_setup' %}">Change</a></p>
+</section>
+
+<section class="dbs-card">
+  <h2>Anomalies</h2>
+  {% if anomalies %}
+  <table>
+    <tr><th>When</th><th>Who</th><th>Score</th><th>Outcome</th><th>Why</th></tr>
+    {% for event in anomalies %}
+    <tr><td>{{ event.created_at|date:"Y-m-d H:i" }}</td><td>{{ event.user }}</td>
+        <td>{{ event.score }}</td><td>{{ event.action_taken }}</td>
+        <td>{% for reason in event.reasons %}{{ reason }}{% if not forloop.last %}; {% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p>Nothing recorded.</p>{% endif %}
+</section>
+
+<section class="dbs-card">
+  <h2>Audit</h2>
+  {% if audit %}
+  <table>
+    <tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>OK</th></tr>
+    {% for event in audit %}
+    <tr><td>{{ event.created_at|date:"Y-m-d H:i" }}</td><td>{{ event.actor }}</td>
+        <td>{{ event.action }}</td><td>{{ event.target_name }}</td>
+        <td>{{ event.succeeded|yesno:"yes,no" }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p>Nothing recorded.</p>{% endif %}
+</section>
+{% endblock %}
