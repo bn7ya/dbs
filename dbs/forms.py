@@ -1,8 +1,35 @@
 from __future__ import annotations
 
+import ipaddress
+
 from django import forms
+from django.core.validators import validate_email
+from django.db import connections
 
 from .models import AuthMethod, BackupTarget, SecurityLevel
+from .security.guard import MINIMUM_PREFIX
+
+
+def clean_networks(raw, *, field):
+    cleaned = []
+    for line in (raw or "").replace(",", "\n").split("\n"):
+        candidate = line.strip()
+        if not candidate:
+            continue
+        try:
+            network = ipaddress.ip_network(candidate, strict=False)
+        except ValueError:
+            raise forms.ValidationError(
+                f"{candidate!r} is not a network. Write one CIDR per line, "
+                "for example 203.0.113.0/24."
+            ) from None
+        if field == "trusted" and network.prefixlen < MINIMUM_PREFIX[network.version]:
+            raise forms.ValidationError(
+                f"{candidate} covers too much of the internet to be trusted. "
+                f"Use a prefix of /{MINIMUM_PREFIX[network.version]} or narrower."
+            )
+        cleaned.append(str(network))
+    return "\n".join(cleaned)
 
 KEEP_HELP = "Leave empty to keep the stored value."
 
@@ -16,6 +43,11 @@ class BackupTargetForm(forms.ModelForm):
     )
     key_passphrase = forms.CharField(
         required=False, widget=forms.PasswordInput(render_value=False), help_text=KEEP_HELP
+    )
+    clear_secrets = forms.BooleanField(
+        required=False,
+        label="Forget the stored credentials",
+        help_text="Wipe the saved password, private key and key passphrase.",
     )
 
     class Meta:
@@ -68,13 +100,17 @@ class BackupTargetForm(forms.ModelForm):
             given = self.cleaned_data.get(form_field)
             if given:
                 setattr(target, model_field, given)
+        if self.cleaned_data.get("clear_secrets"):
+            target.secret_password = ""
+            target.secret_key_material = ""
+            target.secret_key_passphrase = ""
         if commit:
             target.save()
         return target
 
 
 class CreateBackupForm(forms.Form):
-    database = forms.CharField(initial="default")
+    database = forms.ChoiceField(choices=(), initial="default")
     destination = forms.ChoiceField(choices=(), required=False)
     passphrase = forms.CharField(
         required=False,
@@ -85,6 +121,9 @@ class CreateBackupForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["database"].choices = [
+            (alias, alias) for alias in sorted(connections)
+        ]
         choices = [("", "Download to my browser")]
         choices += [
             (str(target.pk), f"Push to {target.name}")
@@ -144,3 +183,20 @@ class SetupForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2}),
         label="Notify these addresses",
     )
+
+    def clean_expected_networks(self):
+        return clean_networks(self.cleaned_data["expected_networks"], field="expected")
+
+    def clean_trusted_networks(self):
+        return clean_networks(self.cleaned_data["trusted_networks"], field="trusted")
+
+    def clean_notify_emails(self):
+        addresses = []
+        raw = self.cleaned_data["notify_emails"]
+        for line in (raw or "").replace(",", "\n").split("\n"):
+            candidate = line.strip()
+            if not candidate:
+                continue
+            validate_email(candidate)
+            addresses.append(candidate)
+        return "\n".join(addresses)

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
+
 from django.conf import settings
 from django.db import models
 
-from .crypto.secrets import encrypt_secret, is_encrypted, read_secret
+from .crypto.secrets import encrypt_secret, is_encrypted, looks_sealed, read_secret
 from .exceptions import InvalidPassphrase
 from .naming import DEFAULT_PREFIX
 
@@ -19,7 +21,7 @@ class SecretField(models.TextField):
     def get_prep_value(self, value):
         if not value:
             return ""
-        if is_encrypted(value):
+        if is_encrypted(value) and looks_sealed(value):
             return value
         return encrypt_secret(str(value))
 
@@ -121,6 +123,8 @@ class BackupTarget(models.Model):
             data["known_hosts"] = self.known_hosts
         if self.auth_method == AuthMethod.KEY_FILE and self.key_filename:
             data["key_filename"] = self.key_filename
+        if self.auth_method == AuthMethod.KEY_MATERIAL:
+            data["private_key"] = self.secret("secret_key_material")
         if self.auth_method == AuthMethod.PASSWORD:
             data["password"] = self.secret("secret_password")
         passphrase = self.secret("secret_key_passphrase")
@@ -156,6 +160,18 @@ class BackupRecord(models.Model):
     @property
     def stored_locally(self):
         return self.target_id is None and bool(self.location)
+
+    def local_path(self):
+        from .conf import setting
+
+        directory = setting("DBS_BACKUP_DIR", None)
+        if not self.stored_locally or not directory:
+            return None
+        root = os.path.realpath(os.path.expanduser(str(directory)))
+        candidate = os.path.realpath(os.path.join(root, os.path.basename(self.location)))
+        if os.path.commonpath([root, candidate]) != root:
+            return None
+        return candidate if os.path.isfile(candidate) else None
 
 
 class AuditEvent(models.Model):

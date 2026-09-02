@@ -36,3 +36,17 @@ a `Lockout`, ends every session for that account and optionally emails. Requests
 but never enforced against.
 
 Recovery is always available from a shell: `python manage.py dbs security unlock USER`.
+
+## Invariants to preserve
+
+- A session never establishes its own familiarity: "seen" prefixes and browsers come only
+  from *other* sessions, so an attacker cannot clear the new-network signal by making one
+  extra request.
+- A `warn` verdict is enforced, not cosmetic: the middleware refuses any non-read action
+  from a flagged session until it signs in again.
+- A lockout is checked on every authenticated superuser request, not only inside the panel,
+  so it applies whatever the session backend.
+- `BackupRecord.location` is read-only and `download` serves only a file resolved inside
+  `DBS_BACKUP_DIR`. It is a backup catalogue, not a file browser.
+- Trusted networks narrower than /8 (v4) or /16 (v6) only — a guarded session must not be
+  able to trust the whole internet.

@@ -13,6 +13,7 @@ class DbsConfig(AppConfig):
 
         autodiscover_modules("dbs")
         install_hyphen_aliases()
+        from .security import signals  # noqa: F401
 
 
 def install_hyphen_aliases():
@@ -37,6 +38,9 @@ def install_hyphen_aliases():
             name = name.replace("-", "_")
         return original_load(app_name, name)
 
+    get_commands.cache_clear = getattr(
+        original_get_commands, "cache_clear", lambda: None
+    )
     management.get_commands = get_commands
     management.load_command_class = load_command_class
     management._dbs_hyphen_aliases = True

@@ -20,6 +20,16 @@ def is_encrypted(value: str | None) -> bool:
     return bool(value) and value.startswith(PREFIX)
 
 
+def looks_sealed(token: str) -> bool:
+    if not is_encrypted(token):
+        return False
+    try:
+        raw = base64.b64decode(token[len(PREFIX):].encode("ascii"), validate=True)
+    except (ValueError, UnicodeEncodeError):
+        return False
+    return len(raw) > NONCE_LENGTH + 16
+
+
 def encrypt_secret(plaintext: str) -> str:
     keys = derive_field_keys()
     if not keys:

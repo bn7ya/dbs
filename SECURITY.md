@@ -60,3 +60,18 @@ unpickles an estimator.
 
 If the guard locks out the only superuser, recovery is from a shell:
 `python manage.py dbs security unlock USERNAME`.
+
+## What the panel does not defend against
+
+A superuser is trusted with the database by definition, so the guard raises the cost of a
+*hijacked* session rather than constraining a legitimate one. In particular:
+
+- A superuser who edits a password-authenticated SFTP target to point at a host they control
+  and then runs the connection check will receive that password. This is inherent to
+  password authentication; prefer a key file.
+- `DBS_TRUST_FORWARDED_FOR` puts the client IP under the control of whatever sets that
+  header. Enable it only behind a proxy you control, and set `DBS_TRUSTED_PROXIES` to the
+  number of hops so the address is read from the correct end.
+- Sessions held in a cache or signed-cookie backend cannot be deleted server-side. A lockout
+  is checked on every request instead, so such a session stops at its next request rather
+  than instantly.

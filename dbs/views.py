@@ -5,7 +5,8 @@ import json
 import os
 
 from django.contrib import messages
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.http.request import RawPostDataException
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
@@ -43,10 +44,10 @@ def _audit(request, action, target="", detail="", succeeded=True):
 
     AuditEvent.objects.create(
         actor=request.user,
-        action=action,
-        target_name=target,
+        action=action[:64],
+        target_name=target[:128],
         detail=detail[:4000],
-        remote_addr=client_address(request),
+        remote_addr=client_address(request)[:64],
         succeeded=succeeded,
     )
 
@@ -110,7 +111,9 @@ def setup(request):
 def guard_check(request):
     try:
         payload = json.loads(request.body or b"{}")
-    except ValueError:
+    except (ValueError, RawPostDataException):
+        payload = {}
+    if not isinstance(payload, dict):
         payload = {}
     verdict = guard.evaluate(request, action="view", location=payload.get("location"))
     guard.apply(verdict, request)
@@ -153,7 +156,7 @@ def create_backup_view(request):
             sha256=digest,
             database=data["database"],
             created_by=request.user,
-            location="downloaded",
+            location="",
             note=data["note"],
         )
         _audit(request, "backup.create", target=name, detail=f"{len(container)} bytes")
@@ -236,7 +239,7 @@ def restore_view(request):
                 f"Restored {result.records_loaded} records and "
                 f"{result.files_written} files.{healed}"
             )
-        _audit(request, "backup.restore", target=upload.name, detail=summary)
+        _audit(request, "backup.restore", target=upload.name or "upload", detail=summary)
         messages.success(request, summary)
         return redirect("admin:dbs_backup_restore")
     return _page(
@@ -250,15 +253,22 @@ def restore_view(request):
 @never_cache
 def download(request, pk):
     record = BackupRecord.objects.filter(pk=pk).first()
-    if record is None or not record.stored_locally:
+    if record is None:
         raise Http404
-    path = record.location
-    if not os.path.isfile(path):
+    path = record.local_path()
+    if path is None:
+        raise Http404
+    verdict = guard.evaluate(request, action="download")
+    guard.apply(verdict, request)
+    if verdict.level == guard.BLOCK:
         raise Http404
     _audit(request, "backup.download", target=record.filename)
-    with open(path, "rb") as handle:
-        response = HttpResponse(handle.read(), content_type="application/octet-stream")
-    response["Content-Disposition"] = f'attachment; filename="{record.filename}"'
+    response = FileResponse(
+        open(path, "rb"),
+        as_attachment=True,
+        filename=os.path.basename(path),
+        content_type="application/octet-stream",
+    )
     return response
 
 
@@ -287,8 +297,9 @@ def console(request, pk):
 def _run_console(request, target, shell_enabled):
     from .transports.ssh import open_session
 
-    action = request.POST.get("action", "")
     command = request.POST.get("command", "").strip()
+    action = "" if command else request.POST.get("action", "")
+    label = "console.shell" if command else f"console.{action}"
     if command and not shell_enabled:
         _audit(request, "console.shell", target=target.name, detail="refused", succeeded=False)
         return JsonResponse(
@@ -308,16 +319,10 @@ def _run_console(request, target, shell_enabled):
         with open_session(target.ssh_target()) as session:
             output, ok = _console_output(session, target, action, command)
     except Exception as exc:
-        _audit(request, f"console.{action or 'shell'}", target=target.name, detail=str(exc), succeeded=False)
+        _audit(request, label, target=target.name, detail=str(exc), succeeded=False)
         return JsonResponse({"ok": False, "output": str(exc)}, status=200)
 
-    _audit(
-        request,
-        f"console.{action or 'shell'}",
-        target=target.name,
-        detail=command or action,
-        succeeded=ok,
-    )
+    _audit(request, label, target=target.name, detail=command or action, succeeded=ok)
     return JsonResponse({"ok": ok, "output": output})
 
 

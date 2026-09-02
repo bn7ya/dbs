@@ -3,11 +3,15 @@ from __future__ import annotations
 import ipaddress
 from dataclasses import dataclass, field
 
+import logging
+
 from django.utils import timezone
 
 from ..conf import setting
 from ..models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
 from . import detector, features, geo, sessions
+
+logger = logging.getLogger("dbs")
 
 OK = "ok"
 WARN = "warn"
@@ -31,15 +35,30 @@ def enforcement_enabled() -> bool:
     return bool(setting("DBS_ANOMALY_ENFORCE", True))
 
 
+MINIMUM_PREFIX = {4: 8, 6: 16}
+
+
 def _networks(raw):
     for line in (raw or "").replace(",", "\n").split("\n"):
         candidate = line.strip()
         if not candidate:
             continue
         try:
-            yield ipaddress.ip_network(candidate, strict=False)
+            network = ipaddress.ip_network(candidate, strict=False)
         except ValueError:
             continue
+        if network.prefixlen < MINIMUM_PREFIX[network.version]:
+            continue
+        yield network
+
+
+def _within(address: str, raw: str) -> bool:
+    try:
+        parsed = ipaddress.ip_address(address)
+    except ValueError:
+        return True
+    networks = list(_networks(raw))
+    return not networks or any(parsed in network for network in networks)
 
 
 def is_trusted(address: str, policy) -> bool:
@@ -69,6 +88,9 @@ def evaluate(request, action="view", location=None) -> Verdict:
 
     model_score = detector.get_detector().score(user, values)
     rules, reasons = detector.rule_score(values)
+    if policy.expected_networks and not _within(address, policy.expected_networks):
+        rules = min(1.0, rules + 0.2)
+        reasons.append("outside the networks this project expects logins from")
     score = max(model_score, rules)
 
     trusted = is_trusted(address, policy)
@@ -82,7 +104,12 @@ def evaluate(request, action="view", location=None) -> Verdict:
 def _still_learning(user, policy) -> bool:
     if not policy.learning_logins:
         return False
-    seen = SessionEvent.objects.filter(user=user).count()
+    seen = (
+        SessionEvent.objects.filter(user=user)
+        .values("session_key_hash")
+        .distinct()
+        .count()
+    )
     return seen < policy.learning_logins
 
 
@@ -152,6 +179,13 @@ def notify(user, verdict) -> None:
         return
     from django.core.mail import send_mail
 
+    try:
+        _send(send_mail, user, verdict, recipients)
+    except Exception:
+        logger.warning("could not send the DBS anomaly notification", exc_info=True)
+
+
+def _send(send_mail, user, verdict, recipients):
     send_mail(
         subject="DBS ended an admin session",
         message=(

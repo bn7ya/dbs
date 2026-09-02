@@ -592,6 +592,7 @@ read during a backup are also recorded in the manifest
 | `DBS_SECURITY_RETENTION_DAYS` | Telemetry retention for `dbs security purge` (default 90). |
 | `DBS_SETUP_WIZARD` | Redirect superusers to the setup wizard until configured. Default `True`. |
 | `DBS_TRUST_FORWARDED_FOR` | Read the client IP from `X-Forwarded-For`. Only behind a proxy that overwrites it. Default `False`. |
+| `DBS_TRUSTED_PROXIES` | How many proxies sit in front, so the client IP is counted from the right-hand end of `X-Forwarded-For` (default 1). |
 
 ## Working with AI assistants
 

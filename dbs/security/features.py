@@ -118,12 +118,18 @@ def observe_request(user, request, action, location=None):
     address = client_address(request)
     prefix = ip_prefix(address)
     agent = digest(request.META.get("HTTP_USER_AGENT", ""))
+    session_hash = digest(getattr(request.session, "session_key", "") or "")
     recent = list(
-        SessionEvent.objects.filter(user=user).order_by("-created_at")[:200]
+        SessionEvent.objects.filter(user=user).order_by("-created_at")[:500]
     )
     previous = recent[0] if recent else None
-    seen_prefixes = {event.ip_prefix for event in recent if event.ip_prefix}
-    seen_agents = {event.ua_hash for event in recent if event.ua_hash}
+    established = [
+        event
+        for event in recent
+        if event.session_key_hash != session_hash and event.verdict != "block"
+    ]
+    seen_prefixes = {event.ip_prefix for event in established if event.ip_prefix}
+    seen_agents = {event.ua_hash for event in established if event.ua_hash}
     day_start = now - timedelta(days=1)
     today = {
         event.ip_prefix
@@ -143,7 +149,7 @@ def observe_request(user, request, action, location=None):
             1 for event in recent if event.created_at >= window
         ),
         session_age_minutes=_session_age_minutes(request, now),
-        recent_failures=0.0,
+        recent_failures=_recent_failures(address, now),
         new_ip_prefix=bool(prefix) and prefix not in seen_prefixes,
         new_user_agent=bool(agent) and agent not in seen_agents,
         distinct_prefixes_today=len(today) or 1,
@@ -151,6 +157,18 @@ def observe_request(user, request, action, location=None):
         travel_kmh=speed,
     )
     return observation, address, prefix, agent
+
+
+def _recent_failures(address, now):
+    from ..models import AuditEvent
+
+    if not address:
+        return 0.0
+    return AuditEvent.objects.filter(
+        action="auth.failed",
+        remote_addr=address,
+        created_at__gte=now - timedelta(hours=1),
+    ).count()
 
 
 def _travel(user, recent, location, now, KnownLocation):
@@ -195,6 +213,8 @@ def client_address(request) -> str:
 
     if setting("DBS_TRUST_FORWARDED_FOR", False):
         forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        parts = [part.strip() for part in forwarded.split(",") if part.strip()]
+        if parts:
+            proxies = max(1, int(setting("DBS_TRUSTED_PROXIES", 1)))
+            return parts[-min(proxies, len(parts))]
     return request.META.get("REMOTE_ADDR", "") or ""

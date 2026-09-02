@@ -63,7 +63,16 @@ class BackupRecordAdmin(SuperuserOnlyAdmin):
     list_display = ("filename", "created_at", "size_bytes", "target", "created_by")
     list_filter = ("target", "database")
     search_fields = ("filename", "sha256")
-    readonly_fields = ("sha256", "size_bytes", "created_at")
+    readonly_fields = (
+        "filename",
+        "location",
+        "target",
+        "database",
+        "created_by",
+        "sha256",
+        "size_bytes",
+        "created_at",
+    )
 
     def get_urls(self):
         return [
@@ -110,6 +119,9 @@ class AnomalyEventAdmin(SuperuserOnlyAdmin):
     def has_change_permission(self, request, obj=None):
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(AuditEvent)
 class AuditEventAdmin(SuperuserOnlyAdmin):
@@ -121,6 +133,9 @@ class AuditEventAdmin(SuperuserOnlyAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
 
 

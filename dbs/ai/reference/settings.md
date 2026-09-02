@@ -26,4 +26,5 @@
 | `DBS_GEOLOCATION` | Collect browser location as an anomaly signal. Default `False`. |
 | `DBS_SECURITY_RETENTION_DAYS` | Telemetry retention for `dbs security purge` (default 90). |
 | `DBS_SETUP_WIZARD` | Redirect superusers to the setup wizard until configured. Default `True`. |
-| `DBS_TRUST_FORWARDED_FOR` | Read the client IP from `X-Forwarded-For`. Only enable behind a proxy that overwrites it. Default `False`. |
+| `DBS_TRUST_FORWARDED_FOR` | Read the client IP from `X-Forwarded-For`. Only enable behind a proxy that overwrites or appends predictably. Default `False`. |
+| `DBS_TRUSTED_PROXIES` | Number of proxies in front, counted from the right-hand end of `X-Forwarded-For` (default 1). |

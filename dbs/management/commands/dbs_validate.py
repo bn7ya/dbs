@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from dbs._cli import resolve_read_passphrase
 from dbs.engine import validate_backup
+from dbs.exceptions import InvalidPassphrase
 from dbs.keys import with_passphrase
 
 
@@ -30,7 +31,7 @@ class Command(BaseCommand):
             given = options["passphrase"]
             passphrase = resolve_read_passphrase(None if given == "__prompt__" else given)
             result = with_passphrase(
-                lambda secret: validate_backup(data, secret), passphrase
+                lambda secret: _decrypt_checked(data, secret), passphrase
             )
         else:
             result = validate_backup(data)
@@ -38,3 +39,10 @@ class Command(BaseCommand):
         self.stdout.write(style(result.summary()))
         if not result.ok:
             raise CommandError("Validation failed.")
+
+
+def _decrypt_checked(data, secret):
+    result = validate_backup(data, secret)
+    if result.decrypted_ok is False:
+        raise InvalidPassphrase("The backup did not decrypt with this passphrase.")
+    return result

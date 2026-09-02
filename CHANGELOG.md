@@ -62,7 +62,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Settings: `DBS_PASSPHRASE`, `DBS_ADMIN_CONSOLE_SHELL`, `DBS_ANOMALY_ENFORCE`,
   `DBS_ANOMALY_DETECTOR`, `DBS_ANOMALY_MIN_ROWS`, `DBS_TRUSTED_NETWORKS`,
   `DBS_GUARD_POLL_SECONDS`, `DBS_GUARD_EVERYWHERE`, `DBS_GEOLOCATION`,
-  `DBS_SECURITY_RETENTION_DAYS`, `DBS_SETUP_WIZARD`, `DBS_TRUST_FORWARDED_FOR`.
+  `DBS_SECURITY_RETENTION_DAYS`, `DBS_SETUP_WIZARD`, `DBS_TRUST_FORWARDED_FOR`,
+  `DBS_TRUSTED_PROXIES`.
+- Failed admin logins are recorded as audit events and feed the detector's
+  `recent_failures` signal.
+- `expected_networks` from the setup wizard is used: a request from outside them adds risk.
+- The learning period counts distinct sessions rather than requests, so the guard's own
+  polling no longer burns through it in minutes.
+- `DBS_GUARD_EVERYWHERE` extends the authorization poller to the rest of the admin.
+
+### Security
+
+- A session can no longer vouch for its own novelty. "Seen" network prefixes and browsers
+  are drawn only from a user's *other* sessions, so one extra request can no longer clear
+  the new-network and new-browser signals for the rest of a hijacked session.
+- A `warn` verdict is enforced rather than merely displayed: the middleware refuses any
+  non-read action from a flagged session until it authenticates again.
+- A lockout is checked on every authenticated superuser request, not only inside the panel,
+  so it bites whatever the session backend and wherever the request lands.
+- `BackupRecord.location` is read-only and downloads resolve only inside `DBS_BACKUP_DIR`.
+  The catalogue is not a file browser.
+- Trusted networks are limited to /8 or narrower (v4) and /16 or narrower (v6), in the form
+  and again when they are read, so a guarded session cannot trust the whole internet.
+  Malformed networks and notification addresses are now rejected with an error instead of
+  being silently dropped.
+- Audit fields are clamped to their column widths and the console's audit label is chosen by
+  the server, so an action can no longer execute without leaving an accurate record.
+- `DBS_TRUSTED_PROXIES` counts the client address from the right-hand end of
+  `X-Forwarded-For`, where an appending proxy puts it.
 
 ### Changed
 
