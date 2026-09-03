@@ -94,3 +94,7 @@ when Django is unconfigured.
 pip install -e ".[dev]"
 pytest
 ```
+
+The session guard scores time of day, so a test that asserts a verdict tier is
+time-dependent. `DBS_TEST_HOUR=3 pytest` runs the suite as though it were 03:00 UTC.
+Pin the policy thresholds rather than assuming which tier a score lands in.

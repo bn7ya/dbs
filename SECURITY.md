@@ -50,6 +50,10 @@ arbitrary command execution on the target server from a browser.
 
 ## The session guard
 
+The guard runs only when `dbs.security.middleware.DBSSecurityMiddleware` is in
+`MIDDLEWARE`. Without it the panel is still superuser-only, but nothing is scored and
+nothing is enforced.
+
 Every admin request is scored and the outcome is enforced server-side in
 `DBSSecurityMiddleware`. The polling endpoint an open page uses is a convenience, not
 the boundary. Browser geolocation, when enabled, is client-supplied and therefore may

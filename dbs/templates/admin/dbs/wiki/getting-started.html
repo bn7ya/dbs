@@ -2,6 +2,12 @@
 
 {% block wiki %}
 <h1>Getting started</h1>
+<h2>What this project needs</h2>
+<pre><code>INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
+MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]</code></pre>
+<pre><code>python manage.py migrate</code></pre>
+<p><code>django.contrib.admin</code> mounts this panel; the middleware runs the session
+guard. Upgrading from 0.2.x needs that <code>migrate</code> &mdash; 0.3.0 added tables.</p>
 <h2>Declare what to back up</h2>
 <p>DBS backs up every model it finds. To narrow that, add a <code>dbs.py</code> to an app:</p>
 <pre><code>from dbs import backup_registry, ModelBackup

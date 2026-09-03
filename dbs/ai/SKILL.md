@@ -9,6 +9,25 @@ DBS reads a Django project's models, relations and files and writes one encrypte
 redundant, self-healing file. Every backup stores two copies plus Reed-Solomon parity, so
 silent corruption is detected and repaired on restore.
 
+## Setting it up
+
+```python
+INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
+MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
+```
+
+```bash
+python manage.py migrate
+```
+
+`django.contrib.admin` mounts the panel at `/admin/dbs/`; the middleware enforces the
+session guard. Both are optional — the management commands work without either — but the
+guard does nothing at all unless the middleware is installed, so never describe the panel as
+guarded in a project that lacks it.
+
+**On any upgrade from 0.2.x, `manage.py migrate` is required**: 0.3.0 added database tables.
+`scikit-learn` became a hard dependency at the same time.
+
 ## The command surface
 
 ```bash
@@ -106,6 +125,24 @@ Transports: `from dbs.transports import SSHTarget, push_backup, pull_backup, ope
 See `reference/settings.md`. The ones that change behaviour most: `DBS_EXCLUDE_MODELS`,
 `DBS_FILE_ROOTS`, `DBS_RESTORE_ROOTS`, `DBS_SSH_TARGETS`, `DBS_BACKUP_DIR`,
 `DBS_ANOMALY_ENFORCE`, `DBS_TRUSTED_NETWORKS`, `DBS_ADMIN_CONSOLE_SHELL`, `DBS_GEOLOCATION`.
+
+## Troubleshooting map
+
+| Symptom | Cause and fix |
+|---|---|
+| "Credential cannot be read with the current SECRET_KEY" | The stored SFTP secret predates a key rotation. Add the old key to `SECRET_KEY_FALLBACKS`, or re-enter it |
+| Superuser logged out of the admin | The guard scored the request over the logout threshold. `manage.py dbs security unlock USER`, then add the network to the trusted list |
+| `/admin/dbs/` returns 404 | Not a superuser, or `django.contrib.admin` is missing from `INSTALLED_APPS` |
+| `RestoreError` naming a path | File restores are confined to `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS`). Add the directory |
+| Restore merged instead of replacing | Pass `--flush`, or tick *Replace instead of merge* in the panel |
+| Scheduler exits immediately | It needs `--output-dir` or `DBS_BACKUP_DIR` |
+
+## Testing this project
+
+`pytest`. The session guard scores time of day, so a test that asserts a verdict tier is
+time-dependent and will fail at some hours. Set `DBS_TEST_HOUR=3` to run the suite as though
+it were 03:00 UTC. Never assert a specific verdict tier without pinning the policy
+thresholds first.
 
 ## Conventions when editing this project
 

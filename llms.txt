@@ -4,23 +4,43 @@
 > writes an encrypted container holding two copies of the payload plus Reed-Solomon parity,
 > so silent corruption is detected and repaired on restore.
 
-Install: `pip install django-dbs`, add `"dbs"` to `INSTALLED_APPS`, run `manage.py migrate`.
+## Install
+
+```
+pip install django-dbs
+```
+
+```python
+INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
+MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
+```
+
+```
+python manage.py migrate
+python manage.py dbs backup backup.dbs
+```
+
+Upgrading from 0.2.x requires `manage.py migrate`.
 
 ## Commands
-- `manage.py dbs backup OUTPUT` — write an encrypted backup
-- `manage.py dbs restore INPUT [--dry-run] [--flush]` — restore; merges unless flushed
-- `manage.py dbs validate INPUT` — check structure, blocks and decryption
-- `manage.py dbs schedule --interval 6h --output-dir DIR` — repeating backups with retention
-- `manage.py dbs key --show` — print the passphrase derived from SECRET_KEY
-- `manage.py dbs security unlock USER` — clear an anomaly lockout
-- `manage.py dbs ai` — install these instructions for AI coding assistants
+- `manage.py dbs backup OUTPUT` - write an encrypted backup
+- `manage.py dbs restore INPUT [--dry-run] [--flush]` - restore; merges unless flushed
+- `manage.py dbs validate INPUT [--passphrase]` - check structure, blocks and decryption
+- `manage.py dbs schedule --interval 6h --output-dir DIR` - repeating backups with retention
+- `manage.py dbs key --show` - print the passphrase derived from SECRET_KEY
+- `manage.py dbs security unlock USER` - clear an anomaly lockout
+- `manage.py dbs ai` - install these instructions for AI coding assistants
+
+`manage.py django-dbs` is the same command under its old name. `dbs_backup`, `dbs_restore`,
+`dbs_validate` and `dbs_schedule` still work and are not deprecated.
 
 ## Key facts
 - The passphrase comes from `settings.SECRET_KEY` unless `DBS_PASSPHRASE` overrides it.
-  `SECRET_KEY_FALLBACKS` is tried on restore.
-- The admin panel is mounted automatically at `/admin/dbs/` for superusers only.
+  `SECRET_KEY_FALLBACKS` is tried on restore. A backup under a lost key cannot be opened.
+- The admin panel is mounted automatically at `/admin/dbs/`, for superusers only.
 - SFTP target credentials are encrypted at rest under a key derived from `SECRET_KEY`.
 - Admin sessions are scored by an IsolationForest; a high score ends the session.
+  `manage.py dbs security unlock USER` always gets you back in.
 
 ## Documentation
 - Skill for AI assistants: `dbs/ai/SKILL.md` inside the installed package

@@ -2,6 +2,9 @@
 
 This project uses django-dbs for backups.
 
+- Setup: `dbs` in `INSTALLED_APPS` (with `django.contrib.admin` for the panel),
+  `dbs.security.middleware.DBSSecurityMiddleware` in `MIDDLEWARE` for the guard, then
+  `manage.py migrate`. Upgrading from 0.2.x requires that migrate.
 - Commands: `python manage.py dbs backup|restore|validate|schedule|key|security|ai`.
   `manage.py django-dbs` and the older `dbs_backup`/`dbs_restore`/`dbs_validate`/
   `dbs_schedule` names also work.
