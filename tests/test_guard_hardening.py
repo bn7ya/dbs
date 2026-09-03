@@ -7,10 +7,19 @@ from django.contrib.auth.models import User
 from django.test import Client
 
 from dbs.crypto.secrets import looks_sealed
-from dbs.models import AuditEvent, BackupRecord, BackupTarget, Lockout, SecurityPolicy
+from dbs.models import (
+    AuditEvent,
+    BackupRecord,
+    BackupTarget,
+    Lockout,
+    SecurityPolicy,
+    SessionEvent,
+)
 from dbs.security import detector, guard
 from dbs.security.features import client_address, ip_prefix
 from dbs.security.sessions import REAUTH_FLAG
+
+UNREACHABLE = 2.0
 
 PANEL = "/admin/dbs/"
 SETUP = "/admin/dbs/panel/setup/"
@@ -55,7 +64,9 @@ def strict(trusted=""):
 
 @pytest.mark.django_db
 def test_a_session_cannot_vouch_for_its_own_new_network(panel):
-    strict()
+    policy = strict()
+    policy.logout_threshold = UNREACHABLE
+    policy.save()
 
     first = panel.post(GUARD, "{}", content_type="application/json").json()
     second = panel.post(GUARD, "{}", content_type="application/json").json()
@@ -65,6 +76,8 @@ def test_a_session_cannot_vouch_for_its_own_new_network(panel):
         "the second request in the same session must not treat the first as "
         "having established the network"
     )
+    recorded = list(SessionEvent.objects.order_by("created_at", "id"))
+    assert [event.features["new_ip_prefix"] for event in recorded[-2:]] == [1.0, 1.0]
 
 
 @pytest.mark.django_db
