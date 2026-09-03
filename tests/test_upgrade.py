@@ -176,7 +176,7 @@ def test_self_update_refuses_on_a_source_checkout():
 
 
 def test_version_comparison():
-    assert upgrade.is_newer("0.4.0", "0.3.1")
+    assert upgrade.is_newer("1.0.0", "0.9.9")
     assert upgrade.is_newer("0.3.10", "0.3.9")
     assert not upgrade.is_newer("0.3.1", "0.3.1")
     assert not upgrade.is_newer("0.2.2", "0.3.0")

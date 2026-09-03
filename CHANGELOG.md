@@ -4,9 +4,10 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-09-03
+## [0.3.1] - 2026-09-03
 
-The 0.3.1 changes below were never released separately; they ship here.
+Follows 0.3.0 on PyPI. It adds `manage.py dbs upgrade`, and fixes the time-dependent test
+that made the 0.3.0 release run fail on its first attempt.
 
 ### Added
 
@@ -27,6 +28,22 @@ The 0.3.1 changes below were never released separately; they ship here.
   converted file is validated end to end before it counts.
 - `dbs.container.format.container_version` reads a container's format version without
   requiring it to be the current one.
+- `DBS_TEST_HOUR` shifts the clock for the whole test suite, so behaviour that depends on
+  the time of day can be reproduced on demand instead of by chance. The guard, panel,
+  console and base-model tests pass at all twenty-four hours.
+
+### Fixed
+
+- A regression test for the session guard asserted a specific verdict tier, and the guard
+  scores hour-of-day as a feature. A first request from an unrecognised network scores
+  0.72-0.82 during the day and 0.85-0.92 between midnight and 07:00 UTC, so above the
+  balanced logout threshold the guard ended the session and the test's next request arrived
+  anonymous. The behaviour was correct; the assertion was not. The test now pins the logout
+  threshold out of reach and checks the recorded feature rows directly, so it asserts the
+  invariant it cares about rather than the tier a score lands in.
+- The two packaging tests added in 0.3.0 imported `tomllib` unconditionally, which is
+  standard library only from Python 3.11, so they failed on the 3.9 and 3.10 test matrix
+  cells. They now use the same `tomli` fallback the rest of the project does.
 
 ### Security
 
@@ -45,52 +62,21 @@ The 0.3.1 changes below were never released separately; they ship here.
 
 ### Changed
 
-- The README's *Upgrading* section leads with the command, and documents what happens to old
-  backups.
-- `dbs/ai/SKILL.md`, `AGENTS.md` and both `llms.txt` copies tell assistants to run
-  `dbs upgrade --check` before other work and after upgrading the package.
-- The admin wiki gains an *Upgrading* page.
-- `CLAUDE.md` records the rule that keeps this honest: a change requiring developer action
-  is not finished until `dbs/upgrade.py` has a step for it, and a container format bump must
-  keep `MAGIC` stable and register its converter in the same commit.
-
-## [0.3.1] - 2026-09-03
-
-0.3.0 was tagged but never reached PyPI: its release run failed on a test of ours that
-depended on the hour it ran at. 0.3.1 is that release, fixed, with the documentation
-rewritten around it.
-
-### Fixed
-
-- A regression test for the session guard asserted a specific verdict tier, and the guard
-  scores hour-of-day as a feature. A first request from an unrecognised network scores
-  0.72-0.82 during the day and 0.85-0.92 between midnight and 07:00 UTC, so above the
-  balanced logout threshold the guard ended the session and the test's next request arrived
-  anonymous. The behaviour was correct; the assertion was not. The test now pins the logout
-  threshold out of reach and checks the recorded feature rows directly, so it asserts the
-  invariant it cares about rather than the tier a score lands in.
-- The two packaging tests added in 0.3.0 imported `tomllib` unconditionally, which is
-  standard library only from Python 3.11, so they failed on the 3.9 and 3.10 test matrix
-  cells. They now use the same `tomli` fallback the rest of the project does.
-
-### Added
-
-- `DBS_TEST_HOUR` shifts the clock for the whole test suite, so behaviour that depends on
-  the time of day can be reproduced on demand instead of by chance. The guard, panel,
-  console and base-model tests pass at all twenty-four hours.
-
-### Changed
-
 - The README is rewritten around what a developer does rather than what the library
   contains: a five-minute quick start that ends in a working backup, then the panel, the
   schedule, off-site copies, restoring, and the client — each leading with the shortest
   snippet that works. It gains a troubleshooting section keyed to the errors DBS actually
-  emits, and an upgrade section for 0.2.x.
-- The instructions shipped for AI assistants gain the setup and upgrade requirements, the
-  same troubleshooting map, and a note that the guard does nothing unless
-  `DBSSecurityMiddleware` is installed. The settings and command references were
-  regenerated against the code.
+  emits, and an *Upgrading* section that leads with the command and documents what happens
+  to old backups.
+- The instructions shipped for AI assistants gain the setup and upgrade requirements, a
+  troubleshooting map, a note that the guard does nothing unless `DBSSecurityMiddleware` is
+  installed, and an instruction to run `dbs upgrade --check` before other work. The settings
+  and command references were regenerated against the code.
+- The admin wiki gains an *Upgrading* page.
 - `SECURITY.md` states that the guard is inert without its middleware.
+- `CLAUDE.md` records the rule that keeps this honest: a change requiring developer action
+  is not finished until `dbs/upgrade.py` has a step for it, and a container format bump must
+  keep `MAGIC` stable and register its converter in the same commit.
 
 ## [0.3.0] - 2026-09-02
 

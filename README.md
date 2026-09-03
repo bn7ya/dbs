@@ -658,7 +658,7 @@ python manage.py dbs upgrade
 ```
 
 ```
-DBS 0.4.0
+DBS 0.3.1
 [ok]     installed app      dbs is in INSTALLED_APPS
 [done]   migrations         applied the pending dbs migrations
 [ok]     dependencies       scikit-learn is available
