@@ -58,6 +58,14 @@ def _parse_header(raw: bytes) -> dict | None:
     }
 
 
+def container_version(data: bytes) -> int | None:
+    for candidate in (data[:HEADER_SIZE], data[-HEADER_SIZE:] if len(data) >= HEADER_SIZE else b""):
+        header = _parse_header(candidate)
+        if header is not None:
+            return header["version"]
+    return None
+
+
 def _resolve_header(data: bytes) -> dict:
     front = _parse_header(data[:HEADER_SIZE])
     back = _parse_header(data[-HEADER_SIZE:]) if len(data) >= HEADER_SIZE else None

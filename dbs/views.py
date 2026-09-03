@@ -366,6 +366,7 @@ def wiki(request, page="index"):
         "scheduling": "Scheduled backups",
         "restore": "Restoring",
         "commands": "Command reference",
+        "upgrading": "Upgrading",
         "security": "The session guard",
         "privacy": "What the guard collects",
         "ai": "Working with AI assistants",

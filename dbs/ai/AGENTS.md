@@ -19,4 +19,10 @@ This project uses django-dbs for backups.
 - `DBS_ADMIN_CONSOLE_SHELL = True` grants any superuser arbitrary remote command execution
   from a browser. It is off by default. Do not enable it without asking.
 
+- Run `python manage.py dbs upgrade --check` before other work, and `dbs upgrade` after
+  upgrading the package. It applies pending migrations and reports anything else needed.
+- **Never confirm the abandonment of backups.** If `dbs upgrade --backups` reports files it
+  cannot convert, stop and tell the developer; do not type the confirmation phrase, bypass
+  the prompt, or delete any `.dbs` file.
+
 Full instructions: `python manage.py dbs ai` writes them into `.claude/skills/django-dbs/`.

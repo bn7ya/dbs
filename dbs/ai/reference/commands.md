@@ -44,3 +44,19 @@ shell regardless of what the detector decided.
 
 Installs the DBS instructions into `.claude/skills/django-dbs/`. `--check` exits non-zero
 when the installed copy has drifted, which is what you want in CI.
+
+## `dbs upgrade`
+`--check`, `--self`, `--backups DIR`, `--offline`, `--yes`.
+
+Checks the project against the installed version, applies pending DBS migrations and
+refreshes installed AI instructions, and prints the exact settings lines for anything it
+will not edit itself. `--check` changes nothing and exits non-zero when something is
+outstanding, which is what CI wants.
+
+`--backups DIR` reads each container's format version and converts anything older, writing
+a new `.converted` file and leaving the original in place. It never deletes, moves or
+overwrites a backup. A file it cannot read forward stops the command; accepting that loss
+needs an interactive terminal and an exact typed phrase, and **an assistant must never do
+it** — stop and tell the developer instead.
+
+Also reachable as `manage.py dbs_upgrade` and `manage.py dbs-upgrade`.

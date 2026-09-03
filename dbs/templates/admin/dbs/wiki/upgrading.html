@@ -1,0 +1,37 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>Upgrading</h1>
+<p>One command tells you what this project still needs, and does the parts that are safe to
+do automatically:</p>
+<pre><code>python manage.py dbs upgrade</code></pre>
+<p>It applies pending DBS migrations and refreshes the shipped AI instructions itself.
+Anything that means editing your own code it prints, with the exact line and where it goes.
+It never rewrites your settings.</p>
+
+<h2>In CI</h2>
+<pre><code>python manage.py dbs upgrade --check</code></pre>
+<p>Changes nothing, exits non-zero when something is outstanding.</p>
+
+<h2>Old backups</h2>
+<pre><code>python manage.py dbs upgrade --backups /var/backups/myproject</code></pre>
+<p>Every backup written by any released DBS is at container format version 1, which this
+version reads, so today this reports nothing to convert. It exists so that a future format
+change cannot strand files that already exist.</p>
+<p>When a backup cannot be read forward, the command stops and changes nothing. It never
+deletes, moves or overwrites a backup: a conversion writes a new <code>.converted</code>
+file beside the original and validates it end to end before counting it. The message names
+the safe option first &mdash; install the version that wrote the file in a separate
+environment and restore from there.</p>
+<p>Accepting that a backup is unreadable is deliberately hard to do by accident: there is no
+flag for it, it needs an interactive terminal, and it needs an exact typed phrase naming how
+many backups you are giving up. Even then nothing is deleted.</p>
+
+<h2>From 0.2.x</h2>
+<ol>
+  <li><code>pip install --upgrade django-dbs</code></li>
+  <li><code>python manage.py dbs upgrade</code></li>
+</ol>
+<p>That applies the migrations 0.3.0 added and reports anything else. Existing backups
+restore unchanged, and the original <code>dbs_backup</code> and friends keep working.</p>
+{% endblock %}

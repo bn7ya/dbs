@@ -4,6 +4,56 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-03
+
+The 0.3.1 changes below were never released separately; they ship here.
+
+### Added
+
+- `python manage.py dbs upgrade` checks a project against the installed version of DBS,
+  applies what is safe to apply, and prints the exact settings lines for the rest. It knows
+  the steps every release has needed so far: the tables 0.3.0 added, `scikit-learn`, the
+  `django.contrib.admin` and middleware entries the panel and guard need, and the
+  `DBS_EXCLUDE_MODELS` meaning that changed in 0.2.2 — that one silently altered behaviour
+  for anyone who had written the setting expecting it to replace the defaults, and until now
+  nothing detected it. It also reports when a newer release exists, and `--self` installs it
+  unless this is a source checkout. `--check` changes nothing and exits non-zero when
+  something is outstanding, which is what CI wants. Also spelled `manage.py dbs_upgrade` and
+  `manage.py dbs-upgrade`.
+- `dbs upgrade --backups DIR` reads each backup's container format version and converts
+  anything older. Every backup written by any released DBS is version 1, which this version
+  reads, so today it reports nothing to convert; it exists so that a future format change
+  cannot strand files that already exist. Conversion chains across several versions, and a
+  converted file is validated end to end before it counts.
+- `dbs.container.format.container_version` reads a container's format version without
+  requiring it to be the current one.
+
+### Security
+
+- Nothing in `dbs upgrade` deletes, moves or overwrites a backup file. Conversion writes a
+  new file beside the original and leaves the original alone. There is no flag anywhere that
+  changes this, and a test asserts the command's source contains no destructive call.
+- A backup that cannot be read forward stops the command rather than being skipped. The
+  message offers the safe option first — install the version that wrote it in a separate
+  environment and restore from there — because giving up a backup is rarely actually
+  necessary. Accepting the loss requires an interactive terminal and an exact typed phrase
+  naming how many backups are involved; there is no flag, no environment variable and no
+  piped-input path, so nothing running unattended can reach it. Even then the files stay on
+  disk.
+- The instructions shipped for AI assistants forbid confirming that step at all: an
+  assistant that meets an unconvertible backup must stop and tell the developer.
+
+### Changed
+
+- The README's *Upgrading* section leads with the command, and documents what happens to old
+  backups.
+- `dbs/ai/SKILL.md`, `AGENTS.md` and both `llms.txt` copies tell assistants to run
+  `dbs upgrade --check` before other work and after upgrading the package.
+- The admin wiki gains an *Upgrading* page.
+- `CLAUDE.md` records the rule that keeps this honest: a change requiring developer action
+  is not finished until `dbs/upgrade.py` has a step for it, and a container format bump must
+  keep `MAGIC` stable and register its converter in the same commit.
+
 ## [0.3.1] - 2026-09-03
 
 0.3.0 was tagged but never reached PyPI: its release run failed on a test of ours that

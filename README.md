@@ -473,6 +473,7 @@ python manage.py dbs schedule           [--interval 6h] [--output-dir DIR] [--on
 python manage.py dbs key                [--show]
 python manage.py dbs security ACTION    [USERNAME]
 python manage.py dbs ai                 [--agents] [--check] [--print]
+python manage.py dbs upgrade            [--check] [--self] [--backups DIR] [--offline]
 ```
 
 Every command takes `--passphrase`, `--passphrase-stdin` and `--database` where
@@ -649,19 +650,74 @@ directory the backup wants to write into.
 
 ## Upgrading
 
-**From 0.2.x to 0.3.x**
+One command tells you what this project still needs, and does the parts that are safe to
+do automatically:
+
+```bash
+python manage.py dbs upgrade
+```
+
+```
+DBS 0.4.0
+[ok]     installed app      dbs is in INSTALLED_APPS
+[done]   migrations         applied the pending dbs migrations
+[ok]     dependencies       scikit-learn is available
+[warn]   session guard      the control panel is reachable but nothing is scoring requests
+                            MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
+```
+
+It applies pending DBS migrations and refreshes the shipped AI instructions itself. Anything
+that means editing your own code it prints, with the exact line and where it goes — it never
+rewrites your settings.
+
+| | |
+|---|---|
+| `--check` | Report only, change nothing. Exits non-zero if something needs doing — use this in CI |
+| `--self` | Install a newer django-dbs from PyPI if one exists. Refuses on a source checkout |
+| `--backups DIR` | Also read the backups in `DIR` and convert any written in an older format |
+| `--offline` | Do not contact PyPI |
+
+`python manage.py dbs-upgrade` and `python manage.py dbs_upgrade` are the same command.
+
+### What it checks
+
+Installed app, pending migrations, `scikit-learn`, whether the panel is mounted, whether the
+guard middleware is active, `DBS_EXCLUDE_MODELS` written for pre-0.2.2 semantics, whether a
+passphrase can be derived, whether `DBS_RESTORE_ROOTS` would refuse every path, and whether
+the installed AI instructions match the version you have.
+
+### Old backups
+
+```bash
+python manage.py dbs upgrade --backups /var/backups/myproject
+```
+
+Every backup ever written by any released DBS is at container format version 1, which this
+version reads, so today this reports "nothing to convert". It exists because a future format
+change would otherwise strand files that already exist.
+
+When a backup *can't* be read forward, the command **stops and changes nothing**:
+
+- It never deletes, moves or overwrites a backup — not with a flag, not with confirmation.
+  Conversion writes a new `.converted` file beside the original and leaves the original
+  alone.
+- A converted file is validated end to end before it counts as converted.
+- It tells you the safe option first: install the version that wrote the file in a separate
+  environment and restore from there. You rarely need to give anything up.
+
+Only if you genuinely no longer need those files can you continue, and doing so is
+deliberately hard to automate: there is no flag, it requires a terminal, and it requires
+typing an exact phrase naming how many backups you are giving up. Even then nothing is
+deleted — the files stay on disk.
+
+### From 0.2.x
 
 1. `pip install --upgrade django-dbs`
-2. **Run `python manage.py migrate`** — 0.3.0 added database tables.
-3. Add `django.contrib.admin` to `INSTALLED_APPS` and
-   `dbs.security.middleware.DBSSecurityMiddleware` to `MIDDLEWARE` if you want
-   the panel and its guard. Without them the commands still work exactly as
-   before.
-4. `scikit-learn` is a new dependency, installed automatically.
+2. `python manage.py dbs upgrade`
 
-Nothing else changes: your existing backups restore unchanged, and the
-`dbs_backup` / `dbs_restore` / `dbs_validate` / `dbs_schedule` commands keep
-working.
+That applies the migrations 0.3.0 added and tells you about anything else. `scikit-learn`
+arrives automatically as a dependency. Your existing backups restore unchanged, and the
+`dbs_backup` / `dbs_restore` / `dbs_validate` / `dbs_schedule` commands keep working.
 
 ## Development
 

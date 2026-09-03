@@ -41,6 +41,20 @@ def test_the_skill_covers_what_loses_data():
     assert "DBS_ADMIN_CONSOLE_SHELL" in text
 
 
+def test_the_skill_tells_assistants_to_keep_projects_current():
+    text = (ASSETS / "SKILL.md").read_text()
+
+    assert "dbs upgrade --check" in text
+    assert "Never confirm the abandonment of backups" in text
+
+
+def test_every_assistant_facing_file_carries_the_backup_prohibition():
+    for name in ("SKILL.md", "AGENTS.md", "llms.txt"):
+        text = (ASSETS / name).read_text().lower()
+        assert "abandon" in text, name
+        assert "dbs upgrade" in text, name
+
+
 def test_install_writes_the_skill_into_a_project(tmp_path):
     out = StringIO()
 

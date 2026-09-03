@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
-HYPHEN_ALIASES = ("django-dbs",)
+HYPHEN_ALIASES = ("django-dbs", "dbs-upgrade")
 
 
 class DbsConfig(AppConfig):

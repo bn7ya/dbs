@@ -30,9 +30,16 @@ Upgrading from 0.2.x requires `manage.py migrate`.
 - `manage.py dbs key --show` - print the passphrase derived from SECRET_KEY
 - `manage.py dbs security unlock USER` - clear an anomaly lockout
 - `manage.py dbs ai` - install these instructions for AI coding assistants
+- `manage.py dbs upgrade [--check]` - bring a project up to date with the installed version
 
 `manage.py django-dbs` is the same command under its old name. `dbs_backup`, `dbs_restore`,
 `dbs_validate` and `dbs_schedule` still work and are not deprecated.
+
+## For assistants
+
+Run `manage.py dbs upgrade --check` before working in a project, and `dbs upgrade` after
+upgrading the package. Never confirm the abandonment of unconvertible backups: stop and ask
+a human.
 
 ## Key facts
 - The passphrase comes from `settings.SECRET_KEY` unless `DBS_PASSPHRASE` overrides it.

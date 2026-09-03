@@ -75,6 +75,7 @@ def test_every_wiki_page_renders(panel):
         "scheduling",
         "restore",
         "commands",
+        "upgrading",
         "security",
         "privacy",
         "ai",

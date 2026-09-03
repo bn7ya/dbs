@@ -28,6 +28,29 @@ guarded in a project that lacks it.
 **On any upgrade from 0.2.x, `manage.py migrate` is required**: 0.3.0 added database tables.
 `scikit-learn` became a hard dependency at the same time.
 
+## Keep the project current
+
+Whenever you work in a project using django-dbs, run this first:
+
+```bash
+python manage.py dbs upgrade --check
+```
+
+If it reports outstanding items, resolve them — `python manage.py dbs upgrade` applies the
+safe ones — before making other changes. A project that has skipped an upgrade step fails at
+runtime, not at install time. After upgrading the package itself, always run `dbs upgrade`.
+
+## Never confirm the abandonment of backups
+
+If `dbs upgrade --backups` reports backups it cannot convert, **stop and tell the
+developer.** Do not type the confirmation phrase, do not pipe input to the prompt, do not
+look for a flag that skips it, and do not delete, move or overwrite any `.dbs` file to get
+past it. Those files may be the only copy of data that exists nowhere else, and whether they
+still matter is not a judgement you can make.
+
+Report what the command said, including its suggestion to install the older version in a
+separate environment and restore from there. Let a human decide.
+
 ## The command surface
 
 ```bash
@@ -39,6 +62,7 @@ python manage.py dbs schedule [--interval 6h] [--once] --output-dir DIR
 python manage.py dbs key --show
 python manage.py dbs security status|unlock USER|retrain|purge
 python manage.py dbs ai [--agents] [--check]
+python manage.py dbs upgrade [--check] [--self] [--backups DIR]
 ```
 
 `manage.py django-dbs` is the same command under its old name. The original `dbs_backup`,

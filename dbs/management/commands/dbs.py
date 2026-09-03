@@ -11,6 +11,7 @@ SUBCOMMANDS = {
     "key": ("dbs_key", "Show the passphrase DBS derives from SECRET_KEY."),
     "security": ("dbs_security", "Inspect and unlock the admin session guard."),
     "ai": ("dbs_ai", "Install the DBS instructions for AI coding assistants."),
+    "upgrade": ("dbs_upgrade", "Bring this project up to date with the installed DBS."),
 }
 
 ALIAS_TIP = 'Tip: this command is also available as "manage.py dbs".'

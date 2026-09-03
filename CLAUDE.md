@@ -81,6 +81,26 @@ Changes to `dbs/security/` must preserve these:
 - **The console's named actions take no user-supplied command string.** Free-form
   commands stay behind `DBS_ADMIN_CONSOLE_SHELL`, default off.
 
+## Upgrade path
+
+`dbs/upgrade.py` is the executable version of the changelog. When a change requires a
+developer to do something to their project — a new migration, a new or renamed setting, a
+changed default, a new `INSTALLED_APPS`/`MIDDLEWARE` entry, a new dependency, a
+`FORMAT_VERSION` bump — add a step to `dbs/upgrade.py` **in the same commit**, with a test.
+The changelog says what changed; `manage.py dbs upgrade` checks and repairs it. A release
+that needs manual steps and ships no upgrade step is incomplete.
+
+Bump `FORMAT_VERSION` when the container layout changes; never change `MAGIC`. Old files
+must stay parseable so `dbs upgrade --backups` can find and convert them, and so a mismatch
+reports a version rather than "not a DBS container". Register the conversion in `CONVERTERS`
+in the same commit.
+
+The converter must never destroy its source: write a new file, validate it end to end, and
+leave the original alone. Nothing in DBS deletes or overwrites a backup file — not with a
+flag, not with confirmation. Abandoning unreadable backups stays behind an interactive typed
+confirmation with no programmatic bypass, and the message offers installing the older
+version to read them before it offers giving them up.
+
 ## Client constraint
 
 `dbs/client/` must import and run with **no Django settings configured**. Never
