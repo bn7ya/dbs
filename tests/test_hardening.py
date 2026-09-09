@@ -5,7 +5,7 @@ import struct
 import pytest
 from django.test import RequestFactory
 
-from dbs.container.format import HEADER_SIZE
+from dbs.container.format import HEADER_SIZE, read_container
 from dbs.crypto.kdf import KDFParams
 from dbs.engine import create_backup, restore_backup, validate_backup
 from dbs.exceptions import ContainerError, CorruptionError, CryptoError, RestoreError
@@ -103,7 +103,26 @@ def test_backup_output_is_written_atomically(tmp_path):
     out = tmp_path / "backup.dbs"
     container = create_backup(PASS, kdf_params=FAST_KDF, output=str(out))
     assert out.read_bytes() == container
-    assert not (tmp_path / "backup.dbs.tmp").exists()
+    assert list(tmp_path.iterdir()) == [out]
+    assert out.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.django_db
+def test_unencrypted_manifest_does_not_disclose_backup_metadata(tmp_path):
+    author = Author.objects.create(name="Ada")
+    missing = tmp_path / "confidential-customer-name.txt"
+    Book.objects.create(title="Private title", author=author, sidecar_path=str(missing))
+
+    container = create_backup(PASS, kdf_params=FAST_KDF)
+    manifest, _copy_a, _copy_b = read_container(container)
+
+    assert "stats" not in manifest
+    assert b"confidential-customer-name" not in container
+    assert b"testapp.author" not in container
+
+    result = validate_backup(container, PASS)
+    assert result.stats["records"] == 2
+    assert str(missing) in result.stats["skipped_files"][0]
 
 
 @pytest.mark.django_db

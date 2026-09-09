@@ -24,6 +24,17 @@ def test_wrong_passphrase_rejected():
         decrypt_payload(ciphertext, "wrong", material)
 
 
+def test_dictionary_attack_cannot_unlock_without_the_passphrase():
+    ciphertext, material = encrypt_payload(
+        b"private database contents", "a-unique-high-entropy-secret", kdf_params=FAST
+    )
+    guesses = ("password", "12345678", "admin", "letmein", "backup")
+
+    for guess in guesses:
+        with pytest.raises(InvalidPassphrase):
+            decrypt_payload(ciphertext, guess, material)
+
+
 def test_tampered_wrapped_key_rejected():
     ciphertext, material = encrypt_payload(b"secret data", "pw", kdf_params=FAST)
     tampered = bytearray(material.wrapped_dek)

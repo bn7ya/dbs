@@ -93,6 +93,9 @@ class FakeSFTP:
             raise self._missing(remote_path)
         os.remove(local)
 
+    def chmod(self, remote_path, mode):
+        os.chmod(self._local(remote_path), mode)
+
     def rename(self, source, destination):
         os.replace(self._local(source), self._local(destination))
 
