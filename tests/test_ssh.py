@@ -164,6 +164,7 @@ def test_push_creates_the_directory_and_lands_atomically(fake_ssh):
     listed = list_backups(target())
     assert len(listed) == 1
     assert not any(name.endswith(".part") for name in os.listdir(fake_ssh.remote_path(REMOTE_DIR)))
+    assert os.stat(fake_ssh.remote_path(REMOTE_DIR, listed[0])).st_mode & 0o777 == 0o600
     assert pull_backup(listed[0], target()) == b"payload"
 
 
@@ -194,6 +195,7 @@ def test_pull_to_streams_to_disk_and_leaves_no_partial(fake_ssh, tmp_path):
 
     assert pull_backup_to(name, str(destination), target()) == 7
     assert destination.read_bytes() == b"payload"
+    assert destination.stat().st_mode & 0o777 == 0o600
     assert not (tmp_path / "local.dbs.part").exists()
 
 

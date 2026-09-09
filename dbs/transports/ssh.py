@@ -271,6 +271,7 @@ class SSHSession:
         try:
             self.ensure_dir()
             self.sftp.putfo(io.BytesIO(data), partial)
+            self.sftp.chmod(partial, 0o600)
             _replace_remote(self.sftp, partial, remote_path)
         except OSError as exc:
             raise DBSError(f"SFTP upload failed: {exc}") from exc
@@ -301,7 +302,9 @@ class SSHSession:
             _discard(partial)
             raise DBSError(f"SFTP download failed: {exc}") from exc
         size = os.path.getsize(partial)
+        os.chmod(partial, 0o600)
         os.replace(partial, local_path)
+        os.chmod(local_path, 0o600)
         logger.info(
             "pulled %d bytes from %s:%s to %s",
             size,

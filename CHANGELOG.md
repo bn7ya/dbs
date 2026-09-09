@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Backup manifests no longer expose database statistics, model labels, file names, or
+  skipped-file paths before decryption.
+- Local backup writes and SFTP transfers set owner-only `0600` permissions, including when
+  replacing a destination that previously had broader permissions.
+- Security regression coverage now exercises offline dictionary guesses, metadata
+  confidentiality, and local and remote file permissions.
+
 ## [0.3.1] - 2026-09-03
 
 Follows 0.3.0 on PyPI. It adds `manage.py dbs upgrade`, and fixes the time-dependent test

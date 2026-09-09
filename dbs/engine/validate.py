@@ -48,8 +48,9 @@ def validate_backup(data: bytes, passphrase: str | None = None) -> ValidationRes
         try:
             from .restore import read_payload
 
-            read_payload(data, passphrase)
+            read_result = read_payload(data, passphrase)
             result.decrypted_ok = True
+            result.stats = read_result.document.get("stats", {})
         except DBSError as exc:
             result.decrypted_ok = False
             result.ok = False

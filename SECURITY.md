@@ -19,6 +19,12 @@ time for a fix and coordinated disclosure before publishing details.
 
 - Backups are encrypted with AES-256-GCM under a key derived from the
   passphrase with Argon2id; the passphrase and raw data key are never stored.
+- Database statistics, model labels, file names, and skipped-file paths are kept
+  inside the encrypted payload. The public container manifest contains only the
+  metadata needed to derive a key, authenticate, and repair the container.
+- Backup files written locally or transferred through DBS are restricted to the
+  owner with mode `0600`. Directory permissions and access to copies made by
+  other software remain the operator's responsibility.
 - Restoring a backup writes files to disk. File writes are confined to the
   directories listed in `DBS_RESTORE_ROOTS` (falling back to
   `DBS_FILE_ROOTS`); restores refuse to write anywhere else. Treat backup

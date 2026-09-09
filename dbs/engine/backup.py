@@ -117,7 +117,6 @@ def create_backup(
         "copy_len": plan.copy_len,
         "blocks": plan.to_dict(),
         "crypto": material.to_dict(),
-        "stats": doc_meta["stats"],
     }
     flags = FLAG_ENCRYPTED | FLAG_FEC | (FLAG_COMPRESSED if compress else 0)
     container = write_container(manifest, encoded, encoded, flags=flags)
