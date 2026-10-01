@@ -20,6 +20,8 @@ key_filename = "~/.ssh/production.pem"
 # The key's own passphrase, when the key file is encrypted:
 # key_passphrase_env = "DBS_PRODUCTION_KEY_PASSPHRASE"
 known_hosts = "~/.ssh/known_hosts"
+# Or pin the one key this server should present, instead of known_hosts:
+# host_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA..."
 connect_timeout = 30
 
 # Where django-dbs lives on that server.

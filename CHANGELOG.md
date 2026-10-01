@@ -6,6 +6,46 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-01
+
+An application that manages several servers keeps their credentials and host keys in its
+own database. This release lets it connect the way such an application needs to: with a
+private key held in memory, trusting exactly one pinned host key, and confirming that key
+before trusting it. Nothing in a project has to change to upgrade.
+
+### Added
+
+- `SSHTarget.host_key` pins a server's public key, written as `"<type> <base64>"`.
+  Only that key is trusted for the host and port. The system known_hosts is not read, and
+  combining it with `auto_add_host_key` is refused. `dbs-client.toml` accepts `host_key`
+  on a server too.
+- `fetch_host_key(host, port)` reads the key a server presents, without authenticating, so
+  a person can compare its fingerprint before pinning it. It returns a `HostKey`, whose
+  `fingerprint` reads exactly as `ssh-keygen -lf` prints it and whose `line` is ready to
+  store as `host_key`.
+- `HostKeyError`, a `ConfigurationError`, is raised when a server presents a key that does
+  not match the trusted one, or one that is not trusted at all.
+
+### Fixed
+
+- A private key held in memory (`SSHTarget(private_key=...)`, and the admin panel's SFTP
+  targets with a pasted key) now loads. It was read through paramiko's base key class,
+  which cannot parse a key, so every such connection failed before it was attempted.
+  Ed25519, ECDSA and RSA keys load, with or without a passphrase.
+- An unknown or changed host key on a target with `key_filename` was reported as a problem
+  with the private key. It is now reported as a host key problem.
+- `SSHSession.run(timeout=...)`, and so `exec_timeout` in `dbs-client.toml`, bounded each
+  read but not the command. A command that printed nothing and never exited held the
+  caller for ever. The timeout is now a deadline for the whole command: when it passes, the
+  channel is closed and `DBSError` says the command timed out.
+- A target with a password and `use_agent=False` no longer offers the local user's
+  `~/.ssh` keys to the server. Local keys are looked for only when the agent is in use and
+  no key is named.
+- The `Panel` proxy model behind the control panel shipped in 0.3.0 without a migration, so
+  `makemigrations --check` failed in every project with `dbs` installed. `0002_panel` adds
+  it. `manage.py dbs upgrade` reports it as pending and applies it, like any other DBS
+  migration.
+
 ### Security
 
 - Backup manifests no longer expose database statistics, model labels, file names, or

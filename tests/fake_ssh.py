@@ -4,6 +4,7 @@ import errno
 import io
 import os
 import posixpath
+import types
 
 
 class SSHException(Exception):
@@ -14,12 +15,76 @@ class AuthenticationException(SSHException):
     pass
 
 
-class AutoAddPolicy:
+class PasswordRequiredException(AuthenticationException):
     pass
+
+
+class BadHostKeyException(SSHException):
+    def __init__(self, hostname, got_key, expected_key):
+        super().__init__(f"Host key for {hostname} does not match")
+        self.hostname = hostname
+        self.key = got_key
+        self.expected_key = expected_key
+
+
+class AutoAddPolicy:
+    def missing_host_key(self, client, hostname, key):
+        client.get_host_keys().add(hostname, key.split()[0], key)
 
 
 class RejectPolicy:
-    pass
+    def missing_host_key(self, client, hostname, key):
+        raise SSHException(f"Server {hostname!r} not found in known_hosts")
+
+
+class FakeHostKeyEntry:
+    def __init__(self, hostnames, key):
+        self.hostnames = hostnames
+        self.key = key
+
+    @classmethod
+    def from_line(cls, line):
+        fields = line.split(" ")
+        if len(fields) < 3:
+            return None
+        names, key_type, key = fields[:3]
+        return cls(names.split(","), f"{key_type} {key}")
+
+
+class FakeHostKeys(dict):
+    def add(self, hostname, keytype, key):
+        self.setdefault(hostname, {})[keytype] = key
+
+
+class FakeServerKey:
+    def __init__(self, line):
+        self._type, self._base64 = line.split()[:2]
+
+    def get_name(self):
+        return self._type
+
+    def get_base64(self):
+        return self._base64
+
+
+class FakeTransport:
+    def __init__(self, registry, sock):
+        self._registry = registry
+        self.sock = sock
+        self.banner_timeout = None
+        self.start_timeout = None
+        self.closed = False
+
+    def start_client(self, timeout=None):
+        self.start_timeout = timeout
+        if self._registry.handshake_error is not None:
+            raise self._registry.handshake_error
+
+    def get_remote_server_key(self):
+        return FakeServerKey(self._registry.presented_key)
+
+    def close(self):
+        self.closed = True
 
 
 class FakeAttr:
@@ -162,7 +227,11 @@ class FakeSSHClient:
         self.policy = None
         self.host_keys_loaded = None
         self.system_host_keys_loaded = False
+        self.host_keys = FakeHostKeys()
         self.closed = False
+
+    def get_host_keys(self):
+        return self.host_keys
 
     def load_host_keys(self, path):
         self.host_keys_loaded = path
@@ -178,6 +247,17 @@ class FakeSSHClient:
         self._registry.connections.append(kwargs)
         if self._registry.connect_error is not None:
             raise self._registry.connect_error
+        presented = self._registry.presented_key
+        if presented is None:
+            return
+        port = kwargs.get("port", 22)
+        hostname = kwargs["hostname"]
+        name = hostname if port == 22 else f"[{hostname}]:{port}"
+        known = self.host_keys.get(name)
+        if known is None:
+            self.policy.missing_host_key(self, name, presented)
+        elif presented not in known.values():
+            raise BadHostKeyException(name, presented, next(iter(known.values())))
 
     def open_sftp(self):
         return FakeSFTP(self._registry.root)
@@ -199,8 +279,11 @@ class FakeParamiko:
 
     SSHException = SSHException
     AuthenticationException = AuthenticationException
+    PasswordRequiredException = PasswordRequiredException
+    BadHostKeyException = BadHostKeyException
     AutoAddPolicy = AutoAddPolicy
     RejectPolicy = RejectPolicy
+    hostkeys = types.SimpleNamespace(HostKeyEntry=FakeHostKeyEntry)
 
     def __init__(self, root):
         self.root = root
@@ -208,13 +291,21 @@ class FakeParamiko:
         self.commands = []
         self.executions = []
         self.clients = []
+        self.transports = []
         self.connect_error = None
+        self.handshake_error = None
+        self.presented_key = None
         self._handler = None
 
     def SSHClient(self):
         client = FakeSSHClient(self)
         self.clients.append(client)
         return client
+
+    def Transport(self, sock):
+        transport = FakeTransport(self, sock)
+        self.transports.append(transport)
+        return transport
 
     def on_exec(self, handler):
         self._handler = handler
