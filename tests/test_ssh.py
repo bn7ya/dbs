@@ -464,3 +464,19 @@ def test_an_unreadable_stored_key_is_refused():
 
     with pytest.raises(ConfigurationError, match="could not be read"):
         _load_private_key(paramiko, stored)
+
+
+def test_a_password_target_without_the_agent_offers_no_local_keys(fake_ssh):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+    with open_session(target(password="s3cret", use_agent=False)) as session:
+        session.names()
+
+    assert fake_ssh.connections[0]["look_for_keys"] is False
+
+
+def test_an_agent_target_without_a_key_still_looks_for_local_keys(fake_ssh):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+    with open_session(target()) as session:
+        session.names()
+
+    assert fake_ssh.connections[0]["look_for_keys"] is True

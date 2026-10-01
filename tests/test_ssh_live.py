@@ -4,6 +4,7 @@ import base64
 import io
 import socket
 import threading
+import time
 
 import pytest
 
@@ -11,7 +12,7 @@ paramiko = pytest.importorskip("paramiko")
 
 from dbs.client.config import ServerProfile  # noqa: E402
 from dbs.client.remote import trigger_remote_backup  # noqa: E402
-from dbs.exceptions import ConfigurationError, HostKeyError  # noqa: E402
+from dbs.exceptions import ConfigurationError, DBSError, HostKeyError  # noqa: E402
 from dbs.transports.ssh import (  # noqa: E402
     HostKey,
     SSHTarget,
@@ -59,9 +60,11 @@ class Handler(paramiko.ServerInterface):
 
 
 class LoopbackServer:
-    def __init__(self, host_key, authorized_key):
+    def __init__(self, host_key, authorized_key, *, exits=True):
         self.host_key = host_key
         self.authorized_key = authorized_key
+        self.exits = exits
+        self.released = threading.Event()
         self.record = {}
         self._socket = socket.socket()
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -87,6 +90,8 @@ class LoopbackServer:
             if handler.exec_ready.wait(10):
                 self.record["stdin"] = channel.makefile("r").readline()
                 channel.sendall(b"served\n")
+                if not self.exits:
+                    self.released.wait(30)
                 channel.send_exit_status(0)
             channel.close()
         except Exception:
@@ -96,6 +101,7 @@ class LoopbackServer:
             connection.close()
 
     def close(self):
+        self.released.set()
         try:
             self._socket.close()
         except OSError:
@@ -314,3 +320,26 @@ def test_the_passphrase_reaches_the_server_on_stdin_not_in_argv(tmp_path, host_k
     assert server.record["stdin"] == PASSPHRASE + "\n"
     assert PASSPHRASE not in server.record["command"]
     assert "--passphrase-stdin" in server.record["command"]
+
+
+def test_a_command_that_never_exits_is_stopped_at_its_timeout(tmp_path, host_key):
+    server = LoopbackServer(host_key, authorized_key=None, exits=False)
+    try:
+        target = SSHTarget(
+            host="127.0.0.1",
+            port=server.port,
+            username="deploy",
+            password=PASSWORD,
+            use_agent=False,
+            known_hosts=known_hosts_file(tmp_path, server.port, host_key),
+            connect_timeout=10,
+        )
+        with open_session(target) as session:
+            started = time.monotonic()
+            with pytest.raises(DBSError, match="timed out after 1"):
+                session.run("sleep forever", timeout=1)
+            elapsed = time.monotonic() - started
+    finally:
+        server.close()
+
+    assert elapsed < 5

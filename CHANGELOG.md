@@ -34,6 +34,13 @@ before trusting it. Nothing in a project has to change to upgrade.
   Ed25519, ECDSA and RSA keys load, with or without a passphrase.
 - An unknown or changed host key on a target with `key_filename` was reported as a problem
   with the private key. It is now reported as a host key problem.
+- `SSHSession.run(timeout=...)`, and so `exec_timeout` in `dbs-client.toml`, bounded each
+  read but not the command. A command that printed nothing and never exited held the
+  caller for ever. The timeout is now a deadline for the whole command: when it passes, the
+  channel is closed and `DBSError` says the command timed out.
+- A target with a password and `use_agent=False` no longer offers the local user's
+  `~/.ssh` keys to the server. Local keys are looked for only when the agent is in use and
+  no key is named.
 - The `Panel` proxy model behind the control panel shipped in 0.3.0 without a migration, so
   `makemigrations --check` failed in every project with `dbs` installed. `0002_panel` adds
   it. `manage.py dbs upgrade` reports it as pending and applies it, like any other DBS

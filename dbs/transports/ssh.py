@@ -9,6 +9,7 @@ import logging
 import os
 import posixpath
 import socket
+import threading
 from dataclasses import dataclass, field
 
 from ..conf import setting
@@ -288,7 +289,9 @@ def _connect(target: SSHTarget):
             pkey=pkey,
             passphrase=target.key_passphrase,
             allow_agent=target.use_agent,
-            look_for_keys=target.key_filename is None and pkey is None,
+            look_for_keys=target.use_agent
+            and target.key_filename is None
+            and pkey is None,
             timeout=target.connect_timeout,
             banner_timeout=target.connect_timeout,
             auth_timeout=target.connect_timeout,
@@ -466,6 +469,12 @@ class SSHSession:
             stdin, stdout, stderr = self._client.exec_command(
                 command, timeout=timeout, get_pty=False
             )
+        except socket.timeout as exc:
+            raise DBSError(f"Remote command timed out after {timeout}s.") from exc
+        except OSError as exc:
+            raise DBSError(f"Remote command failed: {exc}") from exc
+        deadline = _Deadline(stdout.channel, timeout)
+        try:
             if stdin_line is not None:
                 stdin.write(stdin_line + "\n")
                 stdin.flush()
@@ -473,11 +482,37 @@ class SSHSession:
             out = _decode(stdout)
             err = _decode(stderr)
             status = stdout.channel.recv_exit_status()
-        except socket.timeout as exc:
-            raise DBSError(f"Remote command timed out after {timeout}s.") from exc
-        except OSError as exc:
+        except (socket.timeout, OSError) as exc:
+            if deadline.passed or isinstance(exc, socket.timeout):
+                raise DBSError(f"Remote command timed out after {timeout}s.") from exc
             raise DBSError(f"Remote command failed: {exc}") from exc
+        finally:
+            deadline.cancel()
+        if deadline.passed:
+            raise DBSError(f"Remote command timed out after {timeout}s.")
         return RemoteResult(status, out, err)
+
+
+class _Deadline:
+    def __init__(self, channel, timeout: float | None):
+        self._expired = threading.Event()
+        self._timer = None
+        if timeout:
+            self._timer = threading.Timer(timeout, self._expire, args=(channel,))
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _expire(self, channel) -> None:
+        self._expired.set()
+        channel.close()
+
+    @property
+    def passed(self) -> bool:
+        return self._expired.is_set()
+
+    def cancel(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
 
 
 def fetch_host_key(host: str, port: int = 22, *, timeout: float = 10.0) -> HostKey:
