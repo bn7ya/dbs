@@ -1,6 +1,7 @@
 """A real SSH handshake over loopback: auth wiring and the stdin passphrase channel."""
 
 import base64
+import io
 import socket
 import threading
 
@@ -10,8 +11,13 @@ paramiko = pytest.importorskip("paramiko")
 
 from dbs.client.config import ServerProfile  # noqa: E402
 from dbs.client.remote import trigger_remote_backup  # noqa: E402
-from dbs.exceptions import ConfigurationError  # noqa: E402
-from dbs.transports.ssh import SSHTarget, open_session  # noqa: E402
+from dbs.exceptions import ConfigurationError, HostKeyError  # noqa: E402
+from dbs.transports.ssh import (  # noqa: E402
+    HostKey,
+    SSHTarget,
+    fetch_host_key,
+    open_session,
+)
 
 PASSWORD = "login-secret"
 PASSPHRASE = "backup-pass-phrase"
@@ -220,7 +226,63 @@ def test_an_unknown_host_key_is_rejected(tmp_path, host_key):
             connect_timeout=10,
         )
         (tmp_path / "empty_known_hosts").write_text("")
-        with pytest.raises(Exception):
+        with pytest.raises(HostKeyError):
+            with open_session(target) as session:
+                session.run("true")
+    finally:
+        server.close()
+
+
+def test_fetch_host_key_reads_the_key_a_real_server_presents(host_key):
+    server = LoopbackServer(host_key, authorized_key=None)
+    try:
+        key = fetch_host_key("127.0.0.1", server.port, timeout=10)
+    finally:
+        server.close()
+
+    assert key.line == f"{host_key.get_name()} {host_key.get_base64()}"
+    assert key.fingerprint == host_key.fingerprint
+
+
+def test_a_pinned_host_key_and_an_in_memory_key_over_a_real_handshake(
+    host_key, client_key
+):
+    private_key = io.StringIO()
+    client_key.write_private_key(private_key, password="key-secret")
+    server = LoopbackServer(host_key, authorized_key=client_key)
+    try:
+        target = SSHTarget(
+            host="127.0.0.1",
+            port=server.port,
+            username="deploy",
+            private_key=private_key.getvalue(),
+            key_passphrase="key-secret",
+            host_key=HostKey(host_key.get_name(), host_key.get_base64()).line,
+            use_agent=False,
+            connect_timeout=10,
+        )
+        with open_session(target) as session:
+            session.run("true")
+    finally:
+        server.close()
+
+    assert server.record["auth"] == "publickey"
+
+
+def test_a_different_pinned_key_is_refused_over_a_real_handshake(host_key):
+    impostor = paramiko.RSAKey.generate(2048)
+    server = LoopbackServer(host_key, authorized_key=None)
+    try:
+        target = SSHTarget(
+            host="127.0.0.1",
+            port=server.port,
+            username="deploy",
+            password=PASSWORD,
+            host_key=f"{impostor.get_name()} {impostor.get_base64()}",
+            use_agent=False,
+            connect_timeout=10,
+        )
+        with pytest.raises(HostKeyError, match="does not match"):
             with open_session(target) as session:
                 session.run("true")
     finally:

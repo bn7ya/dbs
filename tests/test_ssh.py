@@ -7,7 +7,7 @@ from django.test import override_settings
 
 from dbs.exceptions import ConfigurationError, DBSError
 from dbs.naming import backup_filename
-from dbs.transports import SSHTarget, open_session
+from dbs.transports import HostKey, HostKeyError, SSHTarget, fetch_host_key, open_session
 from dbs.transports.ssh import (
     check_connection,
     delete_backup,
@@ -247,3 +247,220 @@ def test_check_connection_reports_the_facts(fake_ssh):
     assert facts["host_key_policy"] == "reject-unknown"
     assert facts["remote_dir"] == REMOTE_DIR
     assert facts["backups"] == 1
+
+
+def ed25519_public_line():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    return (
+        ed25519.Ed25519PrivateKey.generate()
+        .public_key()
+        .public_bytes(serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH)
+        .decode()
+    )
+
+
+def test_host_key_parses_and_normalises_a_public_key_line():
+    line = ed25519_public_line()
+
+    key = HostKey.from_line(line + " deploy@laptop")
+
+    assert key.key_type == "ssh-ed25519"
+    assert key.line == line
+    assert key.fingerprint.startswith("SHA256:")
+    assert not key.fingerprint.endswith("=")
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["", "ssh-ed25519", "ssh-ed25519 not-base64!", "ssh-rsa " + "AAAAC3NzaC1lZDI1NTE5AAAAIA=="],
+)
+def test_host_key_refuses_a_malformed_line(line):
+    with pytest.raises(ConfigurationError):
+        HostKey.from_line(line)
+
+
+def test_host_key_fingerprint_matches_paramiko():
+    import paramiko
+
+    key = paramiko.RSAKey.generate(1024)
+
+    assert HostKey(key.get_name(), key.get_base64()).fingerprint == key.fingerprint
+
+
+def test_a_pinned_host_key_is_normalised_and_reported():
+    line = ed25519_public_line()
+
+    pinned = target(host_key=f"  {line}  comment ")
+
+    assert pinned.host_key == line
+    assert pinned.host_key_policy == "pinned"
+    assert SSHTarget.from_dict(
+        {"host": "h", "username": "u", "host_key": line}
+    ).host_key == line
+
+
+def test_a_pinned_host_key_cannot_be_combined_with_auto_add():
+    with pytest.raises(ConfigurationError, match="auto_add_host_key"):
+        target(host_key=ed25519_public_line(), auto_add_host_key=True)
+
+
+def test_a_pinned_host_key_is_the_only_key_trusted(fake_ssh):
+    line = ed25519_public_line()
+    fake_ssh.presented_key = line
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target(host_key=line, port=2222)) as session:
+        session.names()
+
+    client = fake_ssh.clients[0]
+    assert client.host_keys == {"[h.example.com]:2222": {"ssh-ed25519": line}}
+    assert client.system_host_keys_loaded is False
+    assert client.host_keys_loaded is None
+    assert isinstance(client.policy, RejectPolicy)
+
+
+def test_a_changed_host_key_raises_host_key_error_and_closes(fake_ssh):
+    fake_ssh.presented_key = ed25519_public_line()
+
+    with pytest.raises(HostKeyError, match="does not match"):
+        with open_session(target(host_key=ed25519_public_line(), key_filename="/k.pem")):
+            pass
+
+    assert fake_ssh.clients[0].closed is True
+
+
+def test_an_unknown_host_raises_host_key_error(fake_ssh):
+    fake_ssh.presented_key = ed25519_public_line()
+
+    with pytest.raises(HostKeyError, match="not trusted"):
+        with open_session(target(key_filename="/k.pem")):
+            pass
+
+    assert fake_ssh.clients[0].system_host_keys_loaded is True
+    assert fake_ssh.clients[0].closed is True
+
+
+def test_host_key_error_is_a_configuration_error():
+    assert issubclass(HostKeyError, ConfigurationError)
+
+
+def test_fetch_host_key_reads_the_presented_key_without_authenticating(
+    fake_ssh, monkeypatch
+):
+    line = ed25519_public_line()
+    fake_ssh.presented_key = line
+    sockets = []
+    monkeypatch.setattr(
+        "dbs.transports.ssh.socket.create_connection",
+        lambda address, timeout: sockets.append((address, timeout)) or "socket",
+    )
+
+    key = fetch_host_key("h.example.com", 2222, timeout=4)
+
+    assert key.line == line
+    assert sockets == [(("h.example.com", 2222), 4)]
+    transport = fake_ssh.transports[0]
+    assert (transport.sock, transport.start_timeout, transport.banner_timeout) == (
+        "socket",
+        4,
+        4,
+    )
+    assert transport.closed is True
+    assert fake_ssh.connections == []
+
+
+def test_fetch_host_key_reports_an_unreachable_host(fake_ssh, monkeypatch):
+    def refuse(address, timeout):
+        raise ConnectionRefusedError("refused")
+
+    monkeypatch.setattr("dbs.transports.ssh.socket.create_connection", refuse)
+
+    with pytest.raises(DBSError, match="Cannot reach h.example.com:22"):
+        fetch_host_key("h.example.com")
+
+
+def test_fetch_host_key_reports_a_failed_handshake_and_closes(fake_ssh, monkeypatch):
+    from tests.fake_ssh import SSHException
+
+    fake_ssh.handshake_error = SSHException("Error reading SSH protocol banner")
+    monkeypatch.setattr(
+        "dbs.transports.ssh.socket.create_connection", lambda address, timeout: "socket"
+    )
+
+    with pytest.raises(DBSError, match="handshake"):
+        fetch_host_key("h.example.com")
+
+    assert fake_ssh.transports[0].closed is True
+
+
+def openssh_private_key(algorithm, passphrase=None):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
+
+    private = {
+        "ed25519": lambda: ed25519.Ed25519PrivateKey.generate(),
+        "ecdsa": lambda: ec.generate_private_key(ec.SECP256R1()),
+        "rsa": lambda: rsa.generate_private_key(public_exponent=65537, key_size=2048),
+    }[algorithm]()
+    encryption = (
+        serialization.BestAvailableEncryption(passphrase.encode())
+        if passphrase
+        else serialization.NoEncryption()
+    )
+    return private.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.OpenSSH, encryption
+    ).decode()
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "key_name"),
+    [("ed25519", "ssh-ed25519"), ("ecdsa", "ecdsa-sha2-nistp256"), ("rsa", "ssh-rsa")],
+)
+def test_a_stored_private_key_loads_from_memory(algorithm, key_name):
+    import paramiko
+
+    from dbs.transports.ssh import _load_private_key
+
+    key = _load_private_key(
+        paramiko, target(private_key=openssh_private_key(algorithm), use_agent=False)
+    )
+
+    assert key.get_name() == key_name
+
+
+def test_a_stored_private_key_loads_with_its_passphrase():
+    import paramiko
+
+    from dbs.transports.ssh import _load_private_key
+
+    stored = target(
+        private_key=openssh_private_key("rsa", passphrase="hunter2"),
+        key_passphrase="hunter2",
+        use_agent=False,
+    )
+
+    assert _load_private_key(paramiko, stored).get_name() == "ssh-rsa"
+
+
+def test_an_encrypted_stored_key_without_its_passphrase_is_named():
+    import paramiko
+
+    from dbs.transports.ssh import _load_private_key
+
+    stored = target(private_key=openssh_private_key("ed25519", passphrase="x"), use_agent=False)
+
+    with pytest.raises(ConfigurationError, match="encrypted"):
+        _load_private_key(paramiko, stored)
+
+
+def test_an_unreadable_stored_key_is_refused():
+    import paramiko
+
+    from dbs.transports.ssh import _load_private_key
+
+    stored = target(private_key="-----BEGIN NOTHING-----\nAAAA\n-----END NOTHING-----\n")
+
+    with pytest.raises(ConfigurationError, match="could not be read"):
+        _load_private_key(paramiko, stored)
