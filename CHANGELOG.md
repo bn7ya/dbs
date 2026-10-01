@@ -34,6 +34,10 @@ before trusting it. Nothing in a project has to change to upgrade.
   Ed25519, ECDSA and RSA keys load, with or without a passphrase.
 - An unknown or changed host key on a target with `key_filename` was reported as a problem
   with the private key. It is now reported as a host key problem.
+- The `Panel` proxy model behind the control panel shipped in 0.3.0 without a migration, so
+  `makemigrations --check` failed in every project with `dbs` installed. `0002_panel` adds
+  it. `manage.py dbs upgrade` reports it as pending and applies it, like any other DBS
+  migration.
 
 ### Security
 
