@@ -21,6 +21,10 @@ also ships the confidentiality hardening merged after 0.3.1.
   now matches them.
 - Many-to-many links are read from the through table with `_base_manager` too, so a link
   from any row to a row the related model's default manager hides is kept.
+- The `Panel` proxy model behind `/admin/dbs/` shipped without a migration, so running
+  `makemigrations` in a project wrote `dbs/migrations/0002_panel.py` into the installed
+  package. 0.3.2 ships that migration. `manage.py dbs upgrade` applies it (it has no
+  database operations), and a test now fails whenever a model change ships without one.
 
 ### Changed
 
