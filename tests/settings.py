@@ -15,6 +15,7 @@ INSTALLED_APPS = [
     "dbs",
     "tests.testapp",
     "tests.complexapp",
+    "tests.softdeleteapp",
 ]
 
 MIDDLEWARE = [

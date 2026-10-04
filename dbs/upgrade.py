@@ -225,6 +225,37 @@ class RestoreRoots(Step):
         return self.ok("restores are confined to DBS_RESTORE_ROOTS")
 
 
+class HiddenRows(Step):
+    name = "hidden rows"
+    since = "0.3.2"
+
+    def _filtered_models(self):
+        from .introspect import config_for, discover_models
+        from .registry import ModelBackup, backup_registry
+
+        filtered = []
+        for model in discover_models(backup_registry):
+            config = config_for(backup_registry, model)
+            if type(config).get_queryset is not ModelBackup.get_queryset:
+                continue
+            if str(model._default_manager.all().query) != str(model._base_manager.all().query):
+                filtered.append(model._meta.label_lower)
+        return filtered
+
+    def check(self):
+        try:
+            filtered = self._filtered_models()
+        except Exception as exc:
+            return self.warn(f"could not inspect the default managers: {exc}")
+        if not filtered:
+            return self.ok("no backed-up model has a default manager that hides rows")
+        return self.ok(
+            "since 0.3.2 backups include the rows hidden by the default manager of "
+            + ", ".join(filtered)
+            + "; override ModelBackup.get_queryset to leave them out"
+        )
+
+
 class AiInstructions(Step):
     name = "ai instructions"
     since = "0.3.1"
@@ -272,6 +303,7 @@ STEPS = (
     ExcludeSemantics,
     Passphrase,
     RestoreRoots,
+    HiddenRows,
     AiInstructions,
 )
 

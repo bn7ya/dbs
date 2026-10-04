@@ -6,6 +6,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-04
+
+Backups now include every row, including the ones a project's default manager hides. It
+also ships the confidentiality hardening merged after 0.3.1.
+
+### Fixed
+
+- `ModelBackup.get_queryset()` reads through `model._base_manager` instead of
+  `model._default_manager`. A default manager that filters rows — a soft-delete manager
+  hiding `is_deleted=True`, a tenant-scoped manager — used to leave those rows out of the
+  backup, and a restore then failed its constraint check wherever a visible row still held
+  a foreign key to a hidden one. Restore and `flush` already used `_base_manager`; backup
+  now matches them.
+- Many-to-many links are read from the through table with `_base_manager` too, so a link
+  from any row to a row the related model's default manager hides is kept.
+
+### Changed
+
+- Backups of a project with a filtering default manager grow by the rows it hides. To keep
+  leaving them out, override `ModelBackup.get_queryset` for that model and return
+  `model._default_manager.all()`.
+
+### Added
+
+- `manage.py dbs upgrade` names the backed-up models whose default manager hides rows, so
+  the change above is visible before the next backup runs.
+
 ### Security
 
 - Backup manifests no longer expose database statistics, model labels, file names, or
