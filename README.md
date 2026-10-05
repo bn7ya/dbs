@@ -193,9 +193,22 @@ python manage.py dbs schedule --interval 6h --output-dir /var/backups \
 ```
 
 Host keys are verified and unknown hosts are **rejected by default**. Point
-`known_hosts` at a file, or set `auto_add_host_key` to trust whatever key the
-server presents on first contact — which gives up detection of a
-machine-in-the-middle on that first connection.
+`known_hosts` at a file, pin the one key you expect with `host_key`, or set
+`auto_add_host_key` to trust whatever key the server presents on first contact —
+which gives up detection of a machine-in-the-middle on that first connection.
+
+To pin a key, read it once and compare its fingerprint with the one the server
+prints (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`):
+
+```python
+from dbs.transports import fetch_host_key
+
+key = fetch_host_key("backups.example.com")
+print(key.fingerprint)   # SHA256:…, compare it before trusting it
+key.line                 # "ssh-ed25519 AAAA…", store it as host_key
+```
+
+A server that later presents a different key raises `HostKeyError`.
 
 Needs `pip install "django-dbs[ssh]"`.
 
@@ -308,7 +321,7 @@ it. Pick a server with `--server NAME`.
 | `key_passphrase` · `key_passphrase_env` | For an encrypted key file |
 | `password` · `password_env` | Password authentication |
 | `use_agent` | Use ssh-agent (default `true`) |
-| `known_hosts` · `auto_add_host_key` | Host key verification |
+| `known_hosts` · `host_key` · `auto_add_host_key` | Host key verification. `host_key` pins one key, `"<type> <base64>"` |
 | `connect_timeout` | Seconds to wait for the SSH handshake |
 | `remote_dir` | Where backups live on the server. Created if missing |
 | `project_dir` · `python` · `manage` · `django_settings_module` | How to run `manage.py` remotely |
@@ -364,7 +377,7 @@ Every row is backed up, including rows your default manager hides. DBS reads eac
 through `_base_manager`, so a soft-delete manager that filters out `is_deleted=True` (or a
 tenant-scoped manager) does not drop rows from the backup, and a restore never meets a
 live row whose foreign key points at a row that was left behind. Many-to-many links are
-read the same way. Before 0.3.2 the default manager was used. To leave hidden rows out on
+read the same way. Before 0.4.0 the default manager was used. To leave hidden rows out on
 purpose, override `get_queryset`:
 
 ```python
@@ -584,6 +597,28 @@ with open_session(SSHTarget.from_settings("offsite")) as session:
 `list_backup_details`, `delete_backup` and `check_connection` helpers open and
 close a connection each.
 
+A target can carry its credentials and its host key in memory, which is how an
+application that keeps them in its own database connects:
+
+```python
+from dbs.transports import HostKeyError, SSHTarget, open_session
+
+target = SSHTarget(
+    host="app.example.com",
+    username="deploy",
+    private_key=stored_private_key,       # an OpenSSH or PEM key, as text
+    key_passphrase=stored_key_passphrase,
+    host_key=stored_host_key,             # "ssh-ed25519 AAAA…"
+    use_agent=False,
+    remote_dir="/var/backups/app",
+)
+try:
+    with open_session(target) as session:
+        session.run("uname -sr")
+except HostKeyError:
+    ...                                   # the server's key changed; confirm before re-pinning
+```
+
 ---
 
 ## How it heals
@@ -675,7 +710,7 @@ python manage.py dbs upgrade
 ```
 
 ```
-DBS 0.3.2
+DBS 0.4.0
 [ok]     installed app      dbs is in INSTALLED_APPS
 [done]   migrations         applied the pending dbs migrations
 [ok]     dependencies       scikit-learn is available
@@ -701,7 +736,7 @@ rewrites your settings.
 Installed app, pending migrations, `scikit-learn`, whether the panel is mounted, whether the
 guard middleware is active, `DBS_EXCLUDE_MODELS` written for pre-0.2.2 semantics, whether a
 passphrase can be derived, whether `DBS_RESTORE_ROOTS` would refuse every path, which
-backed-up models have a default manager that hides rows (included since 0.3.2), and whether
+backed-up models have a default manager that hides rows (included since 0.4.0), and whether
 the installed AI instructions match the version you have.
 
 ### Old backups

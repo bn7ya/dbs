@@ -1,10 +1,13 @@
+from ..exceptions import HostKeyError
 from .ssh import (
+    HostKey,
     RemoteBackup,
     RemoteResult,
     SSHSession,
     SSHTarget,
     check_connection,
     delete_backup,
+    fetch_host_key,
     list_backup_details,
     list_backups,
     open_session,
@@ -26,4 +29,7 @@ __all__ = [
     "list_backup_details",
     "delete_backup",
     "check_connection",
+    "fetch_host_key",
+    "HostKey",
+    "HostKeyError",
 ]

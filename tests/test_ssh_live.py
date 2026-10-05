@@ -1,8 +1,10 @@
 """A real SSH handshake over loopback: auth wiring and the stdin passphrase channel."""
 
 import base64
+import io
 import socket
 import threading
+import time
 
 import pytest
 
@@ -10,8 +12,13 @@ paramiko = pytest.importorskip("paramiko")
 
 from dbs.client.config import ServerProfile  # noqa: E402
 from dbs.client.remote import trigger_remote_backup  # noqa: E402
-from dbs.exceptions import ConfigurationError  # noqa: E402
-from dbs.transports.ssh import SSHTarget, open_session  # noqa: E402
+from dbs.exceptions import ConfigurationError, DBSError, HostKeyError  # noqa: E402
+from dbs.transports.ssh import (  # noqa: E402
+    HostKey,
+    SSHTarget,
+    fetch_host_key,
+    open_session,
+)
 
 PASSWORD = "login-secret"
 PASSPHRASE = "backup-pass-phrase"
@@ -53,9 +60,11 @@ class Handler(paramiko.ServerInterface):
 
 
 class LoopbackServer:
-    def __init__(self, host_key, authorized_key):
+    def __init__(self, host_key, authorized_key, *, exits=True):
         self.host_key = host_key
         self.authorized_key = authorized_key
+        self.exits = exits
+        self.released = threading.Event()
         self.record = {}
         self._socket = socket.socket()
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -81,6 +90,8 @@ class LoopbackServer:
             if handler.exec_ready.wait(10):
                 self.record["stdin"] = channel.makefile("r").readline()
                 channel.sendall(b"served\n")
+                if not self.exits:
+                    self.released.wait(30)
                 channel.send_exit_status(0)
             channel.close()
         except Exception:
@@ -90,6 +101,7 @@ class LoopbackServer:
             connection.close()
 
     def close(self):
+        self.released.set()
         try:
             self._socket.close()
         except OSError:
@@ -220,7 +232,63 @@ def test_an_unknown_host_key_is_rejected(tmp_path, host_key):
             connect_timeout=10,
         )
         (tmp_path / "empty_known_hosts").write_text("")
-        with pytest.raises(Exception):
+        with pytest.raises(HostKeyError):
+            with open_session(target) as session:
+                session.run("true")
+    finally:
+        server.close()
+
+
+def test_fetch_host_key_reads_the_key_a_real_server_presents(host_key):
+    server = LoopbackServer(host_key, authorized_key=None)
+    try:
+        key = fetch_host_key("127.0.0.1", server.port, timeout=10)
+    finally:
+        server.close()
+
+    assert key.line == f"{host_key.get_name()} {host_key.get_base64()}"
+    assert key.fingerprint == host_key.fingerprint
+
+
+def test_a_pinned_host_key_and_an_in_memory_key_over_a_real_handshake(
+    host_key, client_key
+):
+    private_key = io.StringIO()
+    client_key.write_private_key(private_key, password="key-secret")
+    server = LoopbackServer(host_key, authorized_key=client_key)
+    try:
+        target = SSHTarget(
+            host="127.0.0.1",
+            port=server.port,
+            username="deploy",
+            private_key=private_key.getvalue(),
+            key_passphrase="key-secret",
+            host_key=HostKey(host_key.get_name(), host_key.get_base64()).line,
+            use_agent=False,
+            connect_timeout=10,
+        )
+        with open_session(target) as session:
+            session.run("true")
+    finally:
+        server.close()
+
+    assert server.record["auth"] == "publickey"
+
+
+def test_a_different_pinned_key_is_refused_over_a_real_handshake(host_key):
+    impostor = paramiko.RSAKey.generate(2048)
+    server = LoopbackServer(host_key, authorized_key=None)
+    try:
+        target = SSHTarget(
+            host="127.0.0.1",
+            port=server.port,
+            username="deploy",
+            password=PASSWORD,
+            host_key=f"{impostor.get_name()} {impostor.get_base64()}",
+            use_agent=False,
+            connect_timeout=10,
+        )
+        with pytest.raises(HostKeyError, match="does not match"):
             with open_session(target) as session:
                 session.run("true")
     finally:
@@ -252,3 +320,26 @@ def test_the_passphrase_reaches_the_server_on_stdin_not_in_argv(tmp_path, host_k
     assert server.record["stdin"] == PASSPHRASE + "\n"
     assert PASSPHRASE not in server.record["command"]
     assert "--passphrase-stdin" in server.record["command"]
+
+
+def test_a_command_that_never_exits_is_stopped_at_its_timeout(tmp_path, host_key):
+    server = LoopbackServer(host_key, authorized_key=None, exits=False)
+    try:
+        target = SSHTarget(
+            host="127.0.0.1",
+            port=server.port,
+            username="deploy",
+            password=PASSWORD,
+            use_agent=False,
+            known_hosts=known_hosts_file(tmp_path, server.port, host_key),
+            connect_timeout=10,
+        )
+        with open_session(target) as session:
+            started = time.monotonic()
+            with pytest.raises(DBSError, match="timed out after 1"):
+                session.run("sleep forever", timeout=1)
+            elapsed = time.monotonic() - started
+    finally:
+        server.close()
+
+    assert elapsed < 5

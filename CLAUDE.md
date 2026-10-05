@@ -27,7 +27,8 @@ Re-exported from `dbs/__init__.py`:
 Re-exported from `dbs/transports/__init__.py`:
 `SSHTarget`, `SSHSession`, `RemoteBackup`, `RemoteResult`, `open_session`,
 `push_backup`, `pull_backup`, `pull_backup_to`, `list_backups`,
-`list_backup_details`, `delete_backup`, `check_connection`.
+`list_backup_details`, `delete_backup`, `check_connection`, `fetch_host_key`,
+`HostKey`, `HostKeyError`.
 
 Re-exported from `dbs/client/__init__.py`:
 `ClientConfig`, `ServerProfile`, `load_client_config`, `resolve_client_passphrase`,

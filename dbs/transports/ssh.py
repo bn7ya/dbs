@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import datetime
+import hashlib
 import io
 import logging
 import os
 import posixpath
 import socket
+import threading
 from dataclasses import dataclass, field
 
 from ..conf import setting
-from ..exceptions import ConfigurationError, DBSError
+from ..exceptions import ConfigurationError, DBSError, HostKeyError
 from ..naming import is_backup_name
 
 logger = logging.getLogger("dbs")
@@ -28,6 +32,7 @@ _TARGET_KEYS = {
     "password",
     "password_env",
     "known_hosts",
+    "host_key",
     "remote_dir",
     "auto_add_host_key",
     "use_agent",
@@ -77,6 +82,54 @@ class RemoteResult:
         return self.exit_status == 0
 
 
+@dataclass(frozen=True)
+class HostKey:
+    """A server's public SSH host key, in the form a known_hosts line carries it."""
+
+    key_type: str
+    key_base64: str
+
+    @classmethod
+    def from_line(cls, line: str) -> "HostKey":
+        """Parse ``"<type> <base64> [comment]"``; raise ``ConfigurationError`` if malformed."""
+        parts = (line or "").split()
+        if len(parts) < 2:
+            raise ConfigurationError(
+                "A host key must read '<type> <base64>', for example "
+                "'ssh-ed25519 AAAAC3Nza...'."
+            )
+        key_type, key_base64 = parts[0], parts[1]
+        if _blob_key_type(key_base64) != key_type:
+            raise ConfigurationError(
+                f"The host key is not a valid {key_type} public key."
+            )
+        return cls(key_type, key_base64)
+
+    @property
+    def line(self) -> str:
+        """The key as ``"<type> <base64>"``, ready to store or to pass as ``host_key``."""
+        return f"{self.key_type} {self.key_base64}"
+
+    @property
+    def fingerprint(self) -> str:
+        """The ``SHA256:`` fingerprint, exactly as ``ssh-keygen -lf`` prints it."""
+        digest = hashlib.sha256(base64.b64decode(self.key_base64)).digest()
+        return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
+
+
+def _blob_key_type(key_base64: str) -> str | None:
+    try:
+        blob = base64.b64decode(key_base64, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if len(blob) < 4:
+        return None
+    length = int.from_bytes(blob[:4], "big")
+    if length == 0 or len(blob) < 4 + length:
+        return None
+    return blob[4 : 4 + length].decode("ascii", "replace")
+
+
 @dataclass
 class SSHTarget:
     host: str
@@ -87,6 +140,7 @@ class SSHTarget:
     private_key: str | None = None
     password: str | None = None
     known_hosts: str | None = None
+    host_key: str | None = None
     remote_dir: str = "."
     auto_add_host_key: bool = False
     use_agent: bool = True
@@ -95,6 +149,14 @@ class SSHTarget:
     def __post_init__(self):
         self.key_filename = _expand(self.key_filename)
         self.known_hosts = _expand(self.known_hosts)
+        if self.host_key:
+            if self.auto_add_host_key:
+                raise ConfigurationError(
+                    f"SSH target {self.host!r} pins a host_key and also sets "
+                    "auto_add_host_key; a pinned key trusts exactly one key, so "
+                    "drop auto_add_host_key."
+                )
+            self.host_key = HostKey.from_line(self.host_key).line
         if (
             not self.key_filename
             and not self.private_key
@@ -131,6 +193,7 @@ class SSHTarget:
             private_key=data.get("private_key"),
             password=_from_env(data.get("password_env")) or data.get("password"),
             known_hosts=data.get("known_hosts"),
+            host_key=data.get("host_key"),
             remote_dir=data.get("remote_dir", "."),
             auto_add_host_key=bool(data.get("auto_add_host_key", False)),
             use_agent=bool(data.get("use_agent", True)),
@@ -146,30 +209,56 @@ class SSHTarget:
 
     @property
     def host_key_policy(self) -> str:
+        if self.host_key:
+            return "pinned"
         return "auto-add" if self.auto_add_host_key else "reject-unknown"
 
 
 def _load_private_key(paramiko, target: SSHTarget):
     if not target.private_key:
         return None
-    try:
-        return paramiko.PKey.from_private_key(
-            io.StringIO(target.private_key), password=target.key_passphrase
-        )
-    except paramiko.PasswordRequiredException as exc:
-        raise ConfigurationError(
-            "The stored private key is encrypted; set its key passphrase too."
-        ) from exc
-    except paramiko.SSHException as exc:
-        raise ConfigurationError(
-            f"The stored private key could not be read: {exc}"
-        ) from exc
+    failures = []
+    for key_class in (paramiko.Ed25519Key, paramiko.ECDSAKey, paramiko.RSAKey):
+        try:
+            return key_class.from_private_key(
+                io.StringIO(target.private_key), password=target.key_passphrase
+            )
+        except paramiko.PasswordRequiredException as exc:
+            raise ConfigurationError(
+                "The stored private key is encrypted; set its key passphrase too."
+            ) from exc
+        except (paramiko.SSHException, ValueError) as exc:
+            failures.append(f"{key_class.__name__}: {exc}")
+    raise ConfigurationError(
+        "The stored private key could not be read as an Ed25519, ECDSA or RSA key; "
+        "check the key and its passphrase. " + "; ".join(failures)
+    )
 
 
-def _connect(target: SSHTarget):
-    paramiko = _paramiko()
-    client = paramiko.SSHClient()
-    if target.known_hosts:
+def _known_hosts_name(target: SSHTarget) -> str:
+    return target.host if target.port == 22 else f"[{target.host}]:{target.port}"
+
+
+def _untrusted_host_policy(paramiko):
+    class RejectUntrustedHost(paramiko.RejectPolicy):
+        def missing_host_key(self, client, hostname, key):
+            raise HostKeyError(
+                f"The host key {hostname} presented is not trusted. Pin it with "
+                "host_key, list it in known_hosts, or set auto_add_host_key."
+            )
+
+    return RejectUntrustedHost()
+
+
+def _trust_host_keys(paramiko, client, target: SSHTarget) -> None:
+    if target.host_key:
+        pinned = HostKey.from_line(target.host_key)
+        name = _known_hosts_name(target)
+        entry = paramiko.hostkeys.HostKeyEntry.from_line(f"{name} {pinned.line}")
+        if entry is None:
+            raise ConfigurationError(f"The pinned host key for {target.host} is invalid.")
+        client.get_host_keys().add(name, pinned.key_type, entry.key)
+    elif target.known_hosts:
         try:
             client.load_host_keys(target.known_hosts)
         except OSError as exc:
@@ -179,8 +268,16 @@ def _connect(target: SSHTarget):
     else:
         client.load_system_host_keys()
     client.set_missing_host_key_policy(
-        paramiko.AutoAddPolicy() if target.auto_add_host_key else paramiko.RejectPolicy()
+        paramiko.AutoAddPolicy()
+        if target.auto_add_host_key
+        else _untrusted_host_policy(paramiko)
     )
+
+
+def _connect(target: SSHTarget):
+    paramiko = _paramiko()
+    client = paramiko.SSHClient()
+    _trust_host_keys(paramiko, client, target)
     pkey = _load_private_key(paramiko, target)
     try:
         client.connect(
@@ -192,11 +289,23 @@ def _connect(target: SSHTarget):
             pkey=pkey,
             passphrase=target.key_passphrase,
             allow_agent=target.use_agent,
-            look_for_keys=target.key_filename is None and pkey is None,
+            look_for_keys=target.use_agent
+            and target.key_filename is None
+            and pkey is None,
             timeout=target.connect_timeout,
             banner_timeout=target.connect_timeout,
             auth_timeout=target.connect_timeout,
         )
+    except HostKeyError:
+        client.close()
+        raise
+    except paramiko.BadHostKeyException as exc:
+        client.close()
+        raise HostKeyError(
+            f"The host key {target.host} presented does not match the trusted key. "
+            "Either the server was reinstalled or something is intercepting the "
+            "connection; confirm which before trusting the new key."
+        ) from exc
     except paramiko.PasswordRequiredException as exc:
         raise ConfigurationError(
             f"The private key {target.key_filename} is encrypted; set key_passphrase "
@@ -360,6 +469,12 @@ class SSHSession:
             stdin, stdout, stderr = self._client.exec_command(
                 command, timeout=timeout, get_pty=False
             )
+        except socket.timeout as exc:
+            raise DBSError(f"Remote command timed out after {timeout}s.") from exc
+        except OSError as exc:
+            raise DBSError(f"Remote command failed: {exc}") from exc
+        deadline = _Deadline(stdout.channel, timeout)
+        try:
             if stdin_line is not None:
                 stdin.write(stdin_line + "\n")
                 stdin.flush()
@@ -367,11 +482,56 @@ class SSHSession:
             out = _decode(stdout)
             err = _decode(stderr)
             status = stdout.channel.recv_exit_status()
-        except socket.timeout as exc:
-            raise DBSError(f"Remote command timed out after {timeout}s.") from exc
-        except OSError as exc:
+        except (socket.timeout, OSError) as exc:
+            if deadline.passed or isinstance(exc, socket.timeout):
+                raise DBSError(f"Remote command timed out after {timeout}s.") from exc
             raise DBSError(f"Remote command failed: {exc}") from exc
+        finally:
+            deadline.cancel()
+        if deadline.passed:
+            raise DBSError(f"Remote command timed out after {timeout}s.")
         return RemoteResult(status, out, err)
+
+
+class _Deadline:
+    def __init__(self, channel, timeout: float | None):
+        self._expired = threading.Event()
+        self._timer = None
+        if timeout:
+            self._timer = threading.Timer(timeout, self._expire, args=(channel,))
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _expire(self, channel) -> None:
+        self._expired.set()
+        channel.close()
+
+    @property
+    def passed(self) -> bool:
+        return self._expired.is_set()
+
+    def cancel(self) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+
+
+def fetch_host_key(host: str, port: int = 22, *, timeout: float = 10.0) -> HostKey:
+    """Read the host key ``host`` presents, without authenticating, so a person can confirm it before it is pinned."""
+    paramiko = _paramiko()
+    try:
+        sock = socket.create_connection((host, port), timeout=timeout)
+    except OSError as exc:
+        raise DBSError(f"Cannot reach {host}:{port}: {exc}") from exc
+    transport = paramiko.Transport(sock)
+    transport.banner_timeout = timeout
+    try:
+        transport.start_client(timeout=timeout)
+        key = transport.get_remote_server_key()
+    except (paramiko.SSHException, OSError, EOFError) as exc:
+        raise DBSError(f"SSH handshake with {host}:{port} failed: {exc}") from exc
+    finally:
+        transport.close()
+    return HostKey(key.get_name(), key.get_base64())
 
 
 def open_session(target: SSHTarget) -> SSHSession:

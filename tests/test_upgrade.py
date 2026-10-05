@@ -12,7 +12,7 @@ from dbs import upgrade
 from dbs.container.format import FORMAT_VERSION, container_version
 from dbs.engine import create_backup
 from dbs.keys import default_passphrase
-from dbs.upgrade import ACTION, OK, WARN, Converter
+from dbs.upgrade import ACTION, FIXED, OK, WARN, Converter
 from tests.testapp.models import Author
 
 OFFLINE = {"offline": True}
@@ -69,6 +69,28 @@ def test_a_correctly_configured_project_is_up_to_date():
     assert levels(report)["session guard"] == OK
     assert levels(report)["passphrase"] == OK
     assert "up to date" in run()
+
+
+@pytest.mark.django_db
+def test_the_models_and_their_migrations_agree():
+    call_command("makemigrations", "dbs", "--check", "--dry-run", verbosity=0)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_an_unapplied_dbs_migration_is_reported_and_applied():
+    call_command("migrate", "dbs", "0001", verbosity=0)
+    try:
+        step = upgrade.Migrations()
+
+        reported = step.check()
+        applied = step.fix()
+
+        assert reported.level == ACTION
+        assert reported.remedy == "python manage.py migrate dbs"
+        assert applied.level == FIXED
+        assert step.check().level == OK
+    finally:
+        call_command("migrate", "dbs", verbosity=0)
 
 
 @pytest.mark.django_db

@@ -227,7 +227,7 @@ class RestoreRoots(Step):
 
 class HiddenRows(Step):
     name = "hidden rows"
-    since = "0.3.2"
+    since = "0.4.0"
 
     def _filtered_models(self):
         from .introspect import config_for, discover_models
@@ -250,7 +250,7 @@ class HiddenRows(Step):
         if not filtered:
             return self.ok("no backed-up model has a default manager that hides rows")
         return self.ok(
-            "since 0.3.2 backups include the rows hidden by the default manager of "
+            "since 0.4.0 backups include the rows hidden by the default manager of "
             + ", ".join(filtered)
             + "; override ModelBackup.get_queryset to leave them out"
         )
