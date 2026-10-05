@@ -148,6 +148,14 @@ def test_password_authentication_reaches_the_ssh_target(tmp_path, monkeypatch):
     assert profile.ssh_target().password == "s3cret"
 
 
+def test_a_pinned_host_key_reaches_the_ssh_target(tmp_path):
+    line = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+    text = MINIMAL + f'host_key = "{line}"\n'
+    target = load_client_config(write_config(tmp_path, text)).server().ssh_target()
+    assert target.host_key == line
+    assert target.host_key_policy == "pinned"
+
+
 def test_agent_only_profiles_are_valid(tmp_path):
     profile = load_client_config(write_config(tmp_path, MINIMAL)).server()
     target = profile.ssh_target()

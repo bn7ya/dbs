@@ -6,6 +6,10 @@ class ConfigurationError(DBSError):
     pass
 
 
+class HostKeyError(ConfigurationError):
+    pass
+
+
 class CryptoError(DBSError):
     pass
 

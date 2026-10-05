@@ -24,6 +24,7 @@ SSH_KEYS = (
     "key_passphrase",
     "password",
     "known_hosts",
+    "host_key",
     "auto_add_host_key",
     "use_agent",
     "connect_timeout",
@@ -62,6 +63,7 @@ class ServerProfile:
     password: str | None = None
     password_env: str | None = None
     known_hosts: str | None = None
+    host_key: str | None = None
     auto_add_host_key: bool = False
     use_agent: bool = True
     connect_timeout: float = 30.0
