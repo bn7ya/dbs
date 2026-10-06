@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-10-01
+## [0.4.0] - 2026-10-06
 
 An application that manages several servers keeps their credentials and host keys in its
 own database. This release lets it connect the way such an application needs to: with a
