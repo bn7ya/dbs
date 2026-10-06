@@ -23,8 +23,16 @@ class ModelBackup:
     file_roots: list[str] = []
 
     def get_queryset(self, model):
-        """Return the queryset to back up (override to filter/scope)."""
-        return model._default_manager.all()
+        """Return the queryset to back up (override to filter/scope).
+
+        Reads through ``model._base_manager`` so every row is included. A
+        project's default manager may hide rows (a soft-delete manager that
+        filters out ``is_deleted=True``, a tenant-scoped manager); backing up
+        through it would drop those rows, and a restore would then fail its
+        constraint check wherever a visible row still points at a hidden one.
+        Restore and flush already use ``_base_manager``, so backup now matches.
+        """
+        return model._base_manager.all()
 
 
 class BackupRegistry:

@@ -373,6 +373,23 @@ class InvoiceBackup(ModelBackup):
 
 `FieldType` values: `VALUE` (default), `FILE`, `FILE_PATH`, `EXCLUDE`.
 
+Every row is backed up, including rows your default manager hides. DBS reads each model
+through `_base_manager`, so a soft-delete manager that filters out `is_deleted=True` (or a
+tenant-scoped manager) does not drop rows from the backup, and a restore never meets a
+live row whose foreign key points at a row that was left behind. Many-to-many links are
+read the same way. Before 0.4.0 the default manager was used. To leave hidden rows out on
+purpose, override `get_queryset`:
+
+```python
+@backup_registry.register(Invoice)
+class InvoiceBackup(ModelBackup):
+    def get_queryset(self, model):
+        return model._default_manager.all()
+```
+
+A row whose foreign key points at a row you leave out will fail the restore's constraint
+check, so narrow a queryset only where nothing else refers to what it drops.
+
 `DBS_EXCLUDE_MODELS` skips models **in addition** to the built-in exclusions
 (content types, permissions, admin log, sessions, and DBS's own tables). Prefix
 a label with `-` to back up one the defaults skip:
@@ -718,7 +735,8 @@ rewrites your settings.
 
 Installed app, pending migrations, `scikit-learn`, whether the panel is mounted, whether the
 guard middleware is active, `DBS_EXCLUDE_MODELS` written for pre-0.2.2 semantics, whether a
-passphrase can be derived, whether `DBS_RESTORE_ROOTS` would refuse every path, and whether
+passphrase can be derived, whether `DBS_RESTORE_ROOTS` would refuse every path, which
+backed-up models have a default manager that hides rows (included since 0.4.0), and whether
 the installed AI instructions match the version you have.
 
 ### Old backups

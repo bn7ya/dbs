@@ -353,3 +353,44 @@ def test_the_umbrella_lists_upgrade():
     out = StringIO()
     call_command("dbs", stdout=out)
     assert "manage.py dbs upgrade" in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_models_whose_default_manager_hides_rows_are_named(monkeypatch):
+    from dbs.registry import BackupRegistry
+    from tests.softdeleteapp.models import Category, Item
+
+    registry = BackupRegistry()
+    for model in (Author, Category, Item):
+        registry.register(model)
+    monkeypatch.setattr("dbs.registry.backup_registry", registry)
+
+    finding = next(
+        f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == "hidden rows"
+    )
+
+    assert finding.level == OK
+    assert "softdeleteapp.category" in finding.message
+    assert "softdeleteapp.item" in finding.message
+    assert "testapp.author" not in finding.message
+
+
+@pytest.mark.django_db
+def test_a_custom_get_queryset_is_left_alone(monkeypatch):
+    from dbs import ModelBackup
+    from dbs.registry import BackupRegistry
+    from tests.softdeleteapp.models import Category
+
+    class LiveOnly(ModelBackup):
+        def get_queryset(self, model):
+            return model._default_manager.all()
+
+    registry = BackupRegistry()
+    registry.register(Category)(LiveOnly)
+    monkeypatch.setattr("dbs.registry.backup_registry", registry)
+
+    finding = next(
+        f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == "hidden rows"
+    )
+
+    assert finding.message == "no backed-up model has a default manager that hides rows"

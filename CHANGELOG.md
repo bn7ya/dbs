@@ -11,7 +11,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 An application that manages several servers keeps their credentials and host keys in its
 own database. This release lets it connect the way such an application needs to: with a
 private key held in memory, trusting exactly one pinned host key, and confirming that key
-before trusting it. Nothing in a project has to change to upgrade.
+before trusting it. Backups also now include every row, including the ones a project's
+default manager hides. Nothing in a project has to change to upgrade.
 
 ### Added
 
@@ -25,9 +26,19 @@ before trusting it. Nothing in a project has to change to upgrade.
   store as `host_key`.
 - `HostKeyError`, a `ConfigurationError`, is raised when a server presents a key that does
   not match the trusted one, or one that is not trusted at all.
+- `manage.py dbs upgrade` names the backed-up models whose default manager hides rows, so
+  the backup change below is visible before the next backup runs.
 
 ### Fixed
 
+- `ModelBackup.get_queryset()` reads through `model._base_manager` instead of
+  `model._default_manager`. A default manager that filters rows — a soft-delete manager
+  hiding `is_deleted=True`, a tenant-scoped manager — used to leave those rows out of the
+  backup, and a restore then failed its constraint check wherever a visible row still held
+  a foreign key to a hidden one. Restore and `flush` already used `_base_manager`; backup
+  now matches them.
+- Many-to-many links are read from the through table with `_base_manager` too, so a link
+  from any row to a row the related model's default manager hides is kept.
 - A private key held in memory (`SSHTarget(private_key=...)`, and the admin panel's SFTP
   targets with a pasted key) now loads. It was read through paramiko's base key class,
   which cannot parse a key, so every such connection failed before it was attempted.
@@ -45,6 +56,13 @@ before trusting it. Nothing in a project has to change to upgrade.
   `makemigrations --check` failed in every project with `dbs` installed. `0002_panel` adds
   it. `manage.py dbs upgrade` reports it as pending and applies it, like any other DBS
   migration.
+  A test now fails whenever a model change ships without its migration.
+
+### Changed
+
+- Backups of a project with a filtering default manager grow by the rows it hides. To keep
+  leaving them out, override `ModelBackup.get_queryset` for that model and return
+  `model._default_manager.all()`.
 
 ### Security
 
