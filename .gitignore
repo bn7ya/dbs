@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# The manager interface bundle, built by scripts/build_manager_ui.sh at release time
+dbs/manager/static/dbs_manager/
