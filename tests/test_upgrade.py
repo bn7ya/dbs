@@ -458,3 +458,29 @@ def test_a_custom_get_queryset_is_left_alone(monkeypatch):
     )
 
     assert finding.message == "no backed-up model has a default manager that hides rows"
+
+
+def test_the_dependencies_step_checks_what_the_manager_needs():
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == OK
+    assert "waitress" in finding.message and "rest_framework" in finding.message
+
+
+def test_a_missing_manager_dependency_is_reported(monkeypatch):
+    import importlib
+
+    real_import = importlib.import_module
+
+    def without_waitress(name, *args, **kwargs):
+        if name == "waitress":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", without_waitress)
+
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == ACTION
+    assert "waitress" in finding.message and "paramiko" not in finding.message
+    assert "django-dbs>=0.5" in finding.remedy

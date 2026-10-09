@@ -229,7 +229,25 @@ class Dependencies(Step):
                 "scikit-learn is missing, so the session guard cannot score anything",
                 'pip install "django-dbs>=0.3"',
             )
-        return self.ok("scikit-learn is available")
+        missing = [name for name in self.manager_modules if not self.importable(name)]
+        if missing:
+            return self.action(
+                f"{', '.join(missing)} missing, so `django_dbs run` cannot start",
+                'pip install --upgrade "django-dbs>=0.5"',
+            )
+        return self.ok("scikit-learn, paramiko, rest_framework and waitress are available")
+
+    manager_modules = ("paramiko", "rest_framework", "waitress")
+
+    @staticmethod
+    def importable(name):
+        import importlib
+
+        try:
+            importlib.import_module(name)
+        except ImportError:
+            return False
+        return True
 
 
 class AdminPanel(Step):

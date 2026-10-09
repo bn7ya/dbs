@@ -126,3 +126,70 @@ def test_a_restore_with_the_wrong_passphrase_is_recorded_as_failed(tmp_path):
 
     event = AuditEvent.objects.get(action="backup.restore")
     assert event.status == audit.FAILED
+
+
+@pytest.mark.django_db
+def test_a_job_moves_from_queued_to_running_to_succeeded():
+    job = audit.queue("backup.take", target="web-1", subject="server-1", data={"a": 1})
+    assert job.status == audit.QUEUED and not job.succeeded
+    assert job.started_at is None and job.finished_at is None
+
+    running = audit.start(job.pk)
+    assert running.status == audit.RUNNING and running.started_at is not None
+
+    audit.finish(job.pk, data={"backup": "b-1"})
+    job.refresh_from_db()
+    assert job.status == audit.SUCCEEDED and job.succeeded
+    assert job.data == {"backup": "b-1"} and job.finished_at is not None
+    assert audit.start(job.pk) is None
+
+
+@pytest.mark.django_db
+def test_a_failed_job_keeps_its_data_unless_given_new_data():
+    job = audit.queue("backup.verify", data={"backup": "b-1"})
+    audit.start(job.pk)
+
+    audit.fail(job.pk, "backup_missing")
+    job.refresh_from_db()
+
+    assert job.status == audit.FAILED and not job.succeeded
+    assert job.error_code == "backup_missing" and job.data == {"backup": "b-1"}
+
+
+@pytest.mark.django_db
+def test_a_finished_job_is_never_changed_again():
+    job = audit.queue("backup.take")
+    audit.start(job.pk)
+    audit.finish(job.pk)
+
+    assert audit.fail(job.pk, "late") == 0
+    job.refresh_from_db()
+    assert job.status == audit.SUCCEEDED and job.error_code == ""
+
+
+@pytest.mark.django_db
+def test_interrupt_fails_every_unfinished_job_and_leaves_finished_ones():
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    queued = audit.queue("backup.take")
+    running = audit.queue("backup.run")
+    audit.start(running.pk)
+    finished = audit.record("backup.create")
+    fresh = audit.queue("backup.verify")
+    AuditEvent.objects.filter(pk__in=[queued.pk, running.pk]).update(
+        created_at=timezone.now() - timedelta(hours=2),
+        started_at=timezone.now() - timedelta(hours=2),
+    )
+
+    assert audit.interrupt(idle_since=timezone.now() - timedelta(hours=1)) == 2
+    assert audit.interrupt() == 1
+
+    statuses = {
+        event.pk: (event.status, event.error_code) for event in AuditEvent.objects.all()
+    }
+    assert statuses[queued.pk] == (audit.FAILED, audit.INTERRUPTED)
+    assert statuses[running.pk] == (audit.FAILED, audit.INTERRUPTED)
+    assert statuses[fresh.pk] == (audit.FAILED, audit.INTERRUPTED)
+    assert statuses[finished.pk] == (audit.SUCCEEDED, "")

@@ -220,3 +220,4 @@ __marimo__/
 .angular/
 .claude/worktrees/
 .claude/skills/
+dbs/manager/static/dbs_manager/

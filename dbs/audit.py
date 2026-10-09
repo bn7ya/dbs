@@ -5,6 +5,7 @@ import os
 from contextlib import contextmanager
 
 from django.db import DatabaseError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 logger = logging.getLogger("dbs.audit")
@@ -14,6 +15,8 @@ RUNNING = "running"
 SUCCEEDED = "succeeded"
 FAILED = "failed"
 FINISHED = (SUCCEEDED, FAILED)
+UNFINISHED = (QUEUED, RUNNING)
+INTERRUPTED = "interrupted"
 
 ACTION_MAX = 64
 TARGET_MAX = 1024
@@ -124,3 +127,69 @@ def record_backup(output, container, digest, database):
     except DatabaseError as exc:
         logger.warning("Could not record the backup %s: %s", output, exc)
         return None
+
+
+def queue(action, *, actor=None, target="", data=None, subject="", remote_addr=""):
+    from .models import AuditEvent
+
+    return AuditEvent.objects.create(
+        actor=_known_actor(actor),
+        action=str(action)[:ACTION_MAX],
+        target_name=str(target or "")[:TARGET_MAX],
+        data=dict(data or {}),
+        status=QUEUED,
+        succeeded=False,
+        remote_addr=str(remote_addr or "")[:ADDRESS_MAX],
+        subject=str(subject or "")[:SUBJECT_MAX],
+    )
+
+
+def start(event_id):
+    from .models import AuditEvent
+
+    started = AuditEvent.objects.filter(pk=event_id, status__in=UNFINISHED).update(
+        status=RUNNING, started_at=timezone.now()
+    )
+    if not started:
+        return None
+    return AuditEvent.objects.select_related("actor").get(pk=event_id)
+
+
+def finish(event_id, *, data=None):
+    return _close(event_id, SUCCEEDED, data=data)
+
+
+def fail(event_id, error_code, *, data=None, detail=""):
+    return _close(event_id, FAILED, data=data, error_code=error_code, detail=detail)
+
+
+def _close(event_id, status, *, data=None, error_code="", detail=""):
+    from .models import AuditEvent
+
+    fields = {
+        "status": status,
+        "succeeded": status == SUCCEEDED,
+        "error_code": str(error_code or "")[:ERROR_CODE_MAX],
+        "finished_at": timezone.now(),
+    }
+    if data is not None:
+        fields["data"] = dict(data)
+    if detail:
+        fields["detail"] = str(detail)[:DETAIL_MAX]
+    return AuditEvent.objects.filter(pk=event_id, status__in=UNFINISHED).update(**fields)
+
+
+def interrupt(*, idle_since=None):
+    from .models import AuditEvent
+
+    queued = Q(status=QUEUED)
+    running = Q(status=RUNNING)
+    if idle_since is not None:
+        queued &= Q(created_at__lt=idle_since)
+        running &= Q(started_at__lt=idle_since)
+    return AuditEvent.objects.filter(queued | running).update(
+        status=FAILED,
+        succeeded=False,
+        error_code=INTERRUPTED,
+        finished_at=timezone.now(),
+    )
