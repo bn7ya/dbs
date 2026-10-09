@@ -26,6 +26,10 @@ TASKS = {
         timedelta(days=1),
         "dbs.manager.backups.services.backup_schedule_service.remove_expired_files",
     ),
+    "snapshot_env_files": (
+        timedelta(days=1),
+        "dbs.manager.envfiles.services.env_snapshot_service.snapshot_env_files",
+    ),
     "sweep_stale_jobs": (
         timedelta(minutes=15),
         "dbs.manager.activity.services.sweep_stale_jobs",

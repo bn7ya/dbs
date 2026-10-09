@@ -11,6 +11,8 @@ api_patterns = [
     path("activity/", include("dbs.manager.activity.urls")),
     path("servers/", include("dbs.manager.servers.urls")),
     path("backups/", include("dbs.manager.backups.urls")),
+    path("files/", include("dbs.manager.files.urls")),
+    path("envfiles/", include("dbs.manager.envfiles.urls")),
 ]
 
 urlpatterns = [

@@ -24,7 +24,6 @@ from dbs.manager.backups.services import BackupPlanService
 class PlanListView(ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = BackupPlanSerializer
-    filter_backends = []
 
     def get_queryset(self) -> QuerySet[BackupPlan]:
         query = BackupFilterSerializer(data=self.request.query_params)
