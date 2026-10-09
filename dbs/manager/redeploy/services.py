@@ -286,6 +286,7 @@ class RedeployService:
                         ChunkReader(chunks),
                         target.remote_backup_dir,
                         settings.BACKUP_EXEC_TIMEOUT,
+                        relocate=_relocation(file.server, target),
                     )
                 extracted += 1
         return {"extracted": extracted}
@@ -333,6 +334,12 @@ def _runs(step: str, detail: dict[str, Any]) -> bool:
     if step == "archives":
         return bool(detail["archives"])
     return True
+
+
+def _relocation(source: Any, target: Any) -> dict[str, str]:
+    if source.project_dir and target.project_dir:
+        return {source.project_dir: target.project_dir}
+    return {}
 
 
 def _failed_detail(detail: dict[str, Any], exc: APIException) -> dict[str, Any]:

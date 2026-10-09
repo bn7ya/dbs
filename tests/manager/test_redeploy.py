@@ -308,6 +308,29 @@ def test_a_redeploy_for_real_runs_every_step(api, world, run_jobs):
 
 
 @pytest.mark.django_db
+def test_archives_land_in_the_targets_project_folder(api, world, run_jobs):
+    ServerRepository().update(world["source"], project_dir="/srv/app")
+    target_dir = world["target"].project_dir.strip("/")
+
+    with run_jobs():
+        response = api.post(
+            REDEPLOY,
+            body(
+                world,
+                rehearsal=False,
+                archives=[str(world["archive"].pk)],
+                password=PASSWORD,
+                confirm_name="web-2",
+            ),
+            format="json",
+        )
+
+    assert job_of(api, response)["status"] == "succeeded"
+    [extracted] = world["sent"]["extracted"]
+    assert extracted["argv"][6:] == [f"--transform=s|^srv/app/|{target_dir}/|"]
+
+
+@pytest.mark.django_db
 def test_a_failing_step_fails_the_job_and_skips_the_rest(api, world, run_jobs):
     world["hosts"].answer(
         TARGET, [PYTHON, "manage.py", "migrate", "--noinput"], (1, "", "boom")

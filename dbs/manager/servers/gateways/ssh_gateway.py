@@ -306,7 +306,11 @@ class RemoteHost:
         )
 
     def extract_archive(
-        self, source: SupportsRead[bytes], remote_dir: str, timeout: float
+        self,
+        source: SupportsRead[bytes],
+        remote_dir: str,
+        timeout: float,
+        relocate: Mapping[str, str] | None = None,
     ) -> str:
         name = f"{EXTRACT_FILE_PREFIX}{secrets.token_hex(8)}{ARCHIVE_SUFFIX}"
         path = posixpath.join(remote_dir, name)
@@ -314,7 +318,16 @@ class RemoteHost:
         self.write_new(source, remote_dir, name, mode=RESTORE_FILE_MODE)
         try:
             result = self.run(
-                ["tar", "-xzf", path, "-C", "/", "--no-same-owner"], timeout=timeout
+                [
+                    "tar",
+                    "-xzf",
+                    path,
+                    "-C",
+                    "/",
+                    "--no-same-owner",
+                    *_transforms(relocate or {}),
+                ],
+                timeout=timeout,
             )
         finally:
             copy_left = self._removed_or_left(path)
@@ -795,3 +808,19 @@ def connect(credentials: Credentials) -> Iterator[RemoteHost]:
         yield RemoteHost(session)
     finally:
         session.close()
+
+
+def _sed_literal(text: str) -> str:
+    return re.sub(r"([\\.\[\]*^$|])", r"\\\1", text)
+
+
+def _transforms(relocate: Mapping[str, str]) -> list[str]:
+    rules = []
+    for old, new in relocate.items():
+        old_member = posixpath.normpath(old).strip("/")
+        new_member = posixpath.normpath(new).strip("/")
+        if not old_member or not new_member or old_member == new_member:
+            continue
+        replacement = new_member.replace("\\", "\\\\").replace("|", "\\|").replace("&", "\\&")
+        rules.append(f"--transform=s|^{_sed_literal(old_member)}/|{replacement}/|")
+    return rules
