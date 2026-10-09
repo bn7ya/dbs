@@ -1,7 +1,7 @@
 @if (server(); as current) {
   <div class="overview">
-    <p-card class="overview__check">
-      <div class="overview__card">
+    <mat-card appearance="outlined" class="overview__check">
+      <mat-card-content class="overview__card">
         <div class="overview__heading">
           <h2>{{ 'servers.check.title' | t }}</h2>
           <app-check-status-tag [status]="current.last_check_status" />
@@ -16,16 +16,16 @@
         </p>
 
         @if (hostKeyChanged()) {
-          <p-message severity="error">
+          <app-notice severity="danger">
             {{ 'host_key_changed' | errorText }} {{ 'servers.check.blocked' | t }}
-          </p-message>
+          </app-notice>
           <div>
-            <button pButton type="button" severity="danger" variant="outlined" (click)="reviewHostKey()">
+            <button matButton="outlined" class="app-danger" type="button" (click)="reviewHostKey()">
               {{ 'servers.hostKey.review' | t }}
             </button>
           </div>
         } @else if (checkFailure(); as code) {
-          <p-message severity="error">{{ code | errorText }}</p-message>
+          <app-notice severity="danger">{{ code | errorText }}</app-notice>
         }
 
         @if (report(); as found) {
@@ -69,18 +69,18 @@
 
         <div class="overview__actions overview__actions--spread">
           <p class="text-sm text-secondary">{{ 'servers.check.wait' | t }}</p>
-          <button pButton type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="check()">
+          <button matButton="filled" type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="check()">
             @if (checking()) {
-              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
             {{ 'servers.check.run' | t }}
           </button>
         </div>
-      </div>
-    </p-card>
+      </mat-card-content>
+    </mat-card>
 
-    <p-card>
-      <div class="overview__card">
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
         <h2>{{ 'servers.settings.title' | t }}</h2>
 
         <dl class="overview__facts">
@@ -113,13 +113,13 @@
         </dl>
 
         <div class="overview__actions">
-          <button pButton type="button" severity="secondary" (click)="edit()">{{ 'actions.edit' | t }}</button>
+          <button matButton="outlined" type="button" (click)="edit()">{{ 'actions.edit' | t }}</button>
         </div>
-      </div>
-    </p-card>
+      </mat-card-content>
+    </mat-card>
 
-    <p-card>
-      <div class="overview__card">
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
         <div class="overview__intro">
           <h2>{{ 'servers.hostKey.title' | t }}</h2>
           <p class="text-sm text-secondary">{{ 'servers.hostKey.body' | t }}</p>
@@ -128,59 +128,47 @@
         <app-host-key-facts [keyType]="current.host_key_type" [fingerprint]="current.host_key_fingerprint" />
 
         <div class="overview__actions">
-          <button pButton type="button" severity="secondary" (click)="reviewHostKey()">
+          <button matButton="outlined" type="button" (click)="reviewHostKey()">
             {{ 'servers.hostKey.review' | t }}
           </button>
         </div>
-      </div>
-    </p-card>
+      </mat-card-content>
+    </mat-card>
 
-    <p-card>
-      <div class="overview__card">
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
         <div class="overview__intro">
           <h2>{{ 'servers.passphrase.title' | t }}</h2>
           <p class="text-sm text-secondary">{{ 'servers.passphrase.body' | t }}</p>
         </div>
 
         @if (passphrase(); as value) {
-          <app-field [label]="'servers.passphrase.label' | t">
-            <div class="overview__passphrase">
-              <input
-                pInputText
-                appFieldControl
-                readonly
-                dir="ltr"
-                autocomplete="off"
-                spellcheck="false"
-                fluid
-                [value]="value"
-              />
-              <button
-                pButton
-                type="button"
-                iconOnly
-                variant="text"
-                [rounded]="true"
-                [attr.aria-label]="'servers.passphrase.copy' | t"
-                (click)="copy(value)"
-              >
-                <i class="fa-solid fa-copy" aria-hidden="true"></i>
-              </button>
-            </div>
-          </app-field>
+          <mat-form-field class="overview__passphrase">
+            <mat-label>{{ 'servers.passphrase.label' | t }}</mat-label>
+            <input matInput readonly dir="ltr" autocomplete="off" spellcheck="false" [value]="value" />
+            <button
+              matIconButton
+              matIconSuffix
+              type="button"
+              [attr.aria-label]="'servers.passphrase.copy' | t"
+              (click)="copy(value)"
+            >
+              <i class="fa-solid fa-copy" aria-hidden="true"></i>
+            </button>
+          </mat-form-field>
         }
 
         <!-- One button that changes its word: focus returns to it from the password prompt. -->
         <div class="overview__actions">
-          <button pButton type="button" severity="secondary" (click)="togglePassphrase()">
+          <button matButton="outlined" type="button" (click)="togglePassphrase()">
             {{ (passphrase() ? 'servers.passphrase.hide' : 'servers.passphrase.show') | t }}
           </button>
         </div>
-      </div>
-    </p-card>
+      </mat-card-content>
+    </mat-card>
 
-    <p-card>
-      <div class="overview__card">
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
         <div class="overview__intro">
           <h2>{{ 'servers.delete.title' | t }}</h2>
           <p class="text-sm text-secondary">{{ 'servers.delete.body' | t }}</p>
@@ -188,21 +176,20 @@
 
         <div class="overview__actions">
           <button
-            pButton
+            matButton="outlined"
+            class="app-danger"
             type="button"
-            severity="danger"
-            variant="outlined"
             [disabled]="deleting()"
             [attr.aria-busy]="deleting()"
             (click)="remove()"
           >
             @if (deleting()) {
-              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
             {{ 'servers.delete.action' | t }}
           </button>
         </div>
-      </div>
-    </p-card>
+      </mat-card-content>
+    </mat-card>
   </div>
 }

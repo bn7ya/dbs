@@ -1,7 +1,9 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ApplicationRef } from '@angular/core';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed } from '@angular/core/testing';
+import { MatTabNavBarHarness } from '@angular/material/tabs/testing';
 import { provideRouter, withComponentInputBinding, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,6 +60,13 @@ describe('ServerPage', () => {
       `${base}/environment`,
       `${base}/activity`,
     ]);
-    expect(tabs.map((tab) => tab.getAttribute('aria-current'))).toEqual([null, 'page', null, null, null]);
+    const bar = await TestbedHarnessEnvironment.loader(harness.fixture).getHarness(MatTabNavBarHarness);
+    expect(await Promise.all((await bar.getLinks()).map((link) => link.isActive()))).toEqual([
+      false,
+      true,
+      false,
+      false,
+      false,
+    ]);
   });
 });

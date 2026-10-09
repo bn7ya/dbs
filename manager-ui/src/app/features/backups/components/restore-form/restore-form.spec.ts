@@ -3,8 +3,6 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { MessageService } from 'primeng/api';
-import { providePrimeNG } from 'primeng/config';
 import { NEVER } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,8 +35,6 @@ describe('RestoreForm', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: MatDialogRef, useValue: { close } },
-        providePrimeNG(),
-        MessageService,
         { provide: MAT_DIALOG_DATA, useValue: { data: { file: FILE } } },
       ],
     });
@@ -100,7 +96,7 @@ describe('RestoreForm', () => {
     http.expectNone(`/api/backups/${FILE.id}/restore/`);
     expect(form.passwordMissing()).toBe(true);
     expect(form.nameError()).toBe('name_mismatch');
-    const fields = rendered().querySelectorAll('.field__error, mat-error');
+    const fields = rendered().querySelectorAll('mat-error');
     expect(Array.from(fields, (each) => each.textContent?.trim())).toEqual([
       'Enter your password.',
       "Type the server's name exactly as shown.",
@@ -163,7 +159,7 @@ describe('RestoreForm', () => {
     await rehearsing;
 
     expect(form.formFailure()?.code).toBe('backup_running');
-    expect(rendered().querySelector('p-message')?.textContent).toContain(
+    expect(rendered().querySelector('app-notice')?.textContent).toContain(
       'A backup or restore of this server is already running.',
     );
   });

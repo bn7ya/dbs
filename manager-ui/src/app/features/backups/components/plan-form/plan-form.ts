@@ -1,20 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ButtonDirective } from 'primeng/button';
-import { InputNumber } from 'primeng/inputnumber';
-import { InputTags } from 'primeng/inputtags';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
-import { RadioButton } from 'primeng/radiobutton';
-import { Select } from 'primeng/select';
-import { ToggleSwitch } from 'primeng/toggleswitch';
+import { COMMA, ENTER } from '@angular/cdk/keycodes';
+import { MatButton } from '@angular/material/button';
+import { MatChipGrid, MatChipInput, MatChipRemove, MatChipRow, type MatChipInputEvent } from '@angular/material/chips';
+import { MatOption } from '@angular/material/core';
+import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
+import { MatRadioButton, MatRadioGroup } from '@angular/material/radio';
+import { MatSelect } from '@angular/material/select';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
 
 import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
-import { Field } from '@shared/field/field';
-import { FieldControl } from '@shared/field/field-control';
+import { FieldError } from '@shared/field/field-error';
+import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { uniqueId } from '@shared/unique-id';
 import { PLAN_SCHEDULES, scheduleOf, type BackupKind, type BackupPlan, type PlanSchedule, type PlanSettings } from '../../data/backups.types';
@@ -57,17 +58,24 @@ const KINDS: readonly BackupKind[] = ['dbs', 'archive', 'collect'];
   selector: 'app-plan-form',
   imports: [
     FormsModule,
-    ButtonDirective,
-    InputNumber,
-    InputTags,
-    InputText,
-    Message,
+    MatButton,
+    MatChipGrid,
+    MatChipRow,
+    MatChipRemove,
+    MatChipInput,
+    MatFormField,
+    MatLabel,
+    MatHint,
+    MatError,
+    MatInput,
+    MatOption,
+    MatRadioGroup,
+    MatRadioButton,
+    MatSelect,
+    MatSlideToggle,
+    FieldError,
+    Notice,
     PasswordInput,
-    RadioButton,
-    Select,
-    ToggleSwitch,
-    Field,
-    FieldControl,
     ErrorTextPipe,
     TranslatePipe,
   ],
@@ -84,6 +92,8 @@ export class PlanForm {
   readonly editing = this.data.plan;
 
   readonly kindId = uniqueId('plan-kind');
+  readonly enabledId = uniqueId('plan-enabled');
+  readonly separators = [ENTER, COMMA];
   readonly kinds = KINDS;
 
   readonly keepMin = KEEP_MIN;
@@ -187,6 +197,21 @@ export class PlanForm {
       this.update('kind', kind);
       this.edited.update((edited) => new Set<DraftField>([...edited, 'paths', 'pattern', 'keep_remote']));
     }
+  }
+
+  addPath(event: MatChipInputEvent): void {
+    const path = event.value.trim();
+    if (path !== '') {
+      this.update('paths', [...this.draft().paths, path]);
+    }
+    event.chipInput.clear();
+  }
+
+  removePath(index: number): void {
+    this.update(
+      'paths',
+      this.draft().paths.filter((_, position) => position !== index),
+    );
   }
 
   setAccountPassword(password: string): void {

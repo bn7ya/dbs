@@ -1,26 +1,26 @@
 <div class="backups">
-  <p-card>
-    <div class="backups__card">
+  <mat-card appearance="outlined">
+    <mat-card-content class="backups__card">
       <div class="backups__header">
         <div class="backups__intro">
           <h2>{{ 'backups.plans.title' | t }}</h2>
           <p class="text-sm text-secondary">{{ 'backups.plans.body' | t }}</p>
         </div>
         @if (!plansEmpty()) {
-          <button pButton type="button" severity="secondary" (click)="addPlan()">{{ 'backups.plans.add' | t }}</button>
+          <button matButton="outlined" type="button" (click)="addPlan()">{{ 'backups.plans.add' | t }}</button>
         }
       </div>
 
       <div class="backups__body">
         @if (plansError(); as failure) {
-          <p-message severity="error">{{ failure | errorText }}</p-message>
+          <app-notice severity="danger">{{ failure | errorText }}</app-notice>
           <div>
-            <button pButton type="button" severity="secondary" (click)="retryPlans()">{{ 'actions.retry' | t }}</button>
+            <button matButton="outlined" type="button" (click)="retryPlans()">{{ 'actions.retry' | t }}</button>
           </div>
         } @else if (plansPending()) {
           <div class="backups__skeleton" aria-busy="true">
             @for (line of planSkeleton; track line) {
-              <p-skeleton />
+              <app-skeleton />
             }
           </div>
         } @else if (plansEmpty()) {
@@ -30,43 +30,25 @@
             [title]="'backups.plans.empty.title' | t"
             [description]="'backups.plans.empty.body' | t"
           >
-            <button pButton type="button" (click)="addFirstPlan()">{{ 'backups.plans.empty.action' | t }}</button>
-            <button pButton type="button" variant="outlined" (click)="addFolderPlan()">
+            <button matButton="filled" type="button" (click)="addFirstPlan()">{{ 'backups.plans.empty.action' | t }}</button>
+            <button matButton="outlined" type="button" (click)="addFolderPlan()">
               {{ 'backups.plans.empty.folders' | t }}
             </button>
-            <button pButton type="button" variant="outlined" (click)="addCollectPlan()">
+            <button matButton="outlined" type="button" (click)="addCollectPlan()">
               {{ 'backups.plans.empty.collect' | t }}
             </button>
           </app-empty-state>
         } @else {
-          <div class="table-scroll"><p-table
-            [value]="planRows()"
-            dataKey="id"
-            [lazy]="true"
-            [paginator]="plansPaginated()"
-            [rows]="planPageSize"
-            [first]="planFirst()"
-            [totalRecords]="planCount()"
-            [attr.aria-busy]="plansLoading()"
-            [pt]="{
-              table: { 'aria-label': ('backups.plans.title' | t) },
-              pcPaginator: { root: { role: 'navigation', 'aria-label': ('backups.plans.list.pages' | t) } }
-            }"
-            (onPage)="onPlansPaged($event)"
-          >
-            <ng-template #header>
-              <tr>
-                <th scope="col">{{ 'backups.plans.list.plan' | t }}</th>
-                <th scope="col">{{ 'backups.plans.list.schedule' | t }}</th>
-                <th scope="col">{{ 'backups.plans.list.kept' | t }}</th>
-                <th scope="col">{{ 'backups.plans.list.lastRun' | t }}</th>
-                <th scope="col">{{ 'backups.plans.list.nextRun' | t }}</th>
-                <th scope="col">{{ 'backups.list.actions' | t }}</th>
-              </tr>
-            </ng-template>
-            <ng-template #body let-row>
-              <tr>
-                <td>
+          <div class="table-scroll">
+            <table
+              mat-table
+              [dataSource]="planRows()"
+              [attr.aria-label]="'backups.plans.title' | t"
+              [attr.aria-busy]="plansLoading()"
+            >
+              <ng-container matColumnDef="plan">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.plans.list.plan' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__stack">
                     <bdi class="backups__plan-name" dir="auto">{{ row.name }}</bdi>
                     @switch (row.kind) {
@@ -92,15 +74,23 @@
                     }
                   </div>
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="schedule">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.plans.list.schedule' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__stack">
                     <span>{{ scheduleKey(row) | t }}</span>
                     @if (!row.enabled) {
-                      <p-tag severity="secondary" icon="fa-solid fa-pause" [value]="'backups.plans.disabled' | t" />
+                      <app-status-tag severity="neutral" icon="fa-solid fa-pause" [label]="'backups.plans.disabled' | t" />
                     }
                   </div>
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="kept">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.plans.list.kept' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__stack">
                     <span>{{ 'backups.plans.keepHere' | t: { count: row.keep } }}</span>
                     @if (row.kind !== 'collect') {
@@ -108,15 +98,19 @@
                     }
                   </div>
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="lastRun">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.plans.list.lastRun' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   @if (row.last_status === 'none') {
                     <span class="text-sm text-muted">{{ 'backups.plans.lastStatus.none' | t }}</span>
                   } @else {
                     <div class="backups__stack">
-                      <p-tag
+                      <app-status-tag
                         [severity]="runLook(row.last_status).severity"
                         [icon]="runLook(row.last_status).icon"
-                        [value]="'backups.plans.lastStatus.' + row.last_status | t"
+                        [label]="'backups.plans.lastStatus.' + row.last_status | t"
                       />
                       @if (row.last_run_at; as lastRunAt) {
                         <time class="text-sm text-secondary" [attr.datetime]="lastRunAt">{{ lastRunAt | appDate }}</time>
@@ -127,68 +121,84 @@
                     </div>
                   }
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="nextRun">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.plans.list.nextRun' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   @if (nextRun(row); as nextRunAt) {
                     <time [attr.datetime]="nextRunAt">{{ nextRunAt | appDate }}</time>
                   } @else {
                     <span class="text-sm text-muted">{{ 'backups.list.none' | t }}</span>
                   }
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.actions' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__actions">
                     <button
-                      pButton
+                      matButton
                       type="button"
-                      variant="text"
-                      size="small"
                       [disabled]="isRunning(row)"
                       [attr.aria-busy]="isRunning(row)"
                       [attr.aria-label]="'backups.plans.run.label' | t: { name: row.name }"
                       (click)="run(row)"
                     >
                       @if (isRunning(row)) {
-                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                       }
                       {{ (isRunning(row) ? 'backups.plans.run.working' : 'backups.plans.run.action') | t }}
                     </button>
                     <button
-                      pButton
+                      matButton
                       type="button"
-                      variant="text"
-                      size="small"
                       [attr.aria-label]="'backups.plans.edit.label' | t: { name: row.name }"
                       (click)="editPlan(row)"
                     >
                       {{ 'actions.edit' | t }}
                     </button>
                     <button
-                      pButton
+                      matButton
+                      class="app-danger"
                       type="button"
-                      variant="text"
-                      severity="danger"
-                      size="small"
                       [disabled]="isDeletingPlan(row)"
                       [attr.aria-busy]="isDeletingPlan(row)"
                       [attr.aria-label]="'backups.delete.label' | t: { name: row.name }"
                       (click)="removePlan(row)"
                     >
                       @if (isDeletingPlan(row)) {
-                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                       }
                       {{ 'actions.delete' | t }}
                     </button>
                   </div>
                 </td>
-              </tr>
-            </ng-template>
-          </p-table></div>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="['plan', 'schedule', 'kept', 'lastRun', 'nextRun', 'actions']"></tr>
+              <tr mat-row *matRowDef="let row; columns: ['plan', 'schedule', 'kept', 'lastRun', 'nextRun', 'actions']"></tr>
+            </table>
+          </div>
+          @if (plansPaginated()) {
+            <nav [attr.aria-label]="'backups.plans.list.pages' | t">
+              <mat-paginator
+                [length]="planCount()"
+                [pageIndex]="planPage()"
+                [pageSize]="planPageSize"
+                hidePageSize
+                (page)="onPlansPaged($event)"
+              />
+            </nav>
+          }
         }
       </div>
-    </div>
-  </p-card>
+    </mat-card-content>
+  </mat-card>
 
-  <p-card>
-    <div class="backups__card">
+  <mat-card appearance="outlined">
+    <mat-card-content class="backups__card">
       <div class="backups__header">
         <div class="backups__intro">
           <h2>{{ 'backups.title' | t }}</h2>
@@ -199,21 +209,20 @@
           <input #picker type="file" hidden (change)="onFileChosen(picker)" />
           <button
             #uploadButton
-            pButton
+            matButton="outlined"
             type="button"
-            severity="secondary"
             [disabled]="uploading()"
             [attr.aria-busy]="uploading()"
             (click)="picker.click()"
           >
             @if (uploading()) {
-              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
             {{ (uploading() ? 'backups.upload.working' : 'backups.upload.action') | t }}
           </button>
-          <button pButton type="button" [disabled]="taking()" [attr.aria-busy]="taking()" (click)="take()">
+          <button matButton="filled" type="button" [disabled]="taking()" [attr.aria-busy]="taking()" (click)="take()">
             @if (taking()) {
-              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
             {{ (taking() ? 'backups.take.working' : 'backups.take.action') | t }}
           </button>
@@ -229,17 +238,15 @@
                 {{ (uploadProgress() === null ? 'backups.upload.storing' : 'backups.upload.working') | t }}
               </span>
               @if (uploadProgress() !== null) {
-                <p-progressbar [value]="uploadProgress() ?? 0" [attr.aria-labelledby]="uploadLabelId" />
+                <mat-progress-bar mode="determinate" [value]="uploadProgress() ?? 0" [attr.aria-labelledby]="uploadLabelId" />
               } @else {
-                <p-progressbar mode="indeterminate" [attr.aria-labelledby]="uploadLabelId" />
+                <mat-progress-bar mode="indeterminate" [attr.aria-labelledby]="uploadLabelId" />
               }
             </div>
             @if (uploadProgress() !== null) {
               <button
-                pButton
+                matButton
                 type="button"
-                variant="text"
-                size="small"
                 [attr.aria-label]="'backups.upload.cancelLabel' | t: { name: upload.name }"
                 (click)="cancelUpload()"
               >
@@ -250,40 +257,38 @@
         }
 
         @if (backingUp()) {
-          <p-message severity="info">{{ 'backups.take.running' | t }}</p-message>
+          <app-notice severity="info">{{ 'backups.take.running' | t }}</app-notice>
         }
 
         @if (deleted(); as file) {
-          <p-message severity="success" [closable]="true" (onClose)="dismissDeleted()">
+          <app-notice severity="success" closable (closed)="dismissDeleted()">
             <span class="backups__deleted">
               <span>{{ 'backups.delete.done' | t }} <bdi class="backups__code" dir="ltr">{{ file.name }}</bdi></span>
               <button
-                pButton
+                matButton
                 type="button"
-                variant="text"
-                size="small"
                 [disabled]="undoing()"
                 [attr.aria-busy]="undoing()"
                 (click)="undoDelete()"
               >
                 @if (undoing()) {
-                  <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                 }
                 {{ 'backups.delete.undo' | t }}
               </button>
             </span>
-          </p-message>
+          </app-notice>
         }
 
         @if (error(); as failure) {
-          <p-message severity="error">{{ failure | errorText }}</p-message>
+          <app-notice severity="danger">{{ failure | errorText }}</app-notice>
           <div>
-            <button pButton type="button" severity="secondary" (click)="retry()">{{ 'actions.retry' | t }}</button>
+            <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
           </div>
         } @else if (pending()) {
           <div class="backups__skeleton" aria-busy="true">
             @for (line of fileSkeleton; track line) {
-              <p-skeleton />
+              <app-skeleton />
             }
           </div>
         } @else if (empty()) {
@@ -294,41 +299,26 @@
             [description]="'backups.empty.body' | t"
           />
         } @else {
-          <div class="table-scroll"><p-table
-            [value]="fileRows()"
-            dataKey="id"
-            [lazy]="true"
-            [paginator]="paginated()"
-            [rows]="pageSize()"
-            [first]="first()"
-            [totalRecords]="count()"
-            [rowsPerPageOptions]="pageSizes"
-            [attr.aria-busy]="loading()"
-            [pt]="{
-              table: { 'aria-label': ('backups.title' | t) },
-              pcPaginator: { root: { role: 'navigation', 'aria-label': ('backups.list.pages' | t) } }
-            }"
-            (onPage)="onPaged($event)"
-          >
-            <ng-template #header>
-              <tr>
-                <th scope="col">{{ 'backups.list.name' | t }}</th>
-                <th scope="col">{{ 'backups.list.taken' | t }}</th>
-                <th scope="col">{{ 'backups.list.plan' | t }}</th>
-                <th scope="col" class="backups__end">{{ 'backups.list.size' | t }}</th>
-                <th scope="col">{{ 'backups.list.check' | t }}</th>
-                <th scope="col">{{ 'backups.list.actions' | t }}</th>
-              </tr>
-            </ng-template>
-            <ng-template #body let-row>
-              <tr>
-                <td>
+          <div class="table-scroll">
+            <table
+              mat-table
+              [dataSource]="fileRows()"
+              [attr.aria-label]="'backups.title' | t"
+              [attr.aria-busy]="loading()"
+            >
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.name' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__stack">
                     <bdi class="backups__code" dir="ltr">{{ row.name }}</bdi>
-                    <p-tag severity="secondary" [value]="'backups.kind.' + row.kind | t" />
+                    <app-status-tag severity="neutral" [label]="'backups.kind.' + row.kind | t" />
                   </div>
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="taken">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.taken' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__stack">
                     <time [attr.datetime]="row.created_at">{{ row.created_at | appDate }}</time>
                     @if (takenBy(row); as takenBy) {
@@ -336,34 +326,48 @@
                     }
                   </div>
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="plan">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.plan' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   @if (row.plan_name; as planName) {
                     <bdi dir="auto">{{ planName }}</bdi>
                   } @else {
                     <span class="text-sm text-muted">{{ 'backups.list.oneOff' | t }}</span>
                   }
                 </td>
-                <td class="backups__end">
+              </ng-container>
+
+              <ng-container matColumnDef="size">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="backups__end">{{ 'backups.list.size' | t }}</th>
+                <td mat-cell *matCellDef="let row" class="backups__end">
                   <bdi class="backups__size">{{ row.size | fileSize }}</bdi>
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="check">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.check' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__stack">
-                    <p-tag
+                    <app-status-tag
                       [severity]="look(row.validation).severity"
                       [icon]="look(row.validation).icon"
-                      [value]="validationKey(row) | t"
+                      [label]="validationKey(row) | t"
                     />
                     @if (row.validated_at; as validatedAt) {
                       <time class="text-sm text-secondary" [attr.datetime]="validatedAt">{{ validatedAt | appDate }}</time>
                     }
                   </div>
                 </td>
-                <td>
+              </ng-container>
+
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.actions' | t }}</th>
+                <td mat-cell *matCellDef="let row">
                   <div class="backups__actions">
                     <a
-                      pButton
-                      variant="text"
-                      size="small"
+                      matButton
                       [href]="downloadUrl(row)"
                       [attr.download]="row.name"
                       [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
@@ -371,69 +375,68 @@
                       {{ 'backups.download.action' | t }}
                     </a>
                     <button
-                      pButton
+                      matButton
                       type="button"
-                      variant="text"
-                      size="small"
                       [disabled]="isVerifying(row)"
                       [attr.aria-busy]="isVerifying(row)"
                       [attr.aria-label]="'backups.verify.label' | t: { name: row.name }"
                       (click)="verify(row)"
                     >
                       @if (isVerifying(row)) {
-                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                       }
                       {{ 'backups.verify.action' | t }}
                     </button>
                     @if (canRestore(row)) {
                       <button
-                        pButton
+                        matButton
                         type="button"
-                        variant="text"
-                        size="small"
                         [disabled]="restoring(row) !== null"
                         [attr.aria-busy]="restoring(row) !== null"
                         [attr.aria-label]="'backups.restore.label' | t: { name: row.name }"
                         (click)="restore(row)"
                       >
-                        @switch (restoring(row)) {
-                          @case ('rehearse') {
-                            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-                            {{ 'backups.restore.rehearsing' | t }}
-                          }
-                          @case ('restore') {
-                            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-                            {{ 'backups.restore.working' | t }}
-                          }
-                          @default {
-                            {{ 'backups.restore.action' | t }}
-                          }
+                        @if (restoring(row) !== null) {
+                          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                         }
+                        {{ restoreKey(row) | t }}
                       </button>
                     }
                     <button
-                      pButton
+                      matButton
+                      class="app-danger"
                       type="button"
-                      variant="text"
-                      severity="danger"
-                      size="small"
                       [disabled]="isDeleting(row)"
                       [attr.aria-busy]="isDeleting(row)"
                       [attr.aria-label]="'backups.delete.label' | t: { name: row.name }"
                       (click)="remove(row)"
                     >
                       @if (isDeleting(row)) {
-                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                       }
                       {{ 'actions.delete' | t }}
                     </button>
                   </div>
                 </td>
-              </tr>
-            </ng-template>
-          </p-table></div>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="['name', 'taken', 'plan', 'size', 'check', 'actions']"></tr>
+              <tr mat-row *matRowDef="let row; columns: ['name', 'taken', 'plan', 'size', 'check', 'actions']"></tr>
+            </table>
+          </div>
+          @if (paginated()) {
+            <nav [attr.aria-label]="'backups.list.pages' | t">
+              <mat-paginator
+                [length]="count()"
+                [pageIndex]="page()"
+                [pageSize]="pageSize()"
+                [pageSizeOptions]="pageSizes"
+                (page)="onPaged($event)"
+              />
+            </nav>
+          }
         }
       </div>
-    </div>
-  </p-card>
+    </mat-card-content>
+  </mat-card>
 </div>

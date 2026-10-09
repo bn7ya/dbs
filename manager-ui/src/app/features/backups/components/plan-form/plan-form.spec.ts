@@ -1,10 +1,11 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { MatChipGridHarness } from '@angular/material/chips/testing';
+import { MatRadioButtonHarness } from '@angular/material/radio/testing';
 import { provideRouter } from '@angular/router';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { MessageService } from 'primeng/api';
-import { providePrimeNG } from 'primeng/config';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
@@ -34,8 +35,6 @@ describe('PlanForm', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: MatDialogRef, useValue: { close } },
-        providePrimeNG(),
-        MessageService,
         { provide: MAT_DIALOG_DATA, useValue: { data } },
       ],
     });
@@ -46,6 +45,16 @@ describe('PlanForm', () => {
     fixture = TestBed.createComponent(PlanForm);
     return fixture.componentInstance;
   };
+
+  const harnesses = TestbedHarnessEnvironment;
+
+  const chipGrids = async (): Promise<number> =>
+    (await harnesses.loader(fixture).getAllHarnesses(MatChipGridHarness)).length;
+
+  const radioLabels = async (): Promise<string[]> =>
+    Promise.all(
+      (await harnesses.loader(fixture).getAllHarnesses(MatRadioButtonHarness)).map((radio) => radio.getLabelText()),
+    );
 
   const rendered = (): HTMLElement => {
     fixture.detectChanges();
@@ -175,18 +184,17 @@ describe('PlanForm', () => {
   });
 
   describe('what the plan backs up', () => {
-    it('offers the three kinds on a new plan, and the folder list only for folders', () => {
+    it('offers the three kinds on a new plan, and the folder list only for folders', async () => {
       const form = open({ plan: null });
 
       let view = rendered();
-      const radios = Array.from(view.querySelectorAll('fieldset label'), (radio) => radio.textContent?.trim());
-      expect(radios).toEqual(['django-dbs', 'Folders', 'Existing files']);
-      expect(view.querySelector('p-inputtags')).toBeNull();
+      expect(await radioLabels()).toEqual(['django-dbs', 'Folders', 'Existing files']);
+      expect(await chipGrids()).toBe(0);
       expect(view.textContent).toContain("The server's backup passphrase encrypts each backup.");
 
       form.setKind('archive');
       view = rendered();
-      expect(view.querySelector('p-inputtags')).not.toBeNull();
+      expect(await chipGrids()).toBe(1);
       expect(view.textContent).toContain('kept here encrypted');
       expect(view.textContent).toContain('django-dbs backups already include the files their models point at.');
     });
@@ -259,10 +267,10 @@ describe('PlanForm', () => {
       const form = open({ plan: ARCHIVE_PLAN });
 
       const view = rendered();
-      expect(view.querySelector('p-radiobutton')).toBeNull();
+      expect(await radioLabels()).toEqual([]);
       expect(view.querySelector('dl')?.textContent).toContain('Backup type');
       expect(view.querySelector('dl')?.textContent).toContain('Folders');
-      expect(view.querySelector('p-inputtags')).not.toBeNull();
+      expect(await chipGrids()).toBe(1);
 
       form.update('paths', ['/srv/app/media']);
       form.setAccountPassword(PASSWORD);
@@ -308,18 +316,18 @@ describe('PlanForm', () => {
     const input = (view: HTMLElement, name: string): HTMLInputElement | null =>
       view.querySelector<HTMLInputElement>(`input[name="${name}"]`);
 
-    it('asks for one folder and a pattern, both read left to right, and not for copies on the server', () => {
+    it('asks for one folder and a pattern, both read left to right, and not for copies on the server', async () => {
       const form = open({ plan: null, kind: 'collect' });
 
       const view = rendered();
       expect(form.collecting()).toBe(true);
       expect(form.draft().pattern).toBe('*');
-      expect(view.querySelector('p-inputtags')).toBeNull();
+      expect(await chipGrids()).toBe(0);
       expect(input(view, 'folder')?.getAttribute('dir')).toBe('ltr');
       expect(input(view, 'pattern')?.getAttribute('dir')).toBe('ltr');
       expect(input(view, 'pattern')?.getAttribute('maxlength')).toBe('200');
-      expect(view.querySelector('p-inputnumber[name="keep_remote"]')).toBeNull();
-      expect(view.querySelector('p-inputnumber[name="keep"]')).not.toBeNull();
+      expect(input(view, 'keep_remote')).toBeNull();
+      expect(input(view, 'keep')).not.toBeNull();
       expect(view.textContent).toContain('*.sql.gz matches every .sql.gz file in the folder.');
       expect(view.textContent).toContain("the server's copy stays as it is.");
     });
@@ -399,11 +407,11 @@ describe('PlanForm', () => {
 
       const view = rendered();
       await fixture.whenStable();
-      expect(view.querySelector('p-radiobutton')).toBeNull();
+      expect(await radioLabels()).toEqual([]);
       expect(view.querySelector('dl')?.textContent).toContain('Existing files');
       expect(input(view, 'folder')?.value).toBe('/var/backups/postgres');
       expect(input(view, 'pattern')?.value).toBe('*.sql.gz');
-      expect(view.querySelector('p-inputnumber[name="keep_remote"]')).toBeNull();
+      expect(input(view, 'keep_remote')).toBeNull();
 
       form.update('pattern', '*.dump');
       form.setAccountPassword(PASSWORD);
@@ -449,8 +457,8 @@ describe('PlanForm', () => {
       expect(form.error('paths')).toBe('one_folder_required');
       expect(form.error('pattern')).toBe('invalid_pattern');
       expect(form.kindError()).toBeNull();
-      expect(input(view, 'folder')?.closest('app-field')?.textContent).toContain('Enter one folder.');
-      expect(input(view, 'pattern')?.closest('app-field')?.textContent).toContain('Use a pattern with no / in it.');
+      expect(input(view, 'folder')?.closest('mat-form-field')?.textContent).toContain('Enter one folder.');
+      expect(input(view, 'pattern')?.closest('mat-form-field')?.textContent).toContain('Use a pattern with no / in it.');
     });
   });
 
@@ -463,8 +471,8 @@ describe('PlanForm', () => {
       await form.save();
 
       expect(form.passwordMissing()).toBe(true);
-      const field = rendered().querySelector('input[name="account_password"]')?.closest('app-field');
-      expect(field?.querySelector('.field__error')).not.toBeNull();
+      const field = rendered().querySelector('input[name="account_password"]')?.closest('mat-form-field');
+      expect(field?.querySelector('mat-error')).not.toBeNull();
 
       form.setKind('dbs');
       expect(form.passwordShown()).toBe(false);

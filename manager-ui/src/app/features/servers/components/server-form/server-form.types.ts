@@ -30,5 +30,4 @@ export type ServerDraftField = keyof ServerDraft | 'host_key';
 export interface AuthMethodOption {
   readonly value: AuthMethod;
   readonly labelKey: string;
-  readonly inputId: string;
 }

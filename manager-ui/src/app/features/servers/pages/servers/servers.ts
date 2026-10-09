@@ -1,17 +1,12 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { ButtonDirective } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { IconField } from 'primeng/iconfield';
-import { InputIcon } from 'primeng/inputicon';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
-import { Paginator } from 'primeng/paginator';
-import { Skeleton } from 'primeng/skeleton';
-import { TableModule } from 'primeng/table';
-import type { PaginatorState } from 'primeng/types/paginator';
-import type { TablePassThrough } from 'primeng/types/table';
+import { MatButton } from '@angular/material/button';
+import { MatCard, MatCardContent } from '@angular/material/card';
+import { MatFormField, MatLabel, MatPrefix } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
+import { MatPaginator, type PageEvent } from '@angular/material/paginator';
+import { MatTableModule } from '@angular/material/table';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
@@ -19,8 +14,8 @@ import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { EmptyState } from '@shared/empty-state/empty-state';
-import { Field } from '@shared/field/field';
-import { FieldControl } from '@shared/field/field-control';
+import { Notice } from '@shared/notice/notice';
+import { Skeleton } from '@shared/skeleton/skeleton';
 import { Toaster } from '@shared/toaster/toaster';
 import { CheckStatusTag } from '../../components/check-status-tag/check-status-tag';
 import { ServerForm } from '../../components/server-form/server-form';
@@ -33,19 +28,19 @@ import { SERVER_PAGE_SIZES, ServersStore } from '../../state/servers.store';
   imports: [
     FormsModule,
     RouterLink,
-    ButtonDirective,
-    Card,
-    IconField,
-    InputIcon,
-    InputText,
-    Message,
-    Paginator,
+    MatButton,
+    MatCard,
+    MatCardContent,
+    MatFormField,
+    MatLabel,
+    MatPrefix,
+    MatInput,
+    MatPaginator,
+    MatTableModule,
+    Notice,
     Skeleton,
-    TableModule,
     AppDatePipe,
     EmptyState,
-    Field,
-    FieldControl,
     CheckStatusTag,
     ErrorTextPipe,
     TranslatePipe,
@@ -76,11 +71,7 @@ export class ServersPage {
   readonly searching = this.store.searching;
   readonly skeletonLines = [1, 2, 3, 4, 5, 6];
 
-  readonly first = computed(() => this.page() * this.pageSize());
-
-  readonly tablePt = computed<TablePassThrough>(() => ({
-    table: { 'aria-label': this.locale.translate('servers.list.label') },
-  }));
+  readonly columns = ['name', 'address', 'status', 'lastChecked'];
 
   constructor() {
     this.store.openList();
@@ -91,9 +82,8 @@ export class ServersPage {
     this.store.setSearch(text);
   }
 
-  onPaged(event: PaginatorState): void {
-    const rows = event.rows ?? this.pageSize();
-    this.store.goToPage(Math.floor((event.first ?? 0) / rows), rows);
+  onPaged(event: PageEvent): void {
+    this.store.goToPage(event.pageIndex, event.pageSize);
   }
 
   retry(): void {

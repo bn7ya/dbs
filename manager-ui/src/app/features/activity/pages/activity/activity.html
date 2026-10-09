@@ -6,41 +6,37 @@
     </header>
   }
 
-  <p-card>
-    <div class="activity__body">
+  <mat-card appearance="outlined">
+    <mat-card-content class="activity__body">
       <div class="activity__filters">
-        <app-field #statusField="appField" class="activity__filter" [label]="'activity.filters.status' | t">
-          <p-select
-            [inputId]="statusField.id"
-            [options]="statusOptions()"
-            optionLabel="label"
-            optionValue="value"
-            [ngModel]="status()"
-            (ngModelChange)="onStatus($event)"
-          />
-        </app-field>
+        <mat-form-field class="activity__filter">
+          <mat-label>{{ 'activity.filters.status' | t }}</mat-label>
+          <mat-select [ngModel]="status()" (ngModelChange)="onStatus($event)">
+            @for (option of statusOptions(); track option.value) {
+              <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
 
-        <app-field #actionField="appField" class="activity__filter" [label]="'activity.filters.action' | t">
-          <p-select
-            [inputId]="actionField.id"
-            [options]="actionOptions()"
-            optionLabel="label"
-            optionValue="value"
-            [ngModel]="action()"
-            (ngModelChange)="onAction($event)"
-          />
-        </app-field>
+        <mat-form-field class="activity__filter">
+          <mat-label>{{ 'activity.filters.action' | t }}</mat-label>
+          <mat-select [ngModel]="action()" (ngModelChange)="onAction($event)">
+            @for (option of actionOptions(); track option.value) {
+              <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
       </div>
 
       @if (error(); as failure) {
-        <p-message severity="error">{{ failure | errorText }}</p-message>
+        <app-notice severity="danger">{{ failure | errorText }}</app-notice>
         <div>
-          <button pButton type="button" severity="secondary" (click)="retry()">{{ 'actions.retry' | t }}</button>
+          <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
         </div>
       } @else if (pending()) {
         <div class="activity__skeleton" aria-busy="true">
           @for (line of skeletonLines; track line) {
-            <p-skeleton />
+            <app-skeleton />
           }
         </div>
       } @else if (empty()) {
@@ -51,7 +47,7 @@
             [title]="'activity.noMatch.title' | t"
             [description]="'activity.noMatch.body' | t"
           >
-            <button pButton type="button" severity="secondary" (click)="clearFilters()">
+            <button matButton="outlined" type="button" (click)="clearFilters()">
               {{ 'activity.filters.clear' | t }}
             </button>
           </app-empty-state>
@@ -64,59 +60,69 @@
           />
         }
       } @else {
-        <div class="table-scroll"><p-table [value]="entries()" [pt]="tablePt()" [attr.aria-busy]="loading()">
-          <ng-template #header>
-            <tr>
-              <th scope="col">{{ 'activity.list.when' | t }}</th>
-              <th scope="col">{{ 'activity.list.action' | t }}</th>
-              <th scope="col">{{ 'activity.list.status' | t }}</th>
-              @if (!scoped()) {
-                <th scope="col">{{ 'activity.list.server' | t }}</th>
-              }
-              <th scope="col">{{ 'activity.list.target' | t }}</th>
-              <th scope="col">{{ 'activity.list.by' | t }}</th>
-              <th scope="col">{{ 'activity.list.ip' | t }}</th>
-            </tr>
-          </ng-template>
+        <div class="table-scroll">
+          <table
+            mat-table
+            [dataSource]="entries()"
+            [attr.aria-label]="'activity.list.label' | t"
+            [attr.aria-busy]="loading()"
+          >
+            <ng-container matColumnDef="when">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.when' | t }}</th>
+              <td mat-cell *matCellDef="let row">{{ row.created_at | appDate }}</td>
+            </ng-container>
 
-          <ng-template #body let-row>
-            <tr>
-              <td>{{ row.created_at | appDate }}</td>
-              <td>{{ actionLabel(row.action) }}</td>
-              <td>
+            <ng-container matColumnDef="action">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.action' | t }}</th>
+              <td mat-cell *matCellDef="let row">{{ actionLabel(row.action) }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.status' | t }}</th>
+              <td mat-cell *matCellDef="let row">
                 <div class="activity__status">
-                  <p-tag
+                  <app-status-tag
                     [severity]="look(row.status).severity"
                     [icon]="look(row.status).icon"
-                    [value]="'activity.status.' + row.status | t"
+                    [label]="'activity.status.' + row.status | t"
                   />
                   @if (row.status === 'failed' && row.error_code) {
                     <span class="text-sm text-secondary">{{ row.error_code | errorText }}</span>
                   }
                 </div>
               </td>
-              @if (!scoped()) {
-                <td>
-                  @if (row.server; as server) {
-                    <a [routerLink]="['/servers', server]" dir="auto">{{ row.server_name || server }}</a>
-                  } @else if (row.server_name; as name) {
-                    <span class="activity__deleted">
-                      <bdi dir="auto">{{ name }}</bdi>
-                      <span class="text-sm text-muted">{{ 'activity.list.serverDeleted' | t }}</span>
-                    </span>
-                  } @else {
-                    <span class="text-muted">{{ 'activity.list.none' | t }}</span>
-                  }
-                </td>
-              }
-              <td>
+            </ng-container>
+
+            <ng-container matColumnDef="server">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.server' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.server; as server) {
+                  <a [routerLink]="['/servers', server]" dir="auto">{{ row.server_name || server }}</a>
+                } @else if (row.server_name; as name) {
+                  <span class="activity__deleted">
+                    <bdi dir="auto">{{ name }}</bdi>
+                    <span class="text-sm text-muted">{{ 'activity.list.serverDeleted' | t }}</span>
+                  </span>
+                } @else {
+                  <span class="text-muted">{{ 'activity.list.none' | t }}</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="target">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.target' | t }}</th>
+              <td mat-cell *matCellDef="let row">
                 @if (row.target) {
                   <bdi class="activity__target" dir="ltr">{{ row.target }}</bdi>
                 } @else {
                   <span class="text-muted">{{ 'activity.list.none' | t }}</span>
                 }
               </td>
-              <td>
+            </ng-container>
+
+            <ng-container matColumnDef="by">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.by' | t }}</th>
+              <td mat-cell *matCellDef="let row">
                 @if (row.actor; as actor) {
                   <bdi dir="auto">{{ actor }}</bdi>
                 } @else if (scheduled(row)) {
@@ -125,28 +131,34 @@
                   <span class="text-muted">{{ 'activity.list.none' | t }}</span>
                 }
               </td>
-              <td>
+            </ng-container>
+
+            <ng-container matColumnDef="ip">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.ip' | t }}</th>
+              <td mat-cell *matCellDef="let row">
                 @if (row.ip; as ip) {
                   <bdi class="activity__code" dir="ltr">{{ ip }}</bdi>
                 } @else {
                   <span class="text-muted">{{ 'activity.list.none' | t }}</span>
                 }
               </td>
-            </tr>
-          </ng-template>
-        </p-table></div>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns()"></tr>
+          </table>
+        </div>
 
         <nav [attr.aria-label]="'activity.list.pages' | t">
-          <p-paginator
-            locale="en-US"
-            [first]="first()"
-            [rows]="pageSize()"
-            [totalRecords]="count()"
-            [rowsPerPageOptions]="pageSizes"
-            (onPageChange)="onPaged($event)"
+          <mat-paginator
+            [length]="count()"
+            [pageIndex]="page()"
+            [pageSize]="pageSize()"
+            [pageSizeOptions]="pageSizes"
+            (page)="onPaged($event)"
           />
         </nav>
       }
-    </div>
-  </p-card>
+    </mat-card-content>
+  </mat-card>
 </div>

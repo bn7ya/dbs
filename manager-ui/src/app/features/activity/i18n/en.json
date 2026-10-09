@@ -1,7 +1,7 @@
 {
   "activity": {
     "title": "Activity",
-    "subtitle": "Every action taken in DBS Interface, newest first.",
+    "subtitle": "Every action taken in DBS, newest first.",
     "filters": {
       "status": "Status",
       "action": "Action",
@@ -25,7 +25,7 @@
     },
     "empty": {
       "title": "No activity yet",
-      "body": "Actions taken in DBS Interface are listed here.",
+      "body": "Actions taken in DBS are listed here.",
       "serverBody": "Actions taken on this server are listed here."
     },
     "noMatch": {

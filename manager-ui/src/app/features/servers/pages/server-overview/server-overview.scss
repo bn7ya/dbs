@@ -73,9 +73,7 @@
 }
 
 .overview__passphrase {
-  display: flex;
-  gap: var(--app-space-2);
-  align-items: center;
+  inline-size: 100%;
 }
 
 .overview__actions {

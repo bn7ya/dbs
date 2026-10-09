@@ -11,16 +11,13 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { ButtonDirective } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { Message } from 'primeng/message';
-import { Paginator } from 'primeng/paginator';
-import { Select } from 'primeng/select';
-import { Skeleton } from 'primeng/skeleton';
-import { Table } from 'primeng/table';
-import { Tag } from 'primeng/tag';
-import type { PaginatorState } from 'primeng/types/paginator';
-import type { TablePassThrough } from 'primeng/types/table';
+import { MatButton } from '@angular/material/button';
+import { MatCard, MatCardContent } from '@angular/material/card';
+import { MatOption } from '@angular/material/core';
+import { MatFormField, MatLabel } from '@angular/material/form-field';
+import { MatPaginator, type PageEvent } from '@angular/material/paginator';
+import { MatSelect } from '@angular/material/select';
+import { MatTableModule } from '@angular/material/table';
 import { map } from 'rxjs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
@@ -28,7 +25,9 @@ import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { EmptyState } from '@shared/empty-state/empty-state';
-import { Field } from '@shared/field/field';
+import { Notice } from '@shared/notice/notice';
+import { Skeleton } from '@shared/skeleton/skeleton';
+import { StatusTag } from '@shared/status-tag/status-tag';
 import {
   ACTIVITY_ACTIONS,
   ACTIVITY_STATUSES,
@@ -40,7 +39,7 @@ import type { ActivityStatusFilter } from '../../state/activity.store.types';
 import type { FilterOption, StatusLook } from './activity.types';
 
 const STATUS_LOOKS: Readonly<Record<ActivityStatus, StatusLook>> = {
-  queued: { severity: 'secondary', icon: 'fa-solid fa-clock' },
+  queued: { severity: 'neutral', icon: 'fa-solid fa-clock' },
   running: { severity: 'info', icon: 'fa-solid fa-spinner' },
   succeeded: { severity: 'success', icon: 'fa-solid fa-circle-check' },
   failed: { severity: 'danger', icon: 'fa-solid fa-circle-xmark' },
@@ -53,17 +52,20 @@ const ACCOUNT_ACTION_PREFIX = 'auth.';
   imports: [
     FormsModule,
     RouterLink,
-    ButtonDirective,
-    Card,
-    Message,
-    Paginator,
-    Select,
+    MatButton,
+    MatCard,
+    MatCardContent,
+    MatFormField,
+    MatLabel,
+    MatSelect,
+    MatOption,
+    MatPaginator,
+    MatTableModule,
+    Notice,
     Skeleton,
-    Table,
-    Tag,
+    StatusTag,
     AppDatePipe,
     EmptyState,
-    Field,
     ErrorTextPipe,
     TranslatePipe,
   ],
@@ -83,7 +85,7 @@ export class ActivityPage {
   readonly status = this.store.status;
   readonly action = this.store.action;
   readonly pageSize = this.store.pageSize;
-  readonly first = computed(() => this.store.page() * this.store.pageSize());
+  readonly page = this.store.page;
   readonly pageSizes = [...ACTIVITY_PAGE_SIZES];
   readonly loading = this.store.loading;
   readonly pending = this.store.pending;
@@ -92,9 +94,11 @@ export class ActivityPage {
   readonly filtered = this.store.filtered;
   readonly skeletonLines = [1, 2, 3, 4, 5, 6];
 
-  readonly tablePt = computed<TablePassThrough>(() => ({
-    table: { 'aria-label': this.locale.translate('activity.list.label') },
-  }));
+  readonly columns = computed(() =>
+    this.scoped()
+      ? ['when', 'action', 'status', 'target', 'by', 'ip']
+      : ['when', 'action', 'status', 'server', 'target', 'by', 'ip'],
+  );
 
   readonly statusOptions = computed<FilterOption<ActivityStatusFilter>[]>(() => [
     { value: '', label: this.locale.translate('activity.filters.allStatuses') },
@@ -144,9 +148,8 @@ export class ActivityPage {
     this.store.clearFilters();
   }
 
-  onPaged(event: PaginatorState): void {
-    const rows = event.rows ?? this.pageSize();
-    this.store.goToPage(Math.floor((event.first ?? 0) / rows), rows);
+  onPaged(event: PageEvent): void {
+    this.store.goToPage(event.pageIndex, event.pageSize);
   }
 
   retry(): void {

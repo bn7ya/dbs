@@ -4,7 +4,6 @@ import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, withComponentInputBinding, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { ConfirmationService, MessageService } from 'primeng/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
@@ -70,7 +69,7 @@ describe('FilesPage', () => {
   };
 
   const element = (): HTMLElement => harness.routeNativeElement as HTMLElement;
-  const rows = (): HTMLElement[] => Array.from(element().querySelectorAll<HTMLElement>('p-table tbody tr'));
+  const rows = (): HTMLElement[] => Array.from(element().querySelectorAll<HTMLElement>('table tr[mat-row]'));
   const buttonNamed = (text: string): HTMLButtonElement | undefined =>
     Array.from(element().querySelectorAll('button')).find((button) => button.textContent?.trim() === text);
 
@@ -81,8 +80,6 @@ describe('FilesPage', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter(ROUTES, withComponentInputBinding()),
-        MessageService,
-        ConfirmationService,
       ],
     });
     http = TestBed.inject(HttpTestingController);
@@ -109,7 +106,7 @@ describe('FilesPage', () => {
       OTHER.name,
     ]);
     // One allowed folder: nothing to pick between.
-    expect(element().querySelector('p-select')).toBeNull();
+    expect(element().querySelector('mat-select')).toBeNull();
   });
 
   it('opens a folder from its row, by link, and lists it', async () => {
@@ -132,9 +129,9 @@ describe('FilesPage', () => {
     const [folder, file, link, other] = rows();
     expect(folder.textContent).toContain('—');
     expect(file.querySelector('.files__size')?.textContent?.trim()).toBe('1.2 MB');
-    expect(file.querySelector('p-tag')).toBeNull();
-    expect(link.querySelector('p-tag')?.textContent?.trim()).toBe('Link');
-    expect(other.querySelector('p-tag')?.textContent?.trim()).toBe('Special file');
+    expect(file.querySelector('app-status-tag')).toBeNull();
+    expect(link.querySelector('app-status-tag')?.textContent?.trim()).toBe('Link');
+    expect(other.querySelector('app-status-tag')?.textContent?.trim()).toBe('Special file');
     expect(link.querySelector('a[aria-label^="Open folder"]')).toBeNull();
   });
 
@@ -154,9 +151,9 @@ describe('FilesPage', () => {
     it('is a breadcrumb from the allowed folder, each name in its own direction, with the folder on screen last', async () => {
       await showWith(listingOf([NESTED], { path: FOLDER.path }), `?path=${encodeURIComponent(FOLDER.path)}`);
 
-      const trail = element().querySelector('p-breadcrumb nav');
+      const trail = element().querySelector('app-breadcrumb nav');
       expect(trail?.getAttribute('aria-label')).toBe('Folder path');
-      const crumbs = Array.from(trail?.querySelectorAll('.p-breadcrumb-item-link') ?? []);
+      const crumbs = Array.from(trail?.querySelectorAll('.breadcrumb__link') ?? []);
       expect(crumbs.map((crumb) => crumb.textContent?.trim())).toEqual([ROOT, 'photos']);
       expect(crumbs.map((crumb) => crumb.querySelector('bdi')?.getAttribute('dir'))).toEqual(['auto', 'auto']);
       expect(crumbs[1].getAttribute('aria-current')).toBe('page');
@@ -165,7 +162,7 @@ describe('FilesPage', () => {
     it('goes up to the folder a crumb names', async () => {
       await showWith(listingOf([NESTED], { path: FOLDER.path }), `?path=${encodeURIComponent(FOLDER.path)}`);
 
-      element().querySelector<HTMLAnchorElement>('p-breadcrumb a.p-breadcrumb-item-link')?.click();
+      element().querySelector<HTMLAnchorElement>('app-breadcrumb a.breadcrumb__link')?.click();
 
       const request = await answer(listingOf([FOLDER, FILE]));
       expect(request.request.params.get('path')).toBe(ROOT);
@@ -187,7 +184,7 @@ describe('FilesPage', () => {
   it('lets the reader pick between allowed folders when there is more than one', async () => {
     const page = await showWith(listingOf([FOLDER, FILE]));
 
-    expect(element().querySelector('p-select')).not.toBeNull();
+    expect(element().querySelector('mat-select')).not.toBeNull();
     expect(page.rootOptions()).toEqual([ROOT, OTHER_ROOT]);
 
     page.onRoot(OTHER_ROOT);
@@ -217,7 +214,7 @@ describe('FilesPage', () => {
     const empty = element().querySelector('app-empty-state');
     expect(empty?.textContent).toContain('No allowed folders');
     expect(empty?.querySelector('a')?.getAttribute('href')).toBe(`/servers/${SERVER_ID}`);
-    expect(element().querySelector('p-message')).toBeNull();
+    expect(element().querySelector('app-notice')).toBeNull();
     expect(buttonNamed('Upload a file')).toBeUndefined();
     expect(buttonNamed('New folder')).toBeUndefined();
   });
@@ -235,7 +232,7 @@ describe('FilesPage', () => {
     await settle();
     harness.detectChanges();
 
-    expect(element().querySelector('p-message')?.textContent).toContain(
+    expect(element().querySelector('app-notice')?.textContent).toContain(
       "This path is outside the server's allowed folders.",
     );
     // A refusal about the path, not a lost session: the reader stays on the page.

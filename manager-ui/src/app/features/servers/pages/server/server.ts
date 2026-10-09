@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, input } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet, type IsActiveMatchOptions } from '@angular/router';
-import { ButtonDirective } from 'primeng/button';
-import { Message } from 'primeng/message';
-import { Skeleton } from 'primeng/skeleton';
+import { MatButton } from '@angular/material/button';
+import { MatTabLink, MatTabNav, MatTabNavPanel } from '@angular/material/tabs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { EmptyState } from '@shared/empty-state/empty-state';
+import { Notice } from '@shared/notice/notice';
+import { Skeleton } from '@shared/skeleton/skeleton';
 import { CheckStatusTag } from '../../components/check-status-tag/check-status-tag';
 import { ServersStore } from '../../state/servers.store';
 import type { ServerTab } from './server.types';
@@ -33,8 +34,11 @@ const TAB_MATCH: IsActiveMatchOptions = {
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
-    ButtonDirective,
-    Message,
+    MatButton,
+    MatTabNav,
+    MatTabLink,
+    MatTabNavPanel,
+    Notice,
     Skeleton,
     EmptyState,
     CheckStatusTag,

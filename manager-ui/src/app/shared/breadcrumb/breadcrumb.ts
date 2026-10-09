@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, booleanAttribute, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import type { BreadcrumbItem } from './breadcrumb.types';
@@ -13,5 +13,5 @@ import type { BreadcrumbItem } from './breadcrumb.types';
 export class Breadcrumb {
   readonly items = input.required<readonly BreadcrumbItem[]>();
   readonly label = input.required<string>();
-  readonly code = input(false);
+  readonly code = input(false, { transform: booleanAttribute });
 }

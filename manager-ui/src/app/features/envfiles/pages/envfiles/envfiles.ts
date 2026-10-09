@@ -2,13 +2,12 @@ import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal, type Signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { ButtonDirective } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { Message } from 'primeng/message';
-import { Skeleton } from 'primeng/skeleton';
-import { TableModule, type TablePageEvent } from 'primeng/table';
-import { Tag } from 'primeng/tag';
-import { Textarea } from 'primeng/textarea';
+import { MatButton } from '@angular/material/button';
+import { MatCard, MatCardContent } from '@angular/material/card';
+import { MatFormField, MatLabel } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
+import { MatPaginator, type PageEvent } from '@angular/material/paginator';
+import { MatTableModule } from '@angular/material/table';
 import { map } from 'rxjs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
@@ -18,11 +17,12 @@ import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { EmptyState } from '@shared/empty-state/empty-state';
-import { Field } from '@shared/field/field';
-import { FieldControl } from '@shared/field/field-control';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
+import { Notice } from '@shared/notice/notice';
 import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
 import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
+import { Skeleton } from '@shared/skeleton/skeleton';
+import { StatusTag } from '@shared/status-tag/status-tag';
 import type { ToastSeverity } from '@shared/toaster/toaster.types';
 import { Toaster } from '@shared/toaster/toaster';
 import { envFileName, type EnvVersion } from '../../data/envfiles.types';
@@ -36,16 +36,18 @@ const CONTENT_ROWS_MAX = 20;
   selector: 'app-envfiles-page',
   imports: [
     RouterLink,
-    ButtonDirective,
-    Card,
-    Message,
+    MatButton,
+    MatCard,
+    MatCardContent,
+    MatFormField,
+    MatLabel,
+    MatInput,
+    MatPaginator,
+    MatTableModule,
+    Notice,
     Skeleton,
-    TableModule,
-    Tag,
-    Textarea,
+    StatusTag,
     EmptyState,
-    Field,
-    FieldControl,
     AppDatePipe,
     ErrorTextPipe,
     FileSizePipe,
@@ -91,13 +93,6 @@ export class EnvfilesPage {
   readonly overviewLink = computed(() => ['/servers', this.serverId() ?? '']);
 
   readonly paginated = computed(() => this.count() > ENV_PAGE_SIZES[0]);
-
-  readonly first = computed(() => this.page() * this.pageSize());
-
-  readonly tablePt = computed(() => ({
-    table: { 'aria-label': this.locale.translate('envfiles.list.label') },
-    pcPaginator: { root: { role: 'navigation', 'aria-label': this.locale.translate('envfiles.list.pages') } },
-  }));
 
   readonly skeletonLines = [0, 1, 2, 3, 4, 5];
 
@@ -217,8 +212,8 @@ export class EnvfilesPage {
       .whenClosed();
   }
 
-  onPage(event: TablePageEvent): void {
-    this.store.goToPage(Math.floor(event.first / event.rows), event.rows);
+  onPage(event: PageEvent): void {
+    this.store.goToPage(event.pageIndex, event.pageSize);
   }
 
   retry(): void {

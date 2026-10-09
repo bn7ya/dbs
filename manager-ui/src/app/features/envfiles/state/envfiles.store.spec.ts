@@ -3,7 +3,6 @@ import { HttpTestingController, provideHttpClientTesting, type TestRequest } fro
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { MessageService } from 'primeng/api';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import type { Page } from '@core/http/api.types';
@@ -78,7 +77,6 @@ describe('EnvfilesStore', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
-        MessageService,
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });

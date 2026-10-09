@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ButtonDirective } from 'primeng/button';
-import { Checkbox } from 'primeng/checkbox';
-import { Message } from 'primeng/message';
-import { Skeleton } from 'primeng/skeleton';
+import { MatButton } from '@angular/material/button';
+import { MatCheckbox } from '@angular/material/checkbox';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { injectDialogRef } from '@shared/dialogs/dialogs';
+import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
+import { Skeleton } from '@shared/skeleton/skeleton';
 import { uniqueId } from '@shared/unique-id';
 import type { HostKey } from '../../data/servers.types';
 import { ServersStore } from '../../state/servers.store';
@@ -18,9 +18,9 @@ import { HostKeyFacts } from '../host-key-facts/host-key-facts';
   selector: 'app-host-key-review',
   imports: [
     FormsModule,
-    ButtonDirective,
-    Checkbox,
-    Message,
+    MatButton,
+    MatCheckbox,
+    Notice,
     Skeleton,
     PasswordInput,
     HostKeyFacts,

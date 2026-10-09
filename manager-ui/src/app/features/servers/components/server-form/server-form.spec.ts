@@ -1,11 +1,17 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed } from '@angular/core/testing';
+import { MatStepperHarness } from '@angular/material/stepper/testing';
 import { provideRouter } from '@angular/router';
+import type { MatChipInputEvent } from '@angular/material/chips';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
+import { LocaleStore } from '@core/i18n/locale.store';
+import ar from '../../i18n/ar.json';
+import en from '../../i18n/en.json';
 import type { Server } from '../../data/servers.types';
 import { ServersStore } from '../../state/servers.store';
 import { SERVER } from '../../testing/servers.fixtures';
@@ -234,5 +240,44 @@ describe('ServerForm', () => {
     expect(form.passwordShown()).toBe(true);
     expect(form.passwordMissing()).toBe(true);
     expect(form.step()).toBe(1);
+  });
+
+  it('adds an allowed folder from what was typed, and removes the one asked for', () => {
+    const form = open({ server: null });
+    const clear = vi.fn();
+    const typed = (value: string): MatChipInputEvent =>
+      ({ value, chipInput: { clear } }) as unknown as MatChipInputEvent;
+
+    form.addFileRoot(typed(' /srv/app/media '));
+    form.addFileRoot(typed('   '));
+    form.addFileRoot(typed('/srv/app/uploads'));
+
+    expect(form.draft().file_roots).toEqual(['/srv/app/media', '/srv/app/uploads']);
+    expect(clear).toHaveBeenCalledTimes(3);
+
+    form.removeFileRoot(0);
+    expect(form.draft().file_roots).toEqual(['/srv/app/uploads']);
+  });
+
+  it('walks a new server through three steps in order, opening a later one only once the one before is done', async () => {
+    localStorage.setItem('locale', 'en');
+    open({ server: null });
+    TestBed.inject(LocaleStore).register({ en, ar });
+    const fixture = TestBed.createComponent(ServerForm);
+    fixture.detectChanges();
+    const stepper = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatStepperHarness);
+    const steps = await stepper.getSteps();
+
+    expect(await Promise.all(steps.map((step) => step.getLabel()))).toEqual([
+      'Connection',
+      'Host key',
+      'django-dbs and files',
+    ]);
+    expect(await steps[0].isSelected()).toBe(true);
+
+    await steps[2].select();
+    expect(await steps[2].isSelected()).toBe(false);
+    expect(fixture.componentInstance.step()).toBe(0);
+    localStorage.clear();
   });
 });

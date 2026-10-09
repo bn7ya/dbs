@@ -1,6 +1,6 @@
 <form class="dialog-form" (ngSubmit)="save()" novalidate>
   @if (formFailure(); as failure) {
-    <p-message severity="error">{{ failure | errorText }}</p-message>
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
   }
 
   @if (editing) {
@@ -14,21 +14,17 @@
       [attr.aria-describedby]="kindId + '-hint' + (kindError() ? ' ' + kindId + '-error' : '')"
     >
       <legend class="text-label">{{ 'backups.plans.form.kind' | t }}</legend>
-      <div class="plan-form__options">
+      <mat-radio-group
+        class="plan-form__options"
+        name="kind"
+        [ngModel]="draft().kind"
+        [ngModelOptions]="{ standalone: true }"
+        (ngModelChange)="setKind($event)"
+      >
         @for (kind of kinds; track kind) {
-          <div class="plan-form__option">
-            <p-radiobutton
-              name="kind"
-              [value]="kind"
-              [inputId]="kindId + '-' + kind"
-              [ngModel]="draft().kind"
-              [ngModelOptions]="{ standalone: true }"
-              (ngModelChange)="setKind($event)"
-            />
-            <label [for]="kindId + '-' + kind">{{ 'backups.kind.' + kind | t }}</label>
-          </div>
+          <mat-radio-button [value]="kind">{{ 'backups.kind.' + kind | t }}</mat-radio-button>
         }
-      </div>
+      </mat-radio-group>
       <small class="text-sm text-secondary" [id]="kindId + '-hint'">{{ 'backups.plans.form.kindHint.' + draft().kind | t }}</small>
       @if (kindError(); as code) {
         <small class="plan-form__error text-sm" role="alert" [id]="kindId + '-error'">{{ code | errorText }}</small>
@@ -37,36 +33,42 @@
   }
 
   @if (archiving()) {
-    <app-field
-      #pathsField="appField"
-      [label]="'backups.plans.form.paths' | t"
-      [hint]="'backups.plans.form.pathsHint' | t"
-      [error]="errorFor('paths')"
-    >
-      <p-inputtags
-        name="paths"
-        fluid
-        [typeahead]="false"
-        [addOnBlur]="true"
-        [placeholder]="'backups.plans.form.pathsPlaceholder' | t"
-        [invalid]="!!error('paths')"
-        [pt]="{ pcAutoComplete: { pcInputText: { root: { id: pathsField.id, 'aria-describedby': pathsField.describedBy() } } } }"
-        [ngModel]="draft().paths"
-        (ngModelChange)="update('paths', $event)"
-      />
-    </app-field>
+    <mat-form-field>
+      <mat-label>{{ 'backups.plans.form.paths' | t }}</mat-label>
+      <mat-chip-grid #paths [appFieldError]="errorFor('paths')" [attr.aria-label]="'backups.plans.form.paths' | t">
+        @for (path of draft().paths; track $index) {
+          <mat-chip-row (removed)="removePath($index)">
+            <bdi class="plan-form__code" dir="ltr">{{ path }}</bdi>
+            <button matChipRemove type="button" [attr.aria-label]="'backups.plans.form.removePath' | t: { path }">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </mat-chip-row>
+        }
+        <input
+          name="paths"
+          dir="ltr"
+          autocomplete="off"
+          spellcheck="false"
+          [placeholder]="'backups.plans.form.pathsPlaceholder' | t"
+          [matChipInputFor]="paths"
+          [matChipInputSeparatorKeyCodes]="separators"
+          [matChipInputAddOnBlur]="true"
+          (matChipInputTokenEnd)="addPath($event)"
+        />
+      </mat-chip-grid>
+      <mat-hint>{{ 'backups.plans.form.pathsHint' | t }}</mat-hint>
+      @if (errorFor('paths'); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
   }
 
   @if (collecting()) {
-    <app-field
-      [label]="'backups.plans.form.folder' | t"
-      [hint]="'backups.plans.form.folderHint' | t"
-      [error]="errorFor('paths')"
-    >
+    <mat-form-field>
+      <mat-label>{{ 'backups.plans.form.folder' | t }}</mat-label>
       <input
-        pInputText
-        appFieldControl
-        fluid
+        matInput
+        [appFieldError]="errorFor('paths')"
         class="plan-form__code"
         name="folder"
         dir="ltr"
@@ -74,21 +76,20 @@
         autocapitalize="off"
         spellcheck="false"
         [placeholder]="'backups.plans.form.folderPlaceholder' | t"
-        [invalid]="!!error('paths')"
         [ngModel]="draft().folder"
         (ngModelChange)="update('folder', $event)"
       />
-    </app-field>
+      <mat-hint>{{ 'backups.plans.form.folderHint' | t }}</mat-hint>
+      @if (errorFor('paths'); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
 
-    <app-field
-      [label]="'backups.plans.form.pattern' | t"
-      [hint]="'backups.plans.form.patternHint' | t"
-      [error]="errorFor('pattern')"
-    >
+    <mat-form-field>
+      <mat-label>{{ 'backups.plans.form.pattern' | t }}</mat-label>
       <input
-        pInputText
-        appFieldControl
-        fluid
+        matInput
+        [appFieldError]="errorFor('pattern')"
         class="plan-form__code"
         name="pattern"
         dir="ltr"
@@ -96,105 +97,110 @@
         autocapitalize="off"
         spellcheck="false"
         maxlength="200"
-        [invalid]="!!error('pattern')"
         [ngModel]="draft().pattern"
         (ngModelChange)="update('pattern', $event)"
       />
-    </app-field>
+      <mat-hint>{{ 'backups.plans.form.patternHint' | t }}</mat-hint>
+      @if (errorFor('pattern'); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
   }
 
-  <app-field [label]="'backups.plans.form.name' | t" [error]="errorFor('name')">
+  <mat-form-field>
+    <mat-label>{{ 'backups.plans.form.name' | t }}</mat-label>
     <input
-      pInputText
-      appFieldControl
-      fluid
+      matInput
+      [appFieldError]="errorFor('name')"
       name="name"
       autocomplete="off"
       maxlength="100"
-      [invalid]="!!error('name')"
       [ngModel]="draft().name"
       (ngModelChange)="update('name', $event)"
     />
-  </app-field>
+    @if (errorFor('name'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
 
-  <app-field
-    #scheduleField="appField"
-    [label]="'backups.plans.form.schedule' | t"
-    [hint]="'backups.plans.form.scheduleHint' | t"
-    [error]="errorFor('interval_minutes')"
-  >
-    <p-select
+  <mat-form-field>
+    <mat-label>{{ 'backups.plans.form.schedule' | t }}</mat-label>
+    <mat-select
       name="schedule"
-      fluid
-      optionLabel="label"
-      optionValue="value"
-      [inputId]="scheduleField.id"
-      [options]="scheduleOptions()"
-      [invalid]="!!error('interval_minutes')"
+      [appFieldError]="errorFor('interval_minutes')"
       [ngModel]="draft().schedule"
       (ngModelChange)="setSchedule($event)"
-    />
-  </app-field>
+    >
+      @for (option of scheduleOptions(); track option.value) {
+        <mat-option [value]="option.value">{{ option.label }}</mat-option>
+      }
+    </mat-select>
+    <mat-hint>{{ 'backups.plans.form.scheduleHint' | t }}</mat-hint>
+    @if (errorFor('interval_minutes'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
 
   <div class="plan-form__pair">
-    <app-field
-      #keepField="appField"
-      [label]="'backups.plans.form.keep' | t"
-      [hint]="'backups.plans.form.keepHint' | t"
-      [error]="errorFor('keep')"
-    >
-      <p-inputnumber
+    <mat-form-field>
+      <mat-label>{{ 'backups.plans.form.keep' | t }}</mat-label>
+      <input
+        matInput
+        type="number"
         name="keep"
-        fluid
-        locale="en-US"
-        [useGrouping]="false"
-        [inputId]="keepField.id"
-        [ariaDescribedBy]="keepField.describedBy() ?? undefined"
+        dir="ltr"
+        inputmode="numeric"
+        step="1"
         [min]="keepMin"
         [max]="keepMax"
-        [invalid]="!!error('keep')"
+        [appFieldError]="errorFor('keep')"
         [ngModel]="draft().keep"
         (ngModelChange)="update('keep', $event)"
       />
-    </app-field>
+      <mat-hint>{{ 'backups.plans.form.keepHint' | t }}</mat-hint>
+      @if (errorFor('keep'); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
 
     @if (!collecting()) {
-      <app-field
-        #keepRemoteField="appField"
-        [label]="'backups.plans.form.keepRemote' | t"
-        [hint]="'backups.plans.form.keepRemoteHint' | t"
-        [error]="errorFor('keep_remote')"
-      >
-        <p-inputnumber
+      <mat-form-field>
+        <mat-label>{{ 'backups.plans.form.keepRemote' | t }}</mat-label>
+        <input
+          matInput
+          type="number"
           name="keep_remote"
-          fluid
-          locale="en-US"
-          [useGrouping]="false"
-          [inputId]="keepRemoteField.id"
-          [ariaDescribedBy]="keepRemoteField.describedBy() ?? undefined"
+          dir="ltr"
+          inputmode="numeric"
+          step="1"
           [min]="keepRemoteMin"
           [max]="keepMax"
-          [invalid]="!!error('keep_remote')"
+          [appFieldError]="errorFor('keep_remote')"
           [ngModel]="draft().keep_remote"
           (ngModelChange)="update('keep_remote', $event)"
         />
-      </app-field>
+        <mat-hint>{{ 'backups.plans.form.keepRemoteHint' | t }}</mat-hint>
+        @if (errorFor('keep_remote'); as message) {
+          <mat-error>{{ message }}</mat-error>
+        }
+      </mat-form-field>
     }
   </div>
 
-  <app-field
-    #enabledField="appField"
-    [label]="'backups.plans.form.enabled' | t"
-    [hint]="'backups.plans.form.enabledHint' | t"
-    [error]="errorFor('enabled')"
-  >
-    <p-toggleswitch
+  <div class="plan-form__toggle">
+    <mat-slide-toggle
       name="enabled"
-      [inputId]="enabledField.id"
+      [aria-describedby]="enabledId + '-hint'"
       [ngModel]="draft().enabled"
       (ngModelChange)="update('enabled', $event)"
-    />
-  </app-field>
+    >
+      {{ 'backups.plans.form.enabled' | t }}
+    </mat-slide-toggle>
+    <small class="text-sm text-secondary" [id]="enabledId + '-hint'">{{ 'backups.plans.form.enabledHint' | t }}</small>
+    @if (errorFor('enabled'); as message) {
+      <small class="plan-form__error text-sm" role="alert">{{ message }}</small>
+    }
+  </div>
 
   @if (passwordShown()) {
     <app-password-input
@@ -209,10 +215,10 @@
   }
 
   <div class="dialog-actions">
-    <button pButton type="button" severity="secondary" variant="text" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
-    <button pButton type="submit" [disabled]="saving()" [attr.aria-busy]="saving()">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="saving()" [attr.aria-busy]="saving()">
       @if (saving()) {
-        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
       }
       {{ (editing ? 'actions.save' : 'backups.plans.form.submit') | t }}
     </button>

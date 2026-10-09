@@ -1,11 +1,11 @@
 import { HttpEventType, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting, type TestRequest } from '@angular/common/http/testing';
 import { ApplicationRef } from '@angular/core';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed } from '@angular/core/testing';
+import { MatButtonHarness } from '@angular/material/button/testing';
 import { provideRouter, withComponentInputBinding, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { ConfirmationService, MessageService } from 'primeng/api';
-import { providePrimeNG } from 'primeng/config';
 import { NEVER } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -104,10 +104,10 @@ describe('BackupsPage', () => {
   };
 
   const fileRows = (): HTMLTableRowElement[] =>
-    Array.from(element().querySelectorAll('p-table')[1].querySelectorAll<HTMLTableRowElement>('tbody tr'));
+    Array.from(element().querySelectorAll('table')[1].querySelectorAll<HTMLTableRowElement>('tr[mat-row]'));
 
   const planRows = (): HTMLTableRowElement[] =>
-    Array.from(element().querySelectorAll('p-table')[0].querySelectorAll<HTMLTableRowElement>('tbody tr'));
+    Array.from(element().querySelectorAll('table')[0].querySelectorAll<HTMLTableRowElement>('tr[mat-row]'));
 
   beforeEach(() => {
     localStorage.setItem('locale', 'en');
@@ -118,9 +118,6 @@ describe('BackupsPage', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter(ROUTES, withComponentInputBinding()),
-        providePrimeNG(),
-        MessageService,
-        ConfirmationService,
       ],
     });
     http = TestBed.inject(HttpTestingController);
@@ -156,12 +153,12 @@ describe('BackupsPage', () => {
 
   it('leaves the pages out while one page holds every file', async () => {
     await showWith([FILE], 20);
-    expect(element().querySelector('p-paginator')).toBeNull();
+    expect(element().querySelector('mat-paginator')).toBeNull();
   });
 
   it('pages a list longer than one page', async () => {
     await showWith([FILE], 21);
-    expect(element().querySelector('p-paginator')).not.toBeNull();
+    expect(element().querySelector('mat-paginator')).not.toBeNull();
   });
 
   it('says there are no backups yet', async () => {
@@ -182,7 +179,7 @@ describe('BackupsPage', () => {
   it('tags each file with what made it', async () => {
     await showWith([FILE, ARCHIVE_FILE, COLLECTED_FILE, UPLOADED_FILE]);
 
-    const tags = fileRows().map((row) => row.querySelector('td:first-child p-tag')?.textContent?.trim());
+    const tags = fileRows().map((row) => row.querySelector('td:first-child app-status-tag')?.textContent?.trim());
     expect(tags).toEqual(['django-dbs', 'Folders', 'Collected', 'Uploaded']);
   });
 
@@ -196,7 +193,7 @@ describe('BackupsPage', () => {
     ]);
 
     const checks = fileRows().map((row) =>
-      Array.from(row.querySelectorAll('td:nth-child(5) p-tag'), (tag) => tag.textContent?.trim()),
+      Array.from(row.querySelectorAll('td:nth-child(5) app-status-tag'), (tag) => tag.textContent?.trim()),
     );
     expect(checks).toEqual([['Structure checked'], ['Verified'], ['Intact'], ['Damaged'], ['Stored']]);
   });
@@ -224,7 +221,10 @@ describe('BackupsPage', () => {
       const opened = vi.spyOn(picker(), 'click').mockImplementation(() => undefined);
 
       expect(picker().hidden).toBe(true);
-      expect(uploadButton()?.getAttribute('severity')).toBe('secondary');
+      const button = await TestbedHarnessEnvironment.loader(harness.fixture).getHarness(
+        MatButtonHarness.with({ text: 'Upload a backup' }),
+      );
+      expect(await button.getAppearance()).toBe('outlined');
       uploadButton()?.click();
 
       expect(opened).toHaveBeenCalledOnce();
@@ -238,7 +238,7 @@ describe('BackupsPage', () => {
       harness.detectChanges();
 
       expect(picker().value).toBe('');
-      const progress = element().querySelector('p-progressbar');
+      const progress = element().querySelector('mat-progress-bar');
       expect(progress?.getAttribute('aria-valuenow')).toBe('25');
       expect(element().querySelector('.backups__upload-status')?.textContent).toContain('Uploading…');
       const name = element().querySelector('.backups__upload bdi');
@@ -254,7 +254,7 @@ describe('BackupsPage', () => {
       await settle();
 
       expect(request.cancelled).toBe(true);
-      expect(element().querySelector('p-progressbar')).toBeNull();
+      expect(element().querySelector('mat-progress-bar')).toBeNull();
       // Cancel took itself off the page; focus is back on the button that started the upload.
       expect(document.activeElement).toBe(uploadButton());
     });
@@ -266,14 +266,14 @@ describe('BackupsPage', () => {
       request.event({ type: HttpEventType.UploadProgress, loaded: 4, total: 4 });
       harness.detectChanges();
 
-      const progress = element().querySelector('p-progressbar');
+      const progress = element().querySelector('mat-progress-bar');
       expect(progress?.hasAttribute('aria-valuenow')).toBe(false);
       expect(element().querySelector('.backups__upload-status')?.textContent).toContain('Saving the file…');
       expect(element().querySelector('.backups__upload button')).toBeNull();
 
       request.flush(UPLOADED_FILE, { status: 201, statusText: 'Created' });
       harness.detectChanges();
-      expect(element().querySelector('p-progressbar')).toBeNull();
+      expect(element().querySelector('mat-progress-bar')).toBeNull();
       TestBed.tick();
       listRequest().flush(pageOf([UPLOADED_FILE, FILE]));
       await settle();
@@ -342,7 +342,7 @@ describe('BackupsPage', () => {
         expect.objectContaining({ data: { plan: null, name: 'django-dbs' } }),
       );
 
-      const [first, folders, collect] = Array.from(empty?.querySelectorAll('button') ?? []);
+      const [, folders, collect] = Array.from(empty?.querySelectorAll('button') ?? []);
       expect(folders?.textContent?.trim()).toBe('Back up folders');
       folders?.click();
       expect(open).toHaveBeenLastCalledWith(PlanForm, expect.objectContaining({ data: { plan: null, kind: 'archive' } }));
@@ -352,8 +352,11 @@ describe('BackupsPage', () => {
       expect(open).toHaveBeenLastCalledWith(PlanForm, expect.objectContaining({ data: { plan: null, kind: 'collect' } }));
 
       // One offer leads; the other two kinds sit a step below it, level with each other.
-      expect([first, folders, collect].map((button) => button?.getAttribute('variant'))).toEqual([
-        null,
+      const offers = await TestbedHarnessEnvironment.loader(harness.fixture).getAllHarnesses(
+        MatButtonHarness.with({ ancestor: 'app-empty-state' }),
+      );
+      expect(await Promise.all(offers.map((offer) => offer.getAppearance()))).toEqual([
+        'filled',
         'outlined',
         'outlined',
       ]);
@@ -371,7 +374,7 @@ describe('BackupsPage', () => {
       harness.detectChanges();
 
       expect(page.isRunning(PLAN)).toBe(true);
-      expect(element().querySelector('p-message')?.textContent).toContain('A backup is running.');
+      expect(element().querySelector('app-notice')?.textContent).toContain('A backup is running.');
     });
 
     it('asks before deleting a plan, saying its backups stay', async () => {
@@ -433,7 +436,7 @@ describe('BackupsPage', () => {
     request.flush({ activity: JOB_ID });
     harness.detectChanges();
 
-    expect(element().querySelector('p-message')?.textContent).toContain('A backup is running.');
+    expect(element().querySelector('app-notice')?.textContent).toContain('A backup is running.');
   });
 
   it('asks before deleting, and deletes only on yes', async () => {
@@ -456,7 +459,7 @@ describe('BackupsPage', () => {
     await settle();
     harness.detectChanges();
 
-    const deleted = element().querySelector('p-message');
+    const deleted = element().querySelector('app-notice');
     expect(deleted?.textContent).toContain('Backup deleted.');
     expect(deleted?.textContent).toContain(FILE.name);
     const undo = Array.from(deleted?.querySelectorAll('button') ?? []).find(

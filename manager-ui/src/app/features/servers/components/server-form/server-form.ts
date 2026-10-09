@@ -1,21 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, afterRenderEffect, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ButtonDirective } from 'primeng/button';
-import { Checkbox } from 'primeng/checkbox';
-import { InputNumber } from 'primeng/inputnumber';
-import { InputTags } from 'primeng/inputtags';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
-import { RadioButton } from 'primeng/radiobutton';
-import { Step, StepList, StepPanel, StepPanels, Stepper } from 'primeng/stepper';
-import { Textarea } from 'primeng/textarea';
+import { COMMA, ENTER } from '@angular/cdk/keycodes';
+import { MatButton } from '@angular/material/button';
+import { MatCheckbox } from '@angular/material/checkbox';
+import { MatChipGrid, MatChipInput, MatChipRemove, MatChipRow, type MatChipInputEvent } from '@angular/material/chips';
+import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
+import { MatRadioButton, MatRadioGroup } from '@angular/material/radio';
+import { MatStep, MatStepper, MatStepperIcon } from '@angular/material/stepper';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
-import { Field } from '@shared/field/field';
+import { FieldError } from '@shared/field/field-error';
+import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
-import { FieldControl } from '@shared/field/field-control';
 import { uniqueId } from '@shared/unique-id';
 import type { AuthMethod, HostKey, Server, ServerCreate, ServerSettings } from '../../data/servers.types';
 import { ServersStore } from '../../state/servers.store';
@@ -41,7 +40,7 @@ const NEW_SERVER: ServerDraft = {
   python_path: 'python3',
   manage_path: 'manage.py',
   settings_module: '',
-  remote_backup_dir: '/var/backups/dbs-interface',
+  remote_backup_dir: '/var/backups/dbs',
   file_roots: [],
   env_path: '',
   backup_passphrase: '',
@@ -77,22 +76,25 @@ const STEP_LABELS: Readonly<Record<ServerFormStep, string>> = {
   selector: 'app-server-form',
   imports: [
     FormsModule,
-    ButtonDirective,
-    Checkbox,
-    InputNumber,
-    InputTags,
-    InputText,
-    Message,
-    RadioButton,
-    Stepper,
-    StepList,
-    Step,
-    StepPanels,
-    StepPanel,
-    Textarea,
-    Field,
+    MatButton,
+    MatCheckbox,
+    MatChipGrid,
+    MatChipRow,
+    MatChipRemove,
+    MatChipInput,
+    MatFormField,
+    MatLabel,
+    MatHint,
+    MatError,
+    MatInput,
+    MatRadioGroup,
+    MatRadioButton,
+    MatStepper,
+    MatStep,
+    MatStepperIcon,
+    FieldError,
+    Notice,
     PasswordInput,
-    FieldControl,
     HostKeyFacts,
     ErrorTextPipe,
     TranslatePipe,
@@ -109,9 +111,10 @@ export class ServerForm {
 
   protected readonly confirmId = uniqueId('host-key-confirmed');
   protected readonly authMethods: readonly AuthMethodOption[] = [
-    { value: 'key', labelKey: 'servers.authMethod.key', inputId: uniqueId('auth-method-key') },
-    { value: 'password', labelKey: 'servers.authMethod.password', inputId: uniqueId('auth-method-password') },
+    { value: 'key', labelKey: 'servers.authMethod.key' },
+    { value: 'password', labelKey: 'servers.authMethod.password' },
   ];
+  protected readonly separators = [ENTER, COMMA];
 
   readonly steps: readonly ServerFormStep[] = this.editing
     ? ['connection', 'project']
@@ -119,6 +122,7 @@ export class ServerForm {
   readonly stepLabels = STEP_LABELS;
 
   readonly step = signal(0);
+  protected readonly shownStep = signal(0);
   readonly onLastStep = computed(() => this.step() === this.steps.length - 1);
 
   readonly draft = signal<ServerDraft>(this.editing ? draftOf(this.editing) : NEW_SERVER);
@@ -186,6 +190,7 @@ export class ServerForm {
 
   constructor() {
     this.store.resetForm();
+    afterRenderEffect({ write: () => this.shownStep.set(this.step()) });
   }
 
   error(field: ServerDraftField): string | null {
@@ -203,22 +208,6 @@ export class ServerForm {
       }
     }
     return true;
-  }
-
-  // PrimeNG prints a step's value as its number, so values count from 1.
-  stepValue(step: ServerFormStep): number {
-    return this.steps.indexOf(step) + 1;
-  }
-
-  stepOpen(step: ServerFormStep): boolean {
-    const index = this.steps.indexOf(step);
-    return this.editing !== null || index <= this.step() || this.steps.slice(0, index).every((before) => this.stepDone(before));
-  }
-
-  goTo(value: number | undefined): void {
-    if (value !== undefined) {
-      this.step.set(value - 1);
-    }
   }
 
   update<K extends keyof ServerDraft>(field: K, value: ServerDraft[K]): void {
@@ -241,8 +230,19 @@ export class ServerForm {
     }
   }
 
-  setFileRoots(roots: string[] | null): void {
-    this.update('file_roots', roots ?? []);
+  addFileRoot(event: MatChipInputEvent): void {
+    const root = event.value.trim();
+    if (root !== '') {
+      this.update('file_roots', [...this.draft().file_roots, root]);
+    }
+    event.chipInput.clear();
+  }
+
+  removeFileRoot(index: number): void {
+    this.update(
+      'file_roots',
+      this.draft().file_roots.filter((_, position) => position !== index),
+    );
   }
 
   async fetchHostKey(): Promise<void> {

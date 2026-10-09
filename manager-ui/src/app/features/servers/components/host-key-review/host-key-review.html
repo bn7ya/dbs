@@ -13,40 +13,37 @@
       @if (fetching()) {
         <div class="review__skeleton">
           @for (line of skeletonLines; track line) {
-            <p-skeleton />
+            <app-skeleton />
           }
         </div>
       } @else if (fetchError(); as failure) {
-        <p-message severity="error">{{ failure | errorText }}</p-message>
+        <app-notice severity="danger">{{ failure | errorText }}</app-notice>
         <div>
-          <button pButton type="button" severity="secondary" (click)="fetch()">{{ 'actions.retry' | t }}</button>
+          <button matButton="outlined" type="button" (click)="fetch()">{{ 'actions.retry' | t }}</button>
         </div>
       } @else if (presented(); as key) {
         <app-host-key-facts [keyType]="key.key_type" [fingerprint]="key.fingerprint" [compare]="canPin()" />
 
         @if (unchanged()) {
-          <p-message severity="success">{{ 'servers.review.unchanged' | t }}</p-message>
+          <app-notice severity="success">{{ 'servers.review.unchanged' | t }}</app-notice>
         } @else {
-          <p-message severity="warn">{{ 'servers.review.changed' | t }}</p-message>
+          <app-notice severity="warning">{{ 'servers.review.changed' | t }}</app-notice>
 
           @if (pinFailure(); as failure) {
-            <p-message severity="error">{{ failure | errorText }}</p-message>
+            <app-notice severity="danger">{{ failure | errorText }}</app-notice>
           }
 
           <div class="review__check">
-            <div class="review__check-row">
-              <p-checkbox
-                name="confirmed"
-                [binary]="true"
-                [inputId]="confirmId"
-                [invalid]="unconfirmed()"
-                [ngModel]="confirmed()"
-                (ngModelChange)="confirmed.set($event)"
-              />
-              <label [for]="confirmId">{{ 'servers.hostKey.matches' | t }}</label>
-            </div>
+            <mat-checkbox
+              name="confirmed"
+              [aria-describedby]="unconfirmed() ? confirmId + '-error' : ''"
+              [ngModel]="confirmed()"
+              (ngModelChange)="confirmed.set($event)"
+            >
+              {{ 'servers.hostKey.matches' | t }}
+            </mat-checkbox>
             @if (unconfirmed()) {
-              <small class="review__error" role="alert">{{ 'host_key_unconfirmed' | errorText }}</small>
+              <small class="review__error" role="alert" [id]="confirmId + '-error'">{{ 'host_key_unconfirmed' | errorText }}</small>
             }
           </div>
 
@@ -65,13 +62,13 @@
   </div>
 
   <div class="dialog-actions">
-    <button pButton type="button" severity="secondary" variant="text" (click)="close()">
+    <button matButton type="button" (click)="close()">
       {{ (canPin() ? 'actions.cancel' : 'actions.close') | t }}
     </button>
     @if (canPin()) {
-      <button pButton type="submit" severity="danger" [disabled]="pinning()" [attr.aria-busy]="pinning()">
+      <button matButton="filled" class="app-danger" type="submit" [disabled]="pinning()" [attr.aria-busy]="pinning()">
         @if (pinning()) {
-          <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
         }
         {{ 'servers.review.pin' | t }}
       </button>

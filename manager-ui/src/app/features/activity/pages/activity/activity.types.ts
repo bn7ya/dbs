@@ -1,7 +1,7 @@
-import type { TagSeverity } from 'primeng/types/tag';
+import type { StatusTagSeverity } from '@shared/status-tag/status-tag.types';
 
 export interface StatusLook {
-  readonly severity: TagSeverity;
+  readonly severity: StatusTagSeverity;
   readonly icon: string;
 }
 

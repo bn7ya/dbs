@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ButtonDirective } from 'primeng/button';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
-import { RadioButton } from 'primeng/radiobutton';
+import { MatButton } from '@angular/material/button';
+import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
+import { MatRadioButton, MatRadioGroup } from '@angular/material/radio';
 
 import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
-import { Field } from '@shared/field/field';
-import { FieldControl } from '@shared/field/field-control';
+import { FieldError } from '@shared/field/field-error';
+import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { uniqueId } from '@shared/unique-id';
 import type { RestoreMode } from '../../data/backups.types';
@@ -23,12 +23,16 @@ const MODES: readonly RestoreMode[] = ['merge', 'replace'];
   selector: 'app-restore-form',
   imports: [
     FormsModule,
-    ButtonDirective,
-    InputText,
-    Message,
-    RadioButton,
-    Field,
-    FieldControl,
+    MatButton,
+    MatFormField,
+    MatLabel,
+    MatHint,
+    MatError,
+    MatInput,
+    MatRadioGroup,
+    MatRadioButton,
+    FieldError,
+    Notice,
     PasswordInput,
     ErrorTextPipe,
     TranslatePipe,

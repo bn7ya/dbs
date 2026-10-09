@@ -2,34 +2,34 @@
   <p class="text-secondary">{{ 'files.newFolder.location' | t: { path: where } }}</p>
 
   @if (otherFailure(); as failure) {
-    <p-message severity="error">{{ failure | errorText }}</p-message>
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
   }
 
-  <app-field
-    [label]="'files.newFolder.name' | t"
-    [error]="problem() !== null ? ('files.newFolder.invalid.' + problem() | t) : (nameFailure() | errorText)"
-  >
+  @let nameError = problem() !== null ? ('files.newFolder.invalid.' + problem() | t) : (nameFailure() | errorText);
+  <mat-form-field>
+    <mat-label>{{ 'files.newFolder.name' | t }}</mat-label>
     <input
-      pInputText
-      appFieldControl
-      fluid
+      matInput
+      [appFieldError]="nameError"
       type="text"
       name="name"
       dir="auto"
       autocomplete="off"
       spellcheck="false"
       maxlength="255"
-      [invalid]="problem() !== null || nameFailure() !== null"
       [ngModel]="name()"
       (ngModelChange)="onName($event)"
     />
-  </app-field>
+    @if (nameError) {
+      <mat-error>{{ nameError }}</mat-error>
+    }
+  </mat-form-field>
 
   <div class="dialog-actions">
-    <button pButton type="button" severity="secondary" variant="text" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
-    <button pButton type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
       @if (busy()) {
-        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
       }
       {{ 'files.newFolder.submit' | t }}
     </button>

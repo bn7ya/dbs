@@ -23,7 +23,7 @@ export const SERVER: Server = {
   python_path: 'python3',
   manage_path: 'manage.py',
   settings_module: '',
-  remote_backup_dir: '/var/backups/dbs-interface',
+  remote_backup_dir: '/var/backups/dbs',
   file_roots: ['/srv/app/media'],
   env_path: '',
   last_check_error: '',
@@ -44,7 +44,7 @@ export const CREATE: ServerCreate = {
   python_path: 'python3',
   manage_path: 'manage.py',
   settings_module: '',
-  remote_backup_dir: '/var/backups/dbs-interface',
+  remote_backup_dir: '/var/backups/dbs',
   file_roots: [],
   env_path: '',
 };

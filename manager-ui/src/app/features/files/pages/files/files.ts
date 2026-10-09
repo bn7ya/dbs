@@ -14,27 +14,29 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import type { MenuItem } from 'primeng/api';
-import { Breadcrumb } from 'primeng/breadcrumb';
-import { ButtonDirective } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { Message } from 'primeng/message';
-import { ProgressBar } from 'primeng/progressbar';
-import { Select } from 'primeng/select';
-import { Skeleton } from 'primeng/skeleton';
-import { TableModule, type TablePageEvent } from 'primeng/table';
-import { Tag } from 'primeng/tag';
+import { MatButton } from '@angular/material/button';
+import { MatCard, MatCardContent } from '@angular/material/card';
+import { MatOption } from '@angular/material/core';
+import { MatFormField, MatLabel } from '@angular/material/form-field';
+import { MatPaginator, type PageEvent } from '@angular/material/paginator';
+import { MatProgressBar } from '@angular/material/progress-bar';
+import { MatSelect } from '@angular/material/select';
+import { MatTableModule } from '@angular/material/table';
 import { map } from 'rxjs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
+import { Breadcrumb } from '@shared/breadcrumb/breadcrumb';
+import type { BreadcrumbItem } from '@shared/breadcrumb/breadcrumb.types';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { EmptyState } from '@shared/empty-state/empty-state';
-import { Field } from '@shared/field/field';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
+import { Notice } from '@shared/notice/notice';
+import { Skeleton } from '@shared/skeleton/skeleton';
+import { StatusTag } from '@shared/status-tag/status-tag';
 import { uniqueId } from '@shared/unique-id';
 import { NewFolderDialog } from '../../components/new-folder/new-folder';
 import type { NewFolderData } from '../../components/new-folder/new-folder.types';
@@ -55,17 +57,21 @@ const SKELETON_LINES: readonly number[] = [0, 1, 2, 3, 4, 5];
   imports: [
     FormsModule,
     RouterLink,
+    MatButton,
+    MatCard,
+    MatCardContent,
+    MatFormField,
+    MatLabel,
+    MatSelect,
+    MatOption,
+    MatPaginator,
+    MatProgressBar,
+    MatTableModule,
     Breadcrumb,
-    ButtonDirective,
-    Card,
-    Message,
-    ProgressBar,
-    Select,
+    Notice,
     Skeleton,
-    TableModule,
-    Tag,
+    StatusTag,
     EmptyState,
-    Field,
     AppDatePipe,
     ErrorTextPipe,
     FileSizePipe,
@@ -112,17 +118,18 @@ export class FilesPage {
 
   readonly rows = computed(() => [...this.entries()]);
 
-  readonly first = computed(() => this.page() * this.pageSize());
-
   readonly pickRoot = computed(() => this.roots().length > 1);
 
   readonly rootOptions = computed(() => [...this.roots()]);
 
-  readonly crumbs = computed<MenuItem[]>(() =>
-    this.store.trail().map((crumb) => ({ id: crumb.path, label: crumb.name })),
+  readonly crumbs = computed<BreadcrumbItem[]>(() =>
+    this.store.trail().map((crumb) => ({
+      label: crumb.name,
+      link: [],
+      queryParams: { path: crumb.path },
+      icon: crumb.path === this.root() ? 'fa-solid fa-folder' : undefined,
+    })),
   );
-
-  readonly here = computed(() => this.crumbs().at(-1)?.id ?? null);
 
   readonly overviewLink = computed(() => ['/servers', this.serverId() ?? '']);
 
@@ -219,8 +226,8 @@ export class FilesPage {
     }
   }
 
-  onPaged(event: TablePageEvent): void {
-    this.store.goToPage(Math.floor(event.first / event.rows), event.rows);
+  onPaged(event: PageEvent): void {
+    this.store.goToPage(event.pageIndex, event.pageSize);
   }
 
   retry(): void {

@@ -78,7 +78,8 @@
         "enabled": "Enabled",
         "enabledHint": "A disabled plan runs only from Run now.",
         "submit": "Add plan",
-        "passwordHint": "Choosing the folders and files this plan copies from the server needs your password."
+        "passwordHint": "Choosing the folders and files this plan copies from the server needs your password.",
+        "removePath": "Remove {path}"
       }
     },
     "schedule": {

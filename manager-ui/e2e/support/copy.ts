@@ -3,7 +3,7 @@ import type { CopyKey, Lang } from './copy.types';
 export const COPY = {
   // The shell
   skipToContent: { en: 'Skip to content', ar: 'الانتقال إلى المحتوى' },
-  productName: { en: 'DBS Interface', ar: 'واجهة DBS' },
+  productName: { en: 'DBS', ar: 'DBS' },
   language: { en: 'Language', ar: 'اللغة' },
   navServers: { en: 'Servers', ar: 'الخوادم' },
   navActivity: { en: 'Activity', ar: 'النشاط' },

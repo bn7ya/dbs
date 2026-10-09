@@ -107,9 +107,7 @@
     "lastPage": "Last page",
     "nextPage": "Next page",
     "previousPage": "Previous page",
-    "page": "Page {page}",
     "rowsPerPage": "Rows per page",
-    "empty": "No results found",
     "range": "{start}–{end} of {total}"
   }
 }

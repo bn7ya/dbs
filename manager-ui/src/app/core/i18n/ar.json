@@ -107,9 +107,7 @@
     "lastPage": "الصفحة الأخيرة",
     "nextPage": "الصفحة التالية",
     "previousPage": "الصفحة السابقة",
-    "page": "الصفحة {page}",
     "rowsPerPage": "عدد الصفوف في الصفحة",
-    "empty": "لا توجد نتائج",
     "range": "{start}–{end} من {total}"
   }
 }

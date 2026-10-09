@@ -1,6 +1,6 @@
 <form class="dialog-form" (ngSubmit)="restore()" novalidate>
   @if (formFailure(); as failure) {
-    <p-message severity="error">{{ failure | errorText }}</p-message>
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
   }
 
   <p class="text-secondary">{{ 'backups.restore.body' | t }}</p>
@@ -18,21 +18,17 @@
 
   <fieldset class="restore-form__choice" [attr.aria-describedby]="modeId + '-hint'">
     <legend class="text-label">{{ 'backups.restore.mode' | t }}</legend>
-    <div class="restore-form__options">
+    <mat-radio-group
+      class="restore-form__options"
+      name="mode"
+      [ngModel]="mode()"
+      [ngModelOptions]="{ standalone: true }"
+      (ngModelChange)="setMode($event)"
+    >
       @for (each of modes; track each) {
-        <div class="restore-form__option">
-          <p-radiobutton
-            name="mode"
-            [value]="each"
-            [inputId]="modeId + '-' + each"
-            [ngModel]="mode()"
-            [ngModelOptions]="{ standalone: true }"
-            (ngModelChange)="setMode($event)"
-          />
-          <label [for]="modeId + '-' + each">{{ 'backups.restore.modes.' + each | t }}</label>
-        </div>
+        <mat-radio-button [value]="each">{{ 'backups.restore.modes.' + each | t }}</mat-radio-button>
       }
-    </div>
+    </mat-radio-group>
     <small class="text-sm text-secondary" [id]="modeId + '-hint'">{{ 'backups.restore.modeHint.' + mode() | t }}</small>
   </fieldset>
 
@@ -47,56 +43,50 @@
   />
 
   <!-- FSI … PDI: the name keeps its own direction inside the hint in either language. -->
-  <app-field
-    [label]="'backups.restore.serverName' | t"
-    [hint]="'backups.restore.serverNameHint' | t: { name: '⁨' + file.server_name + '⁩' }"
-    [error]="nameErrorText()"
-  >
+  <mat-form-field>
+    <mat-label>{{ 'backups.restore.serverName' | t }}</mat-label>
     <input
-      pInputText
-      appFieldControl
-      fluid
+      matInput
+      [appFieldError]="nameErrorText()"
       name="server_name"
       dir="auto"
       autocomplete="off"
       autocapitalize="off"
       spellcheck="false"
-      [invalid]="!!nameError()"
       [ngModel]="serverName()"
       (ngModelChange)="setServerName($event)"
     />
-  </app-field>
+    <mat-hint>{{ 'backups.restore.serverNameHint' | t: { name: '⁨' + file.server_name + '⁩' } }}</mat-hint>
+    @if (nameErrorText(); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
 
   <div class="dialog-actions">
-    <button pButton type="button" severity="secondary" variant="text" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
     <button
-      pButton
+      matButton="outlined"
       type="button"
-      variant="outlined"
       [disabled]="sending() !== null"
       [attr.aria-busy]="sending() === 'rehearse'"
       (click)="rehearse()"
     >
       @if (sending() === 'rehearse') {
-        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-        {{ 'backups.restore.rehearsing' | t }}
-      } @else {
-        {{ 'backups.restore.rehearse' | t }}
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
       }
+      {{ (sending() === 'rehearse' ? 'backups.restore.rehearsing' : 'backups.restore.rehearse') | t }}
     </button>
     <button
-      pButton
+      matButton="filled"
+      class="app-danger"
       type="submit"
-      severity="danger"
       [disabled]="sending() !== null"
       [attr.aria-busy]="sending() === 'restore'"
     >
       @if (sending() === 'restore') {
-        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-        {{ 'backups.restore.working' | t }}
-      } @else {
-        {{ 'backups.restore.submit' | t }}
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
       }
+      {{ (sending() === 'restore' ? 'backups.restore.working' : 'backups.restore.submit') | t }}
     </button>
   </div>
 </form>

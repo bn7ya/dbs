@@ -3,7 +3,6 @@ import { HttpTestingController, provideHttpClientTesting, type TestRequest } fro
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { MessageService } from 'primeng/api';
 import { Subject, type Observable } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
@@ -120,7 +119,6 @@ describe('BackupsStore', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
-        MessageService,
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });
@@ -848,12 +846,12 @@ describe('BackupsStore', () => {
       http.expectOne(`/api/backups/${FILE.id}/restore/`).flush({ activity: JOB_ID });
       await starting;
 
-      jobs.report(restored({ records: 1, files: 0, copy_left: '/var/backups/.dbs-interface-restore-ab.dbs' }));
+      jobs.report(restored({ records: 1, files: 0, copy_left: '/var/backups/.dbs-restore-ab.dbs' }));
 
       expect(lastToast()).toEqual({
         severity: 'warning',
         summary: 'Rehearsal finished. Nothing changed.',
-        detail: 'Records: 1. Files: 0. The copy sent to the server is still at ⁨/var/backups/.dbs-interface-restore-ab.dbs⁩.',
+        detail: 'Records: 1. Files: 0. The copy sent to the server is still at ⁨/var/backups/.dbs-restore-ab.dbs⁩.',
       });
     });
 

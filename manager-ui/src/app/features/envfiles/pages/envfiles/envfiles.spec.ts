@@ -4,7 +4,6 @@ import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, withComponentInputBinding, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { ConfirmationService, MessageService } from 'primeng/api';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
@@ -98,8 +97,8 @@ describe('EnvfilesPage', () => {
   };
 
   const element = (): HTMLElement => harness.routeNativeElement as HTMLElement;
-  const rows = (): HTMLElement[] => Array.from(element().querySelectorAll<HTMLElement>('p-table tbody tr'));
-  const cards = (): HTMLElement[] => Array.from(element().querySelectorAll<HTMLElement>('.envfiles > p-card'));
+  const rows = (): HTMLElement[] => Array.from(element().querySelectorAll<HTMLElement>('table tr[mat-row]'));
+  const cards = (): HTMLElement[] => Array.from(element().querySelectorAll<HTMLElement>('.envfiles > mat-card'));
   const buttonNamed = (text: string): HTMLButtonElement | undefined =>
     Array.from(element().querySelectorAll('button')).find((button) => button.textContent?.trim() === text);
 
@@ -141,8 +140,6 @@ describe('EnvfilesPage', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter(ROUTES, withComponentInputBinding()),
-        MessageService,
-        ConfirmationService,
       ],
     });
     http = TestBed.inject(HttpTestingController);
@@ -170,7 +167,7 @@ describe('EnvfilesPage', () => {
     expect(buttonNamed('Pull now')).toBeDefined();
 
     expect(rows()).toHaveLength(3);
-    expect(rows().map((row) => row.querySelector('p-tag')?.textContent?.trim())).toEqual([
+    expect(rows().map((row) => row.querySelector('app-status-tag')?.textContent?.trim())).toEqual([
       'Pulled',
       'Daily snapshot',
       'Pushed',
@@ -225,7 +222,7 @@ describe('EnvfilesPage', () => {
   it('keeps the versions of a server whose .env file is no longer set, with nothing to pull or push', async () => {
     await showWith(pageOf([VERSION]), '');
 
-    expect(element().querySelector('p-message')?.textContent).toContain('This server has no .env file set.');
+    expect(element().querySelector('app-notice')?.textContent).toContain('This server has no .env file set.');
     expect(rows()).toHaveLength(1);
     expect(buttonNamed('Pull now')).toBeUndefined();
     expect(buttonNamed('Push this version to the server')).toBeUndefined();
@@ -375,7 +372,7 @@ describe('EnvfilesPage', () => {
     await settle();
     harness.detectChanges();
 
-    expect(cards()[1].querySelector('p-message')?.textContent).toContain('No difference in keys or values.');
+    expect(cards()[1].querySelector('app-notice')?.textContent).toContain('No difference in keys or values.');
   });
 
   describe('pushing a version back', () => {
@@ -435,7 +432,7 @@ describe('EnvfilesPage', () => {
     await settle();
     harness.detectChanges();
 
-    expect(element().querySelector('p-message')?.textContent).toContain("Can't reach DBS.");
+    expect(element().querySelector('app-notice')?.textContent).toContain("Can't reach DBS.");
     buttonNamed('Try again')?.click();
     TestBed.tick();
     listRequest().flush(pageOf([VERSION]));

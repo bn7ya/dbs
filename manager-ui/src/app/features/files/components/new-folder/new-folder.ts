@@ -1,15 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ButtonDirective } from 'primeng/button';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
+import { MatButton } from '@angular/material/button';
+import { MatError, MatFormField, MatLabel } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
 
 import type { ApiError } from '@core/http/api.types';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
-import { Field } from '@shared/field/field';
-import { FieldControl } from '@shared/field/field-control';
+import { FieldError } from '@shared/field/field-error';
+import { Notice } from '@shared/notice/notice';
 import { folderNameProblem, type Entry } from '../../data/files.types';
 import { FilesStore } from '../../state/files.store';
 import type { NewFolderData } from './new-folder.types';
@@ -18,7 +18,18 @@ const NAME_FAILURES: ReadonlySet<string> = new Set(['file_exists']);
 
 @Component({
   selector: 'app-new-folder',
-  imports: [FormsModule, ButtonDirective, InputText, Message, Field, FieldControl, ErrorTextPipe, TranslatePipe],
+  imports: [
+    FormsModule,
+    MatButton,
+    MatFormField,
+    MatLabel,
+    MatError,
+    MatInput,
+    FieldError,
+    Notice,
+    ErrorTextPipe,
+    TranslatePipe,
+  ],
   templateUrl: './new-folder.html',
   styleUrl: './new-folder.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

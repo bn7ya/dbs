@@ -18,12 +18,6 @@
   gap: var(--app-space-2);
 }
 
-.review__check-row {
-  display: flex;
-  gap: var(--app-space-2);
-  align-items: center;
-}
-
 .review__error {
   font-size: var(--app-text--1);
   color: var(--app-color-danger);

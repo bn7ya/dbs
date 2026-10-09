@@ -1,3 +1,5 @@
+@use "layout" as *;
+
 :host {
   display: block;
 }
@@ -29,10 +31,10 @@
   gap: var(--app-space-4);
 }
 
-.plan-form__option {
+.plan-form__toggle {
   display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
+  flex-direction: column;
+  gap: var(--app-space-1);
 }
 
 .plan-form__error {
@@ -46,6 +48,6 @@
 // The two counts read as one setting, side by side, and stack when the dialog is narrow.
 .plan-form__pair {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(calc($card-max / 3), 100%), 1fr));
   gap: var(--app-space-4);
 }

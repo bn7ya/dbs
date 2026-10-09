@@ -23,12 +23,6 @@
   font-family: var(--app-font-mono);
 }
 
-.server__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--app-space-2);
-}
-
 .server__failure {
   display: flex;
   flex-direction: column;

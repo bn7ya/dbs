@@ -3,7 +3,7 @@
 @use "fonts";
 @use "tokens";
 
-@layer reset, base, primeng, material, app;
+@layer reset, base, material, app;
 
 @layer reset {
   @include meta.load-css("reset");

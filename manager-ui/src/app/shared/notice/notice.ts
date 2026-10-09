@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, booleanAttribute, computed, input, output } from '@angular/core';
 import { MatIconButton } from '@angular/material/button';
 
 import { TranslatePipe } from '@core/i18n/translate.pipe';
@@ -17,7 +17,7 @@ import { NOTICE_ICON, type NoticeSeverity } from './notice.types';
 })
 export class Notice {
   readonly severity = input<NoticeSeverity>('info');
-  readonly closable = input(false);
+  readonly closable = input(false, { transform: booleanAttribute });
   readonly closed = output();
 
   protected readonly icon = computed(() => NOTICE_ICON[this.severity()]);

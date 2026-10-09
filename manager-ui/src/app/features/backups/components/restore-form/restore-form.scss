@@ -35,12 +35,6 @@
   gap: var(--app-space-4);
 }
 
-.restore-form__option {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-}
-
 .restore-form__code {
   font-family: var(--app-font-mono);
   overflow-wrap: anywhere;

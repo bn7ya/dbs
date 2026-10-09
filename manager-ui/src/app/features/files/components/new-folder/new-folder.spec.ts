@@ -2,7 +2,6 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { MessageService } from 'primeng/api';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -28,7 +27,7 @@ describe('NewFolderDialog', () => {
     return fixture.nativeElement as HTMLElement;
   };
 
-  const fieldError = (): string | undefined => rendered().querySelector('.field__error')?.textContent?.trim();
+  const fieldError = (): string | undefined => rendered().querySelector('mat-error')?.textContent?.trim();
 
   beforeEach(() => {
     close = vi.fn();
@@ -36,7 +35,6 @@ describe('NewFolderDialog', () => {
     TestBed.configureTestingModule({
       providers: [
         FilesStore,
-        MessageService,
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
@@ -103,7 +101,7 @@ describe('NewFolderDialog', () => {
 
     expect(close).not.toHaveBeenCalled();
     expect(fieldError()).toBe('A file or folder with this name already exists here.');
-    expect(rendered().querySelector('p-message')).toBeNull();
+    expect(rendered().querySelector('app-notice')).toBeNull();
 
     dialog.onName('photos-2');
     expect(fieldError()).toBeUndefined();
@@ -121,7 +119,7 @@ describe('NewFolderDialog', () => {
       );
     await creating;
 
-    expect(rendered().querySelector('p-message')?.textContent).toContain(
+    expect(rendered().querySelector('app-notice')?.textContent).toContain(
       'Access to the folder or file was denied on the server.',
     );
     expect(fieldError()).toBeUndefined();

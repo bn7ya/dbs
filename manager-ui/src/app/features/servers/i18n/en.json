@@ -1,7 +1,7 @@
 {
   "servers": {
     "title": "Servers",
-    "subtitle": "The servers DBS Interface connects to over SSH.",
+    "subtitle": "The servers DBS connects to over SSH.",
     "add": "Add server",
     "search": {
       "label": "Search",
@@ -121,10 +121,10 @@
     },
     "delete": {
       "title": "Delete server",
-      "body": "Removes this server from DBS Interface. Backups stored on the server stay there.",
+      "body": "Removes this server from DBS. Backups stored on the server stay there.",
       "action": "Delete server",
       "confirmTitle": "Delete {name}?",
-      "confirmBody": "The server is removed from DBS Interface. Backups stored on the server stay there.",
+      "confirmBody": "The server is removed from DBS. Backups stored on the server stay there.",
       "done": "Server deleted."
     },
     "form": {
@@ -197,7 +197,8 @@
       "fileRoots": {
         "label": "Allowed folders",
         "hint": "Folders the Files tab can open. Press Enter after each one.",
-        "placeholder": "/srv/app/media"
+        "placeholder": "/srv/app/media",
+        "remove": "Remove {path}"
       },
       "envPath": {
         "label": ".env file",

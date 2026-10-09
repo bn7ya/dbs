@@ -14,13 +14,11 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { ButtonDirective } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { Message } from 'primeng/message';
-import { ProgressBar } from 'primeng/progressbar';
-import { Skeleton } from 'primeng/skeleton';
-import { TableModule, type TablePageEvent } from 'primeng/table';
-import { Tag } from 'primeng/tag';
+import { MatButton } from '@angular/material/button';
+import { MatCard, MatCardContent } from '@angular/material/card';
+import { MatPaginator, type PageEvent } from '@angular/material/paginator';
+import { MatProgressBar } from '@angular/material/progress-bar';
+import { MatTableModule } from '@angular/material/table';
 import { map } from 'rxjs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
@@ -31,6 +29,9 @@ import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
+import { Notice } from '@shared/notice/notice';
+import { Skeleton } from '@shared/skeleton/skeleton';
+import { StatusTag } from '@shared/status-tag/status-tag';
 import { uniqueId } from '@shared/unique-id';
 import { PlanForm } from '../../components/plan-form/plan-form';
 import type { PlanFormData } from '../../components/plan-form/plan-form.types';
@@ -48,7 +49,7 @@ import type { RestoreProgress } from '../../state/backups.store.types';
 import type { TagLook } from './backups.types';
 
 const VALIDATION_LOOKS: Readonly<Record<BackupValidation, TagLook>> = {
-  structure_ok: { severity: 'secondary', icon: 'fa-solid fa-check' },
+  structure_ok: { severity: 'neutral', icon: 'fa-solid fa-check' },
   verified: { severity: 'success', icon: 'fa-solid fa-shield-check' },
   failed: { severity: 'danger', icon: 'fa-solid fa-circle-exclamation' },
 };
@@ -63,13 +64,15 @@ const FIRST_PLAN_NAME = 'django-dbs';
 @Component({
   selector: 'app-backups-page',
   imports: [
-    ButtonDirective,
-    Card,
-    Message,
-    ProgressBar,
+    MatButton,
+    MatCard,
+    MatCardContent,
+    MatPaginator,
+    MatProgressBar,
+    MatTableModule,
+    Notice,
     Skeleton,
-    TableModule,
-    Tag,
+    StatusTag,
     AppDatePipe,
     EmptyState,
     ErrorTextPipe,
@@ -92,7 +95,7 @@ export class BackupsPage {
 
   readonly planRows = computed(() => [...this.store.plans()]);
   readonly planCount = this.store.planCount;
-  readonly planFirst = computed(() => this.store.planPage() * PLAN_PAGE_SIZE);
+  readonly planPage = this.store.planPage;
   readonly planPageSize = PLAN_PAGE_SIZE;
   readonly plansLoading = this.store.plansLoading;
   readonly plansPending = this.store.plansPending;
@@ -102,7 +105,7 @@ export class BackupsPage {
   readonly fileRows = computed(() => [...this.store.files()]);
   readonly count = this.store.count;
   readonly pageSize = this.store.pageSize;
-  readonly first = computed(() => this.store.page() * this.store.pageSize());
+  readonly page = this.store.page;
   readonly pageSizes = [...BACKUP_PAGE_SIZES];
   readonly loading = this.store.loading;
   readonly pending = this.store.pending;
@@ -120,7 +123,9 @@ export class BackupsPage {
   readonly planSkeleton = [0, 1, 2];
   readonly fileSkeleton = [0, 1, 2, 3, 4, 5];
 
-  private readonly uploadButton = viewChild.required<ElementRef<HTMLButtonElement>>('uploadButton');
+  private readonly uploadButton = viewChild.required<unknown, ElementRef<HTMLButtonElement>>('uploadButton', {
+    read: ElementRef,
+  });
 
   readonly plansPaginated = computed(() => this.planCount() > PLAN_PAGE_SIZE);
 
@@ -198,8 +203,8 @@ export class BackupsPage {
     }
   }
 
-  onPlansPaged(event: TablePageEvent): void {
-    this.store.goToPlanPage(Math.floor(event.first / event.rows));
+  onPlansPaged(event: PageEvent): void {
+    this.store.goToPlanPage(event.pageIndex);
   }
 
   retryPlans(): void {
@@ -245,6 +250,17 @@ export class BackupsPage {
 
   restoring(file: BackupFile): RestoreProgress | null {
     return this.store.restoring(file);
+  }
+
+  restoreKey(file: BackupFile): string {
+    switch (this.store.restoring(file)) {
+      case 'rehearse':
+        return 'backups.restore.rehearsing';
+      case 'restore':
+        return 'backups.restore.working';
+      default:
+        return 'backups.restore.action';
+    }
   }
 
   canRestore(file: BackupFile): boolean {
@@ -297,8 +313,8 @@ export class BackupsPage {
     this.store.dismissDeleted();
   }
 
-  onPaged(event: TablePageEvent): void {
-    this.store.goToPage(Math.floor(event.first / event.rows), event.rows);
+  onPaged(event: PageEvent): void {
+    this.store.goToPage(event.pageIndex, event.pageSize);
   }
 
   retry(): void {

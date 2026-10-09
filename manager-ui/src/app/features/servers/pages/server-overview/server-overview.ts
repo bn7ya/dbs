@@ -1,10 +1,10 @@
 import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { ButtonDirective } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
+import { MatButton, MatIconButton } from '@angular/material/button';
+import { MatCard, MatCardContent } from '@angular/material/card';
+import { MatFormField, MatLabel, MatSuffix } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
 
 import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
@@ -12,8 +12,7 @@ import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
-import { Field } from '@shared/field/field';
-import { FieldControl } from '@shared/field/field-control';
+import { Notice } from '@shared/notice/notice';
 import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
 import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { Toaster } from '@shared/toaster/toaster';
@@ -37,13 +36,16 @@ const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
 @Component({
   selector: 'app-server-overview-page',
   imports: [
-    ButtonDirective,
-    Card,
-    InputText,
-    Message,
+    MatButton,
+    MatIconButton,
+    MatCard,
+    MatCardContent,
+    MatFormField,
+    MatLabel,
+    MatSuffix,
+    MatInput,
+    Notice,
     AppDatePipe,
-    Field,
-    FieldControl,
     CheckStatusTag,
     HostKeyFacts,
     ErrorTextPipe,
