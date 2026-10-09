@@ -1,8 +1,18 @@
 import type { Routes } from '@angular/router';
 
 import { authGuard, guestGuard } from '@core/auth/guards/auth.guard';
+import { provideTranslations } from '@core/i18n/provide-translations';
+import { setupGuard } from '@core/setup/guards/setup.guard';
+import setupAr from '@core/setup/i18n/ar.json';
+import setupEn from '@core/setup/i18n/en.json';
 
 export const routes: Routes = [
+  {
+    path: 'setup',
+    canActivate: [setupGuard],
+    providers: [provideTranslations(setupEn, setupAr)],
+    loadComponent: () => import('@core/setup/pages/setup/setup').then((m) => m.SetupPage),
+  },
   {
     path: 'sign-in',
     canActivate: [guestGuard],

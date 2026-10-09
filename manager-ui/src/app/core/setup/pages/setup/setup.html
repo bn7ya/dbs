@@ -1,0 +1,90 @@
+<main id="main" class="setup">
+  <p-card class="setup__card">
+    <div class="setup__content">
+      <header class="setup__header">
+        <h1>{{ 'setup.title' | t }}</h1>
+        <p class="text-secondary">{{ 'setup.subtitle' | t }}</p>
+      </header>
+
+      @if (error(); as failure) {
+        <p-message severity="error">{{ failure | errorText }}</p-message>
+      }
+
+      @if (done()) {
+        <a pButton routerLink="/sign-in">{{ 'setup.signIn' | t }}</a>
+      } @else {
+        <form class="setup__form" novalidate (ngSubmit)="submit()">
+          @if (!tokenFromLink()) {
+            <app-field
+              [label]="'setup.token' | t"
+              [hint]="'setup.tokenHint' | t"
+              [error]="keyInvalid() ? ('setup.errors.tokenRequired' | t) : (fieldCode('token') | errorText)"
+            >
+              <input
+                pInputText
+                appFieldControl
+                name="token"
+                autocomplete="off"
+                dir="ltr"
+                fluid
+                [ngModel]="key()"
+                (ngModelChange)="key.set($event)"
+              />
+            </app-field>
+          }
+
+          <app-field
+            [label]="'setup.username' | t"
+            [error]="usernameInvalid() ? ('setup.errors.usernameRequired' | t) : (fieldCode('username') | errorText)"
+          >
+            <input
+              pInputText
+              appFieldControl
+              name="username"
+              autocomplete="username"
+              dir="auto"
+              fluid
+              [ngModel]="username()"
+              (ngModelChange)="username.set($event)"
+            />
+          </app-field>
+
+          <app-field
+            [label]="'setup.password' | t"
+            [error]="passwordInvalid() ? ('setup.errors.passwordRequired' | t) : (fieldCode('password') | errorText)"
+          >
+            <app-password-input
+              name="password"
+              autocomplete="new-password"
+              [ngModel]="password()"
+              (ngModelChange)="password.set($event)"
+            />
+          </app-field>
+
+          <app-field
+            [label]="'setup.confirm' | t"
+            [error]="confirmInvalid() ? ('setup.errors.confirmMismatch' | t) : ''"
+          >
+            <app-password-input
+              name="confirm"
+              autocomplete="new-password"
+              [ngModel]="confirm()"
+              (ngModelChange)="confirm.set($event)"
+            />
+          </app-field>
+
+          <button pButton class="setup__submit" type="submit" fluid [disabled]="busy()" [attr.aria-busy]="busy()">
+            @if (busy()) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (busy() ? 'setup.working' : 'setup.submit') | t }}
+          </button>
+        </form>
+      }
+
+      <footer>
+        <app-locale-switcher />
+      </footer>
+    </div>
+  </p-card>
+</main>

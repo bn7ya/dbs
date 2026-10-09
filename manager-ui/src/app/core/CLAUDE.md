@@ -17,6 +17,11 @@ core/
     state/auth.store.ts     root-provided; who the user is
     guards/auth.guard.ts    authGuard, guestGuard, groupGuard(...)
     pages/sign-in/          the sign-in page
+  setup/
+    data/setup.api.ts       GET/POST /api/setup/ — the first-run account
+    state/setup.store.ts    root-provided; whether setup is still needed
+    guards/setup.guard.ts   setupGuard — open only while no account exists
+    pages/setup/            the first-run page
   i18n/
     locale.store.ts         current language, the dictionary, the direction
     locale.types.ts
@@ -60,6 +65,13 @@ name.
 **Guards** (`auth/guards/`) — `authGuard` sends a signed-out visitor to sign in with a
 return path; `guestGuard` keeps a signed-in user off sign-in; `groupGuard(...)` also
 requires one of the named groups, or goes to `/forbidden`.
+
+**`SetupStore`** (`setup/state/`) — `check()` asks `GET /api/setup/` once and keeps the answer;
+`complete()` primes CSRF and posts the first account, closing the setup on success or on
+`setup_done`. **`setupGuard`** opens `/setup` only while it is needed. `authGuard` and `guestGuard`
+send a signed-out visitor to `/setup` (keeping `?token=`) while no account exists.
+**`SetupPage`** — the setup key (only when the link lacks it), username, password and its
+confirmation; on success it loads `/api/auth/me/` and opens `/`.
 
 **`SignInPage`** (`auth/pages/sign-in/`) — the sign-in form: validates both fields, toggles
 password visibility, signs in through the store and follows `?next=`.

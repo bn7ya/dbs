@@ -1,0 +1,28 @@
+{
+  "setup": {
+    "title": "إنشاء الحساب",
+    "subtitle": "يستخدم هذا الحساب لتسجيل الدخول إلى DBS على هذا الجهاز.",
+    "token": "مفتاح الإعداد",
+    "tokenHint": "تجده في رابط الإعداد الظاهر حيث تم تشغيل django_dbs run.",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "confirm": "تأكيد كلمة المرور",
+    "submit": "إنشاء الحساب",
+    "working": "جار إنشاء الحساب…",
+    "signIn": "الذهاب إلى تسجيل الدخول",
+    "errors": {
+      "tokenRequired": "أدخل مفتاح الإعداد.",
+      "usernameRequired": "أدخل اسم المستخدم.",
+      "passwordRequired": "أدخل كلمة المرور.",
+      "confirmMismatch": "كلمتا المرور غير متطابقتين."
+    }
+  },
+  "errors": {
+    "setup_done": "يوجد حساب بالفعل. يمكنك تسجيل الدخول به.",
+    "setup_token_invalid": "مفتاح الإعداد غير صالح. استخدم الرابط الظاهر حيث تم تشغيل django_dbs run.",
+    "password_too_short": "كلمة المرور قصيرة جدا.",
+    "password_too_common": "كلمة المرور شائعة جدا.",
+    "password_entirely_numeric": "استخدم حروفا مع الأرقام.",
+    "password_too_similar": "كلمة المرور قريبة جدا من اسم المستخدم."
+  }
+}

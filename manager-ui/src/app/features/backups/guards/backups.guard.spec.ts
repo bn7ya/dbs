@@ -9,7 +9,7 @@ import {
   type GuardResult,
   type RouterStateSnapshot,
 } from '@angular/router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
 import { errorInterceptor } from '@core/http/error.interceptor';
@@ -61,6 +61,7 @@ describe('backupsGuard', () => {
   it('sends a signed-out visitor to sign in, with the way back to the backups tab', async () => {
     const entering = enter('/servers/abc/backups');
     http.expectOne('/api/auth/me/').flush(null, { status: 403, statusText: 'Forbidden' });
+    (await vi.waitFor(() => http.expectOne('/api/setup/'))).flush({ needed: false });
 
     const result = await entering;
     expect(result).toBeInstanceOf(UrlTree);
