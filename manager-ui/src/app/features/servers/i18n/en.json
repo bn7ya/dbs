@@ -128,14 +128,12 @@
       "done": "Server deleted."
     },
     "form": {
-      "addTitle": "Add server",
       "editTitle": "Edit server",
       "submit": "Add server",
       "added": "Server added.",
       "steps": {
         "label": "Steps",
         "connection": "Connection",
-        "hostKey": "Host key",
         "project": "django-dbs and files"
       },
       "name": {
@@ -205,18 +203,88 @@
         "hint": "Full path to the project's .env file, if it has one.",
         "placeholder": "/srv/app/.env"
       },
-      "backupPassphrase": {
-        "label": "Backup passphrase",
-        "hint": "Leave empty to generate one."
-      },
       "accountPassword": {
         "hint": "Changing anything but the name needs your password."
+      }
+    },
+    "wizard": {
+      "title": "Add a server",
+      "steps": {
+        "snippet": "Connection snippet",
+        "connection": "Address and host key",
+        "signIn": "Sign-in",
+        "project": "Project",
+        "check": "Check",
+        "passphrase": "Backup passphrase",
+        "backup": "Test backup"
+      },
+      "snippet": {
+        "intro": "Paste the connection snippet from the server to fill in most of this. This step is optional.",
+        "label": "Connection snippet",
+        "hint": "Run manage.py dbs connection --json on the server and paste what it prints.",
+        "applied": "Filled in from the connection snippet. Check each value."
+      },
+      "connection": {
+        "keyType": "Key type",
+        "fingerprint": "Fingerprint",
+        "match": "Matches the snippet",
+        "mismatch": "Does not match the snippet"
+      },
+      "signIn": {
+        "legend": "Sign-in method",
+        "generate": "Create a key for me",
+        "key": "Paste a key",
+        "password": "Password",
+        "generateHint": "A new key pair is created. The private key stays here, encrypted.",
+        "publicKey": "Public key",
+        "instruction": "Add this line to {path} on the server, then continue.",
+        "copyKey": "Copy the key",
+        "copyHint": "Copy the line",
+        "reread": "Show the key again"
+      },
+      "project": {
+        "intro": "Find the Django project on the server, or fill in its details.",
+        "discover": "Find the project",
+        "discovering": "Searching…",
+        "found": "Values filled in from the server.",
+        "version": "django-dbs on the server: {version}.",
+        "skip": "Skip"
+      },
+      "check": {
+        "local": "django-dbs here",
+        "remote": "django-dbs on the server",
+        "missing": "Not found",
+        "status": "Check",
+        "health": "Health",
+        "ok": "The two versions work together.",
+        "old": "django-dbs on the server is older than 0.5.0. Health and connection details are not available until it is upgraded.",
+        "incompatible": "This version of django-dbs on the server does not work with this manager. Install a matching version."
+      },
+      "health": {
+        "ok": "Healthy",
+        "warn": "Warning",
+        "error": "Unhealthy"
+      },
+      "passphrase": {
+        "intro": "The backup passphrase can be read from the project settings on the server. This step is optional.",
+        "capture": "Read it from the server",
+        "captured": "The backup passphrase is saved."
+      },
+      "backup": {
+        "intro": "Take a first backup to confirm everything works.",
+        "take": "Take a test backup",
+        "running": "Backing up…",
+        "done": "The test backup worked.",
+        "openServer": "Open the server",
+        "openBackups": "See its backups"
       }
     }
   },
   "errors": {
     "port_range": "Enter a port from 1 to 65535.",
     "host_key_missing": "Get the host key first.",
-    "host_key_unconfirmed": "Compare the fingerprints first."
+    "host_key_unconfirmed": "Compare the fingerprints first.",
+    "snippet_invalid": "This is not valid JSON. Paste the whole snippet.",
+    "snippet_not_dbs": "This is not a DBS connection snippet."
   }
 }

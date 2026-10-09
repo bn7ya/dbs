@@ -4,7 +4,6 @@
   }
 
   <mat-stepper
-    [linear]="!editing"
     [selectedIndex]="shownStep()"
     [attr.aria-label]="'servers.form.steps.label' | t"
     (selectionChange)="step.set($event.selectedIndex)"
@@ -155,52 +154,6 @@
       </div>
     </mat-step>
 
-    @if (!editing) {
-      <mat-step [label]="stepLabels.hostKey | t" [completed]="stepDone('hostKey')">
-        <div class="server-form__step">
-          <p class="text-secondary">{{ 'servers.form.hostKeyIntro' | t }}</p>
-
-          <div>
-            <button
-              matButton="outlined"
-              type="button"
-              [disabled]="fetchingHostKey()"
-              [attr.aria-busy]="fetchingHostKey()"
-              (click)="fetchHostKey()"
-            >
-              @if (fetchingHostKey()) {
-                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-              }
-              {{ (hostKey() ? 'servers.form.fetchAgain' : 'servers.form.fetch') | t }}
-            </button>
-          </div>
-
-          @if (hostKeyError(); as failure) {
-            <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-          }
-
-          @if (hostKey(); as key) {
-            <app-host-key-facts [keyType]="key.key_type" [fingerprint]="key.fingerprint" compare />
-
-            <div class="server-form__check">
-              <mat-checkbox
-                name="host_key_confirmed"
-                [aria-describedby]="error('host_key') ? confirmId + '-error' : ''"
-                [ngModel]="hostKeyConfirmed()"
-                (ngModelChange)="hostKeyConfirmed.set($event)"
-              >
-                {{ 'servers.hostKey.matches' | t }}
-              </mat-checkbox>
-              @if (error('host_key'); as code) {
-                <small class="server-form__error" role="alert" [id]="confirmId + '-error'">{{ code | errorText }}</small>
-              }
-            </div>
-          } @else if (error('host_key'); as code) {
-            <app-notice severity="warning">{{ code | errorText }}</app-notice>
-          }
-        </div>
-      </mat-step>
-    }
 
     <mat-step [label]="stepLabels.project | t" [completed]="stepDone('project')">
       <div class="server-form__step">
@@ -353,17 +306,6 @@
           }
         </mat-form-field>
 
-        @if (!editing) {
-          <app-password-input
-            [label]="'servers.form.backupPassphrase.label' | t"
-            [hint]="'servers.form.backupPassphrase.hint' | t"
-            [error]="error('backup_passphrase') | errorText"
-            name="backup_passphrase"
-            autocomplete="new-password"
-            [ngModel]="draft().backup_passphrase"
-            (ngModelChange)="update('backup_passphrase', $event)"
-          />
-        }
 
         @if (passwordShown()) {
           <app-password-input
@@ -389,7 +331,7 @@
       @if (saving()) {
         <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
       }
-      {{ (onLastStep() ? (editing ? 'actions.save' : 'servers.form.submit') : 'actions.next') | t }}
+      {{ (onLastStep() ? 'actions.save' : 'actions.next') | t }}
     </button>
   </div>
 </form>

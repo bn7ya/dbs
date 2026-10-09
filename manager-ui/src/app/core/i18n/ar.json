@@ -107,5 +107,9 @@
     "previousPage": "الصفحة السابقة",
     "rowsPerPage": "عدد الصفوف في الصفحة",
     "range": "{start}–{end} من {total}"
+  },
+  "copy": {
+    "done": "تم النسخ.",
+    "unavailable": "النسخ غير متاح هنا. حدد النص وانسخه."
   }
 }

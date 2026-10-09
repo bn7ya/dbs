@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, afterRenderEffect, computed, inject
 import { FormsModule } from '@angular/forms';
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
 import { MatButton } from '@angular/material/button';
-import { MatCheckbox } from '@angular/material/checkbox';
 import { MatChipGrid, MatChipInput, MatChipRemove, MatChipRow, type MatChipInputEvent } from '@angular/material/chips';
 import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
@@ -15,10 +14,8 @@ import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
 import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
-import { uniqueId } from '@shared/unique-id';
-import type { AuthMethod, HostKey, Server, ServerCreate, ServerSettings } from '../../data/servers.types';
+import type { AuthMethod, Server, ServerSettings } from '../../data/servers.types';
 import { ServersStore } from '../../state/servers.store';
-import { HostKeyFacts } from '../host-key-facts/host-key-facts';
 import type {
   AuthMethodOption,
   ServerDraft,
@@ -27,7 +24,7 @@ import type {
   ServerFormStep,
 } from './server-form.types';
 
-const NEW_SERVER: ServerDraft = {
+const BLANK: ServerDraft = {
   name: '',
   host: '',
   port: 22,
@@ -43,7 +40,6 @@ const NEW_SERVER: ServerDraft = {
   remote_backup_dir: '/var/backups/dbs',
   file_roots: [],
   env_path: '',
-  backup_passphrase: '',
 };
 
 const FIELD_STEPS: Readonly<Record<ServerDraftField, ServerFormStep>> = {
@@ -55,7 +51,6 @@ const FIELD_STEPS: Readonly<Record<ServerDraftField, ServerFormStep>> = {
   private_key: 'connection',
   key_passphrase: 'connection',
   password: 'connection',
-  host_key: 'hostKey',
   project_dir: 'project',
   python_path: 'project',
   manage_path: 'project',
@@ -63,12 +58,10 @@ const FIELD_STEPS: Readonly<Record<ServerDraftField, ServerFormStep>> = {
   remote_backup_dir: 'project',
   file_roots: 'project',
   env_path: 'project',
-  backup_passphrase: 'project',
 };
 
 const STEP_LABELS: Readonly<Record<ServerFormStep, string>> = {
   connection: 'servers.form.steps.connection',
-  hostKey: 'servers.form.steps.hostKey',
   project: 'servers.form.steps.project',
 };
 
@@ -77,7 +70,6 @@ const STEP_LABELS: Readonly<Record<ServerFormStep, string>> = {
   imports: [
     FormsModule,
     MatButton,
-    MatCheckbox,
     MatChipGrid,
     MatChipRow,
     MatChipRemove,
@@ -95,7 +87,6 @@ const STEP_LABELS: Readonly<Record<ServerFormStep, string>> = {
     FieldError,
     Notice,
     PasswordInput,
-    HostKeyFacts,
     ErrorTextPipe,
     TranslatePipe,
   ],
@@ -109,38 +100,31 @@ export class ServerForm {
 
   readonly editing = injectDialogData<ServerFormData>().server;
 
-  protected readonly confirmId = uniqueId('host-key-confirmed');
   protected readonly authMethods: readonly AuthMethodOption[] = [
     { value: 'key', labelKey: 'servers.authMethod.key' },
     { value: 'password', labelKey: 'servers.authMethod.password' },
   ];
   protected readonly separators = [ENTER, COMMA];
 
-  readonly steps: readonly ServerFormStep[] = this.editing
-    ? ['connection', 'project']
-    : ['connection', 'hostKey', 'project'];
+  readonly steps: readonly ServerFormStep[] = ['connection', 'project'];
   readonly stepLabels = STEP_LABELS;
 
   readonly step = signal(0);
   protected readonly shownStep = signal(0);
   readonly onLastStep = computed(() => this.step() === this.steps.length - 1);
 
-  readonly draft = signal<ServerDraft>(this.editing ? draftOf(this.editing) : NEW_SERVER);
+  readonly draft = signal<ServerDraft>(draftOf(this.editing));
 
-  readonly hostKey = signal<HostKey | null>(null);
-  readonly hostKeyConfirmed = signal(false);
 
   readonly saving = this.store.saving;
   readonly saveError = this.store.saveError;
-  readonly fetchingHostKey = this.store.fetchingHostKey;
-  readonly hostKeyError = this.store.hostKeyError;
 
   private readonly attempted = signal<ReadonlySet<ServerFormStep>>(new Set());
 
   private readonly edited = signal<ReadonlySet<ServerDraftField>>(new Set());
 
   private readonly problems = computed(() =>
-    problemsIn(this.draft(), this.editing, this.hostKey(), this.hostKeyConfirmed()),
+    problemsIn(this.draft(), this.editing),
   );
 
   private readonly shown = computed(() => {
@@ -165,7 +149,7 @@ export class ServerForm {
   private readonly passwordEdited = signal(false);
 
   readonly needsPassword = computed(
-    () => this.editing !== null && changesMoreThanName(settingsOf(draftOf(this.editing)), settingsOf(this.draft())),
+    () => changesMoreThanName(settingsOf(draftOf(this.editing)), settingsOf(this.draft())),
   );
 
   private readonly passwordAsked = computed(() => (this.saveError()?.fields?.['account_password'] ?? []).length > 0);
@@ -184,9 +168,9 @@ export class ServerForm {
     return failure && failure.code !== 'invalid_password' ? failure : null;
   });
 
-  readonly keySaved = computed(() => this.editing?.has_private_key ?? false);
-  readonly keyPassphraseSaved = computed(() => this.editing?.has_key_passphrase ?? false);
-  readonly passwordSaved = computed(() => this.editing?.has_password ?? false);
+  readonly keySaved = computed(() => this.editing.has_private_key);
+  readonly keyPassphraseSaved = computed(() => this.editing.has_key_passphrase);
+  readonly passwordSaved = computed(() => this.editing.has_password);
 
   constructor() {
     this.store.resetForm();
@@ -213,10 +197,6 @@ export class ServerForm {
   update<K extends keyof ServerDraft>(field: K, value: ServerDraft[K]): void {
     this.draft.update((draft) => ({ ...draft, [field]: value }));
     this.edited.update((edited) => new Set(edited).add(field));
-    if (field === 'host' || field === 'port') {
-      this.hostKey.set(null);
-      this.hostKeyConfirmed.set(false);
-    }
   }
 
   setAccountPassword(password: string): void {
@@ -245,13 +225,6 @@ export class ServerForm {
     );
   }
 
-  async fetchHostKey(): Promise<void> {
-    const { host, port } = this.draft();
-    this.hostKeyConfirmed.set(false);
-    this.hostKey.set(null);
-    this.edited.update((edited) => new Set(edited).add('host_key'));
-    this.hostKey.set(await this.store.fetchHostKey({ host: host.trim(), port: port ?? 22 }));
-  }
 
   back(): void {
     this.step.update((step) => Math.max(0, step - 1));
@@ -288,13 +261,8 @@ export class ServerForm {
     this.edited.set(new Set());
     this.passwordEdited.set(false);
     const draft = this.draft();
-    const hostKey = this.hostKey();
     const password = this.passwordShown() && this.accountPassword() ? { account_password: this.accountPassword() } : {};
-    const saved = this.editing
-      ? await this.store.update(this.editing.id, { ...settingsOf(draft), ...password })
-      : hostKey
-        ? await this.store.create(creationOf(draft, hostKey))
-        : null;
+    const saved = await this.store.update(this.editing.id, { ...settingsOf(draft), ...password });
 
     if (saved) {
       this.ref.close(saved);
@@ -316,9 +284,7 @@ const ABSOLUTE_PATH = /^\//;
 
 function problemsIn(
   draft: ServerDraft,
-  editing: Server | null,
-  hostKey: HostKey | null,
-  hostKeyConfirmed: boolean,
+  editing: Server,
 ): ReadonlyMap<ServerDraftField, string> {
   const problems = new Map<ServerDraftField, string>();
   for (const field of ['name', 'host', 'username', 'remote_backup_dir'] as const) {
@@ -330,18 +296,11 @@ function problemsIn(
   if (port === null || !Number.isInteger(port) || port < 1 || port > 65535) {
     problems.set('port', 'port_range');
   }
-  if (draft.auth_method === 'key' && draft.private_key.trim() === '' && !editing?.has_private_key) {
+  if (draft.auth_method === 'key' && draft.private_key.trim() === '' && !editing.has_private_key) {
     problems.set('private_key', 'required');
   }
-  if (draft.auth_method === 'password' && draft.password === '' && !editing?.has_password) {
+  if (draft.auth_method === 'password' && draft.password === '' && !editing.has_password) {
     problems.set('password', 'required');
-  }
-  if (!editing) {
-    if (!hostKey) {
-      problems.set('host_key', 'host_key_missing');
-    } else if (!hostKeyConfirmed) {
-      problems.set('host_key', 'host_key_unconfirmed');
-    }
   }
   for (const field of ['project_dir', 'remote_backup_dir', 'env_path'] as const) {
     const path = draft[field].trim();
@@ -357,7 +316,7 @@ function problemsIn(
 
 function draftOf(server: Server): ServerDraft {
   return {
-    ...NEW_SERVER,
+    ...BLANK,
     name: server.name,
     host: server.host,
     port: server.port,
@@ -402,12 +361,4 @@ function changesMoreThanName(before: ServerSettings, after: ServerSettings): boo
   const fields = new Set([...Object.keys(before), ...Object.keys(after)] as (keyof ServerSettings)[]);
   fields.delete('name');
   return [...fields].some((field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]));
-}
-
-function creationOf(draft: ServerDraft, hostKey: HostKey): ServerCreate {
-  return {
-    ...settingsOf(draft),
-    host_key: hostKey.line,
-    ...(draft.backup_passphrase ? { backup_passphrase: draft.backup_passphrase } : {}),
-  };
 }

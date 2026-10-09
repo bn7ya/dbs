@@ -9,7 +9,6 @@ import type {
   HostKey,
   HostKeyTarget,
   Server,
-  ServerCreate,
   ServerListQuery,
   ServerSummary,
   ServerUpdate,
@@ -120,18 +119,6 @@ export class ServersStore {
     this.hostKeyError.set(null);
   }
 
-  async create(server: ServerCreate): Promise<Server | null> {
-    this.saving.set(true);
-    this.saveError.set(null);
-    try {
-      return await firstValueFrom(this.api.create(server));
-    } catch (error) {
-      this.saveError.set(error as ApiError);
-      return null;
-    } finally {
-      this.saving.set(false);
-    }
-  }
 
   async update(id: string, changes: ServerUpdate): Promise<Server | null> {
     this.saving.set(true);

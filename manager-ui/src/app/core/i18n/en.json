@@ -107,5 +107,9 @@
     "previousPage": "Previous page",
     "rowsPerPage": "Rows per page",
     "range": "{start}–{end} of {total}"
+  },
+  "copy": {
+    "done": "Copied.",
+    "unavailable": "Copying is not available here. Select the text and copy it."
   }
 }

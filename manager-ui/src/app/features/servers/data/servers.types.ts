@@ -61,7 +61,47 @@ export interface ServerSettings {
 
 export interface ServerCreate extends ServerSettings {
   readonly host_key: string;
-  readonly backup_passphrase?: string;
+  readonly generate_key?: boolean;
+}
+
+export interface CreatedServer extends Server {
+  readonly public_key?: string;
+  readonly authorized_keys_hint?: string;
+}
+
+export interface PublicKey {
+  readonly public_key: string;
+}
+
+export type ProjectSettings = Pick<
+  ServerSettings,
+  'project_dir' | 'python_path' | 'manage_path' | 'settings_module' | 'remote_backup_dir' | 'file_roots' | 'env_path'
+>;
+
+export interface Discovery extends ProjectSettings {
+  readonly dbs_version: string | null;
+  readonly candidates: {
+    readonly project_dirs: readonly string[];
+    readonly python_paths: readonly string[];
+  };
+}
+
+export type HealthStatus = 'ok' | 'warn' | 'error';
+
+export interface HealthReport {
+  readonly status: HealthStatus;
+  readonly checks: readonly { readonly name: string; readonly status: HealthStatus; readonly message: string }[];
+}
+
+export interface CheckedServer extends Server {
+  readonly local_version: string;
+  readonly remote_version: string | null;
+  readonly compatible: boolean;
+  readonly last_health: HealthReport | null;
+}
+
+export interface PassphraseCapture {
+  readonly captured: boolean;
 }
 
 export interface ServerUpdate extends Partial<ServerSettings> {

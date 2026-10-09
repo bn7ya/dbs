@@ -1,17 +1,15 @@
-import type { AuthMethod, Server } from '../../data/servers.types';
+export type SignInChoice = 'generate' | 'key' | 'password';
 
-export interface ServerFormData {
-  readonly server: Server;
-}
+export type WizardStep = 'snippet' | 'connection' | 'signIn' | 'project' | 'check' | 'passphrase' | 'backup';
 
-export type ServerFormStep = 'connection' | 'project';
+export type FingerprintMatch = 'match' | 'mismatch';
 
-export interface ServerDraft {
+export interface WizardDraft {
   readonly name: string;
   readonly host: string;
   readonly port: number | null;
   readonly username: string;
-  readonly auth_method: AuthMethod;
+  readonly sign_in: SignInChoice;
   readonly private_key: string;
   readonly key_passphrase: string;
   readonly password: string;
@@ -24,9 +22,4 @@ export interface ServerDraft {
   readonly env_path: string;
 }
 
-export type ServerDraftField = keyof ServerDraft;
-
-export interface AuthMethodOption {
-  readonly value: AuthMethod;
-  readonly labelKey: string;
-}
+export type WizardField = keyof WizardDraft | 'snippet' | 'host_key';

@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
-import { CREATE, SERVER, SUMMARY, pageOf } from '../testing/servers.fixtures';
+import { SERVER, SUMMARY, pageOf } from '../testing/servers.fixtures';
 import { ServersStore } from './servers.store';
 
 const DETAIL = `/api/servers/${SERVER.id}/`;
@@ -120,32 +120,6 @@ describe('ServersStore', () => {
       TestBed.tick();
 
       expect(store.servers()).toEqual([]);
-    });
-  });
-
-  describe('adding a server', () => {
-    it('posts the server and resolves with it as created', async () => {
-      const creating = store.create(CREATE);
-      expect(store.saving()).toBe(true);
-
-      const request = http.expectOne('/api/servers/');
-      expect(request.request.body).toEqual(CREATE);
-      request.flush(SERVER, { status: 201, statusText: 'Created' });
-
-      await expect(creating).resolves.toEqual(SERVER);
-      expect(store.saving()).toBe(false);
-      expect(store.saveError()).toBeNull();
-    });
-
-    it('keeps the field codes the backend sent', async () => {
-      const creating = store.create(CREATE);
-      http.expectOne('/api/servers/').flush(
-        { error: { code: 'invalid', message: 'Server prose', fields: { name: ['name_taken'] } } },
-        { status: 400, statusText: 'Bad Request' },
-      );
-
-      await expect(creating).resolves.toBeNull();
-      expect(store.saveError()?.fields).toEqual({ name: ['name_taken'] });
     });
   });
 

@@ -4,6 +4,7 @@ import { provideTranslations } from '@core/i18n/provide-translations';
 import { serversGuard } from './guards/servers.guard';
 import ar from './i18n/ar.json';
 import en from './i18n/en.json';
+import { ServerWizardStore } from './state/server-wizard.store';
 import { ServersStore } from './state/servers.store';
 
 export const routes: Routes = [
@@ -15,6 +16,11 @@ export const routes: Routes = [
       {
         path: '',
         loadComponent: () => import('./pages/servers/servers').then((m) => m.ServersPage),
+      },
+      {
+        path: 'new',
+        providers: [ServerWizardStore],
+        loadComponent: () => import('./pages/server-wizard/server-wizard').then((m) => m.ServerWizardPage),
       },
       {
         path: ':serverId',

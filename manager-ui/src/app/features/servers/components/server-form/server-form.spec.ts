@@ -18,8 +18,6 @@ import { SERVER } from '../../testing/servers.fixtures';
 import { ServerForm } from './server-form';
 import type { ServerFormData } from './server-form.types';
 
-const HOST_KEY = { key_type: 'ssh-ed25519', line: 'web-1 ssh-ed25519 AAAA', fingerprint: 'SHA256:abc' };
-
 describe('ServerForm', () => {
   let http: HttpTestingController;
   let close: ReturnType<typeof vi.fn>;
@@ -40,109 +38,9 @@ describe('ServerForm', () => {
     return TestBed.createComponent(ServerForm).componentInstance;
   };
 
-  const fillConnection = (form: ServerForm): void => {
-    form.update('name', 'Production web');
-    form.update('host', 'web-1.example.com');
-    form.update('username', 'deploy');
-    form.update('private_key', '-----BEGIN OPENSSH PRIVATE KEY-----');
-  };
-
   afterEach(() => {
     http.verify();
     TestBed.resetTestingModule();
-  });
-
-  it('holds the reader on a step until its fields are filled, and says why', async () => {
-    const form = open({ server: null });
-    expect(form.error('name')).toBeNull();
-
-    await form.advance();
-
-    expect(form.step()).toBe(0);
-    expect(form.error('name')).toBe('required');
-    expect(form.error('private_key')).toBe('required');
-  });
-
-  it('marks a step done only once the reader has moved past it', async () => {
-    const form = open({ server: null });
-    expect([form.stepDone('connection'), form.stepDone('hostKey'), form.stepDone('project')]).toEqual([
-      false,
-      false,
-      false,
-    ]);
-    expect(form.stepReady('project')).toBe(true);
-
-    fillConnection(form);
-    await form.advance();
-
-    expect([form.stepDone('connection'), form.stepDone('hostKey'), form.stepDone('project')]).toEqual([
-      true,
-      false,
-      false,
-    ]);
-  });
-
-  it('needs the host key fetched and compared before the last step', async () => {
-    const form = open({ server: null });
-    fillConnection(form);
-    await form.advance();
-    expect(form.step()).toBe(1);
-
-    await form.advance();
-    expect(form.step()).toBe(1);
-    expect(form.error('host_key')).toBe('host_key_missing');
-
-    const fetching = form.fetchHostKey();
-    const request = http.expectOne('/api/servers/fingerprint/');
-    expect(request.request.body).toEqual({ host: 'web-1.example.com', port: 22 });
-    request.flush(HOST_KEY);
-    await fetching;
-
-    await form.advance();
-    expect(form.error('host_key')).toBe('host_key_unconfirmed');
-
-    form.hostKeyConfirmed.set(true);
-    await form.advance();
-    expect(form.step()).toBe(2);
-  });
-
-  it('forgets a fetched key when the address changes', async () => {
-    const form = open({ server: null });
-    fillConnection(form);
-    const fetching = form.fetchHostKey();
-    http.expectOne('/api/servers/fingerprint/').flush(HOST_KEY);
-    await fetching;
-    form.hostKeyConfirmed.set(true);
-
-    form.update('port', 2222);
-
-    expect(form.hostKey()).toBeNull();
-    expect(form.hostKeyConfirmed()).toBe(false);
-  });
-
-  it('sends the pinned key line and only the secrets of the chosen method, then closes', async () => {
-    const form = open({ server: null });
-    fillConnection(form);
-    form.update('password', 'typed before switching to a key');
-    const fetching = form.fetchHostKey();
-    http.expectOne('/api/servers/fingerprint/').flush(HOST_KEY);
-    await fetching;
-    form.hostKeyConfirmed.set(true);
-    form.step.set(2);
-
-    const saving = form.advance();
-    const request = http.expectOne('/api/servers/');
-    expect(request.request.body).toMatchObject({
-      name: 'Production web',
-      host_key: HOST_KEY.line,
-      private_key: '-----BEGIN OPENSSH PRIVATE KEY-----',
-    });
-    expect(request.request.body).not.toHaveProperty('password');
-    expect(request.request.body).not.toHaveProperty('backup_passphrase');
-    request.flush(SERVER, { status: 201, statusText: 'Created' });
-    await saving;
-
-    expect(close).toHaveBeenCalledWith(SERVER);
   });
 
   it('puts a backend field error under its field, opens its step, and drops it once edited', async () => {
@@ -243,7 +141,7 @@ describe('ServerForm', () => {
   });
 
   it('adds an allowed folder from what was typed, and removes the one asked for', () => {
-    const form = open({ server: null });
+    const form = open({ server: SERVER });
     const clear = vi.fn();
     const typed = (value: string): MatChipInputEvent =>
       ({ value, chipInput: { clear } }) as unknown as MatChipInputEvent;
@@ -252,32 +150,27 @@ describe('ServerForm', () => {
     form.addFileRoot(typed('   '));
     form.addFileRoot(typed('/srv/app/uploads'));
 
-    expect(form.draft().file_roots).toEqual(['/srv/app/media', '/srv/app/uploads']);
+    expect(form.draft().file_roots).toEqual([...SERVER.file_roots, '/srv/app/media', '/srv/app/uploads']);
     expect(clear).toHaveBeenCalledTimes(3);
 
-    form.removeFileRoot(0);
-    expect(form.draft().file_roots).toEqual(['/srv/app/uploads']);
+    form.removeFileRoot(SERVER.file_roots.length);
+    expect(form.draft().file_roots).toEqual([...SERVER.file_roots, '/srv/app/uploads']);
   });
 
-  it('walks a new server through three steps in order, opening a later one only once the one before is done', async () => {
+  it('edits a server in two steps, either of which opens at once', async () => {
     localStorage.setItem('locale', 'en');
-    open({ server: null });
+    open({ server: SERVER });
     TestBed.inject(LocaleStore).register({ en, ar });
     const fixture = TestBed.createComponent(ServerForm);
     fixture.detectChanges();
     const stepper = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatStepperHarness);
     const steps = await stepper.getSteps();
 
-    expect(await Promise.all(steps.map((step) => step.getLabel()))).toEqual([
-      'Connection',
-      'Host key',
-      'django-dbs and files',
-    ]);
-    expect(await steps[0].isSelected()).toBe(true);
+    expect(await Promise.all(steps.map((step) => step.getLabel()))).toEqual(['Connection', 'django-dbs and files']);
 
-    await steps[2].select();
-    expect(await steps[2].isSelected()).toBe(false);
-    expect(fixture.componentInstance.step()).toBe(0);
+    await steps[1].select();
+    expect(await steps[1].isSelected()).toBe(true);
+    expect(fixture.componentInstance.step()).toBe(1);
     localStorage.clear();
   });
 });
