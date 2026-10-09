@@ -163,7 +163,9 @@ API clients and is never printed. A 401/403 whose code is `not_authenticated` or
 **XHR, not fetch.** `provideHttpClient(withXhr(), …)`: only XHR reports upload progress.
 
 **Jobs.** Work that outlives a request answers `202 {activity}`; `JobWatcher.watch(id)` reads
-`/api/activity/{id}/` at once and then on a timer until the job is `succeeded` or `failed`.
+`/api/activity/{id}/` at once and then on a timer until the job is `succeeded` or `failed`. An
+activity id is a number (the audit event's primary key); server, backup, plan and `.env` version ids
+are UUID strings.
 
 **Strings.** Feature bundles register on their route with `provideTranslations(en, ar)`. Shared and
 core strings live in `core/i18n/{en,ar}.json`. Two bundles never define the same `errors.<code>`. A
@@ -192,8 +194,9 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   confirmation; on success it loads `/api/auth/me/` and opens `/`.
 - **`SignInPage`** — username and password, follows `?next=`.
 - **`AppLayout`** — the signed-in frame: a `mat-toolbar` header with the product name, the language
-  switch and an account `mat-menu` holding sign-out; a `mat-nav-list` of `SECTIONS`; the one
-  `<main id="main">`. It provides `SHELL_FRAME`, so `StatusPage` knows it is inside.
+  switch and an account `mat-menu` holding About and sign-out; a `mat-nav-list` of `SECTIONS`
+  (dashboard, servers, activity); the one `<main id="main">`. It provides `SHELL_FRAME`, so
+  `StatusPage` knows it is inside.
 - **`LocaleStore`, `TranslatePipe` (`t`), `ErrorTextPipe` (`errorText`), `provideTranslations()`,
   `LocaleSwitcher`** (a `mat-button-toggle-group`), **`AppDirectionality`, `AppPaginatorIntl`**.
 - **`csrfInterceptor`, `errorInterceptor`, `apiErrorOf()`** — CSRF on unsafe requests; failures as
@@ -217,6 +220,10 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   alone.
 - **`Skeleton`** — a CSS-only loading line. **`Breadcrumb`** (`<app-breadcrumb [items] [label] code>`)
   — a labelled trail of router links, the last one the current page.
+- **`CopyButton`** (`<app-copy-button [text] [label]>`) — copies `text` to the clipboard and says so
+  in a toast, or says to copy it by hand where the clipboard is unavailable.
+- **`TimeAgoPipe`** (`timeAgo`) — "3 hours ago" through `Intl.RelativeTimeFormat`, Latin digits in
+  both languages.
 - **`PasswordInput`**, **`PasswordPrompt`** (asks for the account password and runs the guarded
   operation, retrying a wrong password in place), **`EmptyState`**, **`StatusPage`**,
   **`FieldError`**, **`AppDatePipe`**, **`FileSizePipe`**, **`uniqueId()`**.
@@ -226,25 +233,41 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
 Every feature is mounted under `AppLayout` and its guard mirrors the backend's `IsAuthenticated`;
 the backend permission is the boundary.
 
-- **servers** (`/servers`, `/servers/:serverId`) — list, search and page servers; add one through a
-  linear `mat-stepper` (connection, host key fetched and its fingerprint confirmed, django-dbs and
-  allowed folders as chips); the server page has a `mat-tab-nav-bar` (overview, backups, files,
-  environment, activity) over the child route. The overview runs the connection check, shows the
-  settings, re-pins a changed host key, reveals the backup passphrase behind the account password,
-  and deletes. Secrets are write-only; an edit that changes more than the name asks for the
-  account password.
+- **dashboard** (`/`) — every server as a card (check, health, last backup, next plan run, failures
+  in the last 7 days, storage), the totals, recent failures, and a reminder to export when the last
+  export is missing or older than 7 days. With no server it offers "Add a server".
+- **servers** (`/servers`, `/servers/:serverId`) — list, search and page servers. The server page has
+  a `mat-tab-nav-bar` (overview, backups, files, environment, activity) over the child route. The
+  overview runs the connection check, shows the settings, edits them in a two-step dialog
+  (connection, django-dbs and folders), re-pins a changed host key, reveals the backup passphrase
+  behind the account password, links to the move, and deletes. Secrets are write-only; an edit that
+  changes more than the name asks for the account password.
+- **server wizard** (`/servers/new`, in the servers feature) — a linear vertical `mat-stepper`:
+  the optional connection snippet (`manage.py dbs connection --json`, parsed in
+  `connection-snippet.ts`), address and host key (fingerprint compared with the snippet's), sign-in
+  (create a key pair, paste a key, or a password; the server is created here, and a generated
+  public key is shown to copy into `authorized_keys`), project (discovery fills the fields and
+  offers candidates), check (the two django-dbs versions must be compatible), the optional backup
+  passphrase capture, and a test backup. Steps up to sign-in lock once the server exists.
+- **redeploy** (`/servers/:serverId/move`) — move a server onto another one: target, django-dbs
+  backup, `.env` version, folder archives, migrate and flush. A rehearsal needs no password; a real
+  move needs the account password and the target's name typed out. The job's steps render as a list
+  with a status each.
 - **backups** (`/servers/:serverId/backups`) — plans (django-dbs, folders, or existing files
   collected from one folder) with a schedule and how many to keep here and on the server; files,
   newest first: take, upload with progress, download, verify, restore (rehearsal by default, the
-  server name typed for a real one), delete with undo.
+  server name typed for a real one; optionally onto another server, whose name is then the one
+  typed), delete with undo.
 - **files** (`/servers/:serverId/files?path=`) — the server's allowed folders: a breadcrumb, open,
   download, upload, new folder, delete an empty folder or a file.
 - **envfiles** (`/servers/:serverId/environment`) — versions of the server's `.env`: pull, show
   key names masked, reveal values behind the password, compare with the version before, push one
   back.
 - **activity** (`/activity`, `/servers/:serverId/activity`) — the audit trail, newest first, with
-  status and action filters; scoped to one server on its tab. An unknown action code renders as
-  itself.
+  status and action filters; scoped to one server on its tab, which leaves out the account,
+  sign-in and `manager.*` actions. An unknown action code renders as itself.
+- **about** (`/about`, from the account menu) — the version, data folder, database, backups folder
+  and last export, then the export, export with backups and import commands with copy buttons.
 
 ## API the interface calls
 
@@ -258,11 +281,16 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/auth/login/` | `{username, password}` → `Identity` |
 | POST | `/api/auth/logout/` | → 204 |
 | GET | `/api/auth/me/` | → `Identity` |
+| GET | `/api/dashboard/` | → `{servers, storage_bytes, last_export_at, recent_failures}` |
+| GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at}` |
 | GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` |
-| POST | `/api/servers/` | `ServerCreate` → `Server` |
+| POST | `/api/servers/` | `ServerCreate` (`host_key`, `generate_key?`, project fields) → `Server` with `public_key?`, `authorized_keys_hint?` |
 | GET/PATCH/DELETE | `/api/servers/{id}/` | `ServerUpdate` → `Server` |
 | POST | `/api/servers/fingerprint/` | `{host, port}` → `{key_type, line, fingerprint}` |
-| POST | `/api/servers/{id}/check/` | → `Server` |
+| GET | `/api/servers/{id}/public-key/` | → `{public_key}`; `no_private_key` on a password server |
+| POST | `/api/servers/{id}/discover/` | `{}` → `Discovery` (fields plus `candidates`) |
+| POST | `/api/servers/{id}/passphrase/capture/` | `{}` → `{captured}` |
+| POST | `/api/servers/{id}/check/` | → `Server` with `local_version`, `remote_version`, `compatible`, `last_health` |
 | POST | `/api/servers/{id}/host-key/` | `{host_key, password}` → `Server` |
 | POST | `/api/servers/{id}/passphrase/` | `{password}` → `{passphrase}` |
 | GET | `/api/backups/?server=&page=&page_size=` | → page of `BackupFile` |
@@ -270,7 +298,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/backups/upload/` | multipart `server`, `file` → 201 `BackupFile` |
 | GET | `/api/backups/{id}/download/` | a link |
 | POST | `/api/backups/{id}/verify/` | → 202 `{activity}` |
-| POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, server_name?}` → 202 `{activity}` |
+| POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, server_name?, target_server?}` → 202 `{activity}` |
 | DELETE | `/api/backups/{id}/` | → 204 |
 | POST | `/api/backups/{id}/undo-delete/` | → `BackupFile` |
 | GET/POST | `/api/backups/plans/` | `PlanCreate` → `BackupPlan` |
@@ -287,7 +315,8 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/envfiles/{id}/reveal/` | `{password}` → `{content}` |
 | POST | `/api/envfiles/{id}/push/` | `{password}` → `{version}` |
 | GET | `/api/activity/?server=&action=&status=&page=&page_size=` | → page of `ActivityEntry` |
-| GET | `/api/activity/{id}/` | → `Job` |
+| GET | `/api/activity/{id}/` | → `Job`; `id` is a number |
+| POST | `/api/redeploy/` | `{source_server, target_server, backup, env_version, archives, migrate, flush, rehearsal, password, confirm_name}` → 202 `{activity}` |
 
 Errors arrive as `{"error": {"code", "message", "fields"?}}`. Setup answers `setup_done` (409),
 `setup_token_invalid` (403), and `invalid` with `fields.password` codes from Django's password
@@ -301,5 +330,6 @@ validators (`password_too_short`, `password_too_common`, `password_entirely_nume
 project runs `00-setup.spec.ts` first: it reads the one-time key from `<data dir>/setup.token` (or
 `E2E_SETUP_TOKEN`) and creates the `ADMIN` account through the setup page. The `ltr` and `rtl`
 projects depend on it. The journeys need an SSH fixture serving a Django project with django-dbs;
-`e2e/support/config.ts` lists every knob as an environment variable. `tsconfig.e2e.json`
-type-checks them during `npm run lint`.
+`e2e/support/config.ts` lists every knob as an environment variable. `09-redeploy` also needs a
+second project on the fixture (`E2E_SSH_TARGET_PROJECT_DIR`, `E2E_SSH_TARGET_PYTHON`) and skips
+without one. `tsconfig.e2e.json` type-checks them during `npm run lint`.

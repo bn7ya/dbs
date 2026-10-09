@@ -16,13 +16,17 @@ export interface BackupRecord {
   validation: string;
 }
 
+export interface JobStarted {
+  activity: number;
+}
+
 export interface PlanRecord {
   id: string;
   name: string;
 }
 
 export interface ActivityRecord {
-  id: string;
+  id: number;
   action: string;
   status: string;
   target: string;

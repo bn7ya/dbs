@@ -22,6 +22,12 @@ export const SSH = {
 
 export const ALLOWED_FOLDERS = [SSH.mediaDir, SSH.existingDir];
 
+export const TARGET = {
+  projectDir: env('E2E_SSH_TARGET_PROJECT_DIR', ''),
+  python: env('E2E_SSH_TARGET_PYTHON', ''),
+  remoteBackupDir: env('E2E_SSH_TARGET_REMOTE_BACKUP_DIR', '/var/backups/e2e-dbs-target'),
+};
+
 export const SSH_FS = env('E2E_SSH_FS', '/');
 
 export const DATA_DIR = env('E2E_DATA_DIR', '');

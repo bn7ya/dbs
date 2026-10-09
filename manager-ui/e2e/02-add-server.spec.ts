@@ -1,8 +1,29 @@
+import type { Locator, Page } from '@playwright/test';
 import { Api } from './support/api';
 import { ADMIN, ALLOWED_FOLDERS, SSH } from './support/config';
 import { expect, test } from './support/fixtures';
+import type { Journey } from './support/fixtures.types';
 
 test.describe.configure({ mode: 'serial' });
+
+const stepIs = async (page: Page, name: string): Promise<void> => {
+  await expect(page.getByRole('tab', { name: new RegExp(name) })).toHaveAttribute('aria-selected', 'true');
+};
+
+const fillProject = async (form: Locator, { t }: Journey): Promise<void> => {
+  await form.getByRole('combobox', { name: t('projectFolder') }).fill(SSH.projectDir);
+  await form.getByRole('combobox', { name: t('pythonCommand') }).fill(SSH.python);
+  await form.getByRole('textbox', { name: t('remoteBackupFolder') }).fill(SSH.remoteBackupDir);
+  for (const remove of await form.getByRole('button', { name: new RegExp(`^${t('remove')} `) }).all()) {
+    await remove.click();
+  }
+  const folders = form.getByRole('textbox', { name: t('allowedFolders') });
+  for (const folder of ALLOWED_FOLDERS) {
+    await folders.fill(folder);
+    await folders.press('Enter');
+  }
+  await form.getByRole('textbox', { name: t('envFile') }).fill(SSH.envPath);
+};
 
 test.describe('adding a server', () => {
   let name = '';
@@ -19,88 +40,103 @@ test.describe('adding a server', () => {
     await api.dispose();
   });
 
-  test('the connection step reports what is missing or out of range', async ({ page, journey }) => {
+  test('the first steps report what is missing or out of range', async ({ page, journey }) => {
     const { t } = journey;
     await journey.signIn(page);
-    const opener = page.getByRole('main').getByRole('button', { name: t('addServer'), exact: true }).first();
-    await opener.click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('heading', { level: 2 })).toHaveText(t('addServer'));
+    await page.goto('/servers');
+    await page.getByRole('main').getByRole('link', { name: t('addServer'), exact: true }).first().click();
 
-    await dialog.getByRole('button', { name: t('next'), exact: true }).click();
+    await expect(page).toHaveURL(/\/servers\/new$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('wizardTitle'));
+    const form = page.getByRole('main');
+    const next = form.getByRole('button', { name: t('next'), exact: true });
+    await stepIs(page, t('stepSnippet'));
 
-    await expect(dialog.getByText(t('fillIn'))).toHaveCount(4);
-    await expect(dialog.getByRole('textbox', { name: t('name'), exact: true })).toHaveAccessibleDescription(
+    await form.getByRole('textbox', { name: t('stepSnippet') }).fill('not a snippet');
+    await next.click();
+    await expect(form.getByText(t('snippetInvalid'))).toBeVisible();
+    await stepIs(page, t('stepSnippet'));
+
+    await form.getByRole('textbox', { name: t('stepSnippet') }).fill('');
+    await next.click();
+    await stepIs(page, t('stepAddress'));
+
+    await next.click();
+    await expect(form.getByText(t('fillIn'))).toHaveCount(3);
+    await expect(form.getByRole('textbox', { name: t('name'), exact: true })).toHaveAccessibleDescription(
       new RegExp(t('fillIn')),
     );
-    await expect(dialog.getByRole('tab', { name: t('stepConnection') })).toHaveAttribute('aria-selected', 'true');
+    await expect(form.getByText(t('getHostKeyFirst'))).toBeVisible();
 
-    await dialog.getByRole('spinbutton', { name: t('port') }).fill('65536');
-    await dialog.getByRole('button', { name: t('next'), exact: true }).click();
-    await expect(dialog.getByRole('spinbutton', { name: t('port') })).toHaveAttribute('aria-invalid', 'true');
-    await expect(dialog.getByText(t('portRange'))).toBeVisible();
-    await expect(dialog.getByRole('tab', { name: t('stepConnection') })).toHaveAttribute('aria-selected', 'true');
+    await form.getByRole('spinbutton', { name: t('port') }).fill('65536');
+    await next.click();
+    await expect(form.getByRole('spinbutton', { name: t('port') })).toHaveAttribute('aria-invalid', 'true');
+    await expect(form.getByText(t('portRange'))).toBeVisible();
+    await stepIs(page, t('stepAddress'));
     await journey.shot(page, 'add-server-validation');
-
-    // A dialog traps focus and gives it back to what opened it.
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
-    await expect(opener).toBeFocused();
   });
 
-  test('the wizard pins the host key only once its fingerprint is compared', async ({ page, journey }) => {
+  test('the wizard adds a server, checks it and takes a test backup', async ({ page, journey }) => {
+    test.setTimeout(300_000);
     const { t } = journey;
     await journey.signIn(page);
-    await page.getByRole('main').getByRole('button', { name: t('addServer'), exact: true }).first().click();
-    const dialog = page.getByRole('dialog');
+    await page.goto('/servers/new');
+    const form = page.getByRole('main');
+    const next = form.getByRole('button', { name: t('next'), exact: true });
 
-    await dialog.getByRole('textbox', { name: t('name'), exact: true }).fill(name);
-    await dialog.getByRole('textbox', { name: t('host'), exact: true }).fill(SSH.host);
-    await dialog.getByRole('spinbutton', { name: t('port') }).fill(String(SSH.port));
-    await dialog.getByRole('textbox', { name: t('username') }).fill(SSH.username);
-    const passwordMethod = dialog.getByRole('radio', { name: t('password'), exact: true });
-    await passwordMethod.click();
-    await expect(passwordMethod).toBeChecked();
-    await dialog.getByLabel(t('serverPassword'), { exact: true }).fill(SSH.password);
-    await dialog.getByRole('button', { name: t('next'), exact: true }).click();
-
-    await expect(dialog.getByRole('tab', { name: t('stepHostKey') })).toHaveAttribute('aria-selected', 'true');
-    await dialog.getByRole('button', { name: t('next'), exact: true }).click();
-    await expect(dialog.getByRole('alert')).toHaveText(t('getHostKeyFirst'));
-
-    await dialog.getByRole('button', { name: t('getHostKey') }).click();
-
-    const shown = dialog.getByRole('definition').filter({ hasText: /^SHA256:/ });
-    await expect(shown).toHaveText(SSH.fingerprint);
-    await expect(dialog.getByRole('definition').filter({ hasText: /^ssh-/ })).toBeVisible();
+    await next.click();
+    await stepIs(page, t('stepAddress'));
+    await form.getByRole('textbox', { name: t('name'), exact: true }).fill(name);
+    await form.getByRole('textbox', { name: t('host'), exact: true }).fill(SSH.host);
+    await form.getByRole('spinbutton', { name: t('port') }).fill(String(SSH.port));
+    await form.getByRole('textbox', { name: t('username') }).fill(SSH.username);
+    await form.getByRole('button', { name: t('getHostKey') }).click();
+    await expect(form.getByRole('definition').filter({ hasText: /^SHA256:/ })).toHaveText(SSH.fingerprint);
     await journey.shot(page, 'add-server-host-key');
 
-    await dialog.getByRole('button', { name: t('next'), exact: true }).click();
-    await expect(dialog.getByText(t('compareFirst'))).toBeVisible();
-    const match = dialog.getByRole('checkbox', { name: t('fingerprintsMatch') });
+    await next.click();
+    await expect(form.getByText(t('compareFirst'))).toBeVisible();
+    const match = form.getByRole('checkbox', { name: t('fingerprintsMatch') });
     await match.click();
     await expect(match).toBeChecked();
-    await dialog.getByRole('button', { name: t('next'), exact: true }).click();
+    await next.click();
 
-    await expect(dialog.getByRole('tab', { name: t('stepDjango') })).toHaveAttribute('aria-selected', 'true');
-    await dialog.getByRole('textbox', { name: t('projectFolder') }).fill(SSH.projectDir);
-    await dialog.getByRole('textbox', { name: t('pythonCommand') }).fill(SSH.python);
-    await dialog.getByRole('textbox', { name: t('remoteBackupFolder') }).fill(SSH.remoteBackupDir);
-    const folders = dialog.getByRole('textbox', { name: t('allowedFolders') });
-    for (const folder of ALLOWED_FOLDERS) {
-      await folders.fill(folder);
-      await folders.press('Enter');
-    }
-    await dialog.getByRole('textbox', { name: t('envFile') }).fill(SSH.envPath);
-    await journey.shot(page, 'add-server-settings');
-    await dialog.getByRole('button', { name: t('addServerSubmit'), exact: true }).click();
+    await stepIs(page, t('stepSignIn'));
+    const passwordMethod = form.getByRole('radio', { name: t('password'), exact: true });
+    await passwordMethod.click();
+    await expect(passwordMethod).toBeChecked();
+    await form.getByLabel(t('serverPassword'), { exact: true }).fill(SSH.password);
+    await form.getByRole('button', { name: t('addServerSubmit'), exact: true }).click();
+
+    await stepIs(page, t('stepProject'));
+    await expect(form.getByText(t('serverAdded'))).toBeVisible();
+    await form.getByRole('button', { name: t('findProject') }).click();
+    await expect(form.getByRole('button', { name: t('findProject') })).toBeEnabled({ timeout: 60_000 });
+    await fillProject(form, journey);
+    await journey.shot(page, 'add-server-project');
+    await next.click();
+
+    await stepIs(page, t('stepCheck'));
+    await form.getByRole('button', { name: t('checkNow') }).click();
+    await expect(form.getByText(t('versionsWork'))).toBeVisible({ timeout: 120_000 });
+    await journey.shot(page, 'add-server-check');
+    await next.click();
+
+    await stepIs(page, t('stepPassphrase'));
+    await form.getByRole('button', { name: t('readPassphrase') }).click();
+    await expect(form.getByText(t('passphraseSaved'))).toBeVisible({ timeout: 60_000 });
+    await next.click();
+
+    await stepIs(page, t('stepTestBackup'));
+    await form.getByRole('button', { name: t('takeTestBackup') }).click();
+    await expect(form.getByText(t('testBackupWorked'))).toBeVisible({ timeout: 180_000 });
+    await journey.shot(page, 'add-server-test-backup');
+    await form.getByRole('link', { name: t('openServer') }).click();
 
     await expect(page).toHaveURL(/\/servers\/[0-9a-f-]{36}$/);
     serverUrl = new URL(page.url()).pathname;
-    await expect(journey.toast(page, 'serverAdded')).toBeVisible();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
     await expect(page.getByRole('main')).toContainText(`${SSH.username}@${SSH.host}:${SSH.port}`);
-    await expect(page.getByRole('main').getByText(t('notChecked')).first()).toBeVisible();
     const pinned = page.getByRole('definition').filter({ hasText: /^SHA256:/ });
     await expect(pinned).toHaveText(SSH.fingerprint);
     for (const folder of ALLOWED_FOLDERS) {

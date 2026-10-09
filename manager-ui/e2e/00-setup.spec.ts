@@ -31,10 +31,10 @@ test('the first visit creates the account from the setup link the server printed
   await page.getByLabel(t('confirmPassword'), { exact: true }).fill(ADMIN.password);
   await page.getByRole('button', { name: t('createAccount') }).click();
 
-  await expect(page).toHaveURL(/\/servers$/);
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('banner')).toContainText(ADMIN.username);
   expect(await setupNeeded(page.request)).toBe(false);
 
   await page.goto('/setup');
-  await expect(page).toHaveURL(/\/servers$/);
+  await expect(page).toHaveURL(/\/$/);
 });

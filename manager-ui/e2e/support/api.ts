@@ -1,5 +1,5 @@
-import { request, type APIRequestContext } from '@playwright/test';
-import type { ActivityRecord, BackupRecord, Page, PlanRecord, ServerRecord } from './api.types';
+import { expect, request, type APIRequestContext } from '@playwright/test';
+import type { ActivityRecord, BackupRecord, JobStarted, Page, PlanRecord, ServerRecord } from './api.types';
 import { ADMIN, ALLOWED_FOLDERS, SSH } from './config';
 
 
@@ -66,6 +66,17 @@ export class Api {
       await this.delete(`/api/backups/${file.id}/`);
     }
     await this.delete(`/api/servers/${id}/`);
+  }
+
+  async capturePassphrase(server: string): Promise<void> {
+    await this.post<unknown>(`/api/servers/${server}/passphrase/capture/`, {});
+  }
+
+  async takeBackup(server: string): Promise<ActivityRecord> {
+    const { activity } = await this.post<JobStarted>('/api/backups/take/', { server });
+    const read = () => this.get<ActivityRecord>(`/api/activity/${activity}/`);
+    await expect.poll(async () => (await read()).status, { timeout: 180_000 }).toMatch(/^(succeeded|failed)$/);
+    return read();
   }
 
   async backups(server: string): Promise<BackupRecord[]> {
