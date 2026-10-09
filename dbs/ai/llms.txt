@@ -2,7 +2,9 @@
 
 > Redundant, self-healing, encrypted single-file backup for Django projects. One command
 > writes an encrypted container holding two copies of the payload plus Reed-Solomon parity,
-> so silent corruption is detected and repaired on restore.
+> so silent corruption is detected and repaired on restore. One install gives the library,
+> a panel at /admin/dbs/ (schedule, health, audit, restore) and the `django_dbs run`
+> manager for many servers.
 
 ## Install
 
@@ -20,13 +22,19 @@ python manage.py migrate
 python manage.py dbs backup backup.dbs
 ```
 
-Upgrading from 0.2.x requires `manage.py migrate`.
+Upgrading requires `manage.py dbs upgrade`, which applies DBS migrations.
+
+The manager runs outside any project: `django_dbs run` (local app, opens the browser),
+`django_dbs export` / `import` to move it.
 
 ## Commands
 - `manage.py dbs backup OUTPUT` - write an encrypted backup
 - `manage.py dbs restore INPUT [--dry-run] [--flush]` - restore; merges unless flushed
 - `manage.py dbs validate INPUT [--passphrase]` - check structure, blocks and decryption
-- `manage.py dbs schedule --interval 6h --output-dir DIR` - repeating backups with retention
+- `manage.py dbs schedule [--once]` - follow the schedule set in the panel
+- `manage.py dbs schedule --interval 6h --output-dir DIR` - a fixed plan with retention
+- `manage.py dbs health [--json]` - backup health report
+- `manage.py dbs connection [--json]` - what the DBS manager needs to reach this project
 - `manage.py dbs key --show` - print the passphrase derived from SECRET_KEY
 - `manage.py dbs security unlock USER` - clear an anomaly lockout
 - `manage.py dbs ai` - install these instructions for AI coding assistants
@@ -45,6 +53,9 @@ a human.
 - The passphrase comes from `settings.SECRET_KEY` unless `DBS_PASSPHRASE` overrides it.
   `SECRET_KEY_FALLBACKS` is tried on restore. A backup under a lost key cannot be opened.
 - The admin panel is mounted automatically at `/admin/dbs/`, for superusers only.
+- The backup frequency is set in the panel. `DBS_SCHEDULER` = "thread" (default), "command"
+  or "off" picks where it runs. Every backup, restore and validation is audited by the
+  process itself, never naming who started it.
 - SFTP target credentials are encrypted at rest under a key derived from `SECRET_KEY`.
 - Admin sessions are scored by an IsolationForest; a high score ends the session.
   `manage.py dbs security unlock USER` always gets you back in.

@@ -1,6 +1,6 @@
 ---
 name: django-dbs
-description: Use when working in a Django project that has django-dbs installed — taking, validating, restoring or scheduling backups, configuring SFTP targets, using the /admin/dbs/ panel, the session guard, or any manage.py dbs command. Covers the passphrase model, restore semantics and the mistakes that lose data.
+description: Use when working in a Django project that has django-dbs installed — taking, validating, restoring or scheduling backups, the backup schedule, health and audit trail in the /admin/dbs/ panel, SFTP targets, the session guard, any manage.py dbs command, or the django_dbs manager. Covers the passphrase model, restore semantics and the mistakes that lose data.
 ---
 
 # django-dbs
@@ -58,7 +58,10 @@ python manage.py dbs                      # overview
 python manage.py dbs backup OUTPUT
 python manage.py dbs restore INPUT [--dry-run] [--flush]
 python manage.py dbs validate INPUT [--passphrase]
-python manage.py dbs schedule [--interval 6h] [--once] --output-dir DIR
+python manage.py dbs schedule [--once]               # follows the panel's schedule
+python manage.py dbs schedule --interval 6h --output-dir DIR --keep 14   # a fixed plan
+python manage.py dbs health [--json]
+python manage.py dbs connection [--json]
 python manage.py dbs key --show
 python manage.py dbs security status|unlock USER|retrain|purge
 python manage.py dbs ai [--agents] [--check]
@@ -132,7 +135,35 @@ provisioning actions; free-form commands need `DBS_ADMIN_CONSOLE_SHELL = True`, 
 by default because it grants any superuser arbitrary remote command execution from a
 browser. Do not enable it casually.
 
-## Python API
+## The schedule, health and audit trail
+
+The backup frequency is a database row edited at `/admin/dbs/backupschedule/`, not a
+setting. Turning it on needs `DBS_BACKUP_DIR` and a derivable passphrase. `DBS_SCHEDULER`
+picks where it runs: `"thread"` (default, a thread each web worker starts on its first
+request, with a database lease so one backup is taken per interval), `"command"` (run
+`manage.py dbs schedule` under systemd; with no plan flags it follows the panel) or `"off"`.
+Recommend `"command"` behind uWSGI without `--enable-threads`, or when several hosts each
+keep their own `DBS_BACKUP_DIR`. `DBS_SCHEDULE_INTERVAL` and `DBS_SCHEDULE_KEEP` only seed
+the first schedule row.
+
+`manage.py dbs health --json` (and the panel's Health page) grades the last backup's age,
+the last validation, the newest file on disk, the backup directory, disk space, the
+passphrase and the scheduler. Check it after changing anything about backups.
+
+Every backup, restore, validation, prune and push writes an `AuditEvent` with `status`,
+`data` (file, size, sha256), `error_code` and timings. It records the process, never who
+started it, and a failing audit write never fails a backup. Do not add a field that records
+the caller.
+
+## The DBS manager
+
+`django_dbs run` starts a separate local application that manages many servers over SSH.
+It needs each server to have django-dbs installed, a stable `SECRET_KEY`, `DBS_BACKUP_DIR`,
+and an SSH user that owns the project. `manage.py dbs connection --json` prints the details
+its add-server wizard reads. The project never contacts the manager. Never put
+`dbs.manager` in a project's `INSTALLED_APPS`.
+
+## Python API## Python API
 
 ```python
 from dbs import create_backup, restore_backup, validate_backup
@@ -147,7 +178,7 @@ Transports: `from dbs.transports import SSHTarget, push_backup, pull_backup, ope
 ## Settings
 
 See `reference/settings.md`. The ones that change behaviour most: `DBS_EXCLUDE_MODELS`,
-`DBS_FILE_ROOTS`, `DBS_RESTORE_ROOTS`, `DBS_SSH_TARGETS`, `DBS_BACKUP_DIR`,
+`DBS_FILE_ROOTS`, `DBS_RESTORE_ROOTS`, `DBS_SSH_TARGETS`, `DBS_BACKUP_DIR`, `DBS_SCHEDULER`,
 `DBS_ANOMALY_ENFORCE`, `DBS_TRUSTED_NETWORKS`, `DBS_ADMIN_CONSOLE_SHELL`, `DBS_GEOLOCATION`.
 
 ## Troubleshooting map
@@ -160,6 +191,7 @@ See `reference/settings.md`. The ones that change behaviour most: `DBS_EXCLUDE_M
 | `RestoreError` naming a path | File restores are confined to `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS`). Add the directory |
 | Restore merged instead of replacing | Pass `--flush`, or tick *Replace instead of merge* in the panel |
 | Scheduler exits immediately | It needs `--output-dir` or `DBS_BACKUP_DIR` |
+| Scheduled backups never run | `dbs health` says the scheduler has not checked in: no request has reached a worker yet, or uWSGI runs without threads. Use `DBS_SCHEDULER = "command"` and `manage.py dbs schedule` |
 
 ## Testing this project
 
