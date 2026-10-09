@@ -1,5 +1,3 @@
-// Mirrors the serializer in `backend/apps/activity/serializers/`; the two move together.
-
 export type ActivityStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 
 export const ACTIVITY_STATUSES: readonly ActivityStatus[] = ['queued', 'running', 'succeeded', 'failed'];
@@ -32,6 +30,7 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'env.pull',
   'env.reveal',
   'env.push',
+  'account.setup',
   'auth.sign_in',
   'auth.sign_in_failed',
   'auth.sign_out',

@@ -45,7 +45,9 @@ const STATUS_LOOKS: Readonly<Record<ActivityStatus, StatusLook>> = {
   failed: { severity: 'danger', icon: 'fa-solid fa-circle-xmark' },
 };
 
-const ACCOUNT_ACTION_PREFIX = 'auth.';
+const ACCOUNT_ACTION_PREFIXES: readonly string[] = ['account.', 'auth.'];
+
+const isAccountAction = (code: string): boolean => ACCOUNT_ACTION_PREFIXES.some((prefix) => code.startsWith(prefix));
 
 @Component({
   selector: 'app-activity-page',
@@ -110,7 +112,7 @@ export class ActivityPage {
 
   readonly actionOptions = computed<FilterOption<string>[]>(() => {
     const offered = this.scoped()
-      ? ACTIVITY_ACTIONS.filter((code) => !code.startsWith(ACCOUNT_ACTION_PREFIX))
+      ? ACTIVITY_ACTIONS.filter((code) => !isAccountAction(code))
       : ACTIVITY_ACTIONS;
     return [
       { value: '', label: this.locale.translate('activity.filters.allActions') },
@@ -133,7 +135,7 @@ export class ActivityPage {
   }
 
   scheduled(entry: ActivityEntry): boolean {
-    return !entry.action.startsWith(ACCOUNT_ACTION_PREFIX);
+    return !isAccountAction(entry.action);
   }
 
   onStatus(value: ActivityStatusFilter | null): void {

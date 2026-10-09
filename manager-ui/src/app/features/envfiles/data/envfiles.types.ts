@@ -1,5 +1,3 @@
-// Mirrors `backend/apps/envfiles/serializers/`; the two move together.
-
 export type EnvSource = 'pulled' | 'pushed' | 'scheduled';
 
 export interface EnvVersion {

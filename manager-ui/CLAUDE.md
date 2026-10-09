@@ -1,200 +1,305 @@
-# Frontend memory
+# manager-ui — the DBS manager's interface
 
-Narrows the root `CLAUDE.md` to the Angular side. Read `.claude/docs/design-pattern.md` §3 for the layering contract; this file is the map.
+The Angular source of the standalone DBS manager (`django_dbs run`). It is built once at release
+into `dbs/manager/static/dbs_manager/` and shipped inside the wheel; Django serves it at `/` with
+the assets under `/static/dbs_manager/`. A developer who installs `django-dbs` never needs Node.
+The repository's own `CLAUDE.md` still governs: say "developer", never "end user", and never compare
+DBS to another tool.
+
+## Stack
+
+Angular 22 (standalone, signals, zoneless, TypeScript 6), Angular Material 22 and the CDK, Font
+Awesome Free from npm, Tajawal from `@fontsource/tajawal`. Unit tests are Vitest through
+`@angular/build:unit-test`; journeys are Playwright. Nothing is fetched from the network at run
+time: fonts, icons and styles are all in the bundle.
+
+## Commands
+
+```bash
+npm ci
+npm start                       # ng serve; /api is proxied to django_dbs run on 127.0.0.1:8765
+npm run lint                    # ng lint, the Font Awesome Free check, the e2e type-check
+npx ng test --watch=false       # Vitest, jsdom
+npm run build:package           # production build into ../dbs/manager/static/dbs_manager
+npx playwright test             # starts django_dbs run --no-browser --port 8799 --data-dir <tmp>
+```
+
+`scripts/build_manager_ui.sh` at the repository root runs `npm ci` and `npm run build:package`. The
+built directory is gitignored. The Angular CLI needs Node 22.22.3+ or 24.15+.
+
+## The package build
+
+`angular.json` has a `package` configuration layered on `production`: `outputPath` is
+`{"base": "../dbs/manager/static/dbs_manager", "browser": ""}` and `baseHref` is
+`/static/dbs_manager/`, so the bundle and its fonts resolve under the static prefix. `app.config.ts`
+provides `APP_BASE_HREF` as `/`, so router URLs stay at `/`, `/servers`, `/setup`. API calls are
+absolute (`/api/...`) and unaffected by either.
+
+## Hard rules
+
+1. **One pattern: vertical slice.** One feature directory per page, flowing
+   `Component → Store → Api → HttpClient`; each layer calls only the one below it. A component
+   holding `HttpClient`, or a store holding presentation state, is the pattern broken.
+2. **Standalone components only**, `OnPush`, and `.ts`, `.html`, `.scss` as three files. Never an
+   inline `template:` or `styles:`.
+3. **State is signals** (`signal`, `computed`, `linkedSignal`, `resource`). No `BehaviorSubject`
+   for view state. Zoneless change detection is on; anything mutating state outside a signal does
+   not render.
+4. **No `setTimeout` or `setInterval`.** Model timing in state (`timer` + `exhaustMap` in
+   `JobWatcher`, `afterNextRender`, `afterRenderEffect`).
+5. **Every route has a guard.** Every one.
+6. **Material for every interactive element.** A button is `matButton` (`filled`, `outlined`,
+   `tonal`, or text) or `matIconButton`; a link that looks like a button is `<a matButton
+   routerLink>`. A field is `mat-form-field` with `matInput`, `mat-select`, `mat-chip-grid`; choices
+   are `mat-radio-group`, `mat-checkbox`, `mat-slide-toggle`, `mat-button-toggle-group`; lists are
+   `mat-table` with `mat-paginator`; steps are `mat-stepper`; menus are `mat-menu`. Never
+   `confirm()`, `alert()`, `prompt()`, `<dialog>` or a bare `<input type="radio">`: ask through
+   `Confirmation`, report through `Toaster`, collect through `Dialogs`. A control two features need
+   becomes a component in `shared/`, never a second copy.
+7. **Features never restyle Material.** No `.mat-mdc-*` or `.mdc-*` selector, no `--mat-*`
+   override, no `::ng-deep` in a feature. The theme is one file, `src/styles/_material.scss`:
+   `mat.theme(...)` and `mat.*-overrides(...)` only. A feature stylesheet lays its page out and may
+   size a Material host (`inline-size`, grid placement); how a component looks is a change to
+   `_material.scss` or `_tokens.scss`, a decision for the whole app. A destructive button carries
+   the `app-danger` class, which `_material.scss` defines.
+8. **No raw px in feature styles.** Colour, type, spacing, radius, motion and elevation are
+   `var(--app-*)` tokens from `src/styles/_tokens.scss`. `_layout.scss` holds page widths,
+   dialog widths and breakpoints (`@use "layout" as *;`). Those two and `_reset.scss` are the only
+   files exempt.
+9. **Logical properties only** (`margin-inline-start`, `inset-inline-end`, `text-align: start`).
+   Never `left`/`right`. Content renders in its own direction (`dir` on the content element, a
+   `<bdi>` around a name), never on the row.
+10. **Everything is typed.** No `any`; take `unknown` and narrow. Every `interface` and `type`
+    alias lives in a sibling `<name>.types.ts`, imported with `import type`. `strictTemplates` is
+    on.
+11. **Nothing unused, nothing deprecated.** A function, import, style, translation key or file with
+    no caller is deleted.
+12. **Almost no comments.** No JSDoc, no `/* */` blocks. A comment is one or two lines saying *why*
+    where the code cannot: a framework constraint, a deliberate choice. Lint pragmas are not
+    comments. This file is where the code is described.
+13. **Bilingual, plainly written.** Every user-facing string is in both `en.json` and `ar.json` with
+    identical key sets; never a literal in a template. The Arabic is written from the meaning, with
+    no tashkeel, no count before a noun, and a title that names the page. The backend sends codes,
+    never prose: an error resolves as `errors.<code>`.
+14. **Icons are Font Awesome Free**, `fa-solid` or `fa-regular`, always `aria-hidden="true"` beside
+    text that names the action; an `<i>` is never the button. `scripts/check-icons.mjs` fails the
+    lint on any icon the free set lacks, or a `fa-regular` icon with no free regular style. Glyphs
+    do not mirror; where direction is the point, flip it under `[dir="rtl"]`.
+15. **Never draw an SVG by hand.** An icon is Font Awesome; a picture comes from the developer.
 
 ## Layout
 
 ```
-frontend/
-  angular.json  tsconfig*.json  eslint.config.js  playwright.config.ts
-  proxy.conf.json           /api, /admin, /static, /media → backend:8000
-  e2e/                      Playwright journeys
+manager-ui/
+  angular.json  package.json  tsconfig*.json  eslint.config.js  playwright.config.ts
+  proxy.conf.json           /api → http://127.0.0.1:8765
+  scripts/check-icons.mjs   every fa-* used exists in Font Awesome Free
+  e2e/                      Playwright journeys; e2e/support/ is what they share
   src/
-    styles/_tokens.scss     the `--app-*` tokens: colour, type, space, radius, shadow, motion
-    styles/_layout.scss     page width + shell breakpoints — the only literal lengths
-    styles/_reset.scss, _base.scss, _typography.scss, _dialog.scss, _fonts.scss
-    styles.scss             cascade layers: reset, base, primeng, app
+    styles/_tokens.scss     the --app-* tokens, light and dark through light-dark()
+    styles/_material.scss   the one Material theme and its overrides
+    styles/_layout.scss     page, dialog and nav widths, breakpoints
+    styles/_reset.scss  _base.scss  _typography.scss  _dialog.scss  _table.scss
+    styles.scss             cascade layers: reset, base, material, app
     app/
-      app.{ts,html,scss}    the shell
+      app.{ts,html,scss}    the root: skip link, direction, router outlet
       app.config.ts         providers
-      app.routes.ts         top-level routes, one lazy entry per feature
-      core/                 auth, i18n, http, the signed-in layout
-      shared/               components used by more than one feature
-      features/<feature>/   one directory per page (rule 13)
+      app.routes.ts         top-level routes
+      core/                 auth, setup, i18n, http, jobs, the signed-in layout
+      shared/               components and pipes more than one feature uses
+      features/<feature>/   one directory per page
 ```
 
 A feature directory:
 
 ```
 features/<feature>/
-  <feature>.routes.ts
+  <feature>.routes.ts       lazy entry: guard, route-provided store, provideTranslations(en, ar)
   guards/<feature>.guard.ts
   pages/<page>/<page>.{ts,html,scss}
-  state/<feature>.store.ts
-  data/<feature>.api.ts
-  data/<feature>.types.ts
+  components/<name>/        dialogs and pieces the feature's pages share
+  state/<feature>.store.ts  signals; provided by the route, so state dies with the page
+  data/<feature>.api.ts     one method per endpoint; the only HttpClient
+  data/<feature>.types.ts   the backend contract, pagination envelope included
   i18n/{en,ar}.json
-  CLAUDE.md                 required (rule 3)
+  testing/                  fixtures the specs share, never imported by the app
 ```
 
-## The flow
-
-```
-Component  →  Store (signals)  →  Api  →  HttpClient
-```
-
-Each layer calls only the one below it. A component holding `HttpClient`, or a
-store holding presentation state, is the pattern broken.
-
-Feature stores are provided by the route, not `providedIn: 'root'` — the state
-should die with the page. `AuthStore` and `LocaleStore` are root-provided because
-the guards and the shell need the same instance.
-
-## What the hook enforces
-
-`.claude/hooks/guard-checks.py` runs after every edit and blocks:
-
-- raw px in any `.scss` other than `_layout.scss` and `_reset.scss` (rule 12)
-- `setTimeout` (rule 10)
-- `confirm()`, `alert()`, `prompt()`, `<dialog>`, bare `<input type="radio">` (rule 9)
-- a docstring, a JSDoc block or a comment over two lines, and `any` (rules 30, 31)
-
-`eslint.config.js` catches the same things earlier, plus `BehaviorSubject`
-imports (rule 8) and unused symbols (rule 5).
+Path aliases: `@core/*`, `@shared/*`, `@features/*`, `@styles/*`.
 
 ## Conventions
 
-**Path aliases.** `@core/*`, `@shared/*`, `@features/*`, `@styles/*`. A relative
-path climbing past two levels is a sign the import should be an alias.
+**Theme.** `_material.scss` calls `mat.theme` with an orange primary and yellow tertiary palette,
+`theme-type: color-scheme` (light and dark follow the operating system through `light-dark()`),
+Tajawal through `--app-font-family` and density 0, then maps the system tokens (primary, error,
+surface, outline, corners) onto the `--app-*` tokens. Form fields default to `outline` with dynamic
+subscript sizing (`MAT_FORM_FIELD_DEFAULT_OPTIONS`). Look at a change in both colour schemes.
 
-**Styles.** Colour, type, spacing, radius, motion and elevation are `var(--app-*)`, from
-`src/styles/_tokens.scss`. Logical properties only — `margin-inline-start`, never
-`margin-left` — so RTL is free. No utility-class framework goes in alongside this, Tailwind
-included (see `.claude/docs/design-pattern.md` §5).
+**Direction.** `LocaleStore` writes `lang` and `dir` on the document. `AppDirectionality` replaces
+the CDK `Directionality` app-wide and follows `LocaleStore.isRtl()`, so dialogs, menus, snack bars
+and steppers flip on a runtime language switch. `AppPaginatorIntl` translates the paginator.
 
-`@use "layout" as *;` where a stylesheet needs the page width or a breakpoint
-(`stylePreprocessorOptions.includePaths` puts `src/styles` on the path).
+**Fields.** A text field is `mat-form-field` + `mat-label` + `matInput`, a `mat-hint`, and a
+`mat-error` shown through `[appFieldError]="message"` (`shared/field/field-error.ts`), which puts
+the control in its error state while the message is non-empty. Validation lives in signals, not in
+Angular validators, so the directive is how Material learns a field is wrong. A password is
+`<app-password-input [label] [hint] [error]>`, a whole form field with a reveal toggle.
 
-Every interactive element is a PrimeNG component (rule 9), themed once in `app.preset.ts` —
-Aura with a brass primary, mapped from the `--app-*` tokens. A feature stylesheet lays its page
-out; it never restyles a PrimeNG component: no `.p-*` selector, no `--p-*` override, no
-`::ng-deep`. A change to how every button looks is a change to `app.preset.ts` or `_tokens.scss`.
-The cascade layers are `reset, base, primeng, app`, so the reset is the weakest rule on the page.
+**Tables.** Every `mat-table` sits in `<div class="table-scroll">`: it keeps its columns on a narrow
+screen and the wrapper scrolls sideways. The table carries `[attr.aria-label]`; its paginator sits
+in a labelled `<nav>`.
 
-A form control sits in `<app-field>` (`shared/field`); a dialog opens through `Dialogs`, a toast
-through `Toaster` and a confirmation through `Confirmation` — never PrimeNG's own services.
-Every `p-table` sits in `<div class="table-scroll">`: PrimeNG's table has no card layout for a narrow
-screen, so it keeps its columns and the wrapper scrolls sideways instead of squeezing them.
-A link that should look like a button is `<a class="p-button p-button-text" routerLink>`: v22
-has no `pButton` directive.
+**Busy buttons** are `[disabled]` with `aria-busy` and a `matButtonIcon` spinner before their text,
+and the text says what is happening.
 
-**Do not write a focus ring.** `_base.scss` draws one `:focus-visible` outline for the whole
-document. A component `outline` replaces it rather than adding to it.
+**Do not write a focus ring.** `_base.scss` draws one `:focus-visible` outline for the document.
 
-Both colour schemes are live: every colour token is `light-dark(light, dark)` and the
-document follows the operating system. **Look at a change in both.**
+**Errors.** The interceptor normalises every failure to `ApiError` (`{code, message, fields?}` from
+the backend envelope `{"error": {...}}`). Stores hold it; pages render `{{ error | errorText }}`,
+which reads `errors.<code>`, or `errors.checkFields` when `fields` is set. `message` is English for
+API clients and is never printed. A 401/403 whose code is `not_authenticated` or
+`authentication_failed`, outside `/api/auth/`, forgets the identity and goes to sign in.
 
-**Type.** Tajawal, self-hosted from `@fontsource/tajawal` through the build's `styles` in
-`angular.json` — 400, 500 and 700, matching `--app-weight-regular/medium/bold`. The family
-is `--app-font-family`; nothing else names a font.
+**XHR, not fetch.** `provideHttpClient(withXhr(), …)`: only XHR reports upload progress.
 
-**Icons.** Font Awesome 7 Pro, loaded as a kit script from `index.html`. It is
-the icon set for everything written in a feature template:
+**Jobs.** Work that outlives a request answers `202 {activity}`; `JobWatcher.watch(id)` reads
+`/api/activity/{id}/` at once and then on a timer until the job is `succeeded` or `failed`.
 
-```html
-<i class="fa-solid fa-user" aria-hidden="true"></i>
-```
+**Strings.** Feature bundles register on their route with `provideTranslations(en, ar)`. Shared and
+core strings live in `core/i18n/{en,ar}.json`. Two bundles never define the same `errors.<code>`. A
+missing key renders as itself. `t`, `errorText`, `appDate` and `fileSize` are impure pipes so a
+language switch reaches text already on screen.
 
-The kit is configured webfont-side (`method: "css"`), so it injects a
-stylesheet and the glyph renders on the `<i>` itself — nothing rewrites the
-element into an `<svg>`. That makes it indifferent to when Angular renders, which
-is what we want under zoneless. Being Pro, `fa-thin`, `fa-duotone` and
-`fa-sharp` are available alongside the free styles; they stop working the day
-the subscription does.
+**Tests.** Import `describe`/`it`/`expect` from `vitest` and call `TestBed.resetTestingModule()` in
+`afterEach`. Select Material controls through the CDK component harnesses
+(`TestbedHarnessEnvironment`, `MatButtonHarness`, `MatDialogHarness`, `MatStepperHarness`, …) or by
+role and label, never by `.mat-mdc-*` class. Pass
+`{ provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } }` when a spec opens an
+overlay. Journeys select by role and accessible name, in both languages, from `e2e/support/copy.ts`.
 
-The kit has no auto-accessibility, so an icon is never self-describing: mark a
-decorative one `aria-hidden="true"`, and give a meaningful one a translated
-label on the element that carries the behaviour. An `<i>` is never the button.
+## core
 
-Font Awesome glyphs do not mirror themselves. Prefer a glyph with no direction, and where
-direction is the point, flip it under `[dir="rtl"]`.
+- **`AuthApi` / `AuthStore`** — `/api/auth/{csrf,login,logout,me}`. The store holds the identity as
+  signals; `restore()` treats a refusal as signed out, `signIn()` primes CSRF first, `signOut()`
+  always ends on `/sign-in`, `forget()` drops the identity without a request.
+- **Guards** — `authGuard` (signed in, else `/setup` while no account exists, else `/sign-in?next=`),
+  `guestGuard` (keeps a signed-in user off sign-in; `/setup` while no account exists),
+  `groupGuard(...)`. The setup redirect keeps `?token=`.
+- **`SetupApi` / `SetupStore` / `setupGuard` / `SetupPage`** — the first run. `check()` asks
+  `GET /api/setup/` once and keeps the answer; `complete()` primes CSRF and posts the first account,
+  closing the setup on success or on `setup_done`. `/setup` is open only while setup is needed. The
+  page asks for the setup key only when the link lacks `?token=`, then username, password and its
+  confirmation; on success it loads `/api/auth/me/` and opens `/`.
+- **`SignInPage`** — username and password, follows `?next=`.
+- **`AppLayout`** — the signed-in frame: a `mat-toolbar` header with the product name, the language
+  switch and an account `mat-menu` holding sign-out; a `mat-nav-list` of `SECTIONS`; the one
+  `<main id="main">`. It provides `SHELL_FRAME`, so `StatusPage` knows it is inside.
+- **`LocaleStore`, `TranslatePipe` (`t`), `ErrorTextPipe` (`errorText`), `provideTranslations()`,
+  `LocaleSwitcher`** (a `mat-button-toggle-group`), **`AppDirectionality`, `AppPaginatorIntl`**.
+- **`csrfInterceptor`, `errorInterceptor`, `apiErrorOf()`** — CSRF on unsafe requests; failures as
+  `ApiError`.
+- **`JobsApi`, `JobWatcher`** — follow a background job to its end.
 
-**Strings.** Never a literal in a template. Feature bundles register on the
-route with `provideTranslations(en, ar)`, so a feature's strings load with the
-feature. A missing key renders as the key itself, on purpose.
+## shared
 
-**Errors.** The interceptor normalises every failure to `ApiError`. Stores hold it
-and never inspect status codes; pages render `{{ error | errorText }}`, which reads
-`errors.<code>` from the bundles. `error.message` is English for API clients and is
-never printed (language.md rule 9).
+- **`Dialogs`** — `open<R, D>(Component, { titleKey, data, size })` opens a component in a
+  `MatDialog` framed by `DialogFrame` (translated title, close button) and returns
+  `{ closed, whenClosed() }`; dismissal resolves `undefined`. The dialog component reads
+  `injectDialogData<D>()` and `injectDialogRef<R>()` (`MAT_DIALOG_DATA.data`, `MatDialogRef`). A
+  page that opens dialogs lists `providers: [Dialogs]`, so the dialog resolves the route's store.
+- **`Confirmation.ask(options)`** — a `ConfirmDialog` (`role="alertdialog"`); resolves `true` on
+  accept, `false` on reject or dismiss.
+- **`Toaster.add({ severity, summary, detail? })`** — a `MatSnackBar` from `Toast`; a `danger` toast
+  is announced assertively.
+- **`Notice`** (`<app-notice severity closable (closed)>`) — an inline message; `role="alert"` for
+  `warning` and `danger`, `role="status"` otherwise.
+- **`StatusTag`** (`<app-status-tag severity icon label>`) — a state as icon and word, never colour
+  alone.
+- **`Skeleton`** — a CSS-only loading line. **`Breadcrumb`** (`<app-breadcrumb [items] [label] code>`)
+  — a labelled trail of router links, the last one the current page.
+- **`PasswordInput`**, **`PasswordPrompt`** (asks for the account password and runs the guarded
+  operation, retrying a wrong password in place), **`EmptyState`**, **`StatusPage`**,
+  **`FieldError`**, **`AppDatePipe`**, **`FileSizePipe`**, **`uniqueId()`**.
 
-**XHR, not fetch.** `provideHttpClient(withXhr(), …)` in `app.config.ts`. Fetch is Angular's
-default and reports no upload progress, so an upload's bar would sit at nothing until the file had
-arrived. There is no server-side rendering here, the one place XHR is on its way out. Removing
-`withXhr()` breaks no test — the testing backend replaces both — only the bar.
+## features
 
-**Zoneless.** `provideZonelessChangeDetection()` is on. Anything mutating state
-outside a signal will not render. That is the point.
+Every feature is mounted under `AppLayout` and its guard mirrors the backend's `IsAuthenticated`;
+the backend permission is the boundary.
 
-## PrimeNG license
+- **servers** (`/servers`, `/servers/:serverId`) — list, search and page servers; add one through a
+  linear `mat-stepper` (connection, host key fetched and its fingerprint confirmed, django-dbs and
+  allowed folders as chips); the server page has a `mat-tab-nav-bar` (overview, backups, files,
+  environment, activity) over the child route. The overview runs the connection check, shows the
+  settings, re-pins a changed host key, reveals the backup passphrase behind the account password,
+  and deletes. Secrets are write-only; an edit that changes more than the name asks for the
+  account password.
+- **backups** (`/servers/:serverId/backups`) — plans (django-dbs, folders, or existing files
+  collected from one folder) with a schedule and how many to keep here and on the server; files,
+  newest first: take, upload with progress, download, verify, restore (rehearsal by default, the
+  server name typed for a real one), delete with undo.
+- **files** (`/servers/:serverId/files?path=`) — the server's allowed folders: a breadcrumb, open,
+  download, upload, new folder, delete an empty folder or a file.
+- **envfiles** (`/servers/:serverId/environment`) — versions of the server's `.env`: pull, show
+  key names masked, reveal values behind the password, compare with the version before, push one
+  back.
+- **activity** (`/activity`, `/servers/:serverId/activity`) — the audit trail, newest first, with
+  status and action filters; scoped to one server on its tab. An unknown action code renders as
+  itself.
 
-PrimeNG 22 is licensed: a Community key (free for qualifying organisations, renewed yearly) or a
-Commercial one. The key goes in `src/app/primeui-license.ts` as `PRIMEUI_LICENSE` and is registered by
-`providePrimeNG({ license })` in `app.config.ts`. It is verified offline in the browser, so it is shipped
-with the bundle by design. With it empty, every page shows PrimeNG's red "Invalid PrimeUI License"
-banner. The license's terms forbid removing that mechanism: do not.
+## API the interface calls
 
-## Classes and methods at the root
+All JSON unless marked; lists are `{count, next, previous, results}` with one-based `page`.
 
-**`App`** (`app/app.ts`) — the root: the skip link, the direction on the content, the router
-outlet, and the one `<p-toast>` and `<p-confirmdialog>`. **`AppPreset`** (`app/app.preset.ts`) —
-the PrimeNG theme. **`PRIMEUI_LICENSE`** (`app/primeui-license.ts`) — the license key string.
-**`appConfig`** — zoneless change detection, the router with component input
-binding, HTTP over XHR with the CSRF and error interceptors, and PrimeNG with its message and
-confirmation services. **`routes`** — sign-in, the status
-pages and the redirect; each feature adds one lazy entry. Per-module descriptions live in
-`core/`, `shared/` and each feature's `CLAUDE.md`.
+| Method | Path | Body → answer |
+|---|---|---|
+| GET | `/api/setup/` | → `{needed}` |
+| POST | `/api/setup/` | `{token, username, password}` → 201 `{username}`, signed in |
+| GET | `/api/auth/csrf/` | sets the `csrftoken` cookie |
+| POST | `/api/auth/login/` | `{username, password}` → `Identity` |
+| POST | `/api/auth/logout/` | → 204 |
+| GET | `/api/auth/me/` | → `Identity` |
+| GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` |
+| POST | `/api/servers/` | `ServerCreate` → `Server` |
+| GET/PATCH/DELETE | `/api/servers/{id}/` | `ServerUpdate` → `Server` |
+| POST | `/api/servers/fingerprint/` | `{host, port}` → `{key_type, line, fingerprint}` |
+| POST | `/api/servers/{id}/check/` | → `Server` |
+| POST | `/api/servers/{id}/host-key/` | `{host_key, password}` → `Server` |
+| POST | `/api/servers/{id}/passphrase/` | `{password}` → `{passphrase}` |
+| GET | `/api/backups/?server=&page=&page_size=` | → page of `BackupFile` |
+| POST | `/api/backups/take/` | `{server}` → 202 `{activity}` |
+| POST | `/api/backups/upload/` | multipart `server`, `file` → 201 `BackupFile` |
+| GET | `/api/backups/{id}/download/` | a link |
+| POST | `/api/backups/{id}/verify/` | → 202 `{activity}` |
+| POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, server_name?}` → 202 `{activity}` |
+| DELETE | `/api/backups/{id}/` | → 204 |
+| POST | `/api/backups/{id}/undo-delete/` | → `BackupFile` |
+| GET/POST | `/api/backups/plans/` | `PlanCreate` → `BackupPlan` |
+| PATCH/DELETE | `/api/backups/plans/{id}/` | `PlanUpdate` → `BackupPlan` |
+| POST | `/api/backups/plans/{id}/run/` | → 202 `{activity}` |
+| GET | `/api/files/{server}/?path=&page=&page_size=` | → `Listing` |
+| GET | `/api/files/{server}/download/?path=` | a link |
+| POST | `/api/files/{server}/upload/` | multipart `path`, `file` → 201 `Entry` |
+| POST | `/api/files/{server}/folders/` | `{path, name}` → 201 `Entry` |
+| DELETE | `/api/files/{server}/?path=` | → 204 |
+| GET | `/api/envfiles/?server=&page=&page_size=` | → page of `EnvVersion` |
+| POST | `/api/envfiles/pull/` | `{server}` → `{created, version}` |
+| GET | `/api/envfiles/{from}/compare/?to=` | → `{from, to, added, removed, changed}` |
+| POST | `/api/envfiles/{id}/reveal/` | `{password}` → `{content}` |
+| POST | `/api/envfiles/{id}/push/` | `{password}` → `{version}` |
+| GET | `/api/activity/?server=&action=&status=&page=&page_size=` | → page of `ActivityEntry` |
+| GET | `/api/activity/{id}/` | → `Job` |
 
-## e2e support
+Errors arrive as `{"error": {"code", "message", "fields"?}}`. Setup answers `setup_done` (409),
+`setup_token_invalid` (403), and `invalid` with `fields.password` codes from Django's password
+validators (`password_too_short`, `password_too_common`, `password_entirely_numeric`,
+`password_too_similar`).
 
-`e2e/` holds Playwright journeys; `e2e/support/` is what they share. Types sit beside each helper in `<name>.types.ts`.
+## e2e
 
-**Journeys.** `01-shell` signs in, tries the wrong password, walks the shell, switches language, signs out, and checks a signed-out visitor meets a closed door in both the guard and the API. `02-add-server` adds a server through the wizard (comparing the host-key fingerprint as a person would), runs the connection check, reveals the backup passphrase with the wrong then the right password, deletes the server, and checks the server page's tab row on a server of its own. `03-backups` takes a one-off backup, lists, downloads, verifies, deletes and restores it, and uploads a file from disk. `04-plans` covers the three plan kinds: django-dbs (daily, keep two), folders (downloads as `.tar.gz`) and existing files (collects two `.sql.gz` once, then nothing new). `05-files` opens the allowed folder, enters `uploads`, downloads and reads `a.txt`, uploads, creates a folder, deletes both after confirming, and is refused (not crashed, not signed out) outside the allowed folders. `06-envfile` pulls the `.env` file, reads masked keys, shows and hides values with the password, pulls again unchanged, changes the file and pulls a new version, compares, pushes the earlier version back and finds the server file byte for byte as it was; it holds a lock for its run because both projects edit the one file. `07-activity` checks the activity list reads in plain words, the filters narrow it, and a server's tab shows only that server. `08-lockout` checks repeated wrong sign-ins are refused in words a reader can act on, using a throwaway username so the admin account stays unlocked.
-
-**`support/api.ts`** (`Api`, `api.types.ts`) — the API as a journey's setup and cleanup use it: a server to run on, and everything left behind removed afterwards. Nothing a journey asserts goes through here. `Api.signIn` signs in as the admin and carries the session; `createServer(name, overrides)` makes a server pointed at the SSH fixture with the host key pinned the way the wizard pins it; `findServers(prefix)`, `backups(server)`, `plans(server)` and `activity(query)` list; `deleteServer(id)` removes the server and every plan and backup it still lists; `status(method, path)` is the raw status of a request with this session, for "the API refuses too" checks; `dispose()` closes it.
-
-**`support/config.ts`** — everything the journeys need to know about the environment, each value an environment variable. Defaults describe the setup the journeys were written against: the stack on :4200, signed in as `admin`, an SSH server on 127.0.0.1:2222 serving this machine's own filesystem, with a Django project at /srv/e2e-app (django-dbs in its `.venv`, a `.env` and a media folder) and two `.sql.gz` dumps in /var/backups/e2e-existing. `SSH` describes that server (`fingerprint` is what `ssh-keygen -lf` prints, compared in the UI as a person would; `existingFiles` are the `*.sql.gz` names in the order the app lists them). `SSH_FS` is where the server's filesystem can be read from the runner, default `/`; set `E2E_SSH_FS=` (empty) when it is not reachable, and the assertions that need it are skipped with a reason. `SCREENSHOT_DIR` is where each page is saved in each direction.
-
-**`support/copy.ts`** (`copy.types.ts`) — the words a reader sees in both languages, as accessible names or sentences read off the running app, never translation keys, so a test selects what a person reads and a copy change shows up here rather than as a loosened regex. `copyIn(lang)` returns the lookup.
-
-**`support/fixtures.ts`** (`fixtures.types.ts`) — what every journey shares through the `journey` fixture: the language of its project (`lang`, `dir`), the copy in that language (`t`), `named(action, target, suffix)` for an action button named after its target, `unique(what)` for a readable name so two projects never collide, `signIn(page, user)` as a person does, `shot(page, name)` into one folder per run, `toast(page, key)` (the toast comes before the live region announcing the same text), `shown(scope, text)` (a table keeps a hidden card-shaped copy of each cell for narrow screens, so a text locator needs the visible one) and `dismissToasts(page)`. `plain(text)` strips the FSI and PDI marks the toast region puts around a name.
-
-**`support/lock.ts`** — `acquireLock(name, staleAfterMs)` lets one journey at a time use a resource the projects share (the `.env` file on the SSH server, which the `ltr` and `rtl` runs would otherwise edit under each other). `mkdir` is atomic, so the directory is the lock; one older than `staleAfterMs` belongs to a run that died and is taken over. Returns the release function.
-
-**`support/ssh-fs.ts`** — the SSH server's filesystem as seen from the runner: confirm what the app wrote, make a change the app should notice, and put everything back as it was. `readRemote`, `writeRemote`, `appendRemote`, `remoteExists`, `listRemote` and `remoteMtime` (ms) are no-ops returning `null` when `E2E_SSH_FS` is empty (`remoteReachable` is false and journeys skip those assertions with a reason). `folderSnapshot(path)` remembers a folder's names and its `restore()` removes whatever appeared since, returning the names. `scratchFile(dir, name, content)` makes a small file on the runner to upload through the browser.
-
-## Commands
-
-```bash
-docker compose exec frontend npx ng build
-docker compose exec frontend npx ng test --watch=false   # vitest, jsdom
-docker compose exec frontend npx ng lint
-docker compose exec frontend npx playwright test         # stack must be up
-```
-
-Unit tests are Vitest, not Karma — Karma is retired upstream and rule 4 says
-nothing deprecated. Two consequences worth knowing: import `describe`/`it`/
-`expect` from `vitest` explicitly, and reset the harness yourself in `afterEach`
-with `TestBed.resetTestingModule()`, which Karma used to do for you.
-
-Then look at the page in both languages. `dir="rtl"` is not a checkbox.
-
-## Adding a slice
-
-1. `features/<feature>/` with the layout above — the name matches the Django app.
-2. Types first, in `data/<feature>.types.ts`, mirroring the backend contract, pagination
-   envelope included. No other file declares an interface or type alias (rule 30).
-3. Api → store → component → route → guard.
-4. Both `i18n/en.json` and `i18n/ar.json`, registered with `provideTranslations`.
-5. One lazy entry in `app.routes.ts`, with a guard (rule 11).
-6. Write `features/<feature>/CLAUDE.md`. The `Stop` hook blocks finishing without it.
+`playwright.config.ts` starts `django_dbs run --no-browser --port 8799 --data-dir <tmp>` (set
+`E2E_BASE_URL` to use a running manager instead, `E2E_DATA_DIR` to choose the data dir). The `setup`
+project runs `00-setup.spec.ts` first: it reads the one-time key from `<data dir>/setup.token` (or
+`E2E_SETUP_TOKEN`) and creates the `ADMIN` account through the setup page. The `ltr` and `rtl`
+projects depend on it. The journeys need an SSH fixture serving a Django project with django-dbs;
+`e2e/support/config.ts` lists every knob as an environment variable. `tsconfig.e2e.json`
+type-checks them during `npm run lint`.
