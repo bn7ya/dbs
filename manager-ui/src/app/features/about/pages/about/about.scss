@@ -1,0 +1,49 @@
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-7);
+}
+
+.about__header,
+.about__section,
+.about__skeleton,
+.about__fact,
+.about__command {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.about__section {
+  gap: var(--app-space-4);
+}
+
+.about__fact {
+  gap: var(--app-space-1);
+}
+
+.about__facts,
+.about__commands {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.about__fact dd {
+  margin: 0;
+}
+
+.about__command-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  align-items: center;
+}
+
+.about__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}

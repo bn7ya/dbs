@@ -43,6 +43,10 @@ export const routes: Routes = [
         loadChildren: () => import('@features/activity/activity.routes').then((m) => m.routes),
       },
       {
+        path: 'about',
+        loadChildren: () => import('@features/about/about.routes').then((m) => m.routes),
+      },
+      {
         // Inside the layout, so a signed-in reader who follows a dead link keeps the navigation.
         path: '**',
         canActivate: [authGuard],

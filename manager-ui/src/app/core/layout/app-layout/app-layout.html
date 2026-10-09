@@ -16,6 +16,10 @@
           <bdi dir="auto">{{ displayName() }}</bdi>
         </button>
         <mat-menu #account="matMenu" xPosition="before">
+          <a mat-menu-item routerLink="/about">
+            <i class="fa-solid fa-circle-info app-layout__menu-icon" aria-hidden="true"></i>
+            <span>{{ 'nav.about' | t }}</span>
+          </a>
           <button mat-menu-item type="button" (click)="signOut()">
             <i class="fa-solid fa-right-from-bracket app-layout__menu-icon" aria-hidden="true"></i>
             <span>{{ 'auth.signOut' | t }}</span>

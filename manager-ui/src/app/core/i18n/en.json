@@ -7,7 +7,8 @@
     "label": "Main",
     "dashboard": "Dashboard",
     "servers": "Servers",
-    "activity": "Activity"
+    "activity": "Activity",
+    "about": "About DBS"
   },
   "language": {
     "label": "Language",
