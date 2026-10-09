@@ -16,15 +16,18 @@
 }
 
 .app-layout__header {
+  grid-area: header;
+  border-block-end: var(--app-border-width) solid var(--app-color-outline);
+}
+
+.app-layout__toolbar {
   display: flex;
   flex-wrap: wrap;
-  grid-area: header;
   gap: var(--app-space-2) var(--app-space-4);
   align-items: center;
   justify-content: space-between;
   padding-block: var(--app-space-2);
   white-space: normal;
-  border-block-end: var(--app-border-width) solid var(--app-color-outline);
 }
 
 .app-layout__brand {

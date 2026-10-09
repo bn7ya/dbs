@@ -32,7 +32,7 @@ test.describe('activity', () => {
 
     await page.getByRole('button', { name: t('showPassphrase') }).click();
     const prompt = page.getByRole('dialog');
-    await prompt.getByRole('textbox', { name: t('yourPassword') }).fill('not-the-password');
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill('not-the-password');
     await prompt.getByRole('button', { name: t('showPassphrase') }).click();
     await expect(prompt.getByText(t('wrongPassword'))).toBeVisible();
     await page.keyboard.press('Escape');

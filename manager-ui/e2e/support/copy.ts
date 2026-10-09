@@ -9,6 +9,13 @@ export const COPY = {
   navActivity: { en: 'Activity', ar: 'النشاط' },
   signOut: { en: 'Sign out', ar: 'تسجيل الخروج' },
 
+  // First run
+  setupTitle: { en: 'Create your account', ar: 'إنشاء الحساب' },
+  setupKey: { en: 'Setup key', ar: 'مفتاح الإعداد' },
+  confirmPassword: { en: 'Confirm password', ar: 'تأكيد كلمة المرور' },
+  createAccount: { en: 'Create account', ar: 'إنشاء الحساب' },
+  passwordsDiffer: { en: 'The passwords do not match.', ar: 'كلمتا المرور غير متطابقتين.' },
+
   // Sign in
   signInTitle: { en: 'Sign in', ar: 'تسجيل الدخول' },
   username: { en: 'Username', ar: 'اسم المستخدم' },
@@ -49,6 +56,7 @@ export const COPY = {
   back: { en: 'Back', ar: 'رجوع' },
   cancel: { en: 'Cancel', ar: 'إلغاء' },
   fillIn: { en: 'Fill in this field.', ar: 'املأ هذا الحقل.' },
+  portRange: { en: 'Enter a port from 1 to 65535.', ar: 'أدخل منفذا من 1 إلى 65535.' },
   getHostKey: { en: 'Get host key', ar: 'جلب مفتاح المضيف' },
   getHostKeyFirst: { en: 'Get the host key first.', ar: 'اجلب مفتاح المضيف أولا.' },
   getItAgain: { en: 'Get it again', ar: 'جلبه مرة أخرى' },
@@ -127,7 +135,7 @@ export const COPY = {
   backupUploaded: { en: 'Backup uploaded.', ar: 'تم رفع النسخة الاحتياطية.' },
   uploadBackup: { en: 'Upload a backup', ar: 'رفع نسخة احتياطية' },
   undo: { en: 'Undo', ar: 'تراجع' },
-  dismiss: { en: 'Dismiss', ar: 'تجاهل' },
+  dismiss: { en: 'Close', ar: 'إغلاق' },
   download: { en: 'Download', ar: 'تنزيل' },
   verify: { en: 'Verify', ar: 'تحقق من' },
   delete: { en: 'Delete', ar: 'حذف' },

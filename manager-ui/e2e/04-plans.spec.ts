@@ -43,8 +43,7 @@ test.describe('plans', () => {
     await dialog.getByRole('button', { name: t('addPlanSubmit'), exact: true }).click();
 
     await expect(dialog.getByRole('textbox', { name: t('name'), exact: true })).toHaveAttribute('aria-invalid', 'true');
-    // Below the lowest allowed count: the field keeps it inside the range rather than saying so.
-    await expect(dialog.getByRole('spinbutton', { name: t('keepHere') })).toHaveValue('1');
+    await expect(dialog.getByRole('spinbutton', { name: t('keepHere') })).toHaveAttribute('aria-invalid', 'true');
     await expect(dialog).toBeVisible();
     await journey.shot(page, 'plan-form-validation');
     await page.keyboard.press('Escape');
@@ -92,7 +91,7 @@ test.describe('plans', () => {
     const folders = dialog.getByRole('textbox', { name: t('folders') });
     await folders.fill(SSH.mediaDir);
     await folders.press('Enter');
-    await expect(dialog.getByRole('listitem').filter({ hasText: SSH.mediaDir })).toBeVisible();
+    await expect(dialog.getByRole('row').filter({ hasText: SSH.mediaDir })).toBeVisible();
     await dialog.getByRole('textbox', { name: t('name'), exact: true }).fill(names.archive);
     // What a folders plan reads is chosen behind the reader's own password.
     await dialog.getByLabel(t('yourPassword'), { exact: true }).fill(ADMIN.password);

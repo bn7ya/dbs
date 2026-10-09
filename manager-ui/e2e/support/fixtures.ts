@@ -25,7 +25,7 @@ export const test = base.extend<{ journey: Journey }>({
       signIn: async (page, user = ADMIN) => {
         await page.goto('/sign-in');
         await page.getByRole('textbox', { name: t('username') }).fill(user.username);
-        await page.getByRole('textbox', { name: t('password'), exact: true }).fill(user.password);
+        await page.getByLabel(t('password'), { exact: true }).fill(user.password);
         await page.getByRole('button', { name: t('signIn'), exact: true }).click();
         await expect(page).not.toHaveURL(/\/sign-in/);
       },
@@ -38,6 +38,10 @@ export const test = base.extend<{ journey: Journey }>({
       // The toast's text is also announced by a live region; the toast itself comes first.
       toast: (page, key) => page.getByText(t(key), { exact: true }).first(),
       shown: (scope, text) => scope.getByText(text, { exact: true }).filter({ visible: true }),
+      signOut: async (page, user = ADMIN) => {
+        await page.getByRole('banner').getByRole('button', { name: new RegExp(user.username) }).click();
+        await page.getByRole('menuitem', { name: t('signOut') }).click();
+      },
       dismissToasts: async (page) => {
         for (const button of await page.getByRole('button', { name: t('dismiss') }).all()) {
           await button.click().catch(() => undefined);

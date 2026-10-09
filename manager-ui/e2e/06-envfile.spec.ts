@@ -69,11 +69,11 @@ test.describe('the .env file', () => {
 
     await page.getByRole('button', { name: t('showValues') }).click();
     const prompt = page.getByRole('dialog');
-    await prompt.getByRole('textbox', { name: t('yourPassword') }).fill('not-the-password');
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill('not-the-password');
     await prompt.getByRole('button', { name: t('showValues') }).click();
     await expect(prompt.getByText(t('wrongPassword'))).toBeVisible();
 
-    await prompt.getByRole('textbox', { name: t('yourPassword') }).fill(ADMIN.password);
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill(ADMIN.password);
     await prompt.getByRole('button', { name: t('showValues') }).click();
 
     await expect(prompt).toBeHidden();
@@ -141,11 +141,11 @@ test.describe('the .env file', () => {
     await confirm.getByRole('button', { name: t('continue') }).click();
 
     const prompt = page.getByRole('dialog');
-    await prompt.getByRole('textbox', { name: t('yourPassword') }).fill('not-the-password');
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill('not-the-password');
     await prompt.getByRole('button', { name: t('pushVersion') }).click();
     await expect(prompt.getByText(t('wrongPassword'))).toBeVisible();
     await journey.shot(page, 'env-push-wrong-password');
-    await prompt.getByRole('textbox', { name: t('yourPassword') }).fill(ADMIN.password);
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill(ADMIN.password);
     await prompt.getByRole('button', { name: t('pushVersion') }).click();
 
     await expect(journey.toast(page, 'versionPushed')).toBeVisible();

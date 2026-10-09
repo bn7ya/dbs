@@ -11,5 +11,6 @@ export interface Journey {
   shot: (page: Page, name: string) => Promise<void>;
   toast: (page: Page, key: CopyKey) => Locator;
   shown: (scope: Page | Locator, text: string) => Locator;
+  signOut: (page: Page, user?: { username: string; password: string }) => Promise<void>;
   dismissToasts: (page: Page) => Promise<void>;
 }

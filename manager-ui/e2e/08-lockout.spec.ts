@@ -7,7 +7,7 @@ test('repeated wrong sign-ins lock the attempts out with a plain message', async
 
   const attempt = async () => {
     await page.getByRole('textbox', { name: t('username') }).fill(username);
-    await page.getByRole('textbox', { name: t('password'), exact: true }).fill('wrong-password');
+    await page.getByLabel(t('password'), { exact: true }).fill('wrong-password');
     const response = page.waitForResponse((r) => r.url().endsWith('/api/auth/login/'));
     await page.getByRole('button', { name: t('signIn'), exact: true }).click();
     return (await response).status();

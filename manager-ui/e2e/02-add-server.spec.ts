@@ -30,13 +30,15 @@ test.describe('adding a server', () => {
     await dialog.getByRole('button', { name: t('next'), exact: true }).click();
 
     await expect(dialog.getByText(t('fillIn'))).toHaveCount(4);
-    await expect(dialog.getByRole('textbox', { name: t('name'), exact: true })).toHaveAttribute('aria-invalid', 'true');
+    await expect(dialog.getByRole('textbox', { name: t('name'), exact: true })).toHaveAccessibleDescription(
+      new RegExp(t('fillIn')),
+    );
     await expect(dialog.getByRole('tab', { name: t('stepConnection') })).toHaveAttribute('aria-selected', 'true');
 
-    // One past the highest port: the field keeps it inside the range rather than saying so.
     await dialog.getByRole('spinbutton', { name: t('port') }).fill('65536');
     await dialog.getByRole('button', { name: t('next'), exact: true }).click();
-    await expect(dialog.getByRole('spinbutton', { name: t('port') })).toHaveValue('65535');
+    await expect(dialog.getByRole('spinbutton', { name: t('port') })).toHaveAttribute('aria-invalid', 'true');
+    await expect(dialog.getByText(t('portRange'))).toBeVisible();
     await expect(dialog.getByRole('tab', { name: t('stepConnection') })).toHaveAttribute('aria-selected', 'true');
     await journey.shot(page, 'add-server-validation');
 
@@ -59,7 +61,7 @@ test.describe('adding a server', () => {
     const passwordMethod = dialog.getByRole('radio', { name: t('password'), exact: true });
     await passwordMethod.click();
     await expect(passwordMethod).toBeChecked();
-    await dialog.getByRole('textbox', { name: t('serverPassword'), exact: true }).fill(SSH.password);
+    await dialog.getByLabel(t('serverPassword'), { exact: true }).fill(SSH.password);
     await dialog.getByRole('button', { name: t('next'), exact: true }).click();
 
     await expect(dialog.getByRole('tab', { name: t('stepHostKey') })).toHaveAttribute('aria-selected', 'true');
@@ -139,14 +141,14 @@ test.describe('adding a server', () => {
 
     await page.getByRole('button', { name: t('showPassphrase') }).click();
     const prompt = page.getByRole('dialog');
-    await prompt.getByRole('textbox', { name: t('yourPassword') }).fill('not-the-password');
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill('not-the-password');
     await prompt.getByRole('button', { name: t('showPassphrase') }).click();
 
     await expect(prompt.getByText(t('wrongPassword'))).toBeVisible();
-    await expect(prompt.getByRole('textbox', { name: t('yourPassword') })).toHaveAttribute('aria-invalid', 'true');
+    await expect(prompt.getByLabel(t('yourPassword'), { exact: true })).toHaveAttribute('aria-invalid', 'true');
     await journey.shot(page, 'passphrase-wrong-password');
 
-    await prompt.getByRole('textbox', { name: t('yourPassword') }).fill('journey-admin-pass');
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill('journey-admin-pass');
     await prompt.getByRole('button', { name: t('showPassphrase') }).click();
 
     await expect(prompt).toBeHidden();
@@ -209,7 +211,7 @@ test.describe('the server page tabs', () => {
     const { t } = journey;
     await journey.signIn(page);
     await page.goto(`/servers/${serverId}`);
-    const tabs = page.getByRole('navigation', { name: t('serverSections') });
+    const tabs = page.getByRole('tablist', { name: t('serverSections') });
 
     for (const [tab, path] of [
       ['tabBackups', 'backups'],
@@ -217,12 +219,12 @@ test.describe('the server page tabs', () => {
       ['tabEnv', 'environment'],
       ['tabActivity', 'activity'],
     ] as const) {
-      await tabs.getByRole('link', { name: t(tab) }).click();
+      await tabs.getByRole('tab', { name: t(tab) }).click();
       await expect(page).toHaveURL(new RegExp(`/servers/${serverId}/${path}`));
-      await expect(tabs.getByRole('link', { name: t(tab) })).toHaveAttribute('aria-current', 'page');
+      await expect(tabs.getByRole('tab', { name: t(tab) })).toHaveAttribute('aria-selected', 'true');
     }
 
-    await tabs.getByRole('link', { name: t('tabOverview') }).click();
+    await tabs.getByRole('tab', { name: t('tabOverview') }).click();
 
     await expect(page).toHaveURL(new RegExp(`/servers/${serverId}$`));
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);

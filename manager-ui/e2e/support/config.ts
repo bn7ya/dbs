@@ -24,4 +24,8 @@ export const ALLOWED_FOLDERS = [SSH.mediaDir, SSH.existingDir];
 
 export const SSH_FS = env('E2E_SSH_FS', '/');
 
+export const DATA_DIR = env('E2E_DATA_DIR', '');
+
+export const SETUP_TOKEN = process.env['E2E_SETUP_TOKEN'] ?? null;
+
 export const SCREENSHOT_DIR = env('E2E_SCREENSHOT_DIR', 'test-results/journeys');

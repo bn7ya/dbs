@@ -9,7 +9,7 @@
     "build:package": "ng build --configuration production,package",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "lint": "ng lint && node scripts/check-icons.mjs",
+    "lint": "ng lint && node scripts/check-icons.mjs && tsc -p tsconfig.e2e.json",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -33,6 +33,7 @@
     "@angular/compiler-cli": "^22.1.0",
     "@eslint/js": "^10.0.0",
     "@playwright/test": "^1.62.0",
+    "@types/node": "^24.19.1",
     "angular-eslint": "^22.1.0",
     "eslint": "^10.0.0",
     "jsdom": "^30.0.0",

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { Api } from './support/api';
-import { SSH } from './support/config';
+import { ADMIN, SSH } from './support/config';
 import { expect, test } from './support/fixtures';
 import { folderSnapshot, readRemote, remoteExists, remoteReachable, scratchFile } from './support/ssh-fs';
 
@@ -152,7 +152,7 @@ test.describe('files', () => {
     await expect(page.getByRole('button', { name: t('tryAgain') })).toBeVisible();
     await expect(page.getByRole('button', { name: t('uploadFile') })).toBeDisabled();
     await expect(page.getByRole('button', { name: t('newFolder') })).toBeDisabled();
-    await expect(page.getByRole('button', { name: t('signOut') }).first()).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: new RegExp(ADMIN.username) })).toBeVisible();
     await expect(page).toHaveURL(/path=(%2F|\/)etc/);
     await journey.shot(page, 'files-outside');
   });

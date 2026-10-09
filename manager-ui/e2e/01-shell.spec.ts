@@ -22,22 +22,22 @@ test.describe('the shell', () => {
   test('a wrong password says so, and the right one opens the servers page', async ({ page, journey }) => {
     await page.goto('/sign-in');
     await page.getByRole('textbox', { name: journey.t('username') }).fill(ADMIN.username);
-    await page.getByRole('textbox', { name: journey.t('password'), exact: true }).fill('not-the-password');
+    await page.getByLabel(journey.t('password'), { exact: true }).fill('not-the-password');
     await page.getByRole('button', { name: journey.t('signIn'), exact: true }).click();
 
     await expect(page.getByRole('alert')).toHaveText(journey.t('wrongCredentials'));
     await expect(page).toHaveURL(/\/sign-in/);
     await journey.shot(page, 'sign-in-wrong-password');
 
-    await page.getByRole('textbox', { name: journey.t('password'), exact: true }).fill(ADMIN.password);
+    await page.getByLabel(journey.t('password'), { exact: true }).fill(ADMIN.password);
     await page.getByRole('button', { name: journey.t('signIn'), exact: true }).click();
 
     await expect(page).toHaveURL(/\/servers$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(journey.t('serversTitle'));
     await expect(page.getByRole('banner')).toContainText(ADMIN.username);
     const nav = page.getByRole('navigation', { name: /.+/ }).first();
-    await expect(nav.getByRole('button', { name: journey.t('navServers') })).toBeVisible();
-    await expect(nav.getByRole('button', { name: journey.t('navActivity') })).toBeVisible();
+    await expect(nav.getByRole('link', { name: journey.t('navServers') })).toBeVisible();
+    await expect(nav.getByRole('link', { name: journey.t('navActivity') })).toBeVisible();
     await journey.shot(page, 'servers');
   });
 
@@ -47,16 +47,17 @@ test.describe('the shell', () => {
     const otherDir = journey.lang === 'ar' ? 'ltr' : 'rtl';
     const otherTitle = journey.lang === 'ar' ? 'Servers' : 'الخوادم';
 
-    await page.getByRole('combobox', { name: journey.t('language') }).click();
-    await page.getByRole('option', { name: other }).click();
+    await page.getByRole('radiogroup', { name: journey.t('language') }).getByRole('radio', { name: other }).click();
 
     await expect(page.locator('html')).toHaveAttribute('dir', otherDir);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(otherTitle);
     await journey.shot(page, 'servers-other-language');
 
     const languageLabel = journey.lang === 'ar' ? 'Language' : 'اللغة';
-    await page.getByRole('combobox', { name: languageLabel }).click();
-    await page.getByRole('option', { name: journey.lang === 'ar' ? 'العربية' : 'English' }).click();
+    await page
+      .getByRole('radiogroup', { name: languageLabel })
+      .getByRole('radio', { name: journey.lang === 'ar' ? 'العربية' : 'English' })
+      .click();
 
     await expect(page.locator('html')).toHaveAttribute('dir', journey.dir);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(journey.t('serversTitle'));
@@ -65,7 +66,7 @@ test.describe('the shell', () => {
   test('sign out ends the session on both sides', async ({ page, journey }) => {
     await journey.signIn(page);
 
-    await page.getByRole('button', { name: journey.t('signOut') }).first().click();
+    await journey.signOut(page);
 
     await expect(page).toHaveURL(/\/sign-in/);
     await page.goto('/activity');
@@ -81,13 +82,13 @@ test.describe('the shell', () => {
     await expect(page.getByRole('link', { name: journey.t('skipToContent') })).toBeFocused();
 
     // The main navigation is a few stops in; every stop must be a named control.
-    const servers = page.getByRole('button', { name: journey.t('navServers') });
+    const servers = page.getByRole('link', { name: journey.t('navServers') });
     for (let stop = 0; stop < 8 && !(await servers.evaluate((el) => el === document.activeElement)); stop += 1) {
       await page.keyboard.press('Tab');
     }
     await expect(servers).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: journey.t('navActivity') })).toBeFocused();
+    await expect(page.getByRole('link', { name: journey.t('navActivity') })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/activity$/);
   });
