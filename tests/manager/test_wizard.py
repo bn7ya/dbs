@@ -174,13 +174,31 @@ def test_paths_found_while_adding_a_server_need_no_password_for_an_hour(api, adm
 
 
 @pytest.mark.django_db
-def test_after_an_hour_or_for_someone_else_paths_need_the_password(api, admin):
+def test_a_wrong_password_is_refused_even_where_none_is_needed(api, admin):
+    server = create(admin)
+
+    response = api.patch(
+        url(server),
+        {"project_dir": "/srv/found", "account_password": "not-the-password"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_password"
+    server.refresh_from_db()
+    assert server.project_dir != "/srv/found"
+
+
+@pytest.mark.django_db
+def test_after_an_hour_a_check_or_for_someone_else_paths_need_the_password(api, admin):
     older = create(admin)
     ServerRepository().update(older, created_at=timezone.now() - timedelta(hours=2))
     other = UserRepository().create(username="omar", password=PASSWORD)
     theirs = create(other, name="web-2")
+    checked = create(admin, name="web-3")
+    ServerRepository().update(checked, last_checked_at=timezone.now())
 
-    for server in (older, theirs):
+    for server in (older, theirs, checked):
         response = api.patch(url(server), {"project_dir": "/srv/found"}, format="json")
         assert response.status_code == 400
         assert response.json()["error"]["fields"] == {"account_password": ["required"]}

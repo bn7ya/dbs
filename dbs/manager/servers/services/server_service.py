@@ -232,7 +232,7 @@ class ServerService:
         name = changes.get("name", server.name)
         with self.activity.track(Action.UPDATE, server=server, target=name) as entry:
             entry.detail = {"fields": changed}
-            if guarded:
+            if guarded or account_password:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(lambda: self.servers.update(server, **changes))
 
@@ -242,6 +242,7 @@ class ServerService:
             and self.user.is_authenticated
             and server.created_by_id == self.user.pk
             and server.created_at > timezone.now() - SETUP_WINDOW
+            and server.last_checked_at is None
         )
 
     def delete(self, server_id: UUID) -> None:
