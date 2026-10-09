@@ -16,6 +16,8 @@ DEFAULT_EXCLUDES = {
     "dbs.sessionevent",
     "dbs.anomalyevent",
     "dbs.lockout",
+    "dbs.lease",
+    "dbs.backupschedule",
 }
 
 

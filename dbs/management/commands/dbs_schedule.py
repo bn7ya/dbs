@@ -9,16 +9,20 @@ from django.core.management.base import BaseCommand, CommandError
 from dbs._cli import require_env_passphrase
 from dbs.conf import setting
 from dbs.crypto.kdf import KDFParams
-from dbs.engine import create_backup
+from dbs import schedule_runner
 from dbs.exceptions import DBSError
-from dbs.naming import DEFAULT_PREFIX, backup_filename
-from dbs.retention import prune_directory, prune_remote
+from dbs.naming import DEFAULT_PREFIX
 from dbs.scheduling import install_stop_handlers, parse_interval, run_schedule
-from dbs.transports.ssh import SSHTarget, open_session
+from dbs.transports.ssh import SSHTarget
 
 logger = logging.getLogger("dbs")
 
 MINIMUM_SENSIBLE_INTERVAL = 60
+PLAN_OPTIONS = ("interval", "output_dir", "prefix", "keep", "push", "keep_remote")
+
+
+def _push_target(name):
+    return SSHTarget.from_settings(name) if name else None
 
 
 class Command(BaseCommand):
@@ -41,6 +45,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         passphrase = require_env_passphrase("dbs_schedule")
+        if _follows_database(options):
+            return self._run_database_schedule(options)
         plan = self._plan(options)
         interval = parse_interval(plan["interval"])
         if interval < MINIMUM_SENSIBLE_INTERVAL and not options["once"]:
@@ -92,7 +98,7 @@ class Command(BaseCommand):
             "prefix": options["prefix"] or setting("DBS_BACKUP_PREFIX", DEFAULT_PREFIX),
             "keep": int(keep),
             "keep_remote": None if keep_remote is None else int(keep_remote),
-            "push": options["push"] or setting("DBS_SCHEDULE_PUSH_TARGET", None),
+            "push": _push_target(options["push"] or setting("DBS_SCHEDULE_PUSH_TARGET", None)),
             "database": options["database"],
             "compress": not options["no_compress"],
             "verify": not options["no_verify"],
@@ -101,40 +107,29 @@ class Command(BaseCommand):
         }
 
     def _cycle(self, passphrase: str, plan: dict) -> None:
-        name = _available_name(plan["output_dir"], plan["prefix"])
-        output = os.path.join(plan["output_dir"], name)
-        extra = {"block_size": plan["block_size"]} if plan["block_size"] else {}
-
         try:
-            container = create_backup(
-                passphrase,
-                using=plan["database"],
-                compress=plan["compress"],
-                verify=plan["verify"],
-                kdf_params=plan["kdf_params"],
-                output=output,
-                **extra,
-            )
+            schedule_runner.run_cycle(passphrase, plan)
         except DBSError as exc:
             raise CommandError(f"Backup failed: {exc}") from exc
 
-        logger.info("scheduled backup wrote %s (%d bytes)", output, len(container))
-        prune_directory(plan["output_dir"], plan["keep"], plan["prefix"])
+    def _run_database_schedule(self, options) -> None:
+        if options["once"]:
+            try:
+                schedule_runner.run_due(force=True)
+            except DBSError as exc:
+                raise CommandError(f"Backup failed: {exc}") from exc
+            self.stdout.write(self.style.SUCCESS("Backup cycle complete."))
+            return
+        stop = threading.Event()
+        install_stop_handlers(stop)
+        self.stdout.write("Following the schedule set in the DBS panel.")
+        while not stop.is_set():
+            schedule_runner.tick()
+            stop.wait(schedule_runner.TICK_SECONDS)
 
-        if plan["push"]:
-            self._push(name, output, plan)
 
-    def _push(self, name: str, output: str, plan: dict) -> None:
-        target = SSHTarget.from_settings(plan["push"])
-        with open_session(target) as session:
-            session.push(output, name)
-            if plan["keep_remote"] is not None:
-                prune_remote(session, plan["keep_remote"], plan["prefix"])
-
-
-def _available_name(directory: str, prefix: str) -> str:
-    for ordinal in range(1, 1000):
-        name = backup_filename(prefix, ordinal=ordinal)
-        if not os.path.exists(os.path.join(directory, name)):
-            return name
-    raise CommandError("Cannot find an unused backup filename for this second.")
+def _follows_database(options) -> bool:
+    if any(options[name] is not None for name in PLAN_OPTIONS):
+        return False
+    schedule = schedule_runner.database_schedule()
+    return schedule is not None and schedule.enabled

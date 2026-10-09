@@ -73,3 +73,5 @@ MEDIA_ROOT = tempfile.mkdtemp(prefix="dbs-media-")
 USE_TZ = True
 
 STATIC_URL = "/static/"
+
+DBS_SCHEDULER = "off"

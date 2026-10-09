@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 
 from django import forms
 from django.core.validators import validate_email
 from django.db import connections
 
-from .models import AuthMethod, BackupTarget, SecurityLevel
+from .exceptions import ConfigurationError
+from .models import AuthMethod, BackupSchedule, BackupTarget, SecurityLevel
 from .security.guard import MINIMUM_PREFIX
 
 
@@ -200,3 +202,51 @@ class SetupForm(forms.Form):
             validate_email(candidate)
             addresses.append(candidate)
         return "\n".join(addresses)
+
+
+class BackupScheduleForm(forms.ModelForm):
+    class Meta:
+        model = BackupSchedule
+        fields = ("enabled", "interval", "keep", "database", "push_target", "keep_remote")
+        help_texts = {
+            "interval": "How often to back up: 30m, 6h, 1d.",
+            "keep": "How many backups to keep in DBS_BACKUP_DIR.",
+            "keep_remote": "How many pushed backups to keep on the target. Empty keeps them all.",
+        }
+
+    def clean_interval(self):
+        from .scheduling import parse_interval
+        from .schedule_runner import MINIMUM_INTERVAL_SECONDS
+
+        interval = self.cleaned_data["interval"].strip().lower()
+        try:
+            seconds = parse_interval(interval)
+        except ConfigurationError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+        if seconds < MINIMUM_INTERVAL_SECONDS:
+            raise forms.ValidationError("Back up at most every 5 minutes.")
+        return interval
+
+    def clean_keep(self):
+        keep = self.cleaned_data["keep"]
+        if keep < 1:
+            raise forms.ValidationError("Keep at least one backup.")
+        return keep
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("enabled"):
+            from .schedule_runner import backup_directory, unattended_passphrase
+
+            directory = backup_directory()
+            if not directory:
+                raise forms.ValidationError(
+                    "Set DBS_BACKUP_DIR in your settings before turning the schedule on."
+                )
+            if os.path.isdir(directory) and not os.access(directory, os.W_OK):
+                raise forms.ValidationError(f"{directory} is not writable by this process.")
+            if unattended_passphrase() is None:
+                raise forms.ValidationError(
+                    "Scheduled backups need SECRET_KEY or DBS_PASSPHRASE to encrypt with."
+                )
+        return cleaned

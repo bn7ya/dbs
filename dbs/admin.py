@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from django.contrib import admin
-from django.urls import path
+from django.shortcuts import redirect
+from django.urls import path, reverse
 from django.utils.html import format_html
 
 from . import views
-from .forms import BackupTargetForm
+from .forms import BackupScheduleForm, BackupTargetForm
 from .models import (
     AnomalyEvent,
     AuditEvent,
     BackupRecord,
+    BackupSchedule,
     BackupTarget,
     KnownLocation,
     Panel,
@@ -97,6 +99,44 @@ class BackupRecordAdmin(SuperuserOnlyAdmin):
         return False
 
 
+@admin.register(BackupSchedule)
+class BackupScheduleAdmin(SuperuserOnlyAdmin):
+    form = BackupScheduleForm
+    readonly_fields = ("next_run_at", "last_run_at", "last_status", "last_error", "updated_by")
+    fieldsets = (
+        (None, {"fields": ("enabled", "interval", "keep", "database")}),
+        ("Off-site copy", {"fields": ("push_target", "keep_remote")}),
+        ("Last run", {"fields": readonly_fields}),
+    )
+
+    def changelist_view(self, request, extra_context=None):
+        schedule = BackupSchedule.load()
+        return redirect(reverse("admin:dbs_backupschedule_change", args=[schedule.pk]))
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
+        if "interval" in form.changed_data or "enabled" in form.changed_data:
+            obj.next_run_at = None
+        super().save_model(request, obj, form, change)
+        views._audit(
+            request,
+            "schedule.update",
+            target=str(obj),
+            data={
+                "enabled": obj.enabled,
+                "interval": obj.interval,
+                "keep": obj.keep,
+                "keep_remote": obj.keep_remote,
+            },
+        )
+
+
 @admin.register(SecurityPolicy)
 class SecurityPolicyAdmin(SuperuserOnlyAdmin):
     list_display = ("level", "configured", "warn_threshold", "logout_threshold", "updated_at")
@@ -125,8 +165,8 @@ class AnomalyEventAdmin(SuperuserOnlyAdmin):
 
 @admin.register(AuditEvent)
 class AuditEventAdmin(SuperuserOnlyAdmin):
-    list_display = ("created_at", "actor", "action", "target_name", "succeeded")
-    list_filter = ("action", "succeeded")
+    list_display = ("created_at", "actor", "action", "target_name", "status", "duration")
+    list_filter = ("action", "status")
     search_fields = ("action", "target_name", "detail")
 
     def has_add_permission(self, request):

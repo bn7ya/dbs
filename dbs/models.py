@@ -219,6 +219,68 @@ class AuditEvent(models.Model):
         return self.finished_at - self.started_at
 
 
+class Lease(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+    owner = models.CharField(max_length=128, blank=True, default="")
+    expires_at = models.DateTimeField()
+    renewed_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} held by {self.owner or 'nobody'}"
+
+
+class BackupSchedule(models.Model):
+    enabled = models.BooleanField(default=False)
+    interval = models.CharField(max_length=16, default="24h")
+    keep = models.PositiveIntegerField(default=7)
+    database = models.CharField(max_length=64, default="default")
+    push_target = models.ForeignKey(
+        BackupTarget, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    keep_remote = models.PositiveIntegerField(null=True, blank=True)
+    next_run_at = models.DateTimeField(null=True, blank=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_status = models.CharField(max_length=16, blank=True, default="")
+    last_error = models.TextField(blank=True, default="")
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "backup schedule"
+        verbose_name_plural = "backup schedule"
+
+    def __str__(self):
+        if not self.enabled:
+            return "Scheduled backups are off"
+        return f"Every {self.interval}, keeping {self.keep}"
+
+    @classmethod
+    def load(cls):
+        from .conf import setting
+
+        schedule = cls.objects.order_by("pk").first()
+        if schedule is not None:
+            return schedule
+        keep_remote = setting("DBS_SCHEDULE_KEEP_REMOTE", None)
+        schedule, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                "interval": str(setting("DBS_SCHEDULE_INTERVAL", "24h")),
+                "keep": int(setting("DBS_SCHEDULE_KEEP", 7)),
+                "keep_remote": None if keep_remote is None else int(keep_remote),
+            },
+        )
+        return schedule
+
+    @property
+    def interval_seconds(self):
+        from .scheduling import parse_interval
+
+        return parse_interval(self.interval)
+
+
 class SecurityPolicy(models.Model):
     configured = models.BooleanField(default=False)
     level = models.CharField(

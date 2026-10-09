@@ -145,6 +145,61 @@ class AuditTrail(Step):
         return self.fixed("applied the audit trail migration")
 
 
+class ScheduleInDatabase(Step):
+    name = "backup schedule"
+    since = "0.5.0"
+
+    def check(self):
+        from django.conf import settings
+        from django.db import DatabaseError
+
+        from .models import BackupSchedule
+
+        try:
+            schedule = BackupSchedule.objects.order_by("pk").first()
+        except DatabaseError:
+            return self.warn("the backup schedule table is not migrated yet")
+        if schedule is not None and schedule.enabled:
+            return self.ok(f"backups run every {schedule.interval} from the DBS panel")
+        if hasattr(settings, "DBS_SCHEDULE_INTERVAL"):
+            return self.warn(
+                "DBS_SCHEDULE_INTERVAL is set, but the frequency is now set in the DBS panel",
+                "turn the schedule on at /admin/dbs/backupschedule/",
+            )
+        return self.ok("scheduled backups are off; turn them on at /admin/dbs/backupschedule/")
+
+
+class SchedulerMode(Step):
+    name = "scheduler"
+    since = "0.5.0"
+
+    def check(self):
+        from .schedule_runner import MODES, THREAD, mode
+
+        current = mode()
+        if current not in MODES:
+            return self.action(
+                f"DBS_SCHEDULER is {current!r}, which DBS does not know",
+                'DBS_SCHEDULER = "thread"  # or "command" or "off"',
+            )
+        if current == THREAD and _uwsgi_without_threads():
+            return self.warn(
+                "uWSGI runs without --enable-threads, so the schedule thread cannot start",
+                'add --enable-threads, or set DBS_SCHEDULER = "command" and run '
+                "python manage.py dbs schedule",
+            )
+        return self.ok(f"the schedule runs in {current} mode")
+
+
+def _uwsgi_without_threads():
+    try:
+        import uwsgi
+    except ImportError:
+        return False
+    options = getattr(uwsgi, "opt", {}) or {}
+    return not (options.get("enable-threads") or options.get(b"enable-threads"))
+
+
 class Dependencies(Step):
     name = "dependencies"
     since = "0.3.0"
@@ -326,6 +381,8 @@ STEPS = (
     InstalledApp,
     Migrations,
     AuditTrail,
+    ScheduleInDatabase,
+    SchedulerMode,
     Dependencies,
     AdminPanel,
     GuardMiddleware,

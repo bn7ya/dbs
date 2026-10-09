@@ -111,6 +111,38 @@ def test_the_audit_trail_step_applies_its_migration():
 
 
 @pytest.mark.django_db
+def test_a_schedule_left_in_settings_points_at_the_panel(settings):
+    settings.DBS_SCHEDULE_INTERVAL = "6h"
+
+    finding = upgrade.ScheduleInDatabase().check()
+
+    assert finding.level == WARN
+    assert "/admin/dbs/backupschedule/" in finding.remedy
+
+
+@pytest.mark.django_db
+def test_an_enabled_schedule_is_reported_as_current(settings):
+    from dbs.models import BackupSchedule
+
+    settings.DBS_SCHEDULE_INTERVAL = "6h"
+    BackupSchedule.objects.create(enabled=True, interval="6h")
+
+    assert upgrade.ScheduleInDatabase().check().level == OK
+
+
+def test_an_unknown_scheduler_mode_blocks(settings):
+    settings.DBS_SCHEDULER = "cron"
+
+    assert upgrade.SchedulerMode().check().level == ACTION
+
+
+def test_a_known_scheduler_mode_is_fine(settings):
+    settings.DBS_SCHEDULER = "command"
+
+    assert upgrade.SchedulerMode().check().level == OK
+
+
+@pytest.mark.django_db
 def test_a_missing_guard_middleware_is_reported(settings):
     settings.MIDDLEWARE = [
         m for m in settings.MIDDLEWARE if "DBSSecurityMiddleware" not in m

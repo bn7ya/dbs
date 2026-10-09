@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import contextmanager
 
 from django.db import DatabaseError, transaction
@@ -106,3 +107,20 @@ def track(action, *, target="", data=None, **fields):
     safe_record(
         action, target=entry.target, data=entry.data, started_at=started_at, **fields
     )
+
+
+def record_backup(output, container, digest, database):
+    from .models import BackupRecord
+
+    try:
+        with transaction.atomic():
+            return BackupRecord.objects.create(
+                filename=os.path.basename(output),
+                size_bytes=len(container),
+                sha256=digest,
+                database=database,
+                location=os.path.abspath(output),
+            )
+    except DatabaseError as exc:
+        logger.warning("Could not record the backup %s: %s", output, exc)
+        return None

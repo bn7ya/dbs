@@ -4,7 +4,6 @@ import hashlib
 import os
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import DatabaseError, transaction
 
 from dbs import audit
 from dbs._cli import passphrase_source, resolve_passphrase
@@ -72,7 +71,7 @@ class Command(BaseCommand):
                 verified=not options["no_verify"],
                 compressed=not options["no_compress"],
             )
-            record_backup(output, container, digest, options["database"])
+            audit.record_backup(output, container, digest, options["database"])
 
         source = passphrase_source(
             options.get("passphrase"), from_stdin=options["passphrase_stdin"]
@@ -85,18 +84,3 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"Passphrase came from {source}.")
 
-
-def record_backup(output, container, digest, database):
-    from dbs.models import BackupRecord
-
-    try:
-        with transaction.atomic():
-            BackupRecord.objects.create(
-                filename=os.path.basename(output),
-                size_bytes=len(container),
-                sha256=digest,
-                database=database,
-                location=os.path.abspath(output),
-            )
-    except DatabaseError as exc:
-        audit.logger.warning("Could not record the backup %s: %s", output, exc)
