@@ -92,7 +92,9 @@ describe('ActivityPage', () => {
     harness.detectChanges();
 
     expect(harness.routeNativeElement?.querySelector('h1')).toBeNull();
-    expect(page.actionOptions().some((option) => option.value.startsWith('auth.'))).toBe(false);
+    const scopedCodes = page.actionOptions().map((option) => option.value);
+    expect(scopedCodes.some((code) => code.startsWith('auth.') || code.startsWith('manager.'))).toBe(false);
+    expect(scopedCodes).toContain('redeploy.run');
   });
 
   it('names a known action and shows an unknown one as its code', async () => {
@@ -103,6 +105,9 @@ describe('ActivityPage', () => {
     expect(page.actionLabel('server.check')).toBe('Connection check');
     expect(page.actionLabel('backup.run')).toBe('Run backup plan');
     expect(page.actionLabel('plan.create')).toBe('Add backup plan');
+    expect(page.actionLabel('server.passphrase_capture')).toBe('Save backup passphrase');
+    expect(page.actionLabel('redeploy.final_check')).toBe('Move: check again');
+    expect(page.actionLabel('manager.export')).toBe('Export DBS data');
     expect(page.actionLabel('example.unknown')).toBe('example.unknown');
   });
 

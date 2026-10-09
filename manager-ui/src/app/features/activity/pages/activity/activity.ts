@@ -45,7 +45,7 @@ const STATUS_LOOKS: Readonly<Record<ActivityStatus, StatusLook>> = {
   failed: { severity: 'danger', icon: 'fa-solid fa-circle-xmark' },
 };
 
-const ACCOUNT_ACTION_PREFIXES: readonly string[] = ['account.', 'auth.'];
+const ACCOUNT_ACTION_PREFIXES: readonly string[] = ['account.', 'auth.', 'manager.'];
 
 const isAccountAction = (code: string): boolean => ACCOUNT_ACTION_PREFIXES.some((prefix) => code.startsWith(prefix));
 

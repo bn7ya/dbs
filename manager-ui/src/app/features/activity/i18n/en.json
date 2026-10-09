@@ -46,7 +46,10 @@
         "check": "Connection check",
         "repin": "Pin host key",
         "passphrase_reveal": "Show backup passphrase",
-        "fingerprint": "Get host key"
+        "fingerprint": "Get host key",
+        "keypair": "Create SSH key",
+        "discover": "Find django-dbs settings",
+        "passphrase_capture": "Save backup passphrase"
       },
       "backup": {
         "take": "Back up server",
@@ -83,6 +86,19 @@
       },
       "account": {
         "setup": "First account created"
+      },
+      "redeploy": {
+        "run": "Move to another server",
+        "check": "Move: check the other server",
+        "env": "Move: push the .env file",
+        "migrate": "Move: run the migrations",
+        "restore": "Move: restore the backup",
+        "archives": "Move: unpack the folder archives",
+        "final_check": "Move: check again"
+      },
+      "manager": {
+        "export": "Export DBS data",
+        "import": "Import DBS data"
       }
     }
   }
