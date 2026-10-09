@@ -9,7 +9,7 @@
     "build:package": "ng build --configuration production,package",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "lint": "ng lint",
+    "lint": "ng lint && node scripts/check-icons.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -22,9 +22,7 @@
     "@angular/platform-browser": "^22.1.0",
     "@angular/router": "^22.1.0",
     "@fontsource/tajawal": "^5.3.0",
-    "@primeuix/themes": "^3.0.1",
-    "primeicons": "^8.0.2",
-    "primeng": "^22.1.2",
+    "@fortawesome/fontawesome-free": "^7.3.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.8.0",
     "zone.js": "~0.16.0"

@@ -1,6 +1,5 @@
 @use "sass:meta";
 @use "@angular/cdk" as cdk;
-@use "fonts";
 @use "tokens";
 
 @layer reset, base, material, app;

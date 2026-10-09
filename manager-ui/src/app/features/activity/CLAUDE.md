@@ -22,7 +22,7 @@ the `appDate` pipe. The page opens no dialogs.
 ```
 
 `activity.routes.ts` is mounted twice: in `app.routes.ts` under `AppLayout`, with a `SECTIONS`
-entry in `core/layout/app-layout` (icon `fa-wave-pulse`), and as a lazy child of `:serverId` in
+entry in `core/layout/app-layout` (icon `fa-heart-pulse`), and as a lazy child of `:serverId` in
 `features/servers/servers.routes.ts`, with a tab in the server page's `TABS`. The slice's root
 route carries `activityGuard`, `ActivityStore` and the bundles. Each mount loads the routes on its
 own, so each has its own `ActivityStore`.

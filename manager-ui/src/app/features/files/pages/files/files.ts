@@ -47,7 +47,7 @@ const KIND_ICONS: Readonly<Record<EntryKind, string>> = {
   folder: 'fa-solid fa-folder',
   file: 'fa-regular fa-file',
   link: 'fa-solid fa-link',
-  other: 'fa-regular fa-file-circle-question',
+  other: 'fa-solid fa-file-circle-question',
 };
 
 const SKELETON_LINES: readonly number[] = [0, 1, 2, 3, 4, 5];

@@ -23,16 +23,13 @@
             "browser": "src/main.ts",
             "polyfills": [],
             "tsConfig": "tsconfig.app.json",
-            "assets": [
-              {
-                "glob": "**/*",
-                "input": "public"
-              }
-            ],
             "styles": [
               "@fontsource/tajawal/400.css",
               "@fontsource/tajawal/500.css",
               "@fontsource/tajawal/700.css",
+              "node_modules/@fortawesome/fontawesome-free/css/fontawesome.min.css",
+              "node_modules/@fortawesome/fontawesome-free/css/solid.min.css",
+              "node_modules/@fortawesome/fontawesome-free/css/regular.min.css",
               "src/styles.scss"
             ],
             "stylePreprocessorOptions": {

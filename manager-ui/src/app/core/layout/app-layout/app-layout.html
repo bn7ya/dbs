@@ -4,7 +4,13 @@
 
     <div class="app-layout__account">
       <app-locale-switcher />
-      <button matButton type="button" [matMenuTriggerFor]="account" [disabled]="signingOut()">
+      <button
+        matButton
+        type="button"
+        [matMenuTriggerFor]="account"
+        [disabled]="signingOut()"
+        [attr.aria-label]="'auth.signedInAs' | t: { name: displayName() }"
+      >
         <i matButtonIcon class="fa-solid fa-circle-user" aria-hidden="true"></i>
         <bdi dir="auto">{{ displayName() }}</bdi>
       </button>

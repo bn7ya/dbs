@@ -67,6 +67,7 @@
           <table
             mat-table
             [dataSource]="rows()"
+            [attr.aria-label]="'envfiles.list.label' | t"
             [attr.aria-busy]="loading()"
           >
             <ng-container matColumnDef="when">

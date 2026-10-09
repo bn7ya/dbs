@@ -50,7 +50,7 @@ import type { TagLook } from './backups.types';
 
 const VALIDATION_LOOKS: Readonly<Record<BackupValidation, TagLook>> = {
   structure_ok: { severity: 'neutral', icon: 'fa-solid fa-check' },
-  verified: { severity: 'success', icon: 'fa-solid fa-shield-check' },
+  verified: { severity: 'success', icon: 'fa-solid fa-shield-halved' },
   failed: { severity: 'danger', icon: 'fa-solid fa-circle-exclamation' },
 };
 
