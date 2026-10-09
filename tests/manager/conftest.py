@@ -18,9 +18,9 @@ def own_cache(settings):
 
 
 @pytest.fixture(autouse=True)
-def data_dir(settings, tmp_path):
-    home = tmp_path / "manager-home"
-    (home / "keys").mkdir(parents=True)
+def data_dir(settings, tmp_path_factory):
+    home = tmp_path_factory.mktemp("manager-home")
+    (home / "keys").mkdir()
     settings.DBS_MANAGER_DATA_DIR = str(home)
     settings.BACKUP_STORAGE_DIR = str(home / "backups")
     return home

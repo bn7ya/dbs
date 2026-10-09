@@ -14,6 +14,7 @@ from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.middleware import current_ip
+from dbs.manager.servers.repositories import ServerRepository
 from dbs.models import AuditEvent, AuditStatus
 
 INVALID_STATUS = "Choose queued, running, succeeded or failed."
@@ -56,7 +57,9 @@ class ActivityService:
         return entry
 
     def servers_for(self, entries: Any) -> dict[str, Any]:
-        return {}
+        return ServerRepository().by_subject(
+            {entry.subject for entry in entries if entry.subject}
+        )
 
     def record(
         self,

@@ -9,6 +9,7 @@ api_patterns = [
     path("setup/", SetupView.as_view(), name="setup"),
     path("auth/", include("dbs.manager.accounts.urls")),
     path("activity/", include("dbs.manager.activity.urls")),
+    path("servers/", include("dbs.manager.servers.urls")),
 ]
 
 urlpatterns = [
