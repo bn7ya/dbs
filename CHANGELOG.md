@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.5.0]
+## [0.5.0] - 2026-10-09
 
 One `pip install django-dbs` now covers three uses, depending only on where you use it: the
 backup library inside a project, a panel at `/admin/dbs/` that sets the backup frequency and
