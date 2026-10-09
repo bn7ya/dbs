@@ -278,6 +278,11 @@
         "openServer": "Open the server",
         "openBackups": "See its backups"
       }
+    },
+    "move": {
+      "title": "Move to another server",
+      "body": "Restore this server onto another one, with its .env file and folders.",
+      "action": "Move to another server"
     }
   },
   "errors": {
@@ -285,6 +290,7 @@
     "host_key_missing": "Get the host key first.",
     "host_key_unconfirmed": "Compare the fingerprints first.",
     "snippet_invalid": "This is not valid JSON. Paste the whole snippet.",
-    "snippet_not_dbs": "This is not a DBS connection snippet."
+    "snippet_not_dbs": "This is not a DBS connection snippet.",
+    "no_private_key": "This server signs in with a password, so it has no key."
   }
 }

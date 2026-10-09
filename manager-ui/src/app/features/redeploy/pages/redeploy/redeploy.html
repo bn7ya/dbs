@@ -1,0 +1,166 @@
+<div class="redeploy">
+  <header class="redeploy__header">
+    <h2>{{ 'redeploy.title' | t }}</h2>
+    <p class="text-secondary">{{ 'redeploy.body' | t }}</p>
+    <app-notice severity="info">{{ 'redeploy.needsCode' | t }}</app-notice>
+  </header>
+
+  @if (loadError(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    <div>
+      <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+    </div>
+  } @else {
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <form class="redeploy__form" novalidate (ngSubmit)="moveForReal()" [attr.aria-busy]="loading()">
+          @if (formFailure(); as failure) {
+            <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+          }
+
+          <div class="redeploy__target">
+            <mat-form-field class="redeploy__grow">
+              <mat-label>{{ 'redeploy.target' | t }}</mat-label>
+              <mat-select
+                name="target"
+                [appFieldError]="targetMissing() ? ('redeploy.errors.targetRequired' | t) : ''"
+                [ngModel]="target()"
+                (ngModelChange)="target.set($event)"
+              >
+                @for (server of targets(); track server.id) {
+                  <mat-option [value]="server.id"><bdi dir="auto">{{ server.name }}</bdi></mat-option>
+                }
+              </mat-select>
+              @if (targetMissing()) {
+                <mat-error>{{ 'redeploy.errors.targetRequired' | t }}</mat-error>
+              }
+            </mat-form-field>
+            <a matButton routerLink="/servers/new">{{ 'redeploy.addTarget' | t }}</a>
+          </div>
+
+          <mat-form-field>
+            <mat-label>{{ 'redeploy.backup' | t }}</mat-label>
+            <mat-select
+              name="backup"
+              [appFieldError]="backupMissing() ? ('redeploy.errors.backupRequired' | t) : ''"
+              [ngModel]="backup()"
+              (ngModelChange)="backup.set($event)"
+            >
+              @for (each of backups(); track each.id) {
+                <mat-option [value]="each.id">
+                  <bdi dir="ltr">{{ each.name }}</bdi> · {{ each.created_at | appDate }}
+                </mat-option>
+              }
+            </mat-select>
+            <mat-hint>{{ 'redeploy.backupHint' | t }}</mat-hint>
+            @if (backupMissing()) {
+              <mat-error>{{ 'redeploy.errors.backupRequired' | t }}</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ 'redeploy.env' | t }}</mat-label>
+            <mat-select name="env_version" [canSelectNullableOptions]="true" [ngModel]="envVersion()" (ngModelChange)="envVersion.set($event)">
+              <mat-option [value]="null">{{ 'redeploy.noEnv' | t }}</mat-option>
+              @for (version of envVersions(); track version.id) {
+                <mat-option [value]="version.id">{{ version.created_at | appDate }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ 'redeploy.archives' | t }}</mat-label>
+            <mat-select name="archives" multiple [ngModel]="archives()" (ngModelChange)="archives.set($event)">
+              @for (archive of archiveOptions(); track archive.id) {
+                <mat-option [value]="archive.id"><bdi dir="ltr">{{ archive.name }}</bdi></mat-option>
+              }
+            </mat-select>
+            <mat-hint>{{ 'redeploy.archivesHint' | t }}</mat-hint>
+          </mat-form-field>
+
+          <div class="redeploy__checks">
+            <mat-checkbox name="migrate" [ngModel]="migrate()" (ngModelChange)="migrate.set($event)">
+              {{ 'redeploy.migrate' | t }}
+            </mat-checkbox>
+            <mat-checkbox name="flush" [ngModel]="flush()" (ngModelChange)="flush.set($event)">
+              {{ 'redeploy.flush' | t }}
+            </mat-checkbox>
+          </div>
+
+          <app-password-input
+            [label]="'password.label' | t"
+            [hint]="'redeploy.passwordHint' | t"
+            [error]="passwordError()"
+            name="password"
+            autocomplete="current-password"
+            [ngModel]="password()"
+            (ngModelChange)="setPassword($event)"
+          />
+
+          <mat-form-field>
+            <mat-label>{{ 'redeploy.confirmName' | t }}</mat-label>
+            <input
+              matInput
+              name="confirm_name"
+              dir="auto"
+              autocomplete="off"
+              spellcheck="false"
+              [appFieldError]="nameError()"
+              [ngModel]="confirmName()"
+              (ngModelChange)="setConfirmName($event)"
+            />
+            @if (targetName(); as name) {
+              <mat-hint>{{ 'redeploy.confirmNameHint' | t: { name: '⁨' + name + '⁩' } }}</mat-hint>
+            }
+            @if (nameError(); as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+
+          <div class="redeploy__actions">
+            <button matButton="outlined" type="button" [disabled]="running()" (click)="rehearse()">
+              @if (running() && rehearsing()) {
+                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ 'redeploy.rehearse' | t }}
+            </button>
+            <button matButton="filled" class="app-danger" type="submit" [disabled]="running()" [attr.aria-busy]="running()">
+              @if (running() && !rehearsing()) {
+                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ 'redeploy.move' | t }}
+            </button>
+          </div>
+        </form>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (job(); as current) {
+    <section class="redeploy__progress" aria-live="polite">
+      <h3>{{ (rehearsing() ? 'redeploy.progress.rehearsal' : 'redeploy.progress.title') | t }}</h3>
+      <ol class="redeploy__steps" role="list">
+        @for (each of steps(); track each.step) {
+          <li class="redeploy__step">
+            <span>{{ 'redeploy.steps.' + each.step | t }}</span>
+            <app-status-tag
+              [severity]="stepLook(each.status).severity"
+              [icon]="stepLook(each.status).icon"
+              [label]="'redeploy.status.' + each.status | t"
+            />
+          </li>
+        }
+      </ol>
+      @switch (current.status) {
+        @case ('succeeded') {
+          <app-notice severity="success">
+            {{ (rehearsing() ? 'redeploy.progress.rehearsed' : 'redeploy.progress.done') | t }}
+          </app-notice>
+        }
+        @case ('failed') {
+          <app-notice severity="danger">{{ current.error_code | errorText }}</app-notice>
+        }
+      }
+    </section>
+  }
+</div>

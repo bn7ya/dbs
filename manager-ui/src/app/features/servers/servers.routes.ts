@@ -47,6 +47,10 @@ export const routes: Routes = [
             path: 'activity',
             loadChildren: () => import('@features/activity/activity.routes').then((m) => m.routes),
           },
+          {
+            path: 'move',
+            loadChildren: () => import('@features/redeploy/redeploy.routes').then((m) => m.routes),
+          },
         ],
       },
     ],

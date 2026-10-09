@@ -170,6 +170,18 @@
     <mat-card appearance="outlined">
       <mat-card-content class="overview__card">
         <div class="overview__intro">
+          <h2>{{ 'servers.move.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.move.body' | t }}</p>
+        </div>
+        <div class="overview__actions">
+          <a matButton="outlined" routerLink="move">{{ 'servers.move.action' | t }}</a>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
           <h2>{{ 'servers.delete.title' | t }}</h2>
           <p class="text-sm text-secondary">{{ 'servers.delete.body' | t }}</p>
         </div>

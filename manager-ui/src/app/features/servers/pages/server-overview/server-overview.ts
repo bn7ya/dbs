@@ -1,6 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatCard, MatCardContent } from '@angular/material/card';
 import { MatFormField, MatLabel, MatSuffix } from '@angular/material/form-field';
@@ -36,6 +36,7 @@ const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
 @Component({
   selector: 'app-server-overview-page',
   imports: [
+    RouterLink,
     MatButton,
     MatIconButton,
     MatCard,

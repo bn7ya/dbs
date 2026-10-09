@@ -1,0 +1,53 @@
+{
+  "redeploy": {
+    "title": "Move to another server",
+    "body": "Restore this server's data, .env file and folders onto another server.",
+    "needsCode": "The other server must already have the project's code and its virtual environment.",
+    "target": "Move to",
+    "addTarget": "Add a server",
+    "backup": "Backup to restore",
+    "backupHint": "The newest django-dbs backup is chosen.",
+    "env": ".env version",
+    "noEnv": "Do not push a .env file",
+    "archives": "Folder archives to unpack",
+    "archivesHint": "Optional. Each archive is unpacked in its own folder on the other server.",
+    "migrate": "Run the migrations first",
+    "flush": "Replace the data on the other server instead of merging",
+    "passwordHint": "Needed to move for real. A rehearsal needs no password.",
+    "confirmName": "Name of the other server",
+    "confirmNameHint": "Type {name} to move for real.",
+    "rehearse": "Rehearse",
+    "move": "Move for real",
+    "progress": {
+      "title": "Moving",
+      "rehearsal": "Rehearsal",
+      "done": "The move finished.",
+      "rehearsed": "The rehearsal finished. Nothing was changed on the other server."
+    },
+    "steps": {
+      "check": "Check the other server",
+      "env": "Push the .env file",
+      "migrate": "Run the migrations",
+      "restore": "Restore the backup",
+      "archives": "Unpack the folder archives",
+      "final_check": "Check again"
+    },
+    "status": {
+      "pending": "Waiting",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "errors": {
+      "targetRequired": "Choose the server to move to.",
+      "backupRequired": "Choose a backup."
+    }
+  },
+  "errors": {
+    "passphrase_missing": "The backup passphrase of this server is not saved here.",
+    "confirm_name_mismatch": "Type the other server's name exactly as shown.",
+    "same_server": "Choose a server other than this one.",
+    "target_not_ready": "django-dbs is not installed on the other server, or the project is not ready there."
+  }
+}
