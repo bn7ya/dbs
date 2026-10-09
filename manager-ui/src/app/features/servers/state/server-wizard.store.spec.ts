@@ -11,7 +11,7 @@ import type { Job } from '@core/jobs/job.types';
 import { CREATE, SERVER } from '../testing/servers.fixtures';
 import { ServerWizardStore } from './server-wizard.store';
 
-const DONE: Job = { id: 'job-1', action: 'backup.take', status: 'succeeded', detail: {}, error_code: '', finished_at: null };
+const DONE: Job = { id: 1, action: 'backup.take', status: 'succeeded', detail: {}, error_code: '', finished_at: null };
 
 describe('ServerWizardStore', () => {
   let store: ServerWizardStore;
@@ -110,9 +110,9 @@ describe('ServerWizardStore', () => {
     store.takeBackup();
     const take = http.expectOne('/api/backups/take/');
     expect(take.request.body).toEqual({ server: SERVER.id });
-    take.flush({ activity: 'job-1' }, { status: 202, statusText: 'Accepted' });
+    take.flush({ activity: 1 }, { status: 202, statusText: 'Accepted' });
 
-    expect(watch).toHaveBeenCalledWith('job-1');
+    expect(watch).toHaveBeenCalledWith(1);
     expect(store.backupJob()?.status).toBe('succeeded');
     expect(store.backingUp()).toBe(false);
   });

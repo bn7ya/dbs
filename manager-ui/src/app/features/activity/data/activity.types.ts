@@ -37,7 +37,7 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
 ];
 
 export interface ActivityEntry {
-  readonly id: string;
+  readonly id: number;
   readonly action: string;
   readonly status: ActivityStatus;
   readonly target: string;

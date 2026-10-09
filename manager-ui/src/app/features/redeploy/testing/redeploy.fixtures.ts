@@ -20,7 +20,7 @@ export const ENV_VERSIONS: readonly RedeployEnvVersion[] = [
 ];
 
 export const RUNNING: Job = {
-  id: 'job-9',
+  id: 9,
   action: 'redeploy.run',
   status: 'running',
   detail: {

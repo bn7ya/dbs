@@ -39,7 +39,7 @@ export interface DashboardServer {
 }
 
 export interface DashboardFailure {
-  readonly id: string;
+  readonly id: number;
   readonly action: string;
   readonly status: string;
   readonly target: string;

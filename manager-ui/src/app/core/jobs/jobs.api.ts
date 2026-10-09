@@ -8,7 +8,7 @@ import type { Job } from './job.types';
 export class JobsApi {
   private readonly http = inject(HttpClient);
 
-  get(id: string): Observable<Job> {
+  get(id: number): Observable<Job> {
     return this.http.get<Job>(`/api/activity/${id}/`);
   }
 }

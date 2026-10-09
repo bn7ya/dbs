@@ -36,7 +36,7 @@ const SNIPPET = JSON.stringify({
   host_keys: [{ type: 'ssh-ed25519', fingerprint: 'SHA256:abc' }],
 });
 
-const DONE: Job = { id: 'job-1', action: 'backup.take', status: 'succeeded', detail: {}, error_code: '', finished_at: null };
+const DONE: Job = { id: 1, action: 'backup.take', status: 'succeeded', detail: {}, error_code: '', finished_at: null };
 
 describe('ServerWizardPage', () => {
   let http: HttpTestingController;
@@ -212,7 +212,7 @@ describe('ServerWizardPage', () => {
     expect(wizard.step()).toBe(6);
 
     wizard.takeBackup();
-    http.expectOne('/api/backups/take/').flush({ activity: 'job-1' }, { status: 202, statusText: 'Accepted' });
+    http.expectOne('/api/backups/take/').flush({ activity: 1 }, { status: 202, statusText: 'Accepted' });
     const page = html();
     expect(page.textContent).toContain('The test backup worked.');
     expect(page.querySelector(`a[href="/servers/${SERVER.id}/backups"]`)).not.toBeNull();

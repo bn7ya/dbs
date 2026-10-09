@@ -34,8 +34,8 @@ import type { Opening } from '../testing/backups.fixtures.types';
 import { BackupsStore } from './backups.store';
 
 const OTHER_SERVER = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002';
-const OTHER_JOB = '7a1e0c55-2222-4d1b-8f00-9c3e5b7d0010';
-const THIRD_JOB = '7a1e0c55-2222-4d1b-8f00-9c3e5b7d0011';
+const OTHER_JOB = 10;
+const THIRD_JOB = 11;
 
 const SETTINGS: PlanSettings = {
   name: 'django-dbs',
@@ -49,10 +49,10 @@ const SETTINGS: PlanSettings = {
 
 // Stands in for the poller: the spec says when a job moves and when it ends.
 class FakeJobWatcher {
-  readonly followed = new Map<string, Subject<Job>>();
-  readonly watched: string[] = [];
+  readonly followed = new Map<number, Subject<Job>>();
+  readonly watched: number[] = [];
 
-  watch(id: string): Observable<Job> {
+  watch(id: number): Observable<Job> {
     const job = new Subject<Job>();
     this.followed.set(id, job);
     this.watched.push(id);
@@ -920,7 +920,7 @@ describe('BackupsStore', () => {
         files: [FILE],
         plans: [PLAN, MANUAL_PLAN],
         running: [run],
-        queued: [take, check, { id: 'other', action: 'server.check', status: 'queued', target: 'Production web', detail: {} }],
+        queued: [take, check, { id: 99, action: 'server.check', status: 'queued', target: 'Production web', detail: {} }],
       });
 
       expect(jobs.watched).toEqual([JOB_ID, OTHER_JOB, THIRD_JOB]);

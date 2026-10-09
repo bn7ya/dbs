@@ -1,7 +1,7 @@
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 
 export interface Job {
-  readonly id: string;
+  readonly id: number;
   readonly action: string;
   readonly status: JobStatus;
   readonly detail: Readonly<Record<string, unknown>>;
@@ -10,7 +10,7 @@ export interface Job {
 }
 
 export interface JobStarted {
-  readonly activity: string;
+  readonly activity: number;
 }
 
 export function isFinished(job: Job): boolean {

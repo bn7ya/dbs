@@ -40,7 +40,7 @@ export const DASHBOARD: Dashboard = {
   last_export_at: '2026-10-08T12:00:00Z',
   recent_failures: [
     {
-      id: 'a1',
+      id: 41,
       action: 'backup.take',
       status: 'failed',
       target: 'production-web',

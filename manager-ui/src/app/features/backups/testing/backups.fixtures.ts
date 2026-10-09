@@ -110,7 +110,7 @@ export const VERIFIED: BackupFile = {
   plan_name: PLAN.name,
 };
 
-export const JOB_ID = '7a1e0c55-2222-4d1b-8f00-9c3e5b7d0009';
+export const JOB_ID = 9;
 
 export function jobOf(action: string, finish: Partial<Job> = {}): Job {
   return {

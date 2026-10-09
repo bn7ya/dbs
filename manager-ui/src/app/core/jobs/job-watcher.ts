@@ -11,7 +11,7 @@ export class JobWatcher {
   private readonly api = inject(JobsApi);
 
   // `exhaustMap`, not `switchMap`: a slow read is waited for, or a late backend would never be heard.
-  watch(id: string): Observable<Job> {
+  watch(id: number): Observable<Job> {
     return timer(0, JOB_POLL_MS).pipe(
       exhaustMap(() => this.api.get(id)),
       takeWhile((job) => !isFinished(job), true),

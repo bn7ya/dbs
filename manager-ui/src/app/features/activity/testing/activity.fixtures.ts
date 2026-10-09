@@ -4,7 +4,7 @@ import type { ActivityEntry } from '../data/activity.types';
 export const SERVER_ID = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001';
 
 export const ENTRY: ActivityEntry = {
-  id: '7a1e0c55-2222-4d1b-8f00-9c3e5b7d0001',
+  id: 1,
   action: 'server.check',
   status: 'succeeded',
   target: '',
@@ -21,7 +21,7 @@ export const ENTRY: ActivityEntry = {
 
 export const FAILED: ActivityEntry = {
   ...ENTRY,
-  id: '7a1e0c55-2222-4d1b-8f00-9c3e5b7d0002',
+  id: 2,
   status: 'failed',
   error_code: 'ssh_unreachable',
 };

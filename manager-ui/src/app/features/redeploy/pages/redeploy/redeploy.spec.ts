@@ -101,7 +101,7 @@ describe('RedeployPage', () => {
       password: '',
       confirm_name: '',
     });
-    post.flush({ activity: 'job-9' }, { status: 202, statusText: 'Accepted' });
+    post.flush({ activity: 9 }, { status: 202, statusText: 'Accepted' });
 
     const steps = Array.from(html().querySelectorAll('.redeploy__step'), (step) => [
       step.querySelector('span')?.textContent?.trim(),

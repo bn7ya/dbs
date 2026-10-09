@@ -128,7 +128,7 @@ export interface PlanListQuery {
 }
 
 export interface UnfinishedJob {
-  readonly id: string;
+  readonly id: number;
   readonly action: string;
   readonly status: Extract<JobStatus, 'queued' | 'running'>;
   readonly target: string;

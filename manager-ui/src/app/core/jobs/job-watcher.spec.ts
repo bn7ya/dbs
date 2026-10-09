@@ -10,7 +10,7 @@ import { errorInterceptor } from '@core/http/error.interceptor';
 import { JOB_POLL_MS, JobWatcher } from './job-watcher';
 import type { Job } from './job.types';
 
-const ID = '7a1e0c55-2222-4d1b-8f00-9c3e5b7d0001';
+const ID = 1;
 const URL = `/api/activity/${ID}/`;
 
 const RUNNING: Job = {
