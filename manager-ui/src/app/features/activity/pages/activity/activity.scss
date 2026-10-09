@@ -1,0 +1,59 @@
+@use "layout" as *;
+
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-7);
+}
+
+.activity__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.activity__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.activity__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+}
+
+.activity__filter {
+  flex: 1 1 calc($card-max / 2);
+  max-inline-size: $card-max;
+}
+
+.activity__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.activity__status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+}
+
+.activity__deleted {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--app-space-2);
+}
+
+// A target can be a long path; it wraps anywhere rather than push the table wider.
+.activity__target {
+  overflow-wrap: anywhere;
+}
+
+.activity__code {
+  font-family: var(--app-font-mono);
+}

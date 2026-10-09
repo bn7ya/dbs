@@ -1,0 +1,65 @@
+{
+  "files": {
+    "title": "Files",
+    "body": "Files in the allowed folders of this server.",
+    "location": {
+      "root": "Allowed folder",
+      "trail": "Folder path"
+    },
+    "upload": {
+      "action": "Upload a file",
+      "working": "Uploading…",
+      "storing": "Saving the file on the server…",
+      "cancelLabel": "Cancel the upload of {name}",
+      "done": "File uploaded."
+    },
+    "newFolder": {
+      "action": "New folder",
+      "title": "New folder",
+      "name": "Name",
+      "location": "It is created in {path}.",
+      "submit": "Create folder",
+      "done": "Folder created.",
+      "invalid": {
+        "required": "Enter a name for the folder.",
+        "separator": "Use a name with no / or \\ in it.",
+        "reserved": "A folder cannot be named \".\" or \"..\"."
+      }
+    },
+    "list": {
+      "name": "Name",
+      "size": "Size",
+      "modified": "Modified",
+      "actions": "Actions",
+      "none": "—",
+      "open": "Open folder {name}",
+      "pages": "File pages",
+      "kind": {
+        "link": "Link",
+        "other": "Special file"
+      }
+    },
+    "download": {
+      "action": "Download",
+      "label": "Download {name}"
+    },
+    "delete": {
+      "label": "Delete {name}",
+      "fileTitle": "Delete this file?",
+      "folderTitle": "Delete this folder?",
+      "fileBody": "This cannot be undone.",
+      "folderBody": "Only an empty folder can be deleted. This cannot be undone.",
+      "fileDone": "File deleted.",
+      "folderDone": "Folder deleted."
+    },
+    "empty": {
+      "title": "This folder is empty",
+      "body": "Upload a file or create a folder here."
+    },
+    "noFolders": {
+      "title": "No allowed folders",
+      "body": "Files are listed from the server's allowed folders. Add one under Settings on Overview.",
+      "action": "Go to Overview"
+    }
+  }
+}

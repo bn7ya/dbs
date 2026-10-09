@@ -1,0 +1,41 @@
+:host {
+  display: flex;
+  gap: var(--app-space-3);
+  align-items: center;
+  padding-inline-start: var(--app-space-4);
+}
+
+.toast__icon {
+  flex: none;
+  font-size: var(--app-text-1);
+  color: var(--app-color-info);
+}
+
+:host(.toast--success) .toast__icon {
+  color: var(--app-color-success);
+}
+
+:host(.toast--warning) .toast__icon {
+  color: var(--app-color-warning);
+}
+
+:host(.toast--danger) .toast__icon {
+  color: var(--app-color-danger);
+}
+
+.toast__text {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.toast__summary {
+  font-weight: var(--app-weight-medium);
+}
+
+.toast__detail {
+  color: var(--app-color-on-surface-variant);
+}
+
+.toast__close {
+  flex: none;
+}

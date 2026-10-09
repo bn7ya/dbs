@@ -1,0 +1,53 @@
+body {
+  font-family: var(--app-font-family);
+  font-size: var(--app-text-0);
+  line-height: var(--app-leading-body);
+  color: var(--app-color-on-surface);
+  background: var(--app-color-ground);
+}
+
+:lang(ar) {
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: var(--app-text-3);
+  font-weight: var(--app-weight-bold);
+  line-height: var(--app-leading-tight);
+}
+
+h2 {
+  font-size: var(--app-text-2);
+  font-weight: var(--app-weight-bold);
+  line-height: var(--app-leading-tight);
+}
+
+a {
+  color: var(--app-color-primary);
+}
+
+:focus-visible {
+  outline: var(--app-focus-width) solid var(--app-color-focus);
+  outline-offset: var(--app-focus-width);
+}
+
+.text-secondary {
+  color: var(--app-color-on-surface-variant);
+}
+
+.skip-link {
+  position: absolute;
+  inset-block-start: var(--app-space-2);
+  inset-inline-start: var(--app-space-2);
+  z-index: var(--app-layer-skip-link);
+  padding: var(--app-space-2) var(--app-space-4);
+  color: var(--app-color-on-primary);
+  background: var(--app-color-primary);
+  border-radius: var(--app-radius-md);
+  transform: translateY(-200%);
+  transition: transform var(--app-duration-short) var(--app-easing-standard);
+
+  &:focus {
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,67 @@
+<div class="about">
+  <header class="about__header">
+    <h1>{{ 'about.title' | t }}</h1>
+    <p class="text-secondary">{{ 'about.subtitle' | t }}</p>
+  </header>
+
+  @if (error(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    <div>
+      <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+    </div>
+  } @else if (pending()) {
+    <div class="about__skeleton" aria-busy="true">
+      @for (line of skeletonLines; track line) {
+        <app-skeleton />
+      }
+    </div>
+  } @else if (about(); as about) {
+    <section class="about__section" [attr.aria-labelledby]="managerHeading">
+      <h2 [id]="managerHeading">{{ 'about.manager.title' | t }}</h2>
+      <dl class="about__facts">
+        <div class="about__fact">
+          <dt class="text-label text-secondary">{{ 'about.manager.version' | t }}</dt>
+          <dd><bdi class="about__code" dir="ltr">{{ about.version }}</bdi></dd>
+        </div>
+        <div class="about__fact">
+          <dt class="text-label text-secondary">{{ 'about.manager.dataDir' | t }}</dt>
+          <dd><bdi class="about__code" dir="ltr">{{ about.data_dir }}</bdi></dd>
+        </div>
+        <div class="about__fact">
+          <dt class="text-label text-secondary">{{ 'about.manager.database' | t }}</dt>
+          <dd><bdi class="about__code" dir="ltr">{{ about.database }}</bdi></dd>
+        </div>
+        <div class="about__fact">
+          <dt class="text-label text-secondary">{{ 'about.manager.backupsDir' | t }}</dt>
+          <dd><bdi class="about__code" dir="ltr">{{ about.backups_dir }}</bdi></dd>
+        </div>
+        <div class="about__fact">
+          <dt class="text-label text-secondary">{{ 'about.manager.lastExport' | t }}</dt>
+          <dd>
+            @if (about.last_export_at; as last) {
+              <time [attr.datetime]="last" [attr.title]="last | appDate">{{ last | timeAgo }}</time>
+            } @else {
+              {{ 'about.manager.never' | t }}
+            }
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="about__section" [attr.aria-labelledby]="copyHeading">
+      <h2 [id]="copyHeading">{{ 'about.copy.title' | t }}</h2>
+      <p class="text-secondary">{{ 'about.copy.body' | t }}</p>
+      <ul class="about__commands">
+        @for (command of commands; track command.key) {
+          <li class="about__command">
+            <span>{{ 'about.copy.commands.' + command.key | t }}</span>
+            <div class="about__command-line">
+              <code class="about__code" dir="ltr">{{ command.text }}</code>
+              <app-copy-button [text]="command.text" [label]="'about.copy.labels.' + command.key | t" />
+            </div>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+</div>

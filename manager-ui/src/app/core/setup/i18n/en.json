@@ -1,0 +1,28 @@
+{
+  "setup": {
+    "title": "Create your account",
+    "subtitle": "You sign in to DBS on this computer with this account.",
+    "token": "Setup key",
+    "tokenHint": "It is in the setup link printed where django_dbs run started.",
+    "username": "Username",
+    "password": "Password",
+    "confirm": "Confirm password",
+    "submit": "Create account",
+    "working": "Creating account…",
+    "signIn": "Go to sign in",
+    "errors": {
+      "tokenRequired": "Enter the setup key.",
+      "usernameRequired": "Enter a username.",
+      "passwordRequired": "Enter a password.",
+      "confirmMismatch": "The passwords do not match."
+    }
+  },
+  "errors": {
+    "setup_done": "An account already exists. Sign in with it.",
+    "setup_token_invalid": "The setup key is not valid. Use the link printed where django_dbs run started.",
+    "password_too_short": "The password is too short.",
+    "password_too_common": "The password is too common.",
+    "password_entirely_numeric": "Use letters as well as numbers.",
+    "password_too_similar": "The password is too close to the username."
+  }
+}

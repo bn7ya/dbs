@@ -1,0 +1,10 @@
+@use "layout" as *;
+
+.table-scroll {
+  overflow-x: auto;
+
+  > table {
+    inline-size: 100%;
+    min-inline-size: $table-min;
+  }
+}

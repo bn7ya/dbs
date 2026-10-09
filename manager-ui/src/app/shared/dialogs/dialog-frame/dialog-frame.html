@@ -1,0 +1,7 @@
+<h2 mat-dialog-title class="dialog-frame__title">{{ payload.titleKey | t }}</h2>
+<mat-dialog-content class="dialog-frame__content">
+  <ng-container [ngComponentOutlet]="payload.component" />
+</mat-dialog-content>
+<button matIconButton type="button" class="dialog-frame__close" [mat-dialog-close]="undefined" [attr.aria-label]="'components.close' | t">
+  <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+</button>

@@ -1,0 +1,177 @@
+<div class="dashboard">
+  <header class="dashboard__header">
+    <div class="dashboard__title">
+      <h1>{{ 'dashboard.title' | t }}</h1>
+      <p class="text-secondary">{{ 'dashboard.subtitle' | t }}</p>
+    </div>
+    @if (!empty()) {
+      <a matButton="filled" routerLink="/servers/new">
+        <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
+        {{ 'dashboard.add' | t }}
+      </a>
+    }
+  </header>
+
+  @if (error(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    <div>
+      <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+    </div>
+  } @else if (pending()) {
+    <div class="dashboard__skeleton" aria-busy="true">
+      @for (line of skeletonLines; track line) {
+        <app-skeleton />
+      }
+    </div>
+  } @else if (empty()) {
+    <app-empty-state
+      icon="fa-solid fa-server"
+      [headingLevel]="2"
+      [title]="'dashboard.empty.title' | t"
+      [description]="'dashboard.empty.body' | t"
+    >
+      <a matButton="filled" routerLink="/servers/new">{{ 'dashboard.add' | t }}</a>
+    </app-empty-state>
+  } @else {
+    @if (exportDue()) {
+      <app-notice severity="warning">
+        <span class="dashboard__export">
+          @if (lastExportAt(); as last) {
+            {{ 'dashboard.export.stale' | t: { age: (last | timeAgo) } }}
+          } @else {
+            {{ 'dashboard.export.never' | t }}
+          }
+          <code class="dashboard__code" dir="ltr">{{ exportCommand }}</code>
+        </span>
+      </app-notice>
+    }
+
+    <dl class="dashboard__totals" [attr.aria-label]="'dashboard.totals.label' | t">
+      <div class="dashboard__total">
+        <dt class="text-label text-secondary">{{ 'dashboard.totals.servers' | t }}</dt>
+        <dd class="dashboard__figure">{{ servers().length }}</dd>
+      </div>
+      <div class="dashboard__total">
+        <dt class="text-label text-secondary">{{ 'dashboard.totals.storage' | t }}</dt>
+        <dd class="dashboard__figure"><bdi>{{ storageBytes() | fileSize }}</bdi></dd>
+      </div>
+      <div class="dashboard__total">
+        <dt class="text-label text-secondary">{{ 'dashboard.totals.failures' | t }}</dt>
+        <dd class="dashboard__figure">{{ failuresThisWeek() }}</dd>
+      </div>
+      <div class="dashboard__total">
+        <dt class="text-label text-secondary">{{ 'dashboard.totals.lastExport' | t }}</dt>
+        <dd class="dashboard__figure">
+          @if (lastExportAt(); as last) {
+            <time [attr.datetime]="last">{{ last | timeAgo }}</time>
+          } @else {
+            {{ 'dashboard.totals.never' | t }}
+          }
+        </dd>
+      </div>
+    </dl>
+
+    <section class="dashboard__section">
+      <h2>{{ 'dashboard.servers.title' | t }}</h2>
+      <ul class="dashboard__servers" role="list">
+        @for (server of servers(); track server.id) {
+          <li>
+            <mat-card appearance="outlined" class="dashboard__server">
+              <mat-card-content class="dashboard__card">
+                <div class="dashboard__name">
+                  <h3><a [routerLink]="['/servers', server.id]" dir="auto">{{ server.name }}</a></h3>
+                  <bdi class="dashboard__code text-sm text-secondary" dir="ltr">{{ server.host }}</bdi>
+                </div>
+                <div class="dashboard__tags">
+                  <app-status-tag
+                    [severity]="checkLook(server).severity"
+                    [icon]="checkLook(server).icon"
+                    [label]="'dashboard.servers.check' | t: { status: ('dashboard.check.' + server.check_status | t) }"
+                  />
+                  <app-status-tag
+                    [severity]="healthLook(server).severity"
+                    [icon]="healthLook(server).icon"
+                    [label]="'dashboard.servers.health' | t: { status: ('dashboard.health.' + healthStatus(server) | t) }"
+                  />
+                </div>
+                <dl class="dashboard__facts">
+                  <div class="dashboard__fact">
+                    <dt class="text-label text-secondary">{{ 'dashboard.servers.lastBackup' | t }}</dt>
+                    <dd>
+                      @if (server.last_backup; as backup) {
+                        <time [attr.datetime]="backup.created_at">{{ backup.created_at | timeAgo }}</time>
+                      } @else {
+                        <span class="text-muted">{{ 'dashboard.servers.noBackup' | t }}</span>
+                      }
+                    </dd>
+                  </div>
+                  <div class="dashboard__fact">
+                    <dt class="text-label text-secondary">{{ 'dashboard.servers.nextRun' | t }}</dt>
+                    <dd>
+                      @if (server.next_plan_run; as next) {
+                        <time [attr.datetime]="next">{{ next | appDate }}</time>
+                      } @else {
+                        <span class="text-muted">{{ 'dashboard.servers.noPlan' | t }}</span>
+                      }
+                    </dd>
+                  </div>
+                  <div class="dashboard__fact">
+                    <dt class="text-label text-secondary">{{ 'dashboard.servers.failures' | t }}</dt>
+                    <dd>{{ server.failures_7d }}</dd>
+                  </div>
+                  <div class="dashboard__fact">
+                    <dt class="text-label text-secondary">{{ 'dashboard.servers.storage' | t }}</dt>
+                    <dd><bdi>{{ server.storage_bytes | fileSize }}</bdi></dd>
+                  </div>
+                </dl>
+              </mat-card-content>
+            </mat-card>
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section class="dashboard__section">
+      <div class="dashboard__section-header">
+        <h2>{{ 'dashboard.failures.title' | t }}</h2>
+        <a matButton routerLink="/activity">{{ 'dashboard.failures.all' | t }}</a>
+      </div>
+      @if (failures().length === 0) {
+        <p class="text-secondary">{{ 'dashboard.failures.none' | t }}</p>
+      } @else {
+        <div class="table-scroll">
+          <table mat-table [dataSource]="failures()" [attr.aria-label]="'dashboard.failures.label' | t">
+            <ng-container matColumnDef="when">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'dashboard.failures.when' | t }}</th>
+              <td mat-cell *matCellDef="let row">{{ row.created_at | appDate }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="server">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'dashboard.failures.server' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.server; as server) {
+                  <a [routerLink]="['/servers', server]" dir="auto">{{ row.server_name || server }}</a>
+                } @else {
+                  <bdi dir="auto">{{ row.server_name }}</bdi>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="target">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'dashboard.failures.target' | t }}</th>
+              <td mat-cell *matCellDef="let row"><bdi class="dashboard__code" dir="ltr">{{ row.target }}</bdi></td>
+            </ng-container>
+
+            <ng-container matColumnDef="reason">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'dashboard.failures.reason' | t }}</th>
+              <td mat-cell *matCellDef="let row">{{ row.error_code | errorText }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="failureColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: failureColumns"></tr>
+          </table>
+        </div>
+      }
+    </section>
+  }
+</div>

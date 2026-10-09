@@ -1,0 +1,207 @@
+@if (server(); as current) {
+  <div class="overview">
+    <mat-card appearance="outlined" class="overview__check">
+      <mat-card-content class="overview__card">
+        <div class="overview__heading">
+          <h2>{{ 'servers.check.title' | t }}</h2>
+          <app-check-status-tag [status]="current.last_check_status" />
+        </div>
+
+        <p class="text-sm text-secondary">
+          @if (current.last_checked_at; as checkedAt) {
+            {{ 'servers.check.lastChecked' | t }} {{ checkedAt | appDate }}
+          } @else {
+            {{ 'servers.check.never' | t }}
+          }
+        </p>
+
+        @if (hostKeyChanged()) {
+          <app-notice severity="danger">
+            {{ 'host_key_changed' | errorText }} {{ 'servers.check.blocked' | t }}
+          </app-notice>
+          <div>
+            <button matButton="outlined" class="app-danger" type="button" (click)="reviewHostKey()">
+              {{ 'servers.hostKey.review' | t }}
+            </button>
+          </div>
+        } @else if (checkFailure(); as code) {
+          <app-notice severity="danger">{{ code | errorText }}</app-notice>
+        }
+
+        @if (report(); as found) {
+          <dl class="overview__facts">
+            @for (row of found.rows; track row.labelKey) {
+              <div class="overview__fact">
+                <dt class="text-label text-secondary">{{ row.labelKey | t }}</dt>
+                <dd>
+                  @if (row.value; as value) {
+                    <bdi class="overview__code" dir="ltr">{{ value }}</bdi>
+                  } @else {
+                    <span class="overview__presence" [class.text-muted]="look(row.presence).muted">
+                      <i [class]="look(row.presence).icon" aria-hidden="true"></i>
+                      {{ 'servers.check.' + row.presence | t }}
+                    </span>
+                  }
+                </dd>
+              </div>
+            }
+          </dl>
+
+          @if (found.roots.length > 0) {
+            <div class="overview__roots">
+              <h3>{{ 'servers.check.report.roots' | t }}</h3>
+              <dl class="overview__facts">
+                @for (root of found.roots; track root.path) {
+                  <div class="overview__fact">
+                    <dt><bdi class="overview__code" dir="ltr">{{ root.path }}</bdi></dt>
+                    <dd>
+                      <span class="overview__presence" [class.text-muted]="look(root.presence).muted">
+                        <i [class]="look(root.presence).icon" aria-hidden="true"></i>
+                        {{ 'servers.check.' + root.presence | t }}
+                      </span>
+                    </dd>
+                  </div>
+                }
+              </dl>
+            </div>
+          }
+        }
+
+        <div class="overview__actions overview__actions--spread">
+          <p class="text-sm text-secondary">{{ 'servers.check.wait' | t }}</p>
+          <button matButton="filled" type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="check()">
+            @if (checking()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ 'servers.check.run' | t }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <h2>{{ 'servers.settings.title' | t }}</h2>
+
+        <dl class="overview__facts">
+          @for (row of settings(); track row.labelKey) {
+            <div class="overview__fact">
+              <dt class="text-label text-secondary">{{ row.labelKey | t }}</dt>
+              <dd>
+                @if (row.code) {
+                  <bdi class="overview__code" dir="ltr">{{ row.code }}</bdi>
+                } @else if (row.textKey) {
+                  <span [class.text-muted]="row.textKey === 'servers.settings.notSet'">{{ row.textKey | t }}</span>
+                }
+              </dd>
+            </div>
+          }
+          <div class="overview__fact">
+            <dt class="text-label text-secondary">{{ 'servers.settings.fileRoots' | t }}</dt>
+            <dd>
+              @if (current.file_roots.length > 0) {
+                <ul class="overview__list" role="list">
+                  @for (root of current.file_roots; track root) {
+                    <li><bdi class="overview__code" dir="ltr">{{ root }}</bdi></li>
+                  }
+                </ul>
+              } @else {
+                <span class="text-muted">{{ 'servers.settings.notSet' | t }}</span>
+              }
+            </dd>
+          </div>
+        </dl>
+
+        <div class="overview__actions">
+          <button matButton="outlined" type="button" (click)="edit()">{{ 'actions.edit' | t }}</button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'servers.hostKey.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.hostKey.body' | t }}</p>
+        </div>
+
+        <app-host-key-facts [keyType]="current.host_key_type" [fingerprint]="current.host_key_fingerprint" />
+
+        <div class="overview__actions">
+          <button matButton="outlined" type="button" (click)="reviewHostKey()">
+            {{ 'servers.hostKey.review' | t }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'servers.passphrase.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.passphrase.body' | t }}</p>
+        </div>
+
+        @if (passphrase(); as value) {
+          <mat-form-field class="overview__passphrase">
+            <mat-label>{{ 'servers.passphrase.label' | t }}</mat-label>
+            <input matInput readonly dir="ltr" autocomplete="off" spellcheck="false" [value]="value" />
+            <button
+              matIconButton
+              matIconSuffix
+              type="button"
+              [attr.aria-label]="'servers.passphrase.copy' | t"
+              (click)="copy(value)"
+            >
+              <i class="fa-solid fa-copy" aria-hidden="true"></i>
+            </button>
+          </mat-form-field>
+        }
+
+        <!-- One button that changes its word: focus returns to it from the password prompt. -->
+        <div class="overview__actions">
+          <button matButton="outlined" type="button" (click)="togglePassphrase()">
+            {{ (passphrase() ? 'servers.passphrase.hide' : 'servers.passphrase.show') | t }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'servers.move.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.move.body' | t }}</p>
+        </div>
+        <div class="overview__actions">
+          <a matButton="outlined" routerLink="move">{{ 'servers.move.action' | t }}</a>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'servers.delete.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.delete.body' | t }}</p>
+        </div>
+
+        <div class="overview__actions">
+          <button
+            matButton="outlined"
+            class="app-danger"
+            type="button"
+            [disabled]="deleting()"
+            [attr.aria-busy]="deleting()"
+            (click)="remove()"
+          >
+            @if (deleting()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ 'servers.delete.action' | t }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+}

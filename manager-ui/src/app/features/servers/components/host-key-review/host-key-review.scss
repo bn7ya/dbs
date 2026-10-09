@@ -1,0 +1,24 @@
+// Two keys, each one group: the groups sit further apart than the parts inside them.
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-7);
+}
+
+.review__key,
+.review__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.review__check {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.review__error {
+  font-size: var(--app-text--1);
+  color: var(--app-color-danger);
+}

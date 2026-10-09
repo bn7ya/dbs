@@ -1,0 +1,99 @@
+@use "@angular/material" as mat;
+
+html {
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$orange-palette,
+        tertiary: mat.$yellow-palette,
+        theme-type: color-scheme,
+      ),
+      typography: (
+        plain-family: var(--app-font-family),
+        brand-family: var(--app-font-family),
+        bold-weight: var(--app-weight-bold),
+        medium-weight: var(--app-weight-medium),
+        regular-weight: var(--app-weight-regular),
+      ),
+      density: 0,
+    )
+  );
+
+  @include mat.theme-overrides(
+    (
+      primary: var(--app-color-primary),
+      on-primary: var(--app-color-on-primary),
+      error: var(--app-color-danger),
+      on-error: var(--app-color-on-danger),
+      error-container: var(--app-color-danger-container),
+      on-error-container: var(--app-color-on-danger-container),
+      background: var(--app-color-ground),
+      on-background: var(--app-color-on-surface),
+      surface: var(--app-color-surface),
+      on-surface: var(--app-color-on-surface),
+      on-surface-variant: var(--app-color-on-surface-variant),
+      outline: var(--app-color-outline),
+      corner-extra-small: var(--app-radius-sm),
+      corner-small: var(--app-radius-sm),
+      corner-medium: var(--app-radius-md),
+      corner-large: var(--app-radius-lg),
+      corner-extra-large: var(--app-radius-lg),
+      corner-full: var(--app-radius-full),
+    )
+  );
+
+  @include mat.dialog-overrides(
+    (
+      container-max-width: 100%,
+      container-small-max-width: 100%,
+      container-color: var(--app-color-surface),
+    )
+  );
+
+  @include mat.card-overrides(
+    (
+      outlined-container-color: var(--app-color-surface),
+      outlined-outline-color: var(--app-color-outline),
+    )
+  );
+
+  @include mat.toolbar-overrides(
+    (
+      container-background-color: var(--app-color-surface),
+      container-text-color: var(--app-color-on-surface),
+      standard-height: auto,
+      mobile-height: auto,
+    )
+  );
+
+  @include mat.snack-bar-overrides(
+    (
+      container-color: var(--app-color-surface),
+      supporting-text-color: var(--app-color-on-surface),
+      button-color: var(--app-color-primary),
+    )
+  );
+}
+
+.app-danger {
+  @include mat.button-overrides(
+    (
+      filled-container-color: var(--app-color-danger),
+      filled-label-text-color: var(--app-color-on-danger),
+      filled-state-layer-color: var(--app-color-on-danger),
+      filled-ripple-color: color-mix(in srgb, var(--app-color-on-danger) 12%, transparent),
+      outlined-label-text-color: var(--app-color-danger),
+      outlined-outline-color: var(--app-color-danger),
+      outlined-state-layer-color: var(--app-color-danger),
+      text-label-text-color: var(--app-color-danger),
+      text-state-layer-color: var(--app-color-danger),
+    )
+  );
+
+  @include mat.icon-button-overrides(
+    (
+      icon-color: var(--app-color-danger),
+      state-layer-color: var(--app-color-danger),
+    )
+  );
+}

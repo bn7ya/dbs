@@ -1,0 +1,29 @@
+{
+  "about": {
+    "title": "About DBS",
+    "subtitle": "Where DBS keeps its data, and how to keep a copy of it.",
+    "manager": {
+      "title": "This installation",
+      "version": "Version",
+      "dataDir": "Data folder",
+      "database": "Database",
+      "backupsDir": "Backups folder",
+      "lastExport": "Last export",
+      "never": "Never"
+    },
+    "copy": {
+      "title": "Keep a copy",
+      "body": "An export writes the DBS data to one file. Run these commands on the machine where DBS runs.",
+      "commands": {
+        "export": "Export the DBS data.",
+        "exportWithBackups": "Export the DBS data with the backup files kept here.",
+        "import": "Import an export, for example on a new machine."
+      },
+      "labels": {
+        "export": "Copy the export command",
+        "exportWithBackups": "Copy the export command with backups",
+        "import": "Copy the import command"
+      }
+    }
+  }
+}

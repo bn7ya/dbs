@@ -1,0 +1,137 @@
+@use "layout" as *;
+
+// Side by side where both cards fit, the list first and wider; stacked otherwise.
+.envfiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--app-space-6);
+}
+
+.envfiles__versions {
+  flex: 3 1 $card-max;
+  min-inline-size: 0;
+}
+
+.envfiles__selected {
+  flex: 2 1 $card-max;
+  min-inline-size: 0;
+}
+
+.envfiles__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+.envfiles__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+.envfiles__body,
+.envfiles__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.envfiles__section,
+.envfiles__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.envfiles__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+}
+
+.envfiles__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2) var(--app-space-3);
+}
+
+.envfiles__facts,
+.envfiles__changes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(#{$card-max * 0.5}, 100%), 1fr));
+  gap: var(--app-space-4) var(--app-space-6);
+  margin: 0;
+}
+
+.envfiles__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.envfiles__fact dd,
+.envfiles__pair dt,
+.envfiles__pair dd {
+  margin: 0;
+}
+
+// A long key name wraps under itself, not into its masked value.
+.envfiles__pairs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+}
+
+.envfiles__pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-1) var(--app-space-4);
+}
+
+.envfiles__mask {
+  color: var(--app-color-on-surface-variant);
+  font-family: var(--app-font-mono);
+}
+
+.envfiles__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0;
+}
+
+.envfiles__row,
+.envfiles__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.envfiles__end {
+  text-align: end;
+}
+
+// Paths and key names are code: one family, and a long one wraps rather than widen the card.
+.envfiles__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.envfiles__number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.envfiles__content {
+  inline-size: 100%;
+}

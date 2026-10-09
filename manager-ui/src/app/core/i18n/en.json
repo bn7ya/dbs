@@ -1,0 +1,116 @@
+{
+  "app": {
+    "name": "DBS",
+    "skipToContent": "Skip to content"
+  },
+  "nav": {
+    "label": "Main",
+    "dashboard": "Dashboard",
+    "servers": "Servers",
+    "activity": "Activity",
+    "about": "About DBS"
+  },
+  "language": {
+    "label": "Language",
+    "english": "English",
+    "arabic": "العربية"
+  },
+  "auth": {
+    "signIn": {
+      "title": "Sign in",
+      "subtitle": "Enter your details to continue.",
+      "username": "Username",
+      "usernamePlaceholder": "Your username",
+      "password": "Password",
+      "passwordPlaceholder": "Your password",
+      "submit": "Sign in",
+      "working": "Signing in…",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
+    },
+    "signOut": "Sign out",
+    "signedInAs": "Signed in as {name}",
+    "errors": {
+      "usernameRequired": "Enter your username.",
+      "passwordRequired": "Enter your password.",
+      "unavailable": "Can't reach the server. Check your connection and try again."
+    }
+  },
+  "password": {
+    "label": "Your password",
+    "required": "Enter your password."
+  },
+  "errors": {
+    "generic": "Something went wrong. Try again.",
+    "notFound": "Page not found.",
+    "notFoundBody": "The link may be out of date, or the page may have moved.",
+    "forbidden": "You don't have access to this.",
+    "forbiddenBody": "Ask an administrator if you think you should.",
+    "goHome": "Go to the start",
+    "checkFields": "Check the marked fields.",
+    "invalid": "Enter a valid value.",
+    "required": "Fill in this field.",
+    "blank": "Fill in this field.",
+    "max_length": "This is too long.",
+    "min_value": "Enter a larger number.",
+    "max_value": "Enter a smaller number.",
+    "name_taken": "This name is already in use.",
+    "absolute_path_required": "Use a full path that starts with / and has no .. in it.",
+    "not_found": "This no longer exists.",
+    "network": "Can't reach DBS. Check your connection and try again.",
+    "invalid_password": "The password is not correct.",
+    "authentication_failed": "The username or password is not correct.",
+    "host_key_changed": "The server presented a different host key.",
+    "ssh_auth_failed": "The server refused the username, key or password.",
+    "ssh_unreachable": "The server did not answer over SSH.",
+    "remote_command_failed": "A command on the server failed.",
+    "invalid_host_key": "The host key is not valid. Get it again.",
+    "backup_invalid": "The backup file is not valid.",
+    "backup_running": "A backup or restore of this server is already running.",
+    "interrupted": "The job stopped before it finished.",
+    "unexpected": "Something unexpected went wrong. Try again.",
+    "backup_missing": "This backup's file is no longer here.",
+    "archive_mismatch": "The archive fetched here does not match the one on the server. Nothing was kept.",
+    "archive_failed": "The archive could not be created on the server.",
+    "restore_failed": "The restore failed on the server.",
+    "dbs_too_old": "django-dbs on the server is too old for this. It needs version 0.2.2 or later.",
+    "remote_not_found": "The folder or file does not exist on the server.",
+    "remote_permission_denied": "Access to the folder or file was denied on the server.",
+    "env_path_missing": "This server has no .env file set.",
+    "env_too_large": "The .env file is too large.",
+    "upload_too_large": "The file is too large to upload.",
+    "empty": "The file is empty.",
+    "invalid_name": "The name is not valid.",
+    "file_exists": "A file or folder with this name already exists here.",
+    "folder_not_empty": "The folder is not empty. Only an empty folder can be deleted.",
+    "cannot_delete_root": "An allowed folder cannot be deleted.",
+    "path_outside_roots": "This path is outside the server's allowed folders.",
+    "not_a_file": "This is not a file.",
+    "no_allowed_folders": "This server has no allowed folders.",
+    "permission_denied": "You don't have permission to do this.",
+    "too_many_attempts": "Too many attempts. Wait a few minutes and try again."
+  },
+  "actions": {
+    "cancel": "Cancel",
+    "retry": "Try again",
+    "save": "Save changes",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next",
+    "close": "Close"
+  },
+  "components": {
+    "close": "Close",
+    "firstPage": "First page",
+    "lastPage": "Last page",
+    "nextPage": "Next page",
+    "previousPage": "Previous page",
+    "rowsPerPage": "Rows per page",
+    "range": "{start}–{end} of {total}"
+  },
+  "copy": {
+    "done": "Copied.",
+    "unavailable": "Copying is not available here. Select the text and copy it."
+  }
+}

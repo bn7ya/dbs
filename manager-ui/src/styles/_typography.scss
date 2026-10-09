@@ -1,0 +1,19 @@
+h3 {
+  font-size: var(--app-text-1);
+  font-weight: var(--app-weight-bold);
+  line-height: var(--app-leading-tight);
+}
+
+.text-sm {
+  font-size: var(--app-text--1);
+}
+
+.text-label {
+  font-size: var(--app-text--1);
+  font-weight: var(--app-weight-medium);
+}
+
+.text-muted {
+  color: var(--app-color-on-surface-variant);
+  opacity: 0.85;
+}

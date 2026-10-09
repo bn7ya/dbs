@@ -1,0 +1,16 @@
+@if (icon() !== '') {
+  <i class="empty-state__icon" [class]="icon()" aria-hidden="true"></i>
+}
+@if (headingLevel() === 1) {
+  <h1 class="empty-state__title">{{ title() }}</h1>
+} @else if (headingLevel() === 2) {
+  <h2 class="empty-state__title">{{ title() }}</h2>
+} @else {
+  <h3 class="empty-state__title">{{ title() }}</h3>
+}
+@if (description() !== '') {
+  <p class="text-secondary">{{ description() }}</p>
+}
+<div class="empty-state__actions">
+  <ng-content />
+</div>

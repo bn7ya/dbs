@@ -1,0 +1,103 @@
+@use "layout" as *;
+
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+}
+
+.files__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+.files__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.files__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.files__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.files__location {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.files__root {
+  max-inline-size: $card-max;
+}
+
+.files__upload {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--app-space-4);
+}
+
+.files__upload-status {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.files__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.files__name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-2);
+}
+
+.files__icon {
+  flex: none;
+  color: var(--app-color-on-surface-variant);
+}
+
+.files__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+// A name is code: one family, and a long one wraps anywhere rather than push the table wider.
+.files__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.files__end {
+  text-align: end;
+}
+
+.files__size {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.files__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1);
+}

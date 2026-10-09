@@ -1,0 +1,19 @@
+@if (framed) {
+  <div class="status-page">
+    <ng-container [ngTemplateOutlet]="card" />
+  </div>
+} @else {
+  <main id="main" class="status-page status-page--alone">
+    <ng-container [ngTemplateOutlet]="card" />
+  </main>
+}
+
+<ng-template #card>
+  <mat-card appearance="outlined" class="status-page__card"><mat-card-content>
+    <div class="status-page__content">
+      <h1>{{ titleKey() | t }}</h1>
+      <p class="text-secondary">{{ bodyKey() | t }}</p>
+      <a matButton routerLink="/">{{ 'errors.goHome' | t }}</a>
+    </div>
+  </mat-card-content></mat-card>
+</ng-template>

@@ -220,4 +220,9 @@ __marimo__/
 .angular/
 .claude/worktrees/
 .claude/skills/
+manager-ui/node_modules/
+manager-ui/dist/
+manager-ui/.angular/
+manager-ui/test-results/
+manager-ui/playwright-report/
 dbs/manager/static/dbs_manager/

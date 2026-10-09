@@ -1,0 +1,70 @@
+@use "layout" as *;
+
+.app-layout {
+  display: grid;
+  flex: 1;
+  grid-template:
+    "header" auto
+    "nav" auto
+    "content" 1fr / minmax(0, 1fr);
+
+  @include from($screen-md) {
+    grid-template:
+      "header header" auto
+      "nav content" 1fr / auto minmax(0, 1fr);
+  }
+}
+
+.app-layout__header {
+  grid-area: header;
+  border-block-end: var(--app-border-width) solid var(--app-color-outline);
+}
+
+.app-layout__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2) var(--app-space-4);
+  align-items: center;
+  justify-content: space-between;
+  padding-block: var(--app-space-2);
+  white-space: normal;
+}
+
+.app-layout__brand {
+  font-size: var(--app-text-1);
+  font-weight: var(--app-weight-bold);
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-layout__account {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  align-items: center;
+}
+
+.app-layout__menu-icon {
+  margin-inline-end: var(--app-space-3);
+}
+
+.app-layout__nav {
+  grid-area: nav;
+  padding: var(--app-space-3);
+
+  @include from($screen-md) {
+    min-inline-size: $nav-width;
+    padding-block: var(--app-space-6);
+    padding-inline: var(--app-space-4) 0;
+  }
+}
+
+.app-layout__content {
+  grid-area: content;
+  min-inline-size: 0;
+  padding: var(--app-space-4);
+
+  @include from($screen-md) {
+    padding: var(--app-space-6);
+  }
+}

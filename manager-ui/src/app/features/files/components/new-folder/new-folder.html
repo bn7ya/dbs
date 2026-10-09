@@ -1,0 +1,37 @@
+<form class="dialog-form" (ngSubmit)="submit()">
+  <p class="text-secondary">{{ 'files.newFolder.location' | t: { path: where } }}</p>
+
+  @if (otherFailure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  @let nameError = problem() !== null ? ('files.newFolder.invalid.' + problem() | t) : (nameFailure() | errorText);
+  <mat-form-field>
+    <mat-label>{{ 'files.newFolder.name' | t }}</mat-label>
+    <input
+      matInput
+      [appFieldError]="nameError"
+      type="text"
+      name="name"
+      dir="auto"
+      autocomplete="off"
+      spellcheck="false"
+      maxlength="255"
+      [ngModel]="name()"
+      (ngModelChange)="onName($event)"
+    />
+    @if (nameError) {
+      <mat-error>{{ nameError }}</mat-error>
+    }
+  </mat-form-field>
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+      @if (busy()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ 'files.newFolder.submit' | t }}
+    </button>
+  </div>
+</form>

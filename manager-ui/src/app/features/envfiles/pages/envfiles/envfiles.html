@@ -1,0 +1,261 @@
+<div class="envfiles">
+  <mat-card appearance="outlined" class="envfiles__versions">
+    <mat-card-content class="envfiles__body">
+      <div class="envfiles__header">
+        <div class="envfiles__intro">
+          <h2>{{ 'envfiles.title' | t }}</h2>
+          @if (envPath(); as path) {
+            <p class="text-secondary"><bdi class="envfiles__code" dir="ltr">{{ path }}</bdi></p>
+          }
+          <p class="text-sm text-secondary">{{ 'envfiles.body' | t }}</p>
+        </div>
+        @if (offerPull()) {
+          <button matButton="filled" type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
+            @if (pulling()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (pulling() ? 'envfiles.pull.working' : 'envfiles.pull.action') | t }}
+          </button>
+        }
+      </div>
+
+      @if (error(); as failure) {
+        <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+        <div>
+          <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+        </div>
+      } @else if (pending()) {
+        <div class="envfiles__skeleton" aria-busy="true">
+          @for (line of skeletonLines; track line) {
+            <app-skeleton />
+          }
+        </div>
+      } @else if (empty() && noPath()) {
+        <app-empty-state
+          icon="fa-solid fa-key"
+          [headingLevel]="3"
+          [title]="'envfiles.noPath.title' | t"
+          [description]="'envfiles.noPath.body' | t"
+        >
+          <a matButton="filled" [routerLink]="overviewLink()">{{ 'envfiles.noPath.action' | t }}</a>
+        </app-empty-state>
+      } @else if (empty()) {
+        <app-empty-state
+          icon="fa-solid fa-key"
+          [headingLevel]="3"
+          [title]="'envfiles.empty.title' | t"
+          [description]="'envfiles.empty.body' | t"
+        >
+          <button matButton="filled" type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
+            @if (pulling()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (pulling() ? 'envfiles.pull.working' : 'envfiles.pull.action') | t }}
+          </button>
+        </app-empty-state>
+      } @else {
+        @if (noPath()) {
+          <app-notice severity="warning">
+            {{ 'env_path_missing' | errorText }} {{ 'envfiles.noPath.body' | t }}
+          </app-notice>
+          <div>
+            <a matButton="outlined" [routerLink]="overviewLink()">{{ 'envfiles.noPath.action' | t }}</a>
+          </div>
+        }
+
+        <div class="table-scroll">
+          <table
+            mat-table
+            [dataSource]="rows()"
+            [attr.aria-label]="'envfiles.list.label' | t"
+            [attr.aria-busy]="loading()"
+          >
+            <ng-container matColumnDef="when">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'envfiles.list.when' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="envfiles__stack">
+                  <button
+                    [matButton]="isSelected(row) ? 'filled' : 'text'"
+                    type="button"
+                    [attr.aria-current]="isSelected(row) ? 'true' : null"
+                    (click)="select(row)"
+                  >
+                    {{ row.created_at | appDate }}
+                  </button>
+                  @if (takenBy(row); as by) {
+                    <span class="text-sm text-secondary">{{ by }}</span>
+                  }
+                </div>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="source">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'envfiles.list.source' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                <app-status-tag severity="neutral" [label]="'envfiles.source.' + row.source | t" />
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="size">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="envfiles__end">{{ 'envfiles.list.size' | t }}</th>
+              <td mat-cell *matCellDef="let row" class="envfiles__end">
+                <bdi class="envfiles__number">{{ row.size | fileSize }}</bdi>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="keys">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="envfiles__end">{{ 'envfiles.list.keys' | t }}</th>
+              <td mat-cell *matCellDef="let row" class="envfiles__end">
+                <bdi class="envfiles__number">{{ row.keys.length }}</bdi>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="['when', 'source', 'size', 'keys']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['when', 'source', 'size', 'keys']"></tr>
+          </table>
+        </div>
+        @if (paginated()) {
+          <nav [attr.aria-label]="'envfiles.list.pages' | t">
+            <mat-paginator
+              [length]="count()"
+              [pageIndex]="page()"
+              [pageSize]="pageSize()"
+              [pageSizeOptions]="pageSizes"
+              (page)="onPage($event)"
+            />
+          </nav>
+        }
+      }
+    </mat-card-content>
+  </mat-card>
+
+  @if (selected(); as version) {
+    <mat-card appearance="outlined" class="envfiles__selected">
+      <mat-card-content class="envfiles__detail">
+        <div class="envfiles__intro">
+          <h2>{{ 'envfiles.detail.title' | t }}</h2>
+          <div class="envfiles__meta">
+            <span class="text-secondary">{{ version.created_at | appDate }}</span>
+            <app-status-tag severity="neutral" [label]="'envfiles.source.' + version.source | t" />
+            @if (takenBy(version); as by) {
+              <span class="text-sm text-secondary">{{ by }}</span>
+            }
+          </div>
+        </div>
+
+        <dl class="envfiles__facts">
+          <div class="envfiles__fact">
+            <dt class="text-label text-secondary">{{ 'envfiles.detail.path' | t }}</dt>
+            <dd><bdi class="envfiles__code" dir="ltr">{{ version.path }}</bdi></dd>
+          </div>
+          <div class="envfiles__fact">
+            <dt class="text-label text-secondary">{{ 'envfiles.detail.size' | t }}</dt>
+            <dd><bdi class="envfiles__number">{{ version.size | fileSize }}</bdi></dd>
+          </div>
+        </dl>
+
+        @if (content(); as text) {
+          <div class="envfiles__section">
+            <mat-form-field class="envfiles__content">
+              <mat-label>{{ 'envfiles.reveal.label' | t }}</mat-label>
+              <textarea
+                matInput
+                class="envfiles__code"
+                readonly
+                dir="ltr"
+                autocomplete="off"
+                spellcheck="false"
+                [rows]="contentRows()"
+                [value]="text"
+              ></textarea>
+            </mat-form-field>
+            <div class="envfiles__row">
+              <button matButton="outlined" type="button" (click)="copy(text)">
+                {{ 'envfiles.reveal.copy' | t }}
+              </button>
+              @if (downloadHref(); as href) {
+                <a matButton="outlined" [href]="href" [attr.download]="fileName()">
+                  {{ 'envfiles.reveal.download' | t }}
+                </a>
+              }
+            </div>
+          </div>
+        } @else {
+          <section class="envfiles__section">
+            <h3>{{ 'envfiles.detail.keys' | t: { count: version.keys.length } }}</h3>
+            @if (version.keys.length > 0) {
+              <dl class="envfiles__pairs">
+                @for (key of version.keys; track key) {
+                  <div class="envfiles__pair">
+                    <dt><bdi class="envfiles__code" dir="ltr">{{ key }}</bdi></dt>
+                    <dd>
+                      <span class="envfiles__mask" role="img" [attr.aria-label]="'envfiles.detail.hidden' | t">
+                        {{ 'envfiles.detail.masked' | t }}
+                      </span>
+                    </dd>
+                  </div>
+                }
+              </dl>
+            } @else {
+              <p class="text-muted">{{ 'envfiles.detail.noKeys' | t }}</p>
+            }
+          </section>
+        }
+
+        @if (comparison()) {
+          <section class="envfiles__section">
+            <h3>{{ 'envfiles.compare.title' | t }}</h3>
+            @if (changes().length > 0) {
+              <dl class="envfiles__changes">
+                @for (group of changes(); track group.labelKey) {
+                  <div class="envfiles__fact">
+                    <dt class="text-label text-secondary">{{ group.labelKey | t }}</dt>
+                    <dd>
+                      <ul class="envfiles__list" role="list">
+                        @for (key of group.keys; track key) {
+                          <li><bdi class="envfiles__code" dir="ltr">{{ key }}</bdi></li>
+                        }
+                      </ul>
+                    </dd>
+                  </div>
+                }
+              </dl>
+            } @else {
+              <app-notice severity="info">{{ 'envfiles.compare.none' | t }}</app-notice>
+            }
+          </section>
+        } @else if (compareError(); as failure) {
+          <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+        } @else if (!hasPrevious()) {
+          <p class="text-sm text-muted">{{ 'envfiles.compare.first' | t }}</p>
+        }
+
+        <div class="envfiles__actions">
+          <!-- One button that changes its word: focus returns to it from the password prompt. -->
+          <button matButton="outlined" type="button" (click)="toggleValues(version)">
+            {{ (content() === null ? 'envfiles.reveal.show' : 'envfiles.reveal.hide') | t }}
+          </button>
+          @if (hasPrevious() && !comparison()) {
+            <button
+              matButton="outlined"
+              type="button"
+              [disabled]="comparing()"
+              [attr.aria-busy]="comparing()"
+              (click)="compare()"
+            >
+              @if (comparing()) {
+                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ 'envfiles.compare.action' | t }}
+            </button>
+          }
+          @if (!noPath()) {
+            <button matButton="outlined" class="app-danger" type="button" (click)="push(version)">
+              {{ 'envfiles.push.action' | t }}
+            </button>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+</div>
