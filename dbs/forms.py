@@ -154,6 +154,41 @@ class RestoreUploadForm(forms.Form):
     )
 
 
+class RestoreRecordForm(forms.Form):
+    passphrase = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Leave empty to use the passphrase derived from SECRET_KEY.",
+    )
+    dry_run = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Dry run",
+        help_text="Rehearse the restore in a transaction that is rolled back.",
+    )
+    flush = forms.BooleanField(
+        required=False,
+        label="Replace instead of merge",
+        help_text="Delete existing rows of the backed-up models first.",
+    )
+    confirm = forms.CharField(
+        required=False,
+        label="Type the file name to restore for real",
+    )
+
+    def __init__(self, *args, filename="", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.filename = filename
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("dry_run") and cleaned.get("confirm", "").strip() != self.filename:
+            raise forms.ValidationError(
+                f"Type {self.filename} to restore for real, or tick Dry run."
+            )
+        return cleaned
+
+
 class SetupForm(forms.Form):
     level = forms.ChoiceField(
         choices=SecurityLevel.choices,

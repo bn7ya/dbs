@@ -8,6 +8,7 @@ SUBCOMMANDS = {
     "restore": ("dbs_restore", "Restore a backup into the database and file storage."),
     "validate": ("dbs_validate", "Check a backup's structure, blocks and decryption."),
     "schedule": ("dbs_schedule", "Run backups on a repeating interval."),
+    "health": ("dbs_health", "Report the health of this project's backups."),
     "key": ("dbs_key", "Show the passphrase DBS derives from SECRET_KEY."),
     "security": ("dbs_security", "Inspect and unlock the admin session guard."),
     "ai": ("dbs_ai", "Install the DBS instructions for AI coding assistants."),

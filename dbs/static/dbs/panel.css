@@ -36,3 +36,8 @@
 .dbs-form ul { list-style: none; padding: 0; margin: 0; }
 .dbs-form ul li label { font-weight: 400; }
 .dbs-form .errorlist { color: var(--error-fg, #ba2121); padding-left: 0; list-style: none; }
+.dbs-status { font-weight: 600; text-transform: uppercase; font-size: .8rem; letter-spacing: .03em; }
+.dbs-status-ok { color: var(--message-success-fg, #2e7d32); }
+.dbs-status-info { color: var(--body-quiet-color, #666); }
+.dbs-status-warn { color: var(--message-warning-fg, #b26a00); }
+.dbs-status-error { color: var(--error-fg, #ba2121); }

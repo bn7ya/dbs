@@ -130,6 +130,21 @@ def test_an_enabled_schedule_is_reported_as_current(settings):
     assert upgrade.ScheduleInDatabase().check().level == OK
 
 
+def test_a_missing_backup_directory_is_reported(settings):
+    settings.DBS_BACKUP_DIR = None
+
+    finding = upgrade.BackupDirectory().check()
+
+    assert finding.level == WARN
+    assert "DBS_BACKUP_DIR" in finding.remedy
+
+
+def test_a_backup_directory_is_fine(settings, tmp_path):
+    settings.DBS_BACKUP_DIR = str(tmp_path)
+
+    assert upgrade.BackupDirectory().check().level == OK
+
+
 def test_an_unknown_scheduler_mode_blocks(settings):
     settings.DBS_SCHEDULER = "cron"
 

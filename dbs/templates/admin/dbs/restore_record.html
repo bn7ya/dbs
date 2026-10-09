@@ -1,0 +1,12 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>Restore {{ record.filename }}</h1>
+<p class="dbs-lede">Taken {{ record.created_at|date:"Y-m-d H:i" }}, {{ record.size_bytes|filesizeformat }}.
+A restore writes into this project's database and file storage.
+Leave <strong>Dry run</strong> ticked to rehearse it first.</p>
+<form method="post" class="dbs-form">{% csrf_token %}
+  {{ form.as_p }}
+  <p><button type="submit" class="default">Restore</button></p>
+</form>
+{% endblock %}

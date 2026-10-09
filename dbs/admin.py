@@ -62,7 +62,7 @@ class BackupTargetAdmin(SuperuserOnlyAdmin):
 
 @admin.register(BackupRecord)
 class BackupRecordAdmin(SuperuserOnlyAdmin):
-    list_display = ("filename", "created_at", "size_bytes", "target", "created_by")
+    list_display = ("filename", "created_at", "size_bytes", "target", "created_by", "restore_link")
     list_filter = ("target", "database")
     search_fields = ("filename", "sha256")
     readonly_fields = (
@@ -93,10 +93,21 @@ class BackupRecordAdmin(SuperuserOnlyAdmin):
                 self.admin_site.admin_view(views.download),
                 name="dbs_backup_download",
             ),
+            path(
+                "<int:pk>/restore/",
+                self.admin_site.admin_view(views.restore_record),
+                name="dbs_backup_restore_record",
+            ),
         ] + super().get_urls()
 
     def has_add_permission(self, request):
         return False
+
+    @admin.display(description="restore")
+    def restore_link(self, obj):
+        if obj.local_path() is None:
+            return ""
+        return format_html('<a href="{}/restore/">restore</a>', obj.pk)
 
 
 @admin.register(BackupSchedule)
@@ -205,6 +216,11 @@ class PanelAdmin(SuperuserOnlyAdmin):
                 "security/",
                 self.admin_site.admin_view(views.security_overview),
                 name="dbs_security",
+            ),
+            path(
+                "health/",
+                self.admin_site.admin_view(views.health),
+                name="dbs_health",
             ),
             path(
                 "wiki/",

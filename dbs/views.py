@@ -15,7 +15,7 @@ from . import audit
 from .conf import setting
 from .engine import create_backup, restore_backup
 from .exceptions import DBSError
-from .forms import CreateBackupForm, RestoreUploadForm, SetupForm
+from .forms import CreateBackupForm, RestoreRecordForm, RestoreUploadForm, SetupForm
 from .keys import with_passphrase
 from .models import (
     AnomalyEvent,
@@ -241,17 +241,7 @@ def restore_view(request):
             messages.error(request, f"Restore failed: {exc}")
             return redirect("admin:dbs_backup_restore")
 
-        if form.cleaned_data["dry_run"]:
-            summary = (
-                f"Dry run: {result.records_would_load} records and "
-                f"{result.files_would_write} files would be restored; nothing changed."
-            )
-        else:
-            healed = " Corruption was detected and repaired." if result.healed else ""
-            summary = (
-                f"Restored {result.records_loaded} records and "
-                f"{result.files_written} files.{healed}"
-            )
+        summary = _restore_summary(result, form.cleaned_data["dry_run"])
         _audit(request, "backup.restore", target=upload.name or "upload", detail=summary)
         messages.success(request, summary)
         return redirect("admin:dbs_backup_restore")
@@ -259,6 +249,80 @@ def restore_view(request):
         request,
         "admin/dbs/restore.html",
         {"title": "Restore from an uploaded backup", "form": form},
+    )
+
+
+def _restore_summary(result, dry_run):
+    if dry_run:
+        return (
+            f"Dry run: {result.records_would_load} records and "
+            f"{result.files_would_write} files would be restored; nothing changed."
+        )
+    healed = " Corruption was detected and repaired." if result.healed else ""
+    return (
+        f"Restored {result.records_loaded} records and "
+        f"{result.files_written} files.{healed}"
+    )
+
+
+@superuser_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def restore_record(request, pk):
+    record = BackupRecord.objects.filter(pk=pk).first()
+    path = record.local_path() if record is not None else None
+    if path is None:
+        raise Http404
+    form = RestoreRecordForm(request.POST or None, filename=record.filename)
+    if request.method == "POST" and form.is_valid():
+        dry_run = form.cleaned_data["dry_run"]
+        with open(path, "rb") as fh:
+            data = fh.read()
+        details = {
+            "file": record.filename,
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "dry_run": dry_run,
+            "flushed": form.cleaned_data["flush"],
+        }
+        try:
+            result = with_passphrase(
+                lambda secret: restore_backup(
+                    data, secret, dry_run=dry_run, flush=form.cleaned_data["flush"]
+                ),
+                form.cleaned_data["passphrase"] or None,
+            )
+        except DBSError as exc:
+            _audit(
+                request,
+                "backup.restore",
+                target=record.filename,
+                detail=str(exc),
+                succeeded=False,
+                data=details,
+            )
+            messages.error(request, f"Restore failed: {exc}")
+            return redirect("admin:dbs_backup_restore_record", pk=record.pk)
+        summary = _restore_summary(result, dry_run)
+        _audit(request, "backup.restore", target=record.filename, detail=summary, data=details)
+        messages.success(request, summary)
+        return redirect("admin:dbs_backup_restore_record", pk=record.pk)
+    return _page(
+        request,
+        "admin/dbs/restore_record.html",
+        {"title": f"Restore {record.filename}", "form": form, "record": record},
+    )
+
+
+@superuser_required
+@never_cache
+def health(request):
+    from .health import report
+
+    return _page(
+        request,
+        "admin/dbs/health.html",
+        {"title": "Backup health", "report": report()},
     )
 
 

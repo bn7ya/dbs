@@ -200,6 +200,23 @@ def _uwsgi_without_threads():
     return not (options.get("enable-threads") or options.get(b"enable-threads"))
 
 
+class BackupDirectory(Step):
+    name = "backup directory"
+    since = "0.5.0"
+
+    def check(self):
+        from .schedule_runner import backup_directory
+
+        directory = backup_directory()
+        if not directory:
+            return self.warn(
+                "DBS_BACKUP_DIR is not set, so the panel cannot schedule backups, restore "
+                "a stored backup or report backup health",
+                'DBS_BACKUP_DIR = BASE_DIR / "backups"',
+            )
+        return self.ok(f"backups are kept in {directory}")
+
+
 class Dependencies(Step):
     name = "dependencies"
     since = "0.3.0"
@@ -383,6 +400,7 @@ STEPS = (
     AuditTrail,
     ScheduleInDatabase,
     SchedulerMode,
+    BackupDirectory,
     Dependencies,
     AdminPanel,
     GuardMiddleware,
