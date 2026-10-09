@@ -96,8 +96,12 @@ def test_a_weak_password_is_refused_in_the_error_envelope(anonymous, token):
 
     assert response.status_code == 400
     error = response.json()["error"]
-    assert error["code"] == "password_invalid"
-    assert "short" in error["message"]
+    assert error["code"] == "invalid"
+    assert set(error["fields"]["password"]) == {
+        "password_too_short",
+        "password_entirely_numeric",
+        "password_too_common",
+    }
     assert not UserRepository().any_exist()
 
 
@@ -121,3 +125,18 @@ def test_setup_lets_its_lease_go_whatever_happens(anonymous, token):
     post(anonymous, token="wrong", username="sara", password=PASSWORD)
 
     assert leases.holder(SETUP_LEASE) is None
+
+
+def test_a_password_like_the_username_is_refused_by_its_own_code(anonymous, token):
+    response = post(
+        anonymous, token=token, username="wilhelmina", password="wilhelmina-77"
+    )
+
+    assert response.json()["error"]["fields"]["password"] == ["password_too_similar"]
+
+
+def test_a_username_django_would_refuse_is_a_field_error(anonymous, token):
+    response = post(anonymous, token=token, username="no spaces", password=PASSWORD)
+
+    assert response.status_code == 400
+    assert list(response.json()["error"]["fields"]) == ["username"]

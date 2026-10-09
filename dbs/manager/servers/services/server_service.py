@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import secrets
 from collections.abc import Callable
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
@@ -14,8 +16,10 @@ from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.common.paths import absolute_path
+from dbs.manager.servers import keys, versions
 from dbs.manager.servers.exceptions import (
     HostKeyChanged,
+    NoPrivateKey,
     RemoteCommandFailed,
     SSHAuthFailed,
     SSHUnreachable,
@@ -47,6 +51,19 @@ PLAIN_FIELDS = (
 OPTIONAL_PATH_FIELDS = ("project_dir", "env_path")
 REQUIRED_PATH_FIELDS = ("remote_backup_dir",)
 UNGUARDED_FIELDS = frozenset({"name"})
+SETUP_FIELDS = frozenset(
+    {
+        "project_dir",
+        "python_path",
+        "manage_path",
+        "settings_module",
+        "remote_backup_dir",
+        "file_roots",
+        "env_path",
+    }
+)
+SETUP_WINDOW = timedelta(hours=1)
+HEALTH_STATUSES = ("ok", "warn", "error")
 
 CONNECTION_ERRORS = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
 DBS_VERSION = "import dbs; print(dbs.__version__)"
@@ -72,6 +89,8 @@ class Action:
     REPIN = "server.repin"
     PASSPHRASE_REVEAL = "server.passphrase_reveal"
     FINGERPRINT = "server.fingerprint"
+    KEYPAIR = "server.keypair"
+    PASSPHRASE_CAPTURE = "server.passphrase_capture"
 
 
 def _add(errors: Errors, field: str, message: str, code: str) -> None:
@@ -121,6 +140,7 @@ class ServerService:
             return key
 
     def create(self, **data: Any) -> Server:
+        data.pop("generate_key", None)
         errors: Errors = {}
         fields = {name: data[name] for name in PLAIN_FIELDS if name in data}
         fields |= self._paths(data, errors)
@@ -144,6 +164,35 @@ class ServerService:
             self.activity.record(Action.CREATE, server=server, target=server.name)
         return server
 
+    def create_with_key(self, **data: Any) -> tuple[Server, str]:
+        private_key, public_key = keys.generate_keypair()
+        data.update(
+            auth_method=Server.AuthMethod.KEY,
+            private_key=private_key,
+            key_passphrase="",
+        )
+        with transaction.atomic():
+            server = self.create(**data)
+            self.activity.record(
+                Action.KEYPAIR,
+                server=server,
+                target=server.name,
+                detail={"fingerprint": keys.fingerprint(public_key)},
+            )
+        return server, public_key
+
+    def public_key(self, server_id: UUID) -> str:
+        server = self.get(server_id)
+        credentials = self.connections.credentials(server)
+        if not credentials.private_key:
+            raise NoPrivateKey()
+        try:
+            return keys.public_key_of(
+                credentials.private_key, credentials.key_passphrase
+            )
+        except keys.KeyUnreadable as exc:
+            raise NoPrivateKey() from exc
+
     def update(
         self, server_id: UUID, account_password: str = "", **data: Any
     ) -> Server:
@@ -166,7 +215,12 @@ class ServerService:
                 data["backup_passphrase"], context=vault_contexts.BACKUP_PASSPHRASE
             )
         changed = _changed(server, changes)
-        guarded = not UNGUARDED_FIELDS.issuperset(changed)
+        free = (
+            UNGUARDED_FIELDS | SETUP_FIELDS
+            if self._in_setup(server)
+            else UNGUARDED_FIELDS
+        )
+        guarded = not free.issuperset(changed)
         if guarded and not account_password:
             raise ValidationError(
                 {
@@ -181,6 +235,14 @@ class ServerService:
             if guarded:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(lambda: self.servers.update(server, **changes))
+
+    def _in_setup(self, server: Server) -> bool:
+        return (
+            self.user is not None
+            and self.user.is_authenticated
+            and server.created_by_id == self.user.pk
+            and server.created_at > timezone.now() - SETUP_WINDOW
+        )
 
     def delete(self, server_id: UUID) -> None:
         server = self.get(server_id)
@@ -222,6 +284,7 @@ class ServerService:
             try:
                 with self.connections.open(server) as remote:
                     report = self._inspect(server, remote)
+                    health = self._health(server, remote, report["dbs_version"])
             except CONNECTION_ERRORS as exc:
                 self._record(server, Server.CheckStatus.FAILED, error_code_of(exc), {})
                 entry.detail = {"status": Server.CheckStatus.FAILED}
@@ -230,7 +293,46 @@ class ServerService:
                 Server.CheckStatus.OK if _ready(report) else Server.CheckStatus.PROBLEM
             )
             entry.detail = {"status": status}
+            self.servers.update(server, last_health=health)
             return self._record(server, status, "", report)
+
+    def compatibility(self, server: Server) -> dict[str, Any]:
+        remote = (server.last_check_report or {}).get("dbs_version")
+        return versions.compatibility(remote)
+
+    def capture_passphrase(self, server_id: UUID) -> Server:
+        server = self.get(server_id)
+        with self.activity.track(
+            Action.PASSPHRASE_CAPTURE, server=server, target=server.name
+        ):
+            with self.connections.open(server) as remote:
+                result = remote.run(
+                    [server.python_path, server.manage_path, "dbs_key", "--show"],
+                    cwd=server.project_dir or None,
+                    env=_settings_env(server),
+                )
+            lines = result.stdout.strip().splitlines()
+            if not result.ok or not lines or not lines[-1].strip():
+                raise RemoteCommandFailed(output=result.stderr.strip()[-500:])
+            sealed = seal_text(
+                lines[-1].strip(), context=vault_contexts.BACKUP_PASSPHRASE
+            )
+            return self.servers.update(server, backup_passphrase_sealed=sealed)
+
+    def _health(
+        self, server: Server, remote: RemoteHost, remote_version: str | None
+    ) -> dict[str, Any] | None:
+        if not versions.at_least(remote_version, versions.HEALTH_FROM):
+            return None
+        try:
+            result = remote.run(
+                [server.python_path, server.manage_path, "dbs", "health", "--json"],
+                cwd=server.project_dir or None,
+                env=_settings_env(server),
+            )
+        except RemoteCommandFailed:
+            return None
+        return _health_report(result.stdout)
 
     def _inspect(self, server: Server, remote: RemoteHost) -> dict[str, Any]:
         project_dir = server.project_dir or None
@@ -392,3 +494,19 @@ def _ready(report: dict[str, Any]) -> bool:
         and all(report["roots"].values())
         and report["remote_backup_dir"]
     )
+
+
+def _settings_env(server: Server) -> dict[str, str] | None:
+    if not server.settings_module:
+        return None
+    return {"DJANGO_SETTINGS_MODULE": server.settings_module}
+
+
+def _health_report(stdout: str) -> dict[str, Any] | None:
+    try:
+        report = json.loads(stdout.strip() or "null")
+    except ValueError:
+        return None
+    if not isinstance(report, dict) or report.get("status") not in HEALTH_STATUSES:
+        return None
+    return report

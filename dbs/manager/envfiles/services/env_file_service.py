@@ -112,25 +112,36 @@ class EnvFileService:
         ) as entry:
             entry.detail = {"from_version": str(version.pk)}
             AccountService(self.user).confirm_password(password)
-            path = _env_path(server)
-            content = _opened(version)
-            with self.connections.open(server) as remote:
-                real = remote.realpath(path)
-                current = _regular_file(remote, real)
-                mode, owner = NEW_FILE_MODE, None
-                if current is not None:
-                    self._keep(
-                        server, path, _read(remote, real), EnvVersion.Source.PULLED
-                    )
-                    mode = (
-                        NEW_FILE_MODE
-                        if current.permissions is None
-                        else current.permissions
-                    )
-                    if current.uid is not None and current.gid is not None:
-                        owner = (current.uid, current.gid)
-                remote.replace_file(real, content, mode=mode, owner=owner)
-            return self._store(server, path, content, EnvVersion.Source.PUSHED)
+            return self._write(version, server)
+
+    @sensitive_variables()
+    def copy_to(self, version_id: UUID, server: Server) -> EnvVersion:
+        version = self.get(version_id)
+        with self.activity.track(
+            Action.PUSH, server=server, target=server.env_path
+        ) as entry:
+            entry.detail = {"from_version": str(version.pk)}
+            return self._write(version, server)
+
+    @sensitive_variables()
+    def _write(self, version: EnvVersion, server: Server) -> EnvVersion:
+        path = _env_path(server)
+        content = _opened(version)
+        with self.connections.open(server) as remote:
+            real = remote.realpath(path)
+            current = _regular_file(remote, real)
+            mode, owner = NEW_FILE_MODE, None
+            if current is not None:
+                self._keep(server, path, _read(remote, real), EnvVersion.Source.PULLED)
+                mode = (
+                    NEW_FILE_MODE
+                    if current.permissions is None
+                    else current.permissions
+                )
+                if current.uid is not None and current.gid is not None:
+                    owner = (current.uid, current.gid)
+            remote.replace_file(real, content, mode=mode, owner=owner)
+        return self._store(server, path, content, EnvVersion.Source.PUSHED)
 
     @sensitive_variables()
     def _pull(self, server: Server, source: str) -> Pulled:

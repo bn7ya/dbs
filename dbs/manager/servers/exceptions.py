@@ -94,3 +94,9 @@ class PassphraseMissing(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "passphrase_missing"
     default_detail = "The manager does not hold this server's backup passphrase."
+
+
+class NoPrivateKey(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "no_private_key"
+    default_detail = "This server signs in with a password, so it has no key."

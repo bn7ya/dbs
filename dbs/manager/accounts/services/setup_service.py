@@ -9,14 +9,11 @@ from django.contrib.auth import login
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from rest_framework.exceptions import ErrorDetail, ValidationError
 
 from dbs import audit, leases
 from dbs.manager import paths
-from dbs.manager.accounts.exceptions import (
-    PasswordInvalid,
-    SetupDone,
-    SetupTokenInvalid,
-)
+from dbs.manager.accounts.exceptions import SetupDone, SetupTokenInvalid
 from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.conf import LEASE_SECONDS, SETUP_LEASE, data_dir
 from dbs.manager.middleware import current_ip
@@ -49,6 +46,13 @@ def remove_token() -> None:
         token_path().unlink()
     except FileNotFoundError:
         pass
+
+
+def password_errors(exc: DjangoValidationError) -> list:
+    return [
+        ErrorDetail(" ".join(error.messages), code=error.code or "password_invalid")
+        for error in exc.error_list
+    ]
 
 
 class SetupService:
@@ -87,7 +91,7 @@ class SetupService:
         try:
             validate_password(password, user=self.users.unsaved(username))
         except DjangoValidationError as exc:
-            raise PasswordInvalid(" ".join(exc.messages)) from exc
+            raise ValidationError({"password": password_errors(exc)}) from exc
         user = self.users.create_superuser(username=username, password=password)
         audit.record(
             SETUP_ACTION, actor=user, target=username, remote_addr=current_ip() or ""

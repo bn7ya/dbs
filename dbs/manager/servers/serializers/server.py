@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.core.validators import RegexValidator
 from rest_framework import serializers
+from rest_framework.exceptions import ErrorDetail
 
 from dbs.manager.servers.models import Server
 
@@ -18,6 +19,7 @@ SECRET_MAX_LENGTH = 1024
 ACCOUNT_PASSWORD_MAX_LENGTH = 128
 HOST_KEY_MAX_LENGTH = 8192
 FILE_ROOTS_MAX = 50
+REQUIRED = "This field is required."
 
 
 def secret_field(max_length: int = SECRET_MAX_LENGTH) -> serializers.CharField:
@@ -78,6 +80,7 @@ class ServerSerializer(serializers.ModelSerializer):
             "last_check_error",
             "last_checked_at",
             "last_check_report",
+            "last_health",
             "created_at",
             "updated_at",
         ]
@@ -142,4 +145,17 @@ class ServerUpdateSerializer(ServerSettingsSerializer):
 
 
 class ServerCreateSerializer(ServerSettingsSerializer):
+    generate_key = serializers.BooleanField(required=False, default=False)
     host_key = serializers.CharField(max_length=HOST_KEY_MAX_LENGTH)
+    auth_method = serializers.ChoiceField(
+        choices=Server.AuthMethod.choices, required=False
+    )
+
+    def validate(self, attrs):
+        if attrs.get("generate_key"):
+            attrs["auth_method"] = Server.AuthMethod.KEY
+        elif "auth_method" not in attrs:
+            raise serializers.ValidationError(
+                {"auth_method": [ErrorDetail(REQUIRED, code="required")]}
+            )
+        return attrs

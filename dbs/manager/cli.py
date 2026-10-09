@@ -108,6 +108,44 @@ def build_parser():
     database_option(password)
     password.set_defaults(handler=command_password)
 
+    export = commands.add_parser(
+        "export", help="Write the manager's data to one backup file."
+    )
+    export.add_argument(
+        "file", nargs="?", help="Where to write it. Defaults to a dated name here."
+    )
+    export.add_argument(
+        "--with-backups",
+        action="store_true",
+        help="Include the backups the manager holds.",
+    )
+    export.add_argument(
+        "--passphrase-stdin",
+        action="store_true",
+        help="Read the passphrase from stdin.",
+    )
+    data_dir_option(export)
+    database_option(export)
+    export.set_defaults(handler=command_export)
+
+    restore = commands.add_parser(
+        "import", help="Load an export into a data directory."
+    )
+    restore.add_argument("file")
+    restore.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace the servers this directory holds.",
+    )
+    restore.add_argument(
+        "--passphrase-stdin",
+        action="store_true",
+        help="Read the passphrase from stdin.",
+    )
+    data_dir_option(restore)
+    database_option(restore)
+    restore.set_defaults(handler=command_import)
+
     return parser
 
 
@@ -219,6 +257,55 @@ def command_password(args):
     users.set_password(user, password)
     audit.record("account.password", target=user.get_username())
     print(f"Changed the password of {user.get_username()}.")
+    return 0
+
+
+def read_passphrase(from_stdin, confirm):
+    if from_stdin:
+        passphrase = sys.stdin.readline().rstrip("\n")
+    else:
+        passphrase = getpass.getpass("Export passphrase: ")
+        if confirm and getpass.getpass("Export passphrase again: ") != passphrase:
+            raise CommandFailed("the two passphrases differ.")
+    if not passphrase:
+        raise CommandFailed("the passphrase is empty.")
+    return passphrase
+
+
+def command_export(args):
+    setup_django(resolve(args), args.database_url)
+    from .transfer import TransferError, default_export_name, export_manager
+
+    output = os.path.abspath(args.file or default_export_name())
+    passphrase = read_passphrase(args.passphrase_stdin, confirm=True)
+    try:
+        container = export_manager(output, passphrase, with_backups=args.with_backups)
+    except TransferError as exc:
+        raise CommandFailed(str(exc)) from exc
+    print(f"Wrote {output} ({len(container)} bytes). Keep the passphrase with it.")
+    return 0
+
+
+def command_import(args):
+    data_dir = resolve(args)
+    setup_django(data_dir, args.database_url)
+    from dbs import leases
+
+    from .transfer import TransferError, import_manager
+
+    owner = leases.process_owner()
+    if not take_instance_lease(owner):
+        raise CommandFailed(
+            "django_dbs run is using this data directory; stop it first."
+        )
+    try:
+        passphrase = read_passphrase(args.passphrase_stdin, confirm=False)
+        result = import_manager(args.file, passphrase, replace=args.replace)
+    except TransferError as exc:
+        raise CommandFailed(str(exc)) from exc
+    finally:
+        leases.release(INSTANCE_LEASE, owner)
+    print(f"Imported {result.records_loaded} records into {data_dir}.")
     return 0
 
 

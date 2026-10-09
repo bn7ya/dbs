@@ -134,6 +134,9 @@ class ActivityService:
     ) -> None:
         audit.fail(activity_id, error_code_of(error), data=detail)
 
+    def progress(self, activity_id: int, detail: dict[str, Any]) -> None:
+        self.entries.set_running_data(activity_id, detail)
+
     def interrupt(self, *, idle_since: datetime | None = None) -> int:
         return audit.interrupt(idle_since=idle_since)
 

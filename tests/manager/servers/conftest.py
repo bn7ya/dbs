@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.servers.models import Server
+from dbs.manager.servers.repositories import ServerRepository
 from dbs.manager.servers.services import ServerService
 from tests.manager.servers.support import (
     BACKUP_DIR,
@@ -19,6 +23,8 @@ from tests.manager.servers.support import (
     host_key_line,
     private_key_text,
 )
+
+SETUP_OVER = timedelta(hours=2)
 
 
 @pytest.fixture
@@ -50,7 +56,7 @@ def private_key() -> str:
 
 @pytest.fixture
 def configured_server(admin, host_key, private_key) -> Server:
-    return ServerService(admin).create(
+    server = ServerService(admin).create(
         name="web-1",
         host="10.0.0.5",
         port=2222,
@@ -67,3 +73,4 @@ def configured_server(admin, host_key, private_key) -> Server:
         file_roots=[MEDIA_ROOT],
         env_path=ENV_PATH,
     )
+    return ServerRepository().update(server, created_at=timezone.now() - SETUP_OVER)

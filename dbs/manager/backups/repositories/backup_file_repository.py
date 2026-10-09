@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from uuid import UUID
 
-from django.db.models import F, QuerySet
+from django.db.models import F, QuerySet, Sum
 
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.common.repositories import BaseRepository
@@ -51,3 +51,22 @@ class BackupFileRepository(BaseRepository):
             .filter(deleted_at__lt=moment, removed_at__isnull=True)
             .order_by("deleted_at", "id")
         )
+
+    def latest_of_kind(self, server_id: UUID, kind: str) -> BackupFile | None:
+        return (
+            self.alive_for_server(server_id)
+            .filter(kind=kind, removed_at__isnull=True)
+            .first()
+        )
+
+    def stored_bytes_by_server(self) -> dict[UUID, int]:
+        rows = (
+            self.all_including_deleted()
+            .filter(removed_at__isnull=True)
+            .values("server_id")
+            .annotate(stored=Sum("size"))
+        )
+        return {row["server_id"]: row["stored"] or 0 for row in rows}
+
+    def still_stored(self) -> QuerySet:
+        return self.all_including_deleted().filter(removed_at__isnull=True)

@@ -28,6 +28,7 @@ from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.common.uploads import UploadTooLarge, upload_name
 from dbs.manager.runner import get_runner
+from dbs.manager.servers.exceptions import PassphraseMissing
 from dbs.manager.servers.services import ServerService
 from dbs.manager.vault import open_stream, seal_stream
 from dbs.models import AuditEvent
@@ -164,12 +165,19 @@ class BackupService:
         rehearse: bool,
         account_password: str = "",
         server_name: str = "",
+        target_server: UUID | None = None,
     ) -> AuditEvent:
         file = self.get(file_id)
         if file.kind != BackupFile.Kind.DBS:
             raise NotRestorable()
-        server = self.servers.get(file.server_id)
+        source = self.servers.get(file.server_id)
+        server = source if target_server is None else self.servers.get(target_server)
         detail = {"backup": str(file.pk), "mode": mode, "rehearse": rehearse}
+        if server.pk != source.pk:
+            detail["source_server"] = str(source.pk)
+            detail["target_server"] = str(server.pk)
+        if not source.has_backup_passphrase:
+            raise PassphraseMissing()
         if not rehearse:
             errors: dict[str, list[ErrorDetail]] = {}
             if not account_password:

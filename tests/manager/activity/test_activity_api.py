@@ -14,7 +14,6 @@ SHAPE = {
     "status",
     "target",
     "detail",
-    "data",
     "error_code",
     "ip",
     "actor",
@@ -47,7 +46,7 @@ def test_an_entry_has_the_documented_shape(api, admin):
     assert entry["action"] == "auth.sign_in"
     assert entry["status"] == "succeeded"
     assert entry["target"] == "sara"
-    assert entry["detail"] == entry["data"] == {"a": 1}
+    assert entry["detail"] == {"a": 1}
     assert entry["error_code"] == ""
     assert entry["actor"] == "sara"
     assert entry["ip"] == "203.0.113.9"

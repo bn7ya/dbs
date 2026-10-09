@@ -8,7 +8,6 @@ from dbs.models import AuditEvent
 class ActivitySerializer(serializers.ModelSerializer):
     target = serializers.CharField(source="target_name", read_only=True)
     detail = serializers.JSONField(source="data", read_only=True)
-    data = serializers.JSONField(read_only=True)
     ip = serializers.SerializerMethodField()
     actor = serializers.CharField(
         source="actor.username", read_only=True, allow_null=True
@@ -24,7 +23,6 @@ class ActivitySerializer(serializers.ModelSerializer):
             "status",
             "target",
             "detail",
-            "data",
             "error_code",
             "ip",
             "actor",

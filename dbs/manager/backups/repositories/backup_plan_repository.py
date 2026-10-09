@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from django.db.models import QuerySet
+from django.db.models import Min, QuerySet
 
 from dbs.manager.backups.models import BackupPlan
 from dbs.manager.common.repositories import BaseRepository
@@ -36,3 +36,14 @@ class BackupPlanRepository(BaseRepository):
             .select_for_update(skip_locked=True, of=("self",))
             .order_by("next_run_at", "id")
         )
+
+    def next_runs_by_server(self) -> dict[UUID, datetime]:
+        rows = (
+            self.active()
+            .filter(
+                enabled=True, interval_minutes__isnull=False, next_run_at__isnull=False
+            )
+            .values("server_id")
+            .annotate(following=Min("next_run_at"))
+        )
+        return {row["server_id"]: row["following"] for row in rows}

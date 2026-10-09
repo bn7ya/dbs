@@ -2,9 +2,12 @@ from django.urls import path
 
 from dbs.manager.servers.views import (
     CheckView,
+    DiscoverView,
     FingerprintView,
     HostKeyView,
+    PassphraseCaptureView,
     PassphraseView,
+    PublicKeyView,
     ServerDetailView,
     ServerListView,
 )
@@ -17,5 +20,12 @@ urlpatterns = [
     path("<uuid:pk>/", ServerDetailView.as_view(), name="detail"),
     path("<uuid:pk>/check/", CheckView.as_view(), name="check"),
     path("<uuid:pk>/host-key/", HostKeyView.as_view(), name="host-key"),
+    path("<uuid:pk>/public-key/", PublicKeyView.as_view(), name="public-key"),
+    path("<uuid:pk>/discover/", DiscoverView.as_view(), name="discover"),
     path("<uuid:pk>/passphrase/", PassphraseView.as_view(), name="passphrase"),
+    path(
+        "<uuid:pk>/passphrase/capture/",
+        PassphraseCaptureView.as_view(),
+        name="passphrase-capture",
+    ),
 ]

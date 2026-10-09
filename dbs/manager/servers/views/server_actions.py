@@ -15,7 +15,7 @@ from dbs.manager.servers.serializers import (
     RepinSerializer,
     ServerSerializer,
 )
-from dbs.manager.servers.services import ServerService
+from dbs.manager.servers.services import DiscoveryService, ServerService
 
 
 class FingerprintView(APIView):
@@ -32,8 +32,33 @@ class CheckView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk: UUID) -> Response:
-        server = ServerService(request.user).check(pk)
-        return Response(ServerSerializer(server).data)
+        service = ServerService(request.user)
+        server = service.check(pk)
+        return Response(
+            {**ServerSerializer(server).data, **service.compatibility(server)}
+        )
+
+
+class PublicKeyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, pk: UUID) -> Response:
+        return Response({"public_key": ServerService(request.user).public_key(pk)})
+
+
+class DiscoverView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, pk: UUID) -> Response:
+        return Response(DiscoveryService(request.user).discover(pk))
+
+
+class PassphraseCaptureView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, pk: UUID) -> Response:
+        ServerService(request.user).capture_passphrase(pk)
+        return Response({"captured": True})
 
 
 class HostKeyView(APIView):

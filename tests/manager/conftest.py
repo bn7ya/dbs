@@ -1,3 +1,4 @@
+from functools import partial
 from uuid import uuid4
 
 import pytest
@@ -36,6 +37,11 @@ def api(admin):
     client = APIClient()
     client.force_login(admin)
     return client
+
+
+@pytest.fixture
+def run_jobs(django_capture_on_commit_callbacks):
+    return partial(django_capture_on_commit_callbacks, execute=True)
 
 
 @pytest.fixture

@@ -112,6 +112,7 @@ class Migration(migrations.Migration):
                 ("last_check_error", models.CharField(blank=True, max_length=64)),
                 ("last_checked_at", models.DateTimeField(blank=True, null=True)),
                 ("last_check_report", models.JSONField(blank=True, default=dict)),
+                ("last_health", models.JSONField(blank=True, null=True)),
                 (
                     "created_by",
                     models.ForeignKey(

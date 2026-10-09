@@ -351,7 +351,7 @@ class BackupRunService:
             report = remote.restore_dbs_backup(
                 handle,
                 profile=connections.dbs_profile(server),
-                passphrase=connections.backup_passphrase(server),
+                passphrase=connections.backup_passphrase(file.server),
                 remote_dir=server.remote_backup_dir,
                 flush=job.data["mode"] == RestoreMode.REPLACE,
                 dry_run=job.data["rehearse"],

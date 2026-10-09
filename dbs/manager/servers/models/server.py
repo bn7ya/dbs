@@ -55,6 +55,7 @@ class Server(BaseModel):
     last_check_error = models.CharField(max_length=64, blank=True)
     last_checked_at = models.DateTimeField(null=True, blank=True)
     last_check_report = models.JSONField(default=dict, blank=True)
+    last_health = models.JSONField(null=True, blank=True)
 
     class Meta(BaseModel.Meta):
         constraints = [

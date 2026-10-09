@@ -74,6 +74,8 @@ HEALED = "Corruption detected and repaired"
 UNKNOWN_OPTION = "unrecognized arguments"
 RESTORE_FILE_PREFIX = ".dbs-restore-"
 RESTORE_FILE_MODE = 0o600
+EXTRACT_FILE_PREFIX = ".dbs-extract-"
+ARCHIVE_SUFFIX = ".tar.gz"
 REMOTE_DIRECTORY_MODE = 0o700
 PARTIAL_FILE_MODE = 0o600
 TRANSFER_WINDOW = 4 * 1024 * 1024
@@ -302,6 +304,23 @@ class RemoteHost:
         return _restore_report(
             result.stdout, flush=flush, dry_run=dry_run, copy_left=copy_left
         )
+
+    def extract_archive(
+        self, source: SupportsRead[bytes], remote_dir: str, timeout: float
+    ) -> str:
+        name = f"{EXTRACT_FILE_PREFIX}{secrets.token_hex(8)}{ARCHIVE_SUFFIX}"
+        path = posixpath.join(remote_dir, name)
+        self._make_dirs(remote_dir)
+        self.write_new(source, remote_dir, name, mode=RESTORE_FILE_MODE)
+        try:
+            result = self.run(
+                ["tar", "-xzf", path, "-C", "/", "--no-same-owner"], timeout=timeout
+            )
+        finally:
+            copy_left = self._removed_or_left(path)
+        if not result.ok:
+            raise ArchiveFailed(output=_tail(result.stderr or result.stdout))
+        return copy_left
 
     def archive(
         self, paths: Sequence[str], remote_dir: str, name: str, timeout: float

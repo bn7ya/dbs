@@ -82,3 +82,4 @@ class RestoreSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=SERVER_NAME_MAX_LENGTH,
     )
+    target_server = serializers.UUIDField(required=False, allow_null=True)
