@@ -1,0 +1,105 @@
+<form class="dialog-form" (ngSubmit)="restore()" novalidate>
+  @if (formFailure(); as failure) {
+    <p-message severity="error">{{ failure | errorText }}</p-message>
+  }
+
+  <p class="text-secondary">{{ 'backups.restore.body' | t }}</p>
+
+  <div class="restore-form__facts">
+    <dl class="restore-form__fact">
+      <dt class="text-label text-secondary">{{ 'backups.restore.backup' | t }}</dt>
+      <dd><bdi class="restore-form__code" dir="ltr">{{ file.name }}</bdi></dd>
+    </dl>
+    <dl class="restore-form__fact">
+      <dt class="text-label text-secondary">{{ 'backups.restore.server' | t }}</dt>
+      <dd><bdi dir="auto">{{ file.server_name }}</bdi></dd>
+    </dl>
+  </div>
+
+  <fieldset class="restore-form__choice" [attr.aria-describedby]="modeId + '-hint'">
+    <legend class="text-label">{{ 'backups.restore.mode' | t }}</legend>
+    <div class="restore-form__options">
+      @for (each of modes; track each) {
+        <div class="restore-form__option">
+          <p-radiobutton
+            name="mode"
+            [value]="each"
+            [inputId]="modeId + '-' + each"
+            [ngModel]="mode()"
+            [ngModelOptions]="{ standalone: true }"
+            (ngModelChange)="setMode($event)"
+          />
+          <label [for]="modeId + '-' + each">{{ 'backups.restore.modes.' + each | t }}</label>
+        </div>
+      }
+    </div>
+    <small class="text-sm text-secondary" [id]="modeId + '-hint'">{{ 'backups.restore.modeHint.' + mode() | t }}</small>
+  </fieldset>
+
+  <app-field
+    [label]="'password.label' | t"
+    [hint]="'backups.restore.passwordHint' | t"
+    [error]="passwordError()"
+  >
+    <app-password-input
+      name="account_password"
+      autocomplete="current-password"
+      [ngModel]="accountPassword()"
+      (ngModelChange)="setAccountPassword($event)"
+    />
+  </app-field>
+
+  <!-- FSI … PDI: the name keeps its own direction inside the hint in either language. -->
+  <app-field
+    [label]="'backups.restore.serverName' | t"
+    [hint]="'backups.restore.serverNameHint' | t: { name: '⁨' + file.server_name + '⁩' }"
+    [error]="nameErrorText()"
+  >
+    <input
+      pInputText
+      appFieldControl
+      fluid
+      name="server_name"
+      dir="auto"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      [invalid]="!!nameError()"
+      [ngModel]="serverName()"
+      (ngModelChange)="setServerName($event)"
+    />
+  </app-field>
+
+  <div class="dialog-actions">
+    <button pButton type="button" severity="secondary" variant="text" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button
+      pButton
+      type="button"
+      variant="outlined"
+      [disabled]="sending() !== null"
+      [attr.aria-busy]="sending() === 'rehearse'"
+      (click)="rehearse()"
+    >
+      @if (sending() === 'rehearse') {
+        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        {{ 'backups.restore.rehearsing' | t }}
+      } @else {
+        {{ 'backups.restore.rehearse' | t }}
+      }
+    </button>
+    <button
+      pButton
+      type="submit"
+      severity="danger"
+      [disabled]="sending() !== null"
+      [attr.aria-busy]="sending() === 'restore'"
+    >
+      @if (sending() === 'restore') {
+        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        {{ 'backups.restore.working' | t }}
+      } @else {
+        {{ 'backups.restore.submit' | t }}
+      }
+    </button>
+  </div>
+</form>

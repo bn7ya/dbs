@@ -1,0 +1,439 @@
+<div class="backups">
+  <p-card>
+    <div class="backups__card">
+      <div class="backups__header">
+        <div class="backups__intro">
+          <h2>{{ 'backups.plans.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'backups.plans.body' | t }}</p>
+        </div>
+        @if (!plansEmpty()) {
+          <button pButton type="button" severity="secondary" (click)="addPlan()">{{ 'backups.plans.add' | t }}</button>
+        }
+      </div>
+
+      <div class="backups__body">
+        @if (plansError(); as failure) {
+          <p-message severity="error">{{ failure | errorText }}</p-message>
+          <div>
+            <button pButton type="button" severity="secondary" (click)="retryPlans()">{{ 'actions.retry' | t }}</button>
+          </div>
+        } @else if (plansPending()) {
+          <div class="backups__skeleton" aria-busy="true">
+            @for (line of planSkeleton; track line) {
+              <p-skeleton />
+            }
+          </div>
+        } @else if (plansEmpty()) {
+          <app-empty-state
+            icon="fa-solid fa-calendar"
+            [headingLevel]="3"
+            [title]="'backups.plans.empty.title' | t"
+            [description]="'backups.plans.empty.body' | t"
+          >
+            <button pButton type="button" (click)="addFirstPlan()">{{ 'backups.plans.empty.action' | t }}</button>
+            <button pButton type="button" variant="outlined" (click)="addFolderPlan()">
+              {{ 'backups.plans.empty.folders' | t }}
+            </button>
+            <button pButton type="button" variant="outlined" (click)="addCollectPlan()">
+              {{ 'backups.plans.empty.collect' | t }}
+            </button>
+          </app-empty-state>
+        } @else {
+          <div class="table-scroll"><p-table
+            [value]="planRows()"
+            dataKey="id"
+            [lazy]="true"
+            [paginator]="plansPaginated()"
+            [rows]="planPageSize"
+            [first]="planFirst()"
+            [totalRecords]="planCount()"
+            [attr.aria-busy]="plansLoading()"
+            [pt]="{
+              table: { 'aria-label': ('backups.plans.title' | t) },
+              pcPaginator: { root: { role: 'navigation', 'aria-label': ('backups.plans.list.pages' | t) } }
+            }"
+            (onPage)="onPlansPaged($event)"
+          >
+            <ng-template #header>
+              <tr>
+                <th scope="col">{{ 'backups.plans.list.plan' | t }}</th>
+                <th scope="col">{{ 'backups.plans.list.schedule' | t }}</th>
+                <th scope="col">{{ 'backups.plans.list.kept' | t }}</th>
+                <th scope="col">{{ 'backups.plans.list.lastRun' | t }}</th>
+                <th scope="col">{{ 'backups.plans.list.nextRun' | t }}</th>
+                <th scope="col">{{ 'backups.list.actions' | t }}</th>
+              </tr>
+            </ng-template>
+            <ng-template #body let-row>
+              <tr>
+                <td>
+                  <div class="backups__stack">
+                    <bdi class="backups__plan-name" dir="auto">{{ row.name }}</bdi>
+                    @switch (row.kind) {
+                      @case ('archive') {
+                        <span class="text-sm text-secondary">{{ 'backups.plans.folders' | t: { count: row.paths.length } }}</span>
+                        <ul class="backups__paths" role="list">
+                          @for (path of row.paths; track path) {
+                            <li class="text-sm text-secondary"><bdi class="backups__code" dir="ltr">{{ path }}</bdi></li>
+                          }
+                        </ul>
+                      }
+                      @case ('collect') {
+                        <span class="text-sm text-secondary">{{ 'backups.kind.collect' | t }}</span>
+                        <span class="text-sm text-secondary">
+                          <bdi class="backups__code" dir="ltr">{{ collectsFrom(row) }}</bdi>
+                        </span>
+                      }
+                      @default {
+                        <span class="text-sm text-secondary">
+                          <bdi class="backups__code" dir="ltr">{{ 'backups.kind.dbs' | t }}</bdi>
+                        </span>
+                      }
+                    }
+                  </div>
+                </td>
+                <td>
+                  <div class="backups__stack">
+                    <span>{{ scheduleKey(row) | t }}</span>
+                    @if (!row.enabled) {
+                      <p-tag severity="secondary" icon="fa-solid fa-pause" [value]="'backups.plans.disabled' | t" />
+                    }
+                  </div>
+                </td>
+                <td>
+                  <div class="backups__stack">
+                    <span>{{ 'backups.plans.keepHere' | t: { count: row.keep } }}</span>
+                    @if (row.kind !== 'collect') {
+                      <span>{{ 'backups.plans.keepRemote' | t: { count: row.keep_remote } }}</span>
+                    }
+                  </div>
+                </td>
+                <td>
+                  @if (row.last_status === 'none') {
+                    <span class="text-sm text-muted">{{ 'backups.plans.lastStatus.none' | t }}</span>
+                  } @else {
+                    <div class="backups__stack">
+                      <p-tag
+                        [severity]="runLook(row.last_status).severity"
+                        [icon]="runLook(row.last_status).icon"
+                        [value]="'backups.plans.lastStatus.' + row.last_status | t"
+                      />
+                      @if (row.last_run_at; as lastRunAt) {
+                        <time class="text-sm text-secondary" [attr.datetime]="lastRunAt">{{ lastRunAt | appDate }}</time>
+                      }
+                      @if (row.last_status === 'failed' && row.last_error_code) {
+                        <span class="text-sm text-secondary">{{ row.last_error_code | errorText }}</span>
+                      }
+                    </div>
+                  }
+                </td>
+                <td>
+                  @if (nextRun(row); as nextRunAt) {
+                    <time [attr.datetime]="nextRunAt">{{ nextRunAt | appDate }}</time>
+                  } @else {
+                    <span class="text-sm text-muted">{{ 'backups.list.none' | t }}</span>
+                  }
+                </td>
+                <td>
+                  <div class="backups__actions">
+                    <button
+                      pButton
+                      type="button"
+                      variant="text"
+                      size="small"
+                      [disabled]="isRunning(row)"
+                      [attr.aria-busy]="isRunning(row)"
+                      [attr.aria-label]="'backups.plans.run.label' | t: { name: row.name }"
+                      (click)="run(row)"
+                    >
+                      @if (isRunning(row)) {
+                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                      }
+                      {{ (isRunning(row) ? 'backups.plans.run.working' : 'backups.plans.run.action') | t }}
+                    </button>
+                    <button
+                      pButton
+                      type="button"
+                      variant="text"
+                      size="small"
+                      [attr.aria-label]="'backups.plans.edit.label' | t: { name: row.name }"
+                      (click)="editPlan(row)"
+                    >
+                      {{ 'actions.edit' | t }}
+                    </button>
+                    <button
+                      pButton
+                      type="button"
+                      variant="text"
+                      severity="danger"
+                      size="small"
+                      [disabled]="isDeletingPlan(row)"
+                      [attr.aria-busy]="isDeletingPlan(row)"
+                      [attr.aria-label]="'backups.delete.label' | t: { name: row.name }"
+                      (click)="removePlan(row)"
+                    >
+                      @if (isDeletingPlan(row)) {
+                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                      }
+                      {{ 'actions.delete' | t }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table></div>
+        }
+      </div>
+    </div>
+  </p-card>
+
+  <p-card>
+    <div class="backups__card">
+      <div class="backups__header">
+        <div class="backups__intro">
+          <h2>{{ 'backups.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'backups.take.body' | t }}</p>
+        </div>
+        <div class="backups__header-actions">
+          <!-- No file control here, so the native picker is hidden and this button opens it. -->
+          <input #picker type="file" hidden (change)="onFileChosen(picker)" />
+          <button
+            #uploadButton
+            pButton
+            type="button"
+            severity="secondary"
+            [disabled]="uploading()"
+            [attr.aria-busy]="uploading()"
+            (click)="picker.click()"
+          >
+            @if (uploading()) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (uploading() ? 'backups.upload.working' : 'backups.upload.action') | t }}
+          </button>
+          <button pButton type="button" [disabled]="taking()" [attr.aria-busy]="taking()" (click)="take()">
+            @if (taking()) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (taking() ? 'backups.take.working' : 'backups.take.action') | t }}
+          </button>
+        </div>
+      </div>
+
+      <div class="backups__body">
+        @if (upload(); as upload) {
+          <div class="backups__upload">
+            <div class="backups__upload-status">
+              <span><bdi class="backups__code" dir="ltr">{{ upload.name }}</bdi></span>
+              <span class="text-sm text-secondary" [id]="uploadLabelId">
+                {{ (uploadProgress() === null ? 'backups.upload.storing' : 'backups.upload.working') | t }}
+              </span>
+              @if (uploadProgress() !== null) {
+                <p-progressbar [value]="uploadProgress() ?? 0" [attr.aria-labelledby]="uploadLabelId" />
+              } @else {
+                <p-progressbar mode="indeterminate" [attr.aria-labelledby]="uploadLabelId" />
+              }
+            </div>
+            @if (uploadProgress() !== null) {
+              <button
+                pButton
+                type="button"
+                variant="text"
+                size="small"
+                [attr.aria-label]="'backups.upload.cancelLabel' | t: { name: upload.name }"
+                (click)="cancelUpload()"
+              >
+                {{ 'actions.cancel' | t }}
+              </button>
+            }
+          </div>
+        }
+
+        @if (backingUp()) {
+          <p-message severity="info">{{ 'backups.take.running' | t }}</p-message>
+        }
+
+        @if (deleted(); as file) {
+          <p-message severity="success" [closable]="true" (onClose)="dismissDeleted()">
+            <span class="backups__deleted">
+              <span>{{ 'backups.delete.done' | t }} <bdi class="backups__code" dir="ltr">{{ file.name }}</bdi></span>
+              <button
+                pButton
+                type="button"
+                variant="text"
+                size="small"
+                [disabled]="undoing()"
+                [attr.aria-busy]="undoing()"
+                (click)="undoDelete()"
+              >
+                @if (undoing()) {
+                  <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                }
+                {{ 'backups.delete.undo' | t }}
+              </button>
+            </span>
+          </p-message>
+        }
+
+        @if (error(); as failure) {
+          <p-message severity="error">{{ failure | errorText }}</p-message>
+          <div>
+            <button pButton type="button" severity="secondary" (click)="retry()">{{ 'actions.retry' | t }}</button>
+          </div>
+        } @else if (pending()) {
+          <div class="backups__skeleton" aria-busy="true">
+            @for (line of fileSkeleton; track line) {
+              <p-skeleton />
+            }
+          </div>
+        } @else if (empty()) {
+          <app-empty-state
+            icon="fa-solid fa-box-archive"
+            [headingLevel]="3"
+            [title]="'backups.empty.title' | t"
+            [description]="'backups.empty.body' | t"
+          />
+        } @else {
+          <div class="table-scroll"><p-table
+            [value]="fileRows()"
+            dataKey="id"
+            [lazy]="true"
+            [paginator]="paginated()"
+            [rows]="pageSize()"
+            [first]="first()"
+            [totalRecords]="count()"
+            [rowsPerPageOptions]="pageSizes"
+            [attr.aria-busy]="loading()"
+            [pt]="{
+              table: { 'aria-label': ('backups.title' | t) },
+              pcPaginator: { root: { role: 'navigation', 'aria-label': ('backups.list.pages' | t) } }
+            }"
+            (onPage)="onPaged($event)"
+          >
+            <ng-template #header>
+              <tr>
+                <th scope="col">{{ 'backups.list.name' | t }}</th>
+                <th scope="col">{{ 'backups.list.taken' | t }}</th>
+                <th scope="col">{{ 'backups.list.plan' | t }}</th>
+                <th scope="col" class="backups__end">{{ 'backups.list.size' | t }}</th>
+                <th scope="col">{{ 'backups.list.check' | t }}</th>
+                <th scope="col">{{ 'backups.list.actions' | t }}</th>
+              </tr>
+            </ng-template>
+            <ng-template #body let-row>
+              <tr>
+                <td>
+                  <div class="backups__stack">
+                    <bdi class="backups__code" dir="ltr">{{ row.name }}</bdi>
+                    <p-tag severity="secondary" [value]="'backups.kind.' + row.kind | t" />
+                  </div>
+                </td>
+                <td>
+                  <div class="backups__stack">
+                    <time [attr.datetime]="row.created_at">{{ row.created_at | appDate }}</time>
+                    @if (takenBy(row); as takenBy) {
+                      <span class="text-sm text-secondary">{{ takenBy }}</span>
+                    }
+                  </div>
+                </td>
+                <td>
+                  @if (row.plan_name; as planName) {
+                    <bdi dir="auto">{{ planName }}</bdi>
+                  } @else {
+                    <span class="text-sm text-muted">{{ 'backups.list.oneOff' | t }}</span>
+                  }
+                </td>
+                <td class="backups__end">
+                  <bdi class="backups__size">{{ row.size | fileSize }}</bdi>
+                </td>
+                <td>
+                  <div class="backups__stack">
+                    <p-tag
+                      [severity]="look(row.validation).severity"
+                      [icon]="look(row.validation).icon"
+                      [value]="validationKey(row) | t"
+                    />
+                    @if (row.validated_at; as validatedAt) {
+                      <time class="text-sm text-secondary" [attr.datetime]="validatedAt">{{ validatedAt | appDate }}</time>
+                    }
+                  </div>
+                </td>
+                <td>
+                  <div class="backups__actions">
+                    <a
+                      pButton
+                      variant="text"
+                      size="small"
+                      [href]="downloadUrl(row)"
+                      [attr.download]="row.name"
+                      [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
+                    >
+                      {{ 'backups.download.action' | t }}
+                    </a>
+                    <button
+                      pButton
+                      type="button"
+                      variant="text"
+                      size="small"
+                      [disabled]="isVerifying(row)"
+                      [attr.aria-busy]="isVerifying(row)"
+                      [attr.aria-label]="'backups.verify.label' | t: { name: row.name }"
+                      (click)="verify(row)"
+                    >
+                      @if (isVerifying(row)) {
+                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                      }
+                      {{ 'backups.verify.action' | t }}
+                    </button>
+                    @if (canRestore(row)) {
+                      <button
+                        pButton
+                        type="button"
+                        variant="text"
+                        size="small"
+                        [disabled]="restoring(row) !== null"
+                        [attr.aria-busy]="restoring(row) !== null"
+                        [attr.aria-label]="'backups.restore.label' | t: { name: row.name }"
+                        (click)="restore(row)"
+                      >
+                        @switch (restoring(row)) {
+                          @case ('rehearse') {
+                            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                            {{ 'backups.restore.rehearsing' | t }}
+                          }
+                          @case ('restore') {
+                            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                            {{ 'backups.restore.working' | t }}
+                          }
+                          @default {
+                            {{ 'backups.restore.action' | t }}
+                          }
+                        }
+                      </button>
+                    }
+                    <button
+                      pButton
+                      type="button"
+                      variant="text"
+                      severity="danger"
+                      size="small"
+                      [disabled]="isDeleting(row)"
+                      [attr.aria-busy]="isDeleting(row)"
+                      [attr.aria-label]="'backups.delete.label' | t: { name: row.name }"
+                      (click)="remove(row)"
+                    >
+                      @if (isDeleting(row)) {
+                        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                      }
+                      {{ 'actions.delete' | t }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table></div>
+        }
+      </div>
+    </div>
+  </p-card>
+</div>

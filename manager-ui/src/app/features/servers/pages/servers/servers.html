@@ -1,0 +1,107 @@
+<div class="servers">
+  <header class="servers__header">
+    <div class="servers__title">
+      <h1>{{ 'servers.title' | t }}</h1>
+      <p class="text-secondary">{{ 'servers.subtitle' | t }}</p>
+    </div>
+    <button pButton type="button" (click)="add()">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i>
+      {{ 'servers.add' | t }}
+    </button>
+  </header>
+
+  <p-card>
+    <div class="servers__body">
+      <app-field class="servers__search" [label]="'servers.search.label' | t">
+        <p-iconfield>
+          <p-inputicon class="fa-solid fa-magnifying-glass" />
+          <input
+            pInputText
+            appFieldControl
+            type="search"
+            name="search"
+            autocomplete="off"
+            fluid
+            [placeholder]="'servers.search.placeholder' | t"
+            [ngModel]="search()"
+            (ngModelChange)="onSearch($event)"
+          />
+        </p-iconfield>
+      </app-field>
+
+      @if (error(); as failure) {
+        <p-message severity="error">{{ failure | errorText }}</p-message>
+        <div>
+          <button pButton type="button" severity="secondary" (click)="retry()">{{ 'actions.retry' | t }}</button>
+        </div>
+      } @else if (pending()) {
+        <div class="servers__skeleton" aria-busy="true">
+          @for (line of skeletonLines; track line) {
+            <p-skeleton />
+          }
+        </div>
+      } @else if (empty()) {
+        @if (searching()) {
+          <app-empty-state
+            icon="fa-solid fa-magnifying-glass"
+            [headingLevel]="2"
+            [title]="'servers.noMatch.title' | t"
+            [description]="'servers.noMatch.body' | t"
+          />
+        } @else {
+          <app-empty-state
+            icon="fa-solid fa-server"
+            [headingLevel]="2"
+            [title]="'servers.empty.title' | t"
+            [description]="'servers.empty.body' | t"
+          >
+            <button pButton type="button" (click)="add()">{{ 'servers.add' | t }}</button>
+          </app-empty-state>
+        }
+      } @else {
+        <div class="table-scroll"><p-table [value]="servers()" [pt]="tablePt()" [attr.aria-busy]="loading()">
+          <ng-template #header>
+            <tr>
+              <th scope="col">{{ 'servers.list.name' | t }}</th>
+              <th scope="col">{{ 'servers.list.address' | t }}</th>
+              <th scope="col">{{ 'servers.list.status' | t }}</th>
+              <th scope="col">{{ 'servers.list.lastChecked' | t }}</th>
+            </tr>
+          </ng-template>
+
+          <ng-template #body let-row>
+            <tr>
+              <td>
+                <a [routerLink]="[row.id]" dir="auto">{{ row.name }}</a>
+              </td>
+              <td>
+                <bdi class="servers__address" dir="ltr">{{ row.username }}&#64;{{ row.host }}:{{ row.port }}</bdi>
+              </td>
+              <td>
+                <app-check-status-tag [status]="row.last_check_status" />
+              </td>
+              <td>
+                @if (row.last_checked_at; as checkedAt) {
+                  {{ checkedAt | appDate }}
+                } @else {
+                  <span class="text-muted">{{ 'servers.list.never' | t }}</span>
+                }
+              </td>
+            </tr>
+          </ng-template>
+        </p-table></div>
+
+        <nav [attr.aria-label]="'servers.list.pages' | t">
+          <p-paginator
+            locale="en-US"
+            [first]="first()"
+            [rows]="pageSize()"
+            [totalRecords]="count()"
+            [rowsPerPageOptions]="pageSizes"
+            (onPageChange)="onPaged($event)"
+          />
+        </nav>
+      }
+    </div>
+  </p-card>
+</div>

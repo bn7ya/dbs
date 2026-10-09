@@ -1,0 +1,56 @@
+<main id="main" class="sign-in">
+  <p-card class="sign-in__card">
+    <div class="sign-in__content">
+      <header class="sign-in__header">
+        <h1>{{ 'auth.signIn.title' | t }}</h1>
+        <p class="text-secondary">{{ 'auth.signIn.subtitle' | t }}</p>
+      </header>
+
+      @if (error(); as failure) {
+        <p-message severity="error">{{ failure | errorText }}</p-message>
+      }
+
+      <form class="sign-in__form" novalidate (ngSubmit)="submit()">
+        <app-field
+          [label]="'auth.signIn.username' | t"
+          [error]="usernameInvalid() ? ('auth.errors.usernameRequired' | t) : ''"
+        >
+          <input
+            pInputText
+            appFieldControl
+            name="username"
+            autocomplete="username"
+            dir="auto"
+            fluid
+            [placeholder]="'auth.signIn.usernamePlaceholder' | t"
+            [ngModel]="username()"
+            (ngModelChange)="username.set($event)"
+          />
+        </app-field>
+
+        <app-field
+          [label]="'auth.signIn.password' | t"
+          [error]="passwordInvalid() ? ('auth.errors.passwordRequired' | t) : ''"
+        >
+          <app-password-input
+            name="password"
+            [placeholder]="'auth.signIn.passwordPlaceholder' | t"
+            [ngModel]="password()"
+            (ngModelChange)="password.set($event)"
+          />
+        </app-field>
+
+        <button pButton class="sign-in__submit" type="submit" fluid [disabled]="busy()" [attr.aria-busy]="busy()">
+          @if (busy()) {
+            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+          }
+          {{ (busy() ? 'auth.signIn.working' : 'auth.signIn.submit') | t }}
+        </button>
+      </form>
+
+      <footer>
+        <app-locale-switcher />
+      </footer>
+    </div>
+  </p-card>
+</main>

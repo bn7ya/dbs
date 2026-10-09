@@ -1,0 +1,43 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin: 0;
+}
+
+// Label over value: a fingerprint is too long to share a line with its label on a phone.
+.facts__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.facts__row dd {
+  margin: 0;
+}
+
+code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.facts__compare {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.facts__command {
+  display: block;
+  padding: var(--app-space-2);
+  text-align: start;
+  background: var(--app-color-ground);
+  border-radius: var(--app-radius-sm);
+}

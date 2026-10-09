@@ -1,0 +1,10 @@
+<p-selectbutton
+  size="small"
+  optionLabel="label"
+  optionValue="value"
+  [allowEmpty]="false"
+  [attr.aria-label]="label()"
+  [options]="options()"
+  [ngModel]="current()"
+  (ngModelChange)="select($event)"
+/>

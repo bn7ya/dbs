@@ -1,0 +1,106 @@
+.backups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+}
+
+.backups__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+// The action belongs to the title beside it, and drops under it when the row is narrow.
+.backups__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+.backups__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.backups__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.backups__upload {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--app-space-4);
+}
+
+.backups__upload-status {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.backups__deleted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.backups__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.backups__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.backups__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+}
+
+.backups__plan-name {
+  overflow-wrap: anywhere;
+}
+
+.backups__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.backups__paths {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.backups__end {
+  text-align: end;
+}
+
+// Sizes line up digit under digit, and a number never breaks from its unit.
+.backups__size {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.backups__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1);
+}

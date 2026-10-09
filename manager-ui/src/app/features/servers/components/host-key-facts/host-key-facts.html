@@ -1,0 +1,17 @@
+<dl class="facts">
+  <div class="facts__row">
+    <dt class="text-label text-secondary">{{ 'servers.hostKey.type' | t }}</dt>
+    <dd><code dir="ltr">{{ keyType() }}</code></dd>
+  </div>
+  <div class="facts__row">
+    <dt class="text-label text-secondary">{{ 'servers.hostKey.fingerprint' | t }}</dt>
+    <dd><code dir="ltr">{{ fingerprint() }}</code></dd>
+  </div>
+</dl>
+
+@if (compare()) {
+  <div class="facts__compare">
+    <p class="text-sm text-secondary">{{ 'servers.hostKey.compare' | t }}</p>
+    <code class="facts__command" dir="ltr">{{ command() }}</code>
+  </div>
+}

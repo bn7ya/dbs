@@ -1,0 +1,152 @@
+<div class="activity">
+  @if (!scoped()) {
+    <header class="activity__header">
+      <h1>{{ 'activity.title' | t }}</h1>
+      <p class="text-secondary">{{ 'activity.subtitle' | t }}</p>
+    </header>
+  }
+
+  <p-card>
+    <div class="activity__body">
+      <div class="activity__filters">
+        <app-field #statusField="appField" class="activity__filter" [label]="'activity.filters.status' | t">
+          <p-select
+            [inputId]="statusField.id"
+            [options]="statusOptions()"
+            optionLabel="label"
+            optionValue="value"
+            [ngModel]="status()"
+            (ngModelChange)="onStatus($event)"
+          />
+        </app-field>
+
+        <app-field #actionField="appField" class="activity__filter" [label]="'activity.filters.action' | t">
+          <p-select
+            [inputId]="actionField.id"
+            [options]="actionOptions()"
+            optionLabel="label"
+            optionValue="value"
+            [ngModel]="action()"
+            (ngModelChange)="onAction($event)"
+          />
+        </app-field>
+      </div>
+
+      @if (error(); as failure) {
+        <p-message severity="error">{{ failure | errorText }}</p-message>
+        <div>
+          <button pButton type="button" severity="secondary" (click)="retry()">{{ 'actions.retry' | t }}</button>
+        </div>
+      } @else if (pending()) {
+        <div class="activity__skeleton" aria-busy="true">
+          @for (line of skeletonLines; track line) {
+            <p-skeleton />
+          }
+        </div>
+      } @else if (empty()) {
+        @if (filtered()) {
+          <app-empty-state
+            icon="fa-solid fa-filter"
+            [headingLevel]="2"
+            [title]="'activity.noMatch.title' | t"
+            [description]="'activity.noMatch.body' | t"
+          >
+            <button pButton type="button" severity="secondary" (click)="clearFilters()">
+              {{ 'activity.filters.clear' | t }}
+            </button>
+          </app-empty-state>
+        } @else {
+          <app-empty-state
+            icon="fa-solid fa-wave-pulse"
+            [headingLevel]="2"
+            [title]="'activity.empty.title' | t"
+            [description]="(scoped() ? 'activity.empty.serverBody' : 'activity.empty.body') | t"
+          />
+        }
+      } @else {
+        <div class="table-scroll"><p-table [value]="entries()" [pt]="tablePt()" [attr.aria-busy]="loading()">
+          <ng-template #header>
+            <tr>
+              <th scope="col">{{ 'activity.list.when' | t }}</th>
+              <th scope="col">{{ 'activity.list.action' | t }}</th>
+              <th scope="col">{{ 'activity.list.status' | t }}</th>
+              @if (!scoped()) {
+                <th scope="col">{{ 'activity.list.server' | t }}</th>
+              }
+              <th scope="col">{{ 'activity.list.target' | t }}</th>
+              <th scope="col">{{ 'activity.list.by' | t }}</th>
+              <th scope="col">{{ 'activity.list.ip' | t }}</th>
+            </tr>
+          </ng-template>
+
+          <ng-template #body let-row>
+            <tr>
+              <td>{{ row.created_at | appDate }}</td>
+              <td>{{ actionLabel(row.action) }}</td>
+              <td>
+                <div class="activity__status">
+                  <p-tag
+                    [severity]="look(row.status).severity"
+                    [icon]="look(row.status).icon"
+                    [value]="'activity.status.' + row.status | t"
+                  />
+                  @if (row.status === 'failed' && row.error_code) {
+                    <span class="text-sm text-secondary">{{ row.error_code | errorText }}</span>
+                  }
+                </div>
+              </td>
+              @if (!scoped()) {
+                <td>
+                  @if (row.server; as server) {
+                    <a [routerLink]="['/servers', server]" dir="auto">{{ row.server_name || server }}</a>
+                  } @else if (row.server_name; as name) {
+                    <span class="activity__deleted">
+                      <bdi dir="auto">{{ name }}</bdi>
+                      <span class="text-sm text-muted">{{ 'activity.list.serverDeleted' | t }}</span>
+                    </span>
+                  } @else {
+                    <span class="text-muted">{{ 'activity.list.none' | t }}</span>
+                  }
+                </td>
+              }
+              <td>
+                @if (row.target) {
+                  <bdi class="activity__target" dir="ltr">{{ row.target }}</bdi>
+                } @else {
+                  <span class="text-muted">{{ 'activity.list.none' | t }}</span>
+                }
+              </td>
+              <td>
+                @if (row.actor; as actor) {
+                  <bdi dir="auto">{{ actor }}</bdi>
+                } @else if (scheduled(row)) {
+                  <span class="text-muted">{{ 'activity.list.scheduled' | t }}</span>
+                } @else {
+                  <span class="text-muted">{{ 'activity.list.none' | t }}</span>
+                }
+              </td>
+              <td>
+                @if (row.ip; as ip) {
+                  <bdi class="activity__code" dir="ltr">{{ ip }}</bdi>
+                } @else {
+                  <span class="text-muted">{{ 'activity.list.none' | t }}</span>
+                }
+              </td>
+            </tr>
+          </ng-template>
+        </p-table></div>
+
+        <nav [attr.aria-label]="'activity.list.pages' | t">
+          <p-paginator
+            locale="en-US"
+            [first]="first()"
+            [rows]="pageSize()"
+            [totalRecords]="count()"
+            [rowsPerPageOptions]="pageSizes"
+            (onPageChange)="onPaged($event)"
+          />
+        </nav>
+      }
+    </div>
+  </p-card>
+</div>

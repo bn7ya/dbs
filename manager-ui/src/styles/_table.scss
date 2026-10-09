@@ -1,0 +1,10 @@
+@use "layout" as *;
+
+.table-scroll {
+  overflow-x: auto;
+
+  > p-table {
+    display: block;
+    min-inline-size: $table-min;
+  }
+}

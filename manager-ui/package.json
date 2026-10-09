@@ -1,0 +1,44 @@
+{
+  "name": "dbs-manager-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "ng serve",
+    "build": "ng build",
+    "build:package": "ng build --configuration production,package",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test",
+    "lint": "ng lint",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@angular/cdk": "^22.2.1",
+    "@angular/common": "^22.1.0",
+    "@angular/compiler": "^22.1.0",
+    "@angular/core": "^22.1.0",
+    "@angular/forms": "^22.1.0",
+    "@angular/platform-browser": "^22.1.0",
+    "@angular/router": "^22.1.0",
+    "@fontsource/tajawal": "^5.3.0",
+    "@primeuix/themes": "^3.0.1",
+    "primeicons": "^8.0.2",
+    "primeng": "^22.1.2",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.8.0",
+    "zone.js": "~0.16.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.1.0",
+    "@angular/cli": "^22.1.0",
+    "@angular/compiler-cli": "^22.1.0",
+    "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.62.0",
+    "angular-eslint": "^22.1.0",
+    "eslint": "^10.0.0",
+    "jsdom": "^30.0.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.0"
+  }
+}

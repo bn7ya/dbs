@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# DBS manager UI
+manager-ui/node_modules/
+manager-ui/dist/
+manager-ui/.angular/
+manager-ui/test-results/
+manager-ui/playwright-report/
+dbs/manager/static/dbs_manager/

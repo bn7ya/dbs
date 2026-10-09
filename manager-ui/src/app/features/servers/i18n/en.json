@@ -1,0 +1,221 @@
+{
+  "servers": {
+    "title": "Servers",
+    "subtitle": "The servers DBS Interface connects to over SSH.",
+    "add": "Add server",
+    "search": {
+      "label": "Search",
+      "placeholder": "Name or host"
+    },
+    "list": {
+      "label": "Servers",
+      "name": "Name",
+      "address": "Address",
+      "status": "Status",
+      "lastChecked": "Last checked",
+      "never": "Never",
+      "pages": "Server pages"
+    },
+    "empty": {
+      "title": "No servers yet",
+      "body": "Add a server to check it and back it up."
+    },
+    "noMatch": {
+      "title": "No matching servers",
+      "body": "Try another name or host."
+    },
+    "status": {
+      "unknown": "Not checked",
+      "ok": "Ready",
+      "problem": "Needs attention",
+      "failed": "Check failed"
+    },
+    "authMethod": {
+      "key": "Private key",
+      "password": "Password"
+    },
+    "page": {
+      "back": "All servers",
+      "sections": "Server sections",
+      "overview": "Overview",
+      "backups": "Backups",
+      "files": "Files",
+      "environment": ".env file",
+      "activity": "Activity",
+      "missing": {
+        "title": "Server not found",
+        "body": "It may have been deleted."
+      }
+    },
+    "check": {
+      "title": "Connection check",
+      "lastChecked": "Last checked:",
+      "never": "Not checked yet.",
+      "run": "Check now",
+      "wait": "A check can take up to a minute.",
+      "done": "Check finished.",
+      "blocked": "Every operation on this server is blocked until the host key is reviewed.",
+      "found": "Found",
+      "missing": "Not found",
+      "notSet": "Not set",
+      "notChecked": "Not checked",
+      "report": {
+        "system": "System",
+        "dbsVersion": "django-dbs version",
+        "backupCommand": "Backup command",
+        "envFile": ".env file",
+        "remoteBackupDir": "Remote backup folder",
+        "roots": "Allowed folders"
+      }
+    },
+    "settings": {
+      "title": "Settings",
+      "authMethod": "Sign-in method",
+      "privateKey": "Private key",
+      "keyPassphrase": "Key passphrase",
+      "password": "Server password",
+      "projectDir": "Project folder",
+      "pythonPath": "Python command",
+      "managePath": "manage.py path",
+      "settingsModule": "Settings module",
+      "remoteBackupDir": "Remote backup folder",
+      "envPath": ".env file",
+      "fileRoots": "Allowed folders",
+      "saved": "Saved",
+      "notSaved": "Not saved",
+      "notSet": "Not set",
+      "updated": "Changes saved."
+    },
+    "hostKey": {
+      "title": "Host key",
+      "body": "Every connection checks that the server presents this key.",
+      "type": "Key type",
+      "fingerprint": "Fingerprint",
+      "compare": "Run this command on the server. It prints the fingerprint to compare.",
+      "matches": "The fingerprints match",
+      "review": "Review host key"
+    },
+    "review": {
+      "title": "Review host key",
+      "pinned": "Pinned key",
+      "presented": "Key the server presents now",
+      "unchanged": "The server presents the pinned key. There is nothing to change.",
+      "changed": "The server presents a different key. Pin it only if the fingerprints match.",
+      "passwordHint": "Pinning a new key needs your password.",
+      "pin": "Pin new key",
+      "done": "Host key pinned."
+    },
+    "passphrase": {
+      "title": "Backup passphrase",
+      "body": "It encrypts the django-dbs backups of this server. Keep a copy somewhere safe.",
+      "label": "Passphrase",
+      "show": "Show passphrase",
+      "hide": "Hide passphrase",
+      "copy": "Copy passphrase",
+      "copied": "Passphrase copied.",
+      "copyUnavailable": "Copying is not available here. Select the passphrase and copy it.",
+      "prompt": {
+        "title": "Show backup passphrase",
+        "body": "Enter your password to show the backup passphrase."
+      }
+    },
+    "delete": {
+      "title": "Delete server",
+      "body": "Removes this server from DBS Interface. Backups stored on the server stay there.",
+      "action": "Delete server",
+      "confirmTitle": "Delete {name}?",
+      "confirmBody": "The server is removed from DBS Interface. Backups stored on the server stay there.",
+      "done": "Server deleted."
+    },
+    "form": {
+      "addTitle": "Add server",
+      "editTitle": "Edit server",
+      "submit": "Add server",
+      "added": "Server added.",
+      "steps": {
+        "label": "Steps",
+        "connection": "Connection",
+        "hostKey": "Host key",
+        "project": "django-dbs and files"
+      },
+      "name": {
+        "label": "Name",
+        "hint": "A name to tell this server apart."
+      },
+      "host": {
+        "label": "Host",
+        "hint": "Domain name or IP address."
+      },
+      "port": {
+        "label": "Port"
+      },
+      "username": {
+        "label": "Username",
+        "hint": "The account to sign in to over SSH."
+      },
+      "authMethod": {
+        "label": "Sign-in method"
+      },
+      "privateKey": {
+        "label": "Private key",
+        "hint": "Paste the whole key, with its BEGIN and END lines."
+      },
+      "keyPassphrase": {
+        "label": "Key passphrase",
+        "hint": "Only if the key has one."
+      },
+      "password": {
+        "label": "Server password"
+      },
+      "secretSaved": "Saved. Leave empty to keep it.",
+      "hostKeyIntro": "Get the key the server presents, then compare its fingerprint on the server itself.",
+      "fetch": "Get host key",
+      "fetchAgain": "Get it again",
+      "projectIntro": "Fill these in to back up the Django project on this server. They can be added later.",
+      "projectDir": {
+        "label": "Project folder",
+        "hint": "The folder that holds manage.py.",
+        "placeholder": "/srv/app"
+      },
+      "pythonPath": {
+        "label": "Python command",
+        "hint": "python3, or the Python of the project's virtual environment."
+      },
+      "managePath": {
+        "label": "manage.py path",
+        "hint": "Relative to the project folder."
+      },
+      "settingsModule": {
+        "label": "Settings module",
+        "hint": "Leave empty to use the project's default.",
+        "placeholder": "config.settings.prod"
+      },
+      "remoteBackupDir": {
+        "label": "Remote backup folder",
+        "hint": "Where backups are written on the server."
+      },
+      "fileRoots": {
+        "label": "Allowed folders",
+        "hint": "Folders the Files tab can open. Press Enter after each one.",
+        "placeholder": "/srv/app/media"
+      },
+      "envPath": {
+        "label": ".env file",
+        "hint": "Full path to the project's .env file, if it has one.",
+        "placeholder": "/srv/app/.env"
+      },
+      "backupPassphrase": {
+        "label": "Backup passphrase",
+        "hint": "Leave empty to generate one."
+      },
+      "accountPassword": {
+        "hint": "Changing anything but the name needs your password."
+      }
+    }
+  },
+  "errors": {
+    "port_range": "Enter a port from 1 to 65535.",
+    "host_key_missing": "Get the host key first.",
+    "host_key_unconfirmed": "Compare the fingerprints first."
+  }
+}

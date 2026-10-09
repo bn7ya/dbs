@@ -1,0 +1,223 @@
+<form class="dialog-form" (ngSubmit)="save()" novalidate>
+  @if (formFailure(); as failure) {
+    <p-message severity="error">{{ failure | errorText }}</p-message>
+  }
+
+  @if (editing) {
+    <dl class="plan-form__fact">
+      <dt class="text-label text-secondary">{{ 'backups.plans.form.kind' | t }}</dt>
+      <dd>{{ 'backups.kind.' + editing.kind | t }}</dd>
+    </dl>
+  } @else {
+    <fieldset
+      class="plan-form__choice"
+      [attr.aria-describedby]="kindId + '-hint' + (kindError() ? ' ' + kindId + '-error' : '')"
+    >
+      <legend class="text-label">{{ 'backups.plans.form.kind' | t }}</legend>
+      <div class="plan-form__options">
+        @for (kind of kinds; track kind) {
+          <div class="plan-form__option">
+            <p-radiobutton
+              name="kind"
+              [value]="kind"
+              [inputId]="kindId + '-' + kind"
+              [ngModel]="draft().kind"
+              [ngModelOptions]="{ standalone: true }"
+              (ngModelChange)="setKind($event)"
+            />
+            <label [for]="kindId + '-' + kind">{{ 'backups.kind.' + kind | t }}</label>
+          </div>
+        }
+      </div>
+      <small class="text-sm text-secondary" [id]="kindId + '-hint'">{{ 'backups.plans.form.kindHint.' + draft().kind | t }}</small>
+      @if (kindError(); as code) {
+        <small class="plan-form__error text-sm" role="alert" [id]="kindId + '-error'">{{ code | errorText }}</small>
+      }
+    </fieldset>
+  }
+
+  @if (archiving()) {
+    <app-field
+      #pathsField="appField"
+      [label]="'backups.plans.form.paths' | t"
+      [hint]="'backups.plans.form.pathsHint' | t"
+      [error]="errorFor('paths')"
+    >
+      <p-inputtags
+        name="paths"
+        fluid
+        [typeahead]="false"
+        [addOnBlur]="true"
+        [placeholder]="'backups.plans.form.pathsPlaceholder' | t"
+        [invalid]="!!error('paths')"
+        [pt]="{ pcAutoComplete: { pcInputText: { root: { id: pathsField.id, 'aria-describedby': pathsField.describedBy() } } } }"
+        [ngModel]="draft().paths"
+        (ngModelChange)="update('paths', $event)"
+      />
+    </app-field>
+  }
+
+  @if (collecting()) {
+    <app-field
+      [label]="'backups.plans.form.folder' | t"
+      [hint]="'backups.plans.form.folderHint' | t"
+      [error]="errorFor('paths')"
+    >
+      <input
+        pInputText
+        appFieldControl
+        fluid
+        class="plan-form__code"
+        name="folder"
+        dir="ltr"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        [placeholder]="'backups.plans.form.folderPlaceholder' | t"
+        [invalid]="!!error('paths')"
+        [ngModel]="draft().folder"
+        (ngModelChange)="update('folder', $event)"
+      />
+    </app-field>
+
+    <app-field
+      [label]="'backups.plans.form.pattern' | t"
+      [hint]="'backups.plans.form.patternHint' | t"
+      [error]="errorFor('pattern')"
+    >
+      <input
+        pInputText
+        appFieldControl
+        fluid
+        class="plan-form__code"
+        name="pattern"
+        dir="ltr"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        maxlength="200"
+        [invalid]="!!error('pattern')"
+        [ngModel]="draft().pattern"
+        (ngModelChange)="update('pattern', $event)"
+      />
+    </app-field>
+  }
+
+  <app-field [label]="'backups.plans.form.name' | t" [error]="errorFor('name')">
+    <input
+      pInputText
+      appFieldControl
+      fluid
+      name="name"
+      autocomplete="off"
+      maxlength="100"
+      [invalid]="!!error('name')"
+      [ngModel]="draft().name"
+      (ngModelChange)="update('name', $event)"
+    />
+  </app-field>
+
+  <app-field
+    #scheduleField="appField"
+    [label]="'backups.plans.form.schedule' | t"
+    [hint]="'backups.plans.form.scheduleHint' | t"
+    [error]="errorFor('interval_minutes')"
+  >
+    <p-select
+      name="schedule"
+      fluid
+      optionLabel="label"
+      optionValue="value"
+      [inputId]="scheduleField.id"
+      [options]="scheduleOptions()"
+      [invalid]="!!error('interval_minutes')"
+      [ngModel]="draft().schedule"
+      (ngModelChange)="setSchedule($event)"
+    />
+  </app-field>
+
+  <div class="plan-form__pair">
+    <app-field
+      #keepField="appField"
+      [label]="'backups.plans.form.keep' | t"
+      [hint]="'backups.plans.form.keepHint' | t"
+      [error]="errorFor('keep')"
+    >
+      <p-inputnumber
+        name="keep"
+        fluid
+        locale="en-US"
+        [useGrouping]="false"
+        [inputId]="keepField.id"
+        [ariaDescribedBy]="keepField.describedBy() ?? undefined"
+        [min]="keepMin"
+        [max]="keepMax"
+        [invalid]="!!error('keep')"
+        [ngModel]="draft().keep"
+        (ngModelChange)="update('keep', $event)"
+      />
+    </app-field>
+
+    @if (!collecting()) {
+      <app-field
+        #keepRemoteField="appField"
+        [label]="'backups.plans.form.keepRemote' | t"
+        [hint]="'backups.plans.form.keepRemoteHint' | t"
+        [error]="errorFor('keep_remote')"
+      >
+        <p-inputnumber
+          name="keep_remote"
+          fluid
+          locale="en-US"
+          [useGrouping]="false"
+          [inputId]="keepRemoteField.id"
+          [ariaDescribedBy]="keepRemoteField.describedBy() ?? undefined"
+          [min]="keepRemoteMin"
+          [max]="keepMax"
+          [invalid]="!!error('keep_remote')"
+          [ngModel]="draft().keep_remote"
+          (ngModelChange)="update('keep_remote', $event)"
+        />
+      </app-field>
+    }
+  </div>
+
+  <app-field
+    #enabledField="appField"
+    [label]="'backups.plans.form.enabled' | t"
+    [hint]="'backups.plans.form.enabledHint' | t"
+    [error]="errorFor('enabled')"
+  >
+    <p-toggleswitch
+      name="enabled"
+      [inputId]="enabledField.id"
+      [ngModel]="draft().enabled"
+      (ngModelChange)="update('enabled', $event)"
+    />
+  </app-field>
+
+  @if (passwordShown()) {
+    <app-field
+      [label]="'password.label' | t"
+      [hint]="'backups.plans.form.passwordHint' | t"
+      [error]="passwordError()"
+    >
+      <app-password-input
+        name="account_password"
+        autocomplete="current-password"
+        [ngModel]="accountPassword()"
+        (ngModelChange)="setAccountPassword($event)"
+      />
+    </app-field>
+  }
+
+  <div class="dialog-actions">
+    <button pButton type="button" severity="secondary" variant="text" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button pButton type="submit" [disabled]="saving()" [attr.aria-busy]="saving()">
+      @if (saving()) {
+        <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (editing ? 'actions.save' : 'backups.plans.form.submit') | t }}
+    </button>
+  </div>
+</form>

@@ -1,0 +1,64 @@
+:root {
+  color-scheme: light dark;
+
+  --app-font-family: "Tajawal", "Omani Rial Sign", system-ui, sans-serif;
+  --app-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --app-weight-regular: 400;
+  --app-weight-medium: 500;
+  --app-weight-bold: 700;
+
+  --app-text--2: 0.75rem;
+  --app-text--1: 0.875rem;
+  --app-text-0: 1rem;
+  --app-text-1: 1.125rem;
+  --app-text-2: 1.375rem;
+  --app-text-3: 1.75rem;
+  --app-text-4: 2.25rem;
+  --app-text-5: 3rem;
+  --app-leading-tight: 1.25;
+  --app-leading-body: 1.6;
+
+  --app-space-1: 0.25rem;
+  --app-space-2: 0.5rem;
+  --app-space-3: 0.75rem;
+  --app-space-4: 1rem;
+  --app-space-5: 1.25rem;
+  --app-space-6: 1.5rem;
+  --app-space-7: 2rem;
+  --app-space-8: 2.5rem;
+  --app-space-9: 3rem;
+  --app-space-10: 4rem;
+
+  --app-radius-sm: 0.25rem;
+  --app-radius-md: 0.5rem;
+  --app-radius-lg: 1rem;
+  --app-radius-full: 999rem;
+
+  --app-border-width: 0.0625rem;
+  --app-focus-width: 0.125rem;
+  --app-control-height: 2.75rem;
+  --app-icon-size: 1.25rem;
+
+  --app-color-ground: light-dark(#f6f5f2, #121212);
+  --app-color-surface: light-dark(#ffffff, #1d1d1f);
+  --app-color-on-surface: light-dark(#1b1b1d, #ececee);
+  --app-color-on-surface-variant: light-dark(#55565c, #b4b5bb);
+  --app-color-outline: light-dark(#c9c8c4, #46464a);
+  --app-color-primary: light-dark(#7a5c12, #e2bd62);
+  --app-color-on-primary: light-dark(#ffffff, #241a00);
+  --app-color-danger: light-dark(#b3261e, #ffb4ab);
+  --app-color-danger-container: light-dark(#fce8e6, #3d1512);
+  --app-color-on-danger-container: light-dark(#601410, #ffdad6);
+  --app-color-success: light-dark(#1b6e3c, #7fd6a0);
+  --app-color-warning: light-dark(#8a5300, #ffc566);
+  --app-color-focus: light-dark(#0b57d0, #a8c7fa);
+
+  --app-shadow-1: 0 0.0625rem 0.125rem rgb(0 0 0 / 8%), 0 0.25rem 0.75rem rgb(0 0 0 / 6%);
+  --app-shadow-2: 0 0.25rem 0.5rem rgb(0 0 0 / 10%), 0 0.75rem 1.5rem rgb(0 0 0 / 8%);
+
+  --app-duration-short: 120ms;
+  --app-duration-medium: 240ms;
+  --app-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --app-layer-skip-link: 1200;
+}

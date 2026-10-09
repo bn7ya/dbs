@@ -1,0 +1,255 @@
+<div class="envfiles">
+  <p-card class="envfiles__versions">
+    <div class="envfiles__body">
+      <div class="envfiles__header">
+        <div class="envfiles__intro">
+          <h2>{{ 'envfiles.title' | t }}</h2>
+          @if (envPath(); as path) {
+            <p class="text-secondary"><bdi class="envfiles__code" dir="ltr">{{ path }}</bdi></p>
+          }
+          <p class="text-sm text-secondary">{{ 'envfiles.body' | t }}</p>
+        </div>
+        @if (offerPull()) {
+          <button pButton type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
+            @if (pulling()) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (pulling() ? 'envfiles.pull.working' : 'envfiles.pull.action') | t }}
+          </button>
+        }
+      </div>
+
+      @if (error(); as failure) {
+        <p-message severity="error">{{ failure | errorText }}</p-message>
+        <div>
+          <button pButton type="button" severity="secondary" (click)="retry()">{{ 'actions.retry' | t }}</button>
+        </div>
+      } @else if (pending()) {
+        <div class="envfiles__skeleton" aria-busy="true">
+          @for (line of skeletonLines; track line) {
+            <p-skeleton />
+          }
+        </div>
+      } @else if (empty() && noPath()) {
+        <app-empty-state
+          icon="fa-solid fa-key"
+          [headingLevel]="3"
+          [title]="'envfiles.noPath.title' | t"
+          [description]="'envfiles.noPath.body' | t"
+        >
+          <a pButton [routerLink]="overviewLink()">{{ 'envfiles.noPath.action' | t }}</a>
+        </app-empty-state>
+      } @else if (empty()) {
+        <app-empty-state
+          icon="fa-solid fa-key"
+          [headingLevel]="3"
+          [title]="'envfiles.empty.title' | t"
+          [description]="'envfiles.empty.body' | t"
+        >
+          <button pButton type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
+            @if (pulling()) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (pulling() ? 'envfiles.pull.working' : 'envfiles.pull.action') | t }}
+          </button>
+        </app-empty-state>
+      } @else {
+        @if (noPath()) {
+          <p-message severity="warn">
+            {{ 'env_path_missing' | errorText }} {{ 'envfiles.noPath.body' | t }}
+          </p-message>
+          <div>
+            <a pButton severity="secondary" [routerLink]="overviewLink()">{{ 'envfiles.noPath.action' | t }}</a>
+          </div>
+        }
+
+        <div class="table-scroll"><p-table
+          dataKey="id"
+          paginatorLocale="en-US"
+          [value]="rows()"
+          [lazy]="true"
+          [paginator]="paginated()"
+          [rows]="pageSize()"
+          [first]="first()"
+          [totalRecords]="count()"
+          [rowsPerPageOptions]="pageSizes"
+          [pt]="tablePt()"
+          [attr.aria-busy]="loading()"
+          (onPage)="onPage($event)"
+        >
+          <ng-template #header>
+            <tr>
+              <th scope="col">{{ 'envfiles.list.when' | t }}</th>
+              <th scope="col">{{ 'envfiles.list.source' | t }}</th>
+              <th scope="col" class="envfiles__end">{{ 'envfiles.list.size' | t }}</th>
+              <th scope="col" class="envfiles__end">{{ 'envfiles.list.keys' | t }}</th>
+            </tr>
+          </ng-template>
+          <ng-template #body let-row>
+            <tr>
+              <td>
+                <div class="envfiles__stack">
+                  <button
+                    pButton
+                    type="button"
+                    size="small"
+                    severity="secondary"
+                    [variant]="isSelected(row) ? undefined : 'text'"
+                    [attr.aria-current]="isSelected(row) ? 'true' : null"
+                    (click)="select(row)"
+                  >
+                    {{ row.created_at | appDate }}
+                  </button>
+                  @if (takenBy(row); as by) {
+                    <span class="text-sm text-secondary">{{ by }}</span>
+                  }
+                </div>
+              </td>
+              <td>
+                <p-tag severity="secondary" [value]="'envfiles.source.' + row.source | t" />
+              </td>
+              <td class="envfiles__end">
+                <bdi class="envfiles__number">{{ row.size | fileSize }}</bdi>
+              </td>
+              <td class="envfiles__end">
+                <bdi class="envfiles__number">{{ row.keys.length }}</bdi>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table></div>
+      }
+    </div>
+  </p-card>
+
+  @if (selected(); as version) {
+    <p-card class="envfiles__selected">
+      <div class="envfiles__detail">
+        <div class="envfiles__intro">
+          <h2>{{ 'envfiles.detail.title' | t }}</h2>
+          <div class="envfiles__meta">
+            <span class="text-secondary">{{ version.created_at | appDate }}</span>
+            <p-tag severity="secondary" [value]="'envfiles.source.' + version.source | t" />
+            @if (takenBy(version); as by) {
+              <span class="text-sm text-secondary">{{ by }}</span>
+            }
+          </div>
+        </div>
+
+        <dl class="envfiles__facts">
+          <div class="envfiles__fact">
+            <dt class="text-label text-secondary">{{ 'envfiles.detail.path' | t }}</dt>
+            <dd><bdi class="envfiles__code" dir="ltr">{{ version.path }}</bdi></dd>
+          </div>
+          <div class="envfiles__fact">
+            <dt class="text-label text-secondary">{{ 'envfiles.detail.size' | t }}</dt>
+            <dd><bdi class="envfiles__number">{{ version.size | fileSize }}</bdi></dd>
+          </div>
+        </dl>
+
+        @if (content(); as text) {
+          <div class="envfiles__section">
+            <app-field [label]="'envfiles.reveal.label' | t">
+              <textarea
+                pTextarea
+                appFieldControl
+                class="envfiles__code"
+                readonly
+                dir="ltr"
+                autocomplete="off"
+                spellcheck="false"
+                fluid
+                [rows]="contentRows()"
+                [value]="text"
+              ></textarea>
+            </app-field>
+            <div class="envfiles__row">
+              <button pButton type="button" size="small" severity="secondary" (click)="copy(text)">
+                {{ 'envfiles.reveal.copy' | t }}
+              </button>
+              @if (downloadHref(); as href) {
+                <a pButton size="small" severity="secondary" [href]="href" [attr.download]="fileName()">
+                  {{ 'envfiles.reveal.download' | t }}
+                </a>
+              }
+            </div>
+          </div>
+        } @else {
+          <section class="envfiles__section">
+            <h3>{{ 'envfiles.detail.keys' | t: { count: version.keys.length } }}</h3>
+            @if (version.keys.length > 0) {
+              <dl class="envfiles__pairs">
+                @for (key of version.keys; track key) {
+                  <div class="envfiles__pair">
+                    <dt><bdi class="envfiles__code" dir="ltr">{{ key }}</bdi></dt>
+                    <dd>
+                      <span class="envfiles__mask" role="img" [attr.aria-label]="'envfiles.detail.hidden' | t">
+                        {{ 'envfiles.detail.masked' | t }}
+                      </span>
+                    </dd>
+                  </div>
+                }
+              </dl>
+            } @else {
+              <p class="text-muted">{{ 'envfiles.detail.noKeys' | t }}</p>
+            }
+          </section>
+        }
+
+        @if (comparison()) {
+          <section class="envfiles__section">
+            <h3>{{ 'envfiles.compare.title' | t }}</h3>
+            @if (changes().length > 0) {
+              <dl class="envfiles__changes">
+                @for (group of changes(); track group.labelKey) {
+                  <div class="envfiles__fact">
+                    <dt class="text-label text-secondary">{{ group.labelKey | t }}</dt>
+                    <dd>
+                      <ul class="envfiles__list" role="list">
+                        @for (key of group.keys; track key) {
+                          <li><bdi class="envfiles__code" dir="ltr">{{ key }}</bdi></li>
+                        }
+                      </ul>
+                    </dd>
+                  </div>
+                }
+              </dl>
+            } @else {
+              <p-message severity="info">{{ 'envfiles.compare.none' | t }}</p-message>
+            }
+          </section>
+        } @else if (compareError(); as failure) {
+          <p-message severity="error">{{ failure | errorText }}</p-message>
+        } @else if (!hasPrevious()) {
+          <p class="text-sm text-muted">{{ 'envfiles.compare.first' | t }}</p>
+        }
+
+        <div class="envfiles__actions">
+          <!-- One button that changes its word: focus returns to it from the password prompt. -->
+          <button pButton type="button" severity="secondary" (click)="toggleValues(version)">
+            {{ (content() === null ? 'envfiles.reveal.show' : 'envfiles.reveal.hide') | t }}
+          </button>
+          @if (hasPrevious() && !comparison()) {
+            <button
+              pButton
+              type="button"
+              severity="secondary"
+              [disabled]="comparing()"
+              [attr.aria-busy]="comparing()"
+              (click)="compare()"
+            >
+              @if (comparing()) {
+                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ 'envfiles.compare.action' | t }}
+            </button>
+          }
+          @if (!noPath()) {
+            <button pButton type="button" variant="outlined" severity="danger" (click)="push(version)">
+              {{ 'envfiles.push.action' | t }}
+            </button>
+          }
+        </div>
+      </div>
+    </p-card>
+  }
+</div>

@@ -1,0 +1,24 @@
+<div class="app-layout">
+  <header class="app-layout__header">
+    <a class="app-layout__brand" routerLink="/">{{ 'app.name' | t }}</a>
+
+    <div class="app-layout__account">
+      <p class="app-layout__user text-secondary">
+        <i class="fa-solid fa-circle-user" aria-hidden="true"></i>
+        <bdi dir="auto">{{ displayName() }}</bdi>
+      </p>
+      <app-locale-switcher />
+      <button pButton type="button" severity="secondary" variant="text" size="small" [disabled]="signingOut()" (click)="signOut()">
+        {{ 'auth.signOut' | t }}
+      </button>
+    </div>
+  </header>
+
+  <nav class="app-layout__nav" [attr.aria-label]="'nav.label' | t">
+    <p-menu [model]="items()" />
+  </nav>
+
+  <main id="main" class="app-layout__content">
+    <router-outlet />
+  </main>
+</div>

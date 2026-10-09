@@ -1,0 +1,25 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+.field__label {
+  font-size: var(--app-text--1);
+  font-weight: var(--app-weight-medium);
+}
+
+.field__required {
+  color: var(--app-color-danger);
+}
+
+.field__hint {
+  font-size: var(--app-text--1);
+  color: var(--app-color-on-surface-variant);
+}
+
+.field__error {
+  font-size: var(--app-text--1);
+  color: var(--app-color-danger);
+}
