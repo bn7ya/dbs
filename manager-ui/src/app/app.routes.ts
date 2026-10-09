@@ -32,9 +32,7 @@ export const routes: Routes = [
       {
         path: '',
         pathMatch: 'full',
-        // No guard here: Angular's router rejects `canActivate` alongside `redirectTo` on the same
-        // entry (NG04014). The layout's `authGuard` above covers it.
-        redirectTo: 'servers',
+        loadChildren: () => import('@features/dashboard/dashboard.routes').then((m) => m.routes),
       },
       {
         path: 'servers',

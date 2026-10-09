@@ -1,0 +1,86 @@
+@use "layout" as *;
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-7);
+}
+
+.dashboard__header,
+.dashboard__section-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.dashboard__title,
+.dashboard__name,
+.dashboard__section,
+.dashboard__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.dashboard__section {
+  gap: var(--app-space-4);
+}
+
+.dashboard__export {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.dashboard__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.dashboard__totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(calc($card-max / 2), 100%), 1fr));
+  gap: var(--app-space-4);
+}
+
+.dashboard__total,
+.dashboard__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.dashboard__figure {
+  font-size: var(--app-text-2);
+  font-weight: var(--app-weight-bold);
+}
+
+.dashboard__servers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min($card-max, 100%), 1fr));
+  gap: var(--app-space-5);
+}
+
+.dashboard__server {
+  block-size: 100%;
+}
+
+.dashboard__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.dashboard__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.dashboard__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3) var(--app-space-4);
+}

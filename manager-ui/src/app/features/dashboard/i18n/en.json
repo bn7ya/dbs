@@ -1,0 +1,56 @@
+{
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Every server at a glance: checks, backups and health.",
+    "add": "Add a server",
+    "totals": {
+      "label": "Totals",
+      "servers": "Servers",
+      "storage": "Stored here",
+      "failures": "Failures in the last 7 days",
+      "lastExport": "Last export",
+      "never": "Never"
+    },
+    "export": {
+      "never": "No export yet. Keep a copy of the DBS data with this command:",
+      "stale": "Last export: {age}. Keep a fresh copy of the DBS data with this command:"
+    },
+    "servers": {
+      "title": "Servers",
+      "check": "Check: {status}",
+      "health": "Health: {status}",
+      "lastBackup": "Last backup",
+      "noBackup": "None yet",
+      "nextRun": "Next plan run",
+      "noPlan": "No plan scheduled",
+      "failures": "Failures in the last 7 days",
+      "storage": "Stored here"
+    },
+    "check": {
+      "unknown": "Not checked",
+      "ok": "Ready",
+      "problem": "Needs attention",
+      "failed": "Check failed"
+    },
+    "health": {
+      "ok": "Healthy",
+      "warn": "Warning",
+      "error": "Unhealthy",
+      "unknown": "No report"
+    },
+    "failures": {
+      "title": "Recent failures",
+      "label": "Recent failures",
+      "none": "No failures recorded.",
+      "when": "When",
+      "server": "Server",
+      "target": "On",
+      "reason": "Reason",
+      "all": "See all activity"
+    },
+    "empty": {
+      "title": "No servers yet",
+      "body": "Add a server to check it and back it up."
+    }
+  }
+}

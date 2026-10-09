@@ -5,6 +5,7 @@
   },
   "nav": {
     "label": "Main",
+    "dashboard": "Dashboard",
     "servers": "Servers",
     "activity": "Activity"
   },

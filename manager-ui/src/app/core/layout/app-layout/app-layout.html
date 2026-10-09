@@ -33,6 +33,7 @@
           routerLinkActive
           #active="routerLinkActive"
           [routerLink]="['/', section.path]"
+          [routerLinkActiveOptions]="{ exact: section.path === '' }"
           [activated]="active.isActive"
           [attr.aria-current]="active.isActive ? 'page' : null"
         >
