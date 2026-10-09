@@ -6,6 +6,61 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0]
+
+One `pip install django-dbs` now covers three uses, depending only on where you use it: the
+backup library inside a project, a panel at `/admin/dbs/` that sets the backup frequency and
+shows health and an audit trail with no extra setup, and the DBS manager, a local
+application started with `django_dbs run` that looks after many servers and can move a
+project onto a new one. The manager was a separate project, DBS Interface; it now ships
+inside the package, prebuilt, with no Node, Docker, Redis or separate database needed.
+
+### Added
+
+- **Backup frequency in the panel.** `/admin/dbs/backupschedule/` turns scheduled backups on
+  and sets the interval, the number to keep, and an optional SFTP push target. The schedule
+  runs in a background thread that each web worker starts on its first request; a database
+  lease and an advanced next-run time give one backup per interval however many workers or
+  hosts run. `DBS_SCHEDULER` chooses `"thread"` (default), `"command"` or `"off"`.
+  `manage.py dbs schedule` with no plan flags follows the panel.
+- **Health.** A panel page and `manage.py dbs health [--json]` grade the last backup's age
+  against the schedule, the last validation, the newest file on disk, the backup directory,
+  free space, the passphrase, the scheduler's last check-in and recent failures.
+- **Restore from the server side.** Any backup kept in `DBS_BACKUP_DIR` restores from its
+  row in the panel, dry run first, with the file name typed for a real restore.
+- **Connection details.** A panel page and `manage.py dbs connection [--json]` give the
+  DBS manager everything it needs to reach the project, as one snippet.
+- **The audit trail records outcomes.** `AuditEvent` gains `status`, `data`, `error_code`,
+  `subject`, `started_at` and `finished_at`. `dbs backup`, `dbs restore`, `dbs validate`,
+  scheduled backups, retention prunes and pushes each record what happened, to which file,
+  with its size, SHA-256 and duration. A backup records itself the same way however it was
+  started, and an audit write that fails never fails the backup.
+- `dbs backup` records a `BackupRecord`, so command line and scheduled backups appear in the
+  panel and can be restored from it.
+- **The DBS manager**: `django_dbs run`, `export`, `import`, `createuser`, `password` and
+  `paths`. It keeps everything in one data folder with a local SQLite database, opens the
+  browser, and asks for a username and password on first run. It adds a dashboard, a guided
+  add-server wizard (connection snippet, host key confirmation, generated keys, project
+  discovery, version check, passphrase capture, test backup) and *Move to another server*,
+  which pushes a saved `.env`, migrates, restores and unpacks archives on a new server.
+- Upgrade steps for the audit migration, the schedule, the scheduler mode and the backup
+  directory.
+
+### Changed
+
+- `paramiko`, `djangorestframework` and `waitress` are now dependencies, so the manager
+  needs nothing beyond `pip install django-dbs`. None of them is imported unless used.
+- `AuditEvent.target_name` holds up to 1024 characters.
+- Leases and the backup schedule are left out of backups, so a restore onto a staging
+  server does not bring an enabled schedule with it.
+
+### Upgrading
+
+`manage.py dbs upgrade` applies migrations `0003_audit_outcome` and `0004_schedule_lease`.
+If you set `DBS_SCHEDULE_INTERVAL`, turn the schedule on once in the panel, or keep running
+`dbs schedule --interval …` as before. Behind uWSGI without `--enable-threads`, set
+`DBS_SCHEDULER = "command"` and run `manage.py dbs schedule`.
+
 ## [0.4.0] - 2026-10-06
 
 An application that manages several servers keeps their credentials and host keys in its

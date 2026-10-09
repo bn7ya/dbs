@@ -1,0 +1,24 @@
+{% extends "admin/dbs/wiki/_layout.html" %}
+
+{% block wiki %}
+<h1>The DBS manager</h1>
+<p>The DBS manager is a separate application in the same package. Run it on your own
+machine with:</p>
+<pre><code>django_dbs run</code></pre>
+<p>It opens in your browser and looks after many servers over SSH: it takes and pulls their
+backups, keeps their <code>.env</code> versions and folder archives, and can restore a
+project onto a new server when the old one goes down.</p>
+<h2>Letting it reach this project</h2>
+<ol>
+  <li>Open <a href="{% url 'admin:dbs_connection' %}">Connection</a> and press
+      <em>Copy</em>.</li>
+  <li>In the manager, choose <em>Add a server</em> and paste the snippet.</li>
+  <li>Confirm the host key fingerprint matches the one shown on the Connection page.</li>
+  <li>Add the key the manager shows to <code>~/.ssh/authorized_keys</code> for the user
+      that owns this project.</li>
+</ol>
+<p>This project never contacts the manager and keeps nothing about it. A backup the manager
+asks for is written to <code>DBS_BACKUP_DIR</code> and recorded in the
+<a href="{% url 'admin:dbs_auditevent_changelist' %}">audit trail</a> like any other
+backup.</p>
+{% endblock %}

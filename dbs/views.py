@@ -458,6 +458,7 @@ def wiki(request, page="index"):
         "passphrases": "Passphrases and SECRET_KEY",
         "targets": "SFTP targets and the console",
         "scheduling": "Scheduled backups",
+        "manager": "The DBS manager",
         "restore": "Restoring",
         "commands": "Command reference",
         "upgrading": "Upgrading",

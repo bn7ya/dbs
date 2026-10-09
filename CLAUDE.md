@@ -38,7 +38,9 @@ Everything else (internal functions, classes, modules) carries no docstring and 
 inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 `dbs/scheduling.py`, `dbs/io.py`, `dbs/conf.py`, `dbs/keys.py`, `dbs/models.py`,
 `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`, everything under `dbs/security/`,
-`dbs/client/cli.py` and `dbs/client/remote.py`.
+`dbs/client/cli.py`, `dbs/client/remote.py`, `dbs/audit.py`, `dbs/leases.py`,
+`dbs/schedule_runner.py`, `dbs/health.py`, `dbs/connection.py` and everything under
+`dbs/manager/`.
 
 ## Layout
 
@@ -62,8 +64,20 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   `manage.py dbs ai`.
 - `dbs/naming.py`, `dbs/retention.py`, `dbs/scheduling.py`, `dbs/io.py`,
   `dbs/conf.py` — Django-free helpers shared by the server and the client.
+- `dbs/audit.py`, `dbs/leases.py`, `dbs/schedule_runner.py`, `dbs/health.py`,
+  `dbs/connection.py` — the sourceless audit trail, database leases, the panel's
+  schedule and its in-process runner, the health report, and the connection details the
+  manager reads.
+- `dbs/manager/` — the standalone DBS manager (`django_dbs run`): its own Django project
+  (`dbs/manager/settings.py`), one app labelled `dbs_manager` with a subpackage per slice,
+  the job runner and scheduler that replace Celery, and the built interface in
+  `dbs/manager/static/dbs_manager/` (generated, not committed).
+- `manager-ui/` — the manager's Angular source (Angular Material, Font Awesome Free).
+  `scripts/build_manager_ui.sh` builds it into the package; `manager-ui/CLAUDE.md` holds
+  its rules.
 - `tests/` — pytest suite (pytest-django); `tests/fake_ssh.py` is the paramiko
-  stand-in used by the transport and client tests.
+  stand-in used by the transport and client tests. `tests/manager/` is the manager's
+  suite, run as a second session with its own settings.
 
 ## Security invariants
 
@@ -102,6 +116,20 @@ flag, not with confirmation. Abandoning unreadable backups stays behind an inter
 confirmation with no programmatic bypass, and the message offers installing the older
 version to read them before it offers giving them up.
 
+## Manager constraints
+
+- `dbs.manager` is never in a host project's `INSTALLED_APPS`. The core never imports
+  `dbs.manager` or `rest_framework`; a test runs a backup and checks neither was loaded.
+- The embedded app never contacts the manager and stores nothing about it. Audit rows
+  record the process — action, file, size, digest, outcome, timings — never who or what
+  started it. Do not add a source, origin or caller field to `AuditEvent`, and do not name
+  temporary files after the manager.
+- Manager code is Python 3.9 syntax and Django 4.2–6.x compatible, like the rest of the
+  package: no PEP 695 generics, `Self`, `StrEnum`, `datetime.UTC` or
+  `CheckConstraint(condition=...)`.
+- Remote commands are fixed argument lists; passphrases travel on stdin.
+- The built interface is generated at release time and never committed.
+
 ## Client constraint
 
 `dbs/client/` must import and run with **no Django settings configured**. Never
@@ -113,7 +141,7 @@ when Django is unconfigured.
 
 ```bash
 pip install -e ".[dev]"
-pytest
+scripts/test.sh          # pytest, then pytest tests/manager --ds=tests.manager.settings
 ```
 
 The session guard scores time of day, so a test that asserts a verdict tier is
