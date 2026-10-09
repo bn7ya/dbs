@@ -49,11 +49,11 @@ test.describe('backups', () => {
     await backUp.click();
 
     await expect(page.getByRole('status').filter({ hasText: t('backupRunning') })).toBeVisible();
-    await expect(backUp).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('button[aria-busy="true"]')).toBeDisabled();
     await journey.shot(page, 'backups-running');
 
     await expect(journey.toast(page, 'backupFinished')).toBeVisible({ timeout: 180_000 });
-    await expect(backUp).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(backUp).toBeEnabled();
     const download = page.getByRole('link', { name: new RegExp(`^${t('download')} .+\\.dbs$`) }).first();
     await expect(download).toBeVisible();
     backupName = (await download.getAttribute('aria-label'))!.replace(`${t('download')} `, '');
@@ -83,7 +83,7 @@ test.describe('backups', () => {
 
     const verify = page.getByRole('button', { name: journey.named('verify', backupName) });
     await verify.click();
-    await expect(verify).toHaveAttribute('aria-disabled', 'true');
+    await expect(verify).toBeDisabled();
 
     await expect(journey.toast(page, 'checkPassed')).toBeVisible({ timeout: 180_000 });
     await expect(journey.shown(page, t('verified')).first()).toBeVisible();

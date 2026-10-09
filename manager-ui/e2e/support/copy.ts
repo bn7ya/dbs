@@ -31,7 +31,7 @@ export const COPY = {
     en: 'Too many attempts. Wait a few minutes and try again.',
     ar: 'محاولات كثيرة. انتظر بضع دقائق ثم حاول مرة أخرى.',
   },
-  enterPassword: { en: 'Enter your password.', ar: 'أدخل كلمة المرور.' },
+  enterPassword: { en: 'Enter your password.', ar: 'أدخل كلمة مرورك.' },
 
   // Servers list
   serversTitle: { en: 'Servers', ar: 'الخوادم' },
@@ -96,7 +96,7 @@ export const COPY = {
   showPassphrase: { en: 'Show passphrase', ar: 'إظهار عبارة المرور' },
   hidePassphrase: { en: 'Hide passphrase', ar: 'إخفاء عبارة المرور' },
   passphrase: { en: 'Passphrase', ar: 'عبارة المرور' },
-  yourPassword: { en: 'Your password', ar: 'كلمة المرور' },
+  yourPassword: { en: 'Your password', ar: 'كلمة مرورك' },
   wrongPassword: { en: 'The password is not correct.', ar: 'كلمة المرور غير صحيحة.' },
   deleteServer: { en: 'Delete server', ar: 'حذف الخادم' },
   moveToAnother: { en: 'Move to another server', ar: 'النقل إلى خادم آخر' },

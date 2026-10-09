@@ -263,7 +263,7 @@
         @if (deleted(); as file) {
           <app-notice severity="success" closable (closed)="dismissDeleted()">
             <span class="backups__deleted">
-              <span>{{ 'backups.delete.done' | t }} <bdi class="backups__code" dir="ltr">{{ file.name }}</bdi></span>
+              <span><span>{{ 'backups.delete.done' | t }}</span> <bdi class="backups__code" dir="ltr">{{ file.name }}</bdi></span>
               <button
                 matButton
                 type="button"

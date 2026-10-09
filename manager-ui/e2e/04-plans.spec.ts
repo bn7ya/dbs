@@ -70,7 +70,7 @@ test.describe('plans', () => {
 
     const run = page.getByRole('button', { name: journey.named('run', names.dbs, 'now') });
     await run.click();
-    await expect(run).toHaveAttribute('aria-disabled', 'true');
+    await expect(run).toBeDisabled();
 
     await expect(journey.toast(page, 'backupFinished')).toBeVisible({ timeout: 180_000 });
     await expect(journey.shown(page, t('succeeded'))).toBeVisible();

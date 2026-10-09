@@ -27,7 +27,7 @@ test.describe('activity', () => {
 
     const check = page.getByRole('button', { name: t('checkNow') });
     await check.click();
-    await expect(check).not.toHaveAttribute('aria-disabled', 'true', { timeout: 120_000 });
+    await expect(check).toBeEnabled({ timeout: 120_000 });
     await expect(page.getByRole('main').getByText(t('ready')).first()).toBeVisible();
 
     await page.getByRole('button', { name: t('showPassphrase') }).click();

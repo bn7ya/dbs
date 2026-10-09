@@ -7,7 +7,7 @@ import type { Journey } from './support/fixtures.types';
 test.describe.configure({ mode: 'serial' });
 
 const stepIs = async (page: Page, name: string): Promise<void> => {
-  await expect(page.getByRole('tab', { name: new RegExp(name) })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: new RegExp(name), expanded: true })).toBeVisible();
 };
 
 const fillProject = async (form: Locator, { t }: Journey): Promise<void> => {
@@ -152,9 +152,9 @@ test.describe('adding a server', () => {
 
     const check = page.getByRole('button', { name: t('checkNow') });
     await check.click();
-    await expect(check).toHaveAttribute('aria-disabled', 'true');
+    await expect(check).toBeDisabled();
     await expect(check).toBeEnabled({ timeout: 120_000 });
-    await expect(check).not.toHaveAttribute('aria-disabled', 'true', { timeout: 120_000 });
+    await expect(check).toBeEnabled({ timeout: 120_000 });
 
     await expect(page.getByRole('main').getByText(t('ready')).first()).toBeVisible();
     const valueOf = (term: string) =>
