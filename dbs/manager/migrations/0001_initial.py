@@ -6,7 +6,11 @@ from django.conf import settings
 from django.db import migrations, models
 from django.utils import timezone
 
-SCHEDULED_TASKS = ("sweep_stale_jobs",)
+SCHEDULED_TASKS = (
+    "dispatch_due_plans",
+    "remove_expired_files",
+    "sweep_stale_jobs",
+)
 
 
 def seed_scheduled_tasks(apps, schema_editor):
@@ -121,14 +125,223 @@ class Migration(migrations.Migration):
             options={
                 "ordering": ["-created_at"],
                 "abstract": False,
-                "constraints": [
-                    models.UniqueConstraint(
-                        condition=models.Q(("deleted_at__isnull", True)),
-                        fields=("name",),
-                        name="dbs_manager_server_unique_active_name",
-                    )
-                ],
             },
+        ),
+        migrations.CreateModel(
+            name="BackupPlan",
+            fields=[
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True, db_index=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "deleted_at",
+                    models.DateTimeField(blank=True, db_index=True, null=True),
+                ),
+                ("name", models.CharField(max_length=100)),
+                (
+                    "kind",
+                    models.CharField(
+                        choices=[
+                            ("dbs", "django-dbs backup"),
+                            ("archive", "Archive of server folders"),
+                            ("collect", "Files a server already makes"),
+                        ],
+                        max_length=16,
+                    ),
+                ),
+                ("paths", models.JSONField(blank=True, default=list)),
+                ("pattern", models.CharField(blank=True, default="", max_length=200)),
+                (
+                    "interval_minutes",
+                    models.PositiveIntegerField(blank=True, null=True),
+                ),
+                (
+                    "keep",
+                    models.PositiveSmallIntegerField(
+                        default=7,
+                        validators=[
+                            django.core.validators.MinValueValidator(1),
+                            django.core.validators.MaxValueValidator(365),
+                        ],
+                    ),
+                ),
+                (
+                    "keep_remote",
+                    models.PositiveSmallIntegerField(
+                        default=1,
+                        validators=[django.core.validators.MaxValueValidator(365)],
+                    ),
+                ),
+                ("enabled", models.BooleanField(default=True)),
+                ("next_run_at", models.DateTimeField(blank=True, null=True)),
+                ("last_run_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "last_status",
+                    models.CharField(
+                        choices=[
+                            ("none", "Not run yet"),
+                            ("succeeded", "Succeeded"),
+                            ("failed", "Failed"),
+                        ],
+                        default="none",
+                        max_length=16,
+                    ),
+                ),
+                ("last_error_code", models.CharField(blank=True, max_length=64)),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="+",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "server",
+                    models.ForeignKey(
+                        db_index=False,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="+",
+                        to="dbs_manager.server",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["-created_at"],
+                "abstract": False,
+            },
+        ),
+        migrations.CreateModel(
+            name="BackupFile",
+            fields=[
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True, db_index=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "deleted_at",
+                    models.DateTimeField(blank=True, db_index=True, null=True),
+                ),
+                (
+                    "kind",
+                    models.CharField(
+                        choices=[
+                            ("dbs", "django-dbs backup"),
+                            ("archive", "Archive of server folders"),
+                            ("collected", "File collected from a server folder"),
+                            ("uploaded", "File uploaded from a browser"),
+                        ],
+                        max_length=16,
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("size", models.PositiveBigIntegerField()),
+                ("sha256", models.CharField(max_length=64)),
+                ("storage_path", models.CharField(max_length=512)),
+                ("sealed", models.BooleanField(default=False)),
+                (
+                    "validation",
+                    models.CharField(
+                        choices=[
+                            ("structure_ok", "Structure checked"),
+                            ("verified", "Verified"),
+                            ("failed", "Failed"),
+                        ],
+                        max_length=16,
+                    ),
+                ),
+                ("validated_at", models.DateTimeField(blank=True, null=True)),
+                ("remote_path", models.CharField(blank=True, max_length=1024)),
+                ("remote_size", models.PositiveBigIntegerField(blank=True, null=True)),
+                ("remote_mtime", models.DateTimeField(blank=True, null=True)),
+                ("removed_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="+",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "plan",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="+",
+                        to="dbs_manager.backupplan",
+                    ),
+                ),
+                (
+                    "server",
+                    models.ForeignKey(
+                        db_index=False,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="+",
+                        to="dbs_manager.server",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["-created_at"],
+                "abstract": False,
+            },
+        ),
+        migrations.AddConstraint(
+            model_name="server",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("deleted_at__isnull", True)),
+                fields=("name",),
+                name="dbs_manager_server_unique_active_name",
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="backupplan",
+            index=models.Index(
+                fields=["enabled", "next_run_at"], name="dbs_manager_plan_due_idx"
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="backupplan",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("deleted_at__isnull", True)),
+                fields=("server", "name"),
+                name="dbs_manager_plan_unique_active_name",
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="backupfile",
+            index=models.Index(
+                fields=["server", "-created_at"], name="dbs_manager_backup_server_idx"
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="backupfile",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("removed_at__isnull", True)),
+                fields=("storage_path",),
+                name="dbs_manager_backup_unique_stored_path",
+            ),
         ),
         migrations.RunPython(seed_scheduled_tasks, migrations.RunPython.noop),
     ]

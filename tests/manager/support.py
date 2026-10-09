@@ -8,3 +8,8 @@ def logged(action=None):
     if action is not None:
         entries = entries.filter(action=action)
     return list(entries)
+
+
+def backdated(entry, **fields):
+    AuditEvent.objects.filter(pk=entry.pk).update(**fields)
+    return AuditEvent.objects.select_related("actor").get(pk=entry.pk)
