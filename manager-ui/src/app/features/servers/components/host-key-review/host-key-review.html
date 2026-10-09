@@ -1,0 +1,77 @@
+<form class="dialog-form" (ngSubmit)="pin()" novalidate>
+  <div class="review">
+    @if (server(); as current) {
+      <section class="review__key">
+        <h3>{{ 'servers.review.pinned' | t }}</h3>
+        <app-host-key-facts [keyType]="current.host_key_type" [fingerprint]="current.host_key_fingerprint" />
+      </section>
+    }
+
+    <section class="review__key" [attr.aria-busy]="fetching()">
+      <h3>{{ 'servers.review.presented' | t }}</h3>
+
+      @if (fetching()) {
+        <div class="review__skeleton">
+          @for (line of skeletonLines; track line) {
+            <app-skeleton />
+          }
+        </div>
+      } @else if (fetchError(); as failure) {
+        <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+        <div>
+          <button matButton="outlined" type="button" (click)="fetch()">{{ 'actions.retry' | t }}</button>
+        </div>
+      } @else if (presented(); as key) {
+        <app-host-key-facts [keyType]="key.key_type" [fingerprint]="key.fingerprint" [compare]="canPin()" />
+
+        @if (unchanged()) {
+          <app-notice severity="success">{{ 'servers.review.unchanged' | t }}</app-notice>
+        } @else {
+          <app-notice severity="warning">{{ 'servers.review.changed' | t }}</app-notice>
+
+          @if (pinFailure(); as failure) {
+            <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+          }
+
+          <div class="review__check">
+            <mat-checkbox
+              name="confirmed"
+              [aria-describedby]="unconfirmed() ? confirmId + '-error' : ''"
+              [ngModel]="confirmed()"
+              (ngModelChange)="confirmed.set($event)"
+            >
+              {{ 'servers.hostKey.matches' | t }}
+            </mat-checkbox>
+            @if (unconfirmed()) {
+              <small class="review__error" role="alert" [id]="confirmId + '-error'">{{ 'host_key_unconfirmed' | errorText }}</small>
+            }
+          </div>
+
+          <app-password-input
+            [label]="'password.label' | t"
+            [hint]="'servers.review.passwordHint' | t"
+            [error]="passwordMissing() ? ('password.required' | t) : rejected() ? ('invalid_password' | errorText) : ''"
+            name="password"
+            autocomplete="current-password"
+            [ngModel]="password()"
+            (ngModelChange)="password.set($event)"
+          />
+        }
+      }
+    </section>
+  </div>
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="close()">
+      {{ (canPin() ? 'actions.cancel' : 'actions.close') | t }}
+    </button>
+    @if (canPin()) {
+      <button matButton="filled" class="app-danger" type="submit" [disabled]="pinning()" [attr.aria-busy]="pinning()">
+        @if (pinning()) {
+          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        }
+        {{ 'servers.review.pin' | t }}
+      </button>
+    }
+  </div>
+</form>

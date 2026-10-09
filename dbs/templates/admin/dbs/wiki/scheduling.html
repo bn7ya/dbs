@@ -2,15 +2,30 @@
 
 {% block wiki %}
 <h1>Scheduled backups</h1>
+<p>Open <a href="{% url 'admin:dbs_backupschedule_changelist' %}">Schedule</a>, tick
+<em>enabled</em>, and choose how often (<code>30m</code>, <code>6h</code>, <code>1d</code>)
+and how many backups to keep in <code>DBS_BACKUP_DIR</code>. Pick an SFTP target to copy
+each backup off the server as well.</p>
+<p>The schedule runs inside your web workers. Each worker starts a small background thread
+on the first request it serves, and the thread checks once a minute whether a backup is
+due. A lease in the database lets exactly one of them take each backup.</p>
+<h2>Choosing where it runs</h2>
+<ul>
+  <li><code>DBS_SCHEDULER = "thread"</code> (default): inside the web workers.</li>
+  <li><code>DBS_SCHEDULER = "command"</code>: run <code>python manage.py dbs schedule</code>
+      under systemd. It follows the same panel setting. Use it behind uWSGI without
+      <code>--enable-threads</code>, or when several hosts each keep their own
+      <code>DBS_BACKUP_DIR</code>.</li>
+  <li><code>DBS_SCHEDULER = "off"</code>: no scheduled backups from this project.</li>
+</ul>
+<p><a href="{% url 'admin:dbs_health' %}">Health</a> shows when the scheduler last checked in
+and whether the last backup is on time.</p>
+<h2>A fixed plan from the command line</h2>
+<p>Flags still run their own plan, ignoring the panel:</p>
 <pre><code>python manage.py dbs schedule --interval 6h --output-dir /var/backups \
     --keep 14 --push offsite --keep-remote 7</code></pre>
-<p><code>SIGTERM</code> stops the loop immediately rather than after the current interval, so
-<code>systemctl restart</code> and container shutdowns are prompt. Use <code>--once</code>
-from cron for a single cycle.</p>
-<h2>Settings that supply the defaults</h2>
-<ul>
-  <li><code>DBS_BACKUP_DIR</code>, <code>DBS_BACKUP_PREFIX</code></li>
-  <li><code>DBS_SCHEDULE_INTERVAL</code>, <code>DBS_SCHEDULE_KEEP</code></li>
-  <li><code>DBS_SCHEDULE_PUSH_TARGET</code>, <code>DBS_SCHEDULE_KEEP_REMOTE</code></li>
-</ul>
+<p><code>SIGTERM</code> stops the loop at once, and <code>--once</code> runs a single cycle
+from cron. <code>DBS_SCHEDULE_INTERVAL</code>, <code>DBS_SCHEDULE_KEEP</code> and
+<code>DBS_SCHEDULE_KEEP_REMOTE</code> seed the panel's first schedule and supply the
+defaults for these flags.</p>
 {% endblock %}

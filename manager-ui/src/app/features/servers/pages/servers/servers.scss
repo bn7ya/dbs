@@ -1,0 +1,44 @@
+@use "layout" as *;
+
+// The page title and its action are one band; the list is the next.
+.servers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-7);
+}
+
+.servers__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.servers__title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.servers__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+// A search box reads best at a measure, not stretched across a wide table.
+.servers__search {
+  max-inline-size: $card-max;
+}
+
+// An address is code: one family, read left to right in either language.
+.servers__address {
+  font-family: var(--app-font-mono);
+}
+
+.servers__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}

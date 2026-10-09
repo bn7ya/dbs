@@ -4,7 +4,8 @@ from django import template
 from django.urls import reverse
 
 from ..conf import setting
-from ..models import AnomalyEvent, BackupRecord, BackupTarget, SecurityPolicy
+from ..health import report
+from ..models import AnomalyEvent, BackupRecord, BackupSchedule, BackupTarget, SecurityPolicy
 from ..security import geo
 
 register = template.Library()
@@ -23,5 +24,7 @@ def dbs_dashboard():
         "records": BackupRecord.objects.select_related("target")[:10],
         "anomalies": AnomalyEvent.objects.select_related("user")[:5],
         "policy": SecurityPolicy.load(),
+        "schedule": BackupSchedule.load(),
+        "health": report(),
         "geolocation": geo.enabled(),
     }

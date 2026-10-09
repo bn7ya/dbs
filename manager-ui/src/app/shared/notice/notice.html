@@ -1,0 +1,9 @@
+<i class="notice__icon" [class]="icon()" aria-hidden="true"></i>
+<div class="notice__body">
+  <ng-content />
+</div>
+@if (closable()) {
+  <button matIconButton type="button" class="notice__close" [attr.aria-label]="'components.close' | t" (click)="closed.emit()">
+    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+  </button>
+}

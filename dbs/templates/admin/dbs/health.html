@@ -1,0 +1,19 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>Backup health</h1>
+<p class="dbs-lede">Overall: <strong class="dbs-status dbs-status-{{ report.status }}">{{ report.status }}</strong>.
+{% if report.last_backup_at %}Last backup {{ report.last_backup_at|date:"Y-m-d H:i" }}.{% endif %}</p>
+<section class="dbs-card">
+  <table>
+    <tr><th>Check</th><th>Status</th><th>Detail</th></tr>
+    {% for check in report.checks %}
+    <tr><td>{{ check.name }}</td>
+        <td><span class="dbs-status dbs-status-{{ check.status }}">{{ check.status }}</span></td>
+        <td>{{ check.message }}</td></tr>
+    {% endfor %}
+  </table>
+  <p><a class="button" href="{% url 'admin:dbs_backupschedule_changelist' %}">Backup schedule</a>
+     <a class="button" href="{% url 'admin:dbs_auditevent_changelist' %}">Audit trail</a></p>
+</section>
+{% endblock %}

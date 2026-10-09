@@ -35,3 +35,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 MEDIA_ROOT = tempfile.mkdtemp(prefix="dbs-no-admin-media-")
 
 USE_TZ = True
+
+DBS_SCHEDULER = "off"

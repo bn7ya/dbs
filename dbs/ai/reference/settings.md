@@ -14,10 +14,11 @@ Every setting is optional; DBS works with none of them set.
 
 | Setting | Purpose |
 |---|---|
-| `DBS_BACKUP_DIR` | Default output directory for `dbs schedule` |
+| `DBS_BACKUP_DIR` | Where scheduled backups are kept, restored from in the panel, and checked by health |
+| `DBS_SCHEDULER` | `"thread"` (default), `"command"` or `"off"`: where the panel's schedule runs |
 | `DBS_BACKUP_PREFIX` | Default backup filename prefix |
-| `DBS_SCHEDULE_INTERVAL` | Default scheduler interval (default `24h`) |
-| `DBS_SCHEDULE_KEEP` | Default local retention count (default 7) |
+| `DBS_SCHEDULE_INTERVAL` | Seeds the panel's first schedule; default for `dbs schedule` flags (default `24h`) |
+| `DBS_SCHEDULE_KEEP` | Seeds the panel's first schedule; default local retention (default 7) |
 | `DBS_SSH_TARGETS` | Named SFTP profiles defined in settings; read-only in the admin |
 | `DBS_SCHEDULE_PUSH_TARGET` | Default target to push to |
 | `DBS_SCHEDULE_KEEP_REMOTE` | Default retention for pushed backups |

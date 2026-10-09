@@ -11,13 +11,13 @@ from .sessions import clear_reauthentication
 def record_login_failure(sender, credentials=None, request=None, **kwargs):
     if request is None:
         return
-    from ..models import AuditEvent
+    from .. import audit
 
-    AuditEvent.objects.create(
-        action="auth.failed",
-        target_name=str((credentials or {}).get("username", ""))[:128],
-        remote_addr=client_address(request)[:64],
-        succeeded=False,
+    audit.record(
+        "auth.failed",
+        target=str((credentials or {}).get("username", "")),
+        remote_addr=client_address(request),
+        status=audit.FAILED,
     )
 
 

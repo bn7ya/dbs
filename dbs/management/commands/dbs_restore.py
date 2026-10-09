@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import os
+
 from django.core.management.base import BaseCommand, CommandError
 
+from dbs import audit
 from dbs._cli import resolve_read_passphrase
 from dbs.engine import restore_backup
 from dbs.exceptions import DBSError
@@ -25,27 +29,39 @@ class Command(BaseCommand):
         passphrase = resolve_read_passphrase(
             options.get("passphrase"), from_stdin=options["passphrase_stdin"]
         )
-        try:
-            with open(options["input"], "rb") as fh:
-                data = fh.read()
-        except OSError as exc:
-            raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
-
-        try:
-            result = with_passphrase(
-                lambda secret: restore_backup(
-                    data,
-                    secret,
-                    using=options["database"],
-                    load_data=not options["no_data"],
-                    write_files=not options["no_files"],
-                    dry_run=options["dry_run"],
-                    flush=options["flush"],
-                ),
-                passphrase,
-            )
-        except DBSError as exc:
-            raise CommandError(f"Restore failed: {exc}") from exc
+        name = os.path.basename(options["input"])
+        with audit.track(
+            "backup.restore",
+            target=name,
+            data={
+                "file": name,
+                "database": options["database"],
+                "dry_run": options["dry_run"],
+                "flushed": options["flush"],
+            },
+        ) as entry:
+            try:
+                with open(options["input"], "rb") as fh:
+                    data = fh.read()
+            except OSError as exc:
+                raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
+            entry.data.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
+            try:
+                result = with_passphrase(
+                    lambda secret: restore_backup(
+                        data,
+                        secret,
+                        using=options["database"],
+                        load_data=not options["no_data"],
+                        write_files=not options["no_files"],
+                        dry_run=options["dry_run"],
+                        flush=options["flush"],
+                    ),
+                    passphrase,
+                )
+            except DBSError as exc:
+                raise CommandError(f"Restore failed: {exc}") from exc
+            entry.data.update(restore_summary(result, options["dry_run"]))
 
         if result.healed:
             self.stdout.write(
@@ -81,3 +97,17 @@ class Command(BaseCommand):
                 f"Restored {result.records_loaded} records and {result.files_written} files."
             )
         )
+
+
+def restore_summary(result, dry_run):
+    if dry_run:
+        return {
+            "records": result.records_would_load,
+            "files": result.files_would_write,
+            "healed": bool(result.healed),
+        }
+    return {
+        "records": result.records_loaded,
+        "files": result.files_written,
+        "healed": bool(result.healed),
+    }

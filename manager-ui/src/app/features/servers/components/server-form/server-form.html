@@ -1,0 +1,337 @@
+<form class="dialog-form" (ngSubmit)="advance()" novalidate>
+  @if (formFailure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <mat-stepper
+    [selectedIndex]="shownStep()"
+    [attr.aria-label]="'servers.form.steps.label' | t"
+    (selectionChange)="step.set($event.selectedIndex)"
+  >
+    <ng-template matStepperIcon="edit"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
+    <ng-template matStepperIcon="done"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
+
+    <mat-step [label]="stepLabels.connection | t" [completed]="stepDone('connection')">
+      <div class="server-form__step">
+        <mat-form-field>
+          <mat-label>{{ 'servers.form.name.label' | t }}</mat-label>
+          <input
+            matInput
+            [appFieldError]="error('name') | errorText"
+            name="name"
+            autocomplete="off"
+            required
+            [ngModel]="draft().name"
+            (ngModelChange)="update('name', $event)"
+          />
+          <mat-hint>{{ 'servers.form.name.hint' | t }}</mat-hint>
+          @if (error('name') | errorText; as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+
+        <div class="server-form__address">
+          <mat-form-field>
+            <mat-label>{{ 'servers.form.host.label' | t }}</mat-label>
+            <input
+              matInput
+              [appFieldError]="error('host') | errorText"
+              name="host"
+              dir="ltr"
+              inputmode="url"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              required
+              [ngModel]="draft().host"
+              (ngModelChange)="update('host', $event)"
+            />
+            <mat-hint>{{ 'servers.form.host.hint' | t }}</mat-hint>
+            @if (error('host') | errorText; as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ 'servers.form.port.label' | t }}</mat-label>
+            <input
+              matInput
+              type="number"
+              name="port"
+              dir="ltr"
+              inputmode="numeric"
+              min="1"
+              max="65535"
+              step="1"
+              required
+              [appFieldError]="error('port') | errorText"
+              [ngModel]="draft().port"
+              (ngModelChange)="update('port', $event)"
+            />
+            @if (error('port') | errorText; as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+        </div>
+
+        <mat-form-field>
+          <mat-label>{{ 'servers.form.username.label' | t }}</mat-label>
+          <input
+            matInput
+            [appFieldError]="error('username') | errorText"
+            name="username"
+            dir="ltr"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            required
+            [ngModel]="draft().username"
+            (ngModelChange)="update('username', $event)"
+          />
+          <mat-hint>{{ 'servers.form.username.hint' | t }}</mat-hint>
+          @if (error('username') | errorText; as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+
+        <fieldset class="server-form__choice">
+          <legend class="text-label">{{ 'servers.form.authMethod.label' | t }}</legend>
+          <mat-radio-group
+            class="server-form__options"
+            name="auth_method"
+            [ngModel]="draft().auth_method"
+            (ngModelChange)="setAuthMethod($event)"
+          >
+            @for (method of authMethods; track method.value) {
+              <mat-radio-button [value]="method.value">{{ method.labelKey | t }}</mat-radio-button>
+            }
+          </mat-radio-group>
+        </fieldset>
+
+        @if (draft().auth_method === 'key') {
+          <mat-form-field>
+            <mat-label>{{ 'servers.form.privateKey.label' | t }}</mat-label>
+            <textarea
+              matInput
+              [appFieldError]="error('private_key') | errorText"
+              name="private_key"
+              dir="ltr"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              rows="4"
+              [ngModel]="draft().private_key"
+              (ngModelChange)="update('private_key', $event)"
+            ></textarea>
+            @if ((keySaved() ? 'servers.form.secretSaved' : 'servers.form.privateKey.hint') | t; as hint) {
+              <mat-hint>{{ hint }}</mat-hint>
+            }
+            @if (error('private_key') | errorText; as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+
+          <app-password-input
+            [label]="'servers.form.keyPassphrase.label' | t"
+            [hint]="(keyPassphraseSaved() ? 'servers.form.secretSaved' : 'servers.form.keyPassphrase.hint') | t"
+            [error]="error('key_passphrase') | errorText"
+            name="key_passphrase"
+            autocomplete="new-password"
+            [ngModel]="draft().key_passphrase"
+            (ngModelChange)="update('key_passphrase', $event)"
+          />
+        } @else {
+          <app-password-input
+            [label]="'servers.form.password.label' | t"
+            [hint]="passwordSaved() ? ('servers.form.secretSaved' | t) : ''"
+            [error]="error('password') | errorText"
+            name="password"
+            autocomplete="new-password"
+            [ngModel]="draft().password"
+            (ngModelChange)="update('password', $event)"
+          />
+        }
+      </div>
+    </mat-step>
+
+
+    <mat-step [label]="stepLabels.project | t" [completed]="stepDone('project')">
+      <div class="server-form__step">
+        <p class="text-secondary">{{ 'servers.form.projectIntro' | t }}</p>
+
+        <mat-form-field>
+          <mat-label>{{ 'servers.form.projectDir.label' | t }}</mat-label>
+          <input
+            matInput
+            [appFieldError]="error('project_dir') | errorText"
+            name="project_dir"
+            dir="ltr"
+            autocomplete="off"
+            spellcheck="false"
+            [placeholder]="'servers.form.projectDir.placeholder' | t"
+            [ngModel]="draft().project_dir"
+            (ngModelChange)="update('project_dir', $event)"
+          />
+          <mat-hint>{{ 'servers.form.projectDir.hint' | t }}</mat-hint>
+          @if (error('project_dir') | errorText; as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+
+        <div class="server-form__pair">
+          <mat-form-field>
+            <mat-label>{{ 'servers.form.pythonPath.label' | t }}</mat-label>
+            <input
+              matInput
+              [appFieldError]="error('python_path') | errorText"
+              name="python_path"
+              dir="ltr"
+              autocomplete="off"
+              spellcheck="false"
+              [ngModel]="draft().python_path"
+              (ngModelChange)="update('python_path', $event)"
+            />
+            <mat-hint>{{ 'servers.form.pythonPath.hint' | t }}</mat-hint>
+            @if (error('python_path') | errorText; as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ 'servers.form.managePath.label' | t }}</mat-label>
+            <input
+              matInput
+              [appFieldError]="error('manage_path') | errorText"
+              name="manage_path"
+              dir="ltr"
+              autocomplete="off"
+              spellcheck="false"
+              [ngModel]="draft().manage_path"
+              (ngModelChange)="update('manage_path', $event)"
+            />
+            <mat-hint>{{ 'servers.form.managePath.hint' | t }}</mat-hint>
+            @if (error('manage_path') | errorText; as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+        </div>
+
+        <mat-form-field>
+          <mat-label>{{ 'servers.form.settingsModule.label' | t }}</mat-label>
+          <input
+            matInput
+            [appFieldError]="error('settings_module') | errorText"
+            name="settings_module"
+            dir="ltr"
+            autocomplete="off"
+            spellcheck="false"
+            [placeholder]="'servers.form.settingsModule.placeholder' | t"
+            [ngModel]="draft().settings_module"
+            (ngModelChange)="update('settings_module', $event)"
+          />
+          <mat-hint>{{ 'servers.form.settingsModule.hint' | t }}</mat-hint>
+          @if (error('settings_module') | errorText; as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ 'servers.form.remoteBackupDir.label' | t }}</mat-label>
+          <input
+            matInput
+            [appFieldError]="error('remote_backup_dir') | errorText"
+            name="remote_backup_dir"
+            dir="ltr"
+            autocomplete="off"
+            spellcheck="false"
+            required
+            [ngModel]="draft().remote_backup_dir"
+            (ngModelChange)="update('remote_backup_dir', $event)"
+          />
+          <mat-hint>{{ 'servers.form.remoteBackupDir.hint' | t }}</mat-hint>
+          @if (error('remote_backup_dir') | errorText; as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ 'servers.form.fileRoots.label' | t }}</mat-label>
+          <mat-chip-grid
+            #roots
+            [appFieldError]="error('file_roots') | errorText"
+            [attr.aria-label]="'servers.form.fileRoots.label' | t"
+          >
+            @for (root of draft().file_roots; track $index) {
+              <mat-chip-row (removed)="removeFileRoot($index)">
+                <bdi dir="ltr">{{ root }}</bdi>
+                <button matChipRemove type="button" [attr.aria-label]="'servers.form.fileRoots.remove' | t: { path: root }">
+                  <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+              </mat-chip-row>
+            }
+            <input
+              name="file_roots"
+              dir="ltr"
+              autocomplete="off"
+              spellcheck="false"
+              [placeholder]="'servers.form.fileRoots.placeholder' | t"
+              [matChipInputFor]="roots"
+              [matChipInputSeparatorKeyCodes]="separators"
+              [matChipInputAddOnBlur]="true"
+              (matChipInputTokenEnd)="addFileRoot($event)"
+            />
+          </mat-chip-grid>
+          <mat-hint>{{ 'servers.form.fileRoots.hint' | t }}</mat-hint>
+          @if (error('file_roots') | errorText; as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ 'servers.form.envPath.label' | t }}</mat-label>
+          <input
+            matInput
+            [appFieldError]="error('env_path') | errorText"
+            name="env_path"
+            dir="ltr"
+            autocomplete="off"
+            spellcheck="false"
+            [placeholder]="'servers.form.envPath.placeholder' | t"
+            [ngModel]="draft().env_path"
+            (ngModelChange)="update('env_path', $event)"
+          />
+          <mat-hint>{{ 'servers.form.envPath.hint' | t }}</mat-hint>
+          @if (error('env_path') | errorText; as message) {
+            <mat-error>{{ message }}</mat-error>
+          }
+        </mat-form-field>
+
+
+        @if (passwordShown()) {
+          <app-password-input
+            [label]="'password.label' | t"
+            [hint]="'servers.form.accountPassword.hint' | t"
+            [error]="passwordMissing() ? ('password.required' | t) : passwordRejected() ? ('invalid_password' | errorText) : ''"
+            name="account_password"
+            autocomplete="current-password"
+            [ngModel]="accountPassword()"
+            (ngModelChange)="setAccountPassword($event)"
+          />
+        }
+      </div>
+    </mat-step>
+  </mat-stepper>
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="close()">{{ 'actions.cancel' | t }}</button>
+    @if (step() > 0) {
+      <button matButton="outlined" type="button" (click)="back()">{{ 'actions.back' | t }}</button>
+    }
+    <button matButton="filled" type="submit" [disabled]="saving()" [attr.aria-busy]="saving()">
+      @if (saving()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (onLastStep() ? 'actions.save' : 'actions.next') | t }}
+    </button>
+  </div>
+</form>

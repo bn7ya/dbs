@@ -1,0 +1,207 @@
+{
+  "backups": {
+    "title": "Backups",
+    "kind": {
+      "dbs": "django-dbs",
+      "archive": "Folders",
+      "collect": "Existing files",
+      "collected": "Collected",
+      "uploaded": "Uploaded"
+    },
+    "plans": {
+      "title": "Plans",
+      "body": "A plan runs django-dbs, archives folders or collects existing files on the server. It keeps the newest backups.",
+      "add": "Add plan",
+      "disabled": "Disabled",
+      "keepHere": "Here: {count}",
+      "keepRemote": "On the server: {count}",
+      "folders": "Folders: {count}",
+      "lastStatus": {
+        "none": "Not run yet",
+        "succeeded": "Succeeded",
+        "failed": "Failed"
+      },
+      "list": {
+        "plan": "Plan",
+        "schedule": "Schedule",
+        "kept": "Kept",
+        "lastRun": "Last run",
+        "nextRun": "Next run",
+        "pages": "Plan pages"
+      },
+      "run": {
+        "action": "Run now",
+        "label": "Run {name} now",
+        "working": "Running…"
+      },
+      "edit": {
+        "label": "Edit {name}"
+      },
+      "delete": {
+        "confirmTitle": "Delete {name}?",
+        "confirmBody": "The plan stops running. Its backups stay listed until someone deletes them.",
+        "done": "Plan deleted."
+      },
+      "created": "Plan added.",
+      "saved": "Plan saved.",
+      "empty": {
+        "title": "No plans yet",
+        "body": "A plan backs up this server on a schedule and keeps the newest backups.",
+        "action": "Create a django-dbs plan",
+        "folders": "Back up folders",
+        "collect": "Collect existing files"
+      },
+      "form": {
+        "addTitle": "Add plan",
+        "editTitle": "Edit plan",
+        "kind": "Backup type",
+        "kindHint": {
+          "dbs": "django-dbs backs up the project's data and the files its models point at. The server's backup passphrase encrypts each backup.",
+          "archive": "The plan packs the folders into one archive, kept here encrypted. django-dbs backups already include the files their models point at.",
+          "collect": "The plan collects new files that match the pattern from one folder. Each is kept here encrypted, and the server's copy stays as it is."
+        },
+        "paths": "Folders",
+        "pathsHint": "Full paths on the server. Press Enter after each one.",
+        "pathsPlaceholder": "/srv/app/media",
+        "folder": "Folder",
+        "folderHint": "A full path on the server.",
+        "folderPlaceholder": "/var/backups",
+        "pattern": "Pattern",
+        "patternHint": "The * stands for any text, so *.sql.gz matches every .sql.gz file in the folder.",
+        "name": "Name",
+        "schedule": "Schedule",
+        "scheduleHint": "The first scheduled run is one interval after saving.",
+        "keep": "Keep here",
+        "keepHint": "The newest backups of this plan stay here. Older ones are deleted after each run.",
+        "keepRemote": "Keep on the server",
+        "keepRemoteHint": "0 removes the server's copy once it is fetched.",
+        "enabled": "Enabled",
+        "enabledHint": "A disabled plan runs only from Run now.",
+        "submit": "Add plan",
+        "passwordHint": "Choosing the folders and files this plan copies from the server needs your password.",
+        "removePath": "Remove {path}"
+      }
+    },
+    "schedule": {
+      "manual": "Manual",
+      "hourly": "Every hour",
+      "every3Hours": "Every 3 hours",
+      "every6Hours": "Every 6 hours",
+      "every12Hours": "Every 12 hours",
+      "daily": "Daily",
+      "weekly": "Weekly"
+    },
+    "collect": {
+      "collected": "Collected: {count}.",
+      "skipped": "Skipped: {count}.",
+      "nothingNew": "Nothing new to collect."
+    },
+    "take": {
+      "action": "Back up now",
+      "body": "A one-off backup belongs to no plan and stays until someone deletes it.",
+      "working": "Backing up…",
+      "running": "A backup is running. It continues if you leave this page.",
+      "done": "Backup finished.",
+      "warning": {
+        "files_changed": "Backup finished. Some files changed while they were archived."
+      }
+    },
+    "upload": {
+      "action": "Upload a backup",
+      "working": "Uploading…",
+      "storing": "Saving the file…",
+      "cancelLabel": "Cancel the upload of {name}",
+      "done": "Backup uploaded."
+    },
+    "list": {
+      "name": "Name",
+      "taken": "Taken",
+      "plan": "Plan",
+      "size": "Size",
+      "by": "By {name}",
+      "check": "Check",
+      "actions": "Actions",
+      "none": "—",
+      "oneOff": "One-off",
+      "pages": "Backup pages"
+    },
+    "validation": {
+      "structure_ok": "Structure checked",
+      "verified": "Verified",
+      "failed": "Failed verification"
+    },
+    "sealedValidation": {
+      "structure_ok": "Stored",
+      "verified": "Intact",
+      "failed": "Damaged"
+    },
+    "download": {
+      "action": "Download",
+      "label": "Download {name}"
+    },
+    "verify": {
+      "action": "Verify",
+      "label": "Verify {name}",
+      "verified": "Check passed.",
+      "failed": "Check failed."
+    },
+    "restore": {
+      "action": "Restore",
+      "label": "Restore {name}",
+      "title": "Restore backup",
+      "body": "Restoring loads this backup into the server's database and files. A rehearsal runs the whole restore, then rolls it back.",
+      "backup": "Backup",
+      "server": "Server",
+      "target": "Restore onto",
+      "sameServer": "This server",
+      "targetHint": "To restore onto another server, choose it here.",
+      "mode": "How",
+      "modes": {
+        "merge": "Merge",
+        "replace": "Replace"
+      },
+      "modeHint": {
+        "merge": "Records added since this backup stay.",
+        "replace": "The backed-up tables are cleared first. Records added since this backup are lost."
+      },
+      "passwordHint": "Restoring needs your password. A rehearsal does not.",
+      "serverName": "Server name",
+      "serverNameHint": "Type {name} to restore.",
+      "rehearse": "Rehearse",
+      "rehearsing": "Rehearsing…",
+      "submit": "Restore",
+      "working": "Restoring…",
+      "rehearsed": "Rehearsal finished. Nothing changed.",
+      "done": "Backup restored.",
+      "records": "Records: {count}.",
+      "files": "Files: {count}.",
+      "toClear": "Records to clear first: {count}.",
+      "cleared": "Records cleared first: {count}.",
+      "healed": "A damaged copy in the backup was repaired.",
+      "copyLeft": "The copy sent to the server is still at {path}."
+    },
+    "delete": {
+      "label": "Delete {name}",
+      "confirmTitle": "Delete {name}?",
+      "confirmBody": "Undo is offered right after it is deleted.",
+      "done": "Backup deleted.",
+      "undo": "Undo",
+      "undone": "Deletion undone."
+    },
+    "empty": {
+      "title": "No backups yet",
+      "body": "django-dbs backups need django-dbs on the server. The connection check on Overview shows whether it is installed."
+    }
+  },
+  "errors": {
+    "invalid_interval": "Choose a schedule from the list.",
+    "keep_range": "Enter a number from 1 to 365.",
+    "keep_remote_range": "Enter a number from 0 to 365.",
+    "paths_required": "Add at least one folder.",
+    "paths_not_allowed": "A django-dbs plan takes no folders.",
+    "one_folder_required": "Enter one folder.",
+    "invalid_pattern": "Use a pattern with no / in it.",
+    "name_mismatch": "Type the server's name exactly as shown.",
+    "not_restorable": "Only a django-dbs backup can be restored."
+  }
+}

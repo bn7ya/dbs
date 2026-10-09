@@ -1,0 +1,53 @@
+@use "layout" as *;
+
+:host {
+  display: block;
+}
+
+.plan-form__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0;
+}
+
+.plan-form__fact dd {
+  margin: 0;
+}
+
+.plan-form__choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.plan-form__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+}
+
+.plan-form__toggle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.plan-form__error {
+  color: var(--app-color-danger);
+}
+
+.plan-form__code {
+  font-family: var(--app-font-mono);
+}
+
+// The two counts read as one setting, side by side, and stack when the dialog is narrow.
+.plan-form__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(calc($card-max / 3), 100%), 1fr));
+  gap: var(--app-space-4);
+}

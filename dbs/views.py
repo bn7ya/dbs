@@ -11,10 +11,11 @@ from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
+from . import audit
 from .conf import setting
 from .engine import create_backup, restore_backup
 from .exceptions import DBSError
-from .forms import CreateBackupForm, RestoreUploadForm, SetupForm
+from .forms import CreateBackupForm, RestoreRecordForm, RestoreUploadForm, SetupForm
 from .keys import with_passphrase
 from .models import (
     AnomalyEvent,
@@ -39,16 +40,17 @@ CONSOLE_ACTIONS = {
 }
 
 
-def _audit(request, action, target="", detail="", succeeded=True):
+def _audit(request, action, target="", detail="", succeeded=True, data=None):
     from .security.features import client_address
 
-    AuditEvent.objects.create(
+    audit.record(
+        action,
         actor=request.user,
-        action=action[:64],
-        target_name=target[:128],
-        detail=detail[:4000],
-        remote_addr=client_address(request)[:64],
-        succeeded=succeeded,
+        target=target,
+        detail=detail,
+        data=data,
+        status=audit.SUCCEEDED if succeeded else audit.FAILED,
+        remote_addr=client_address(request),
     )
 
 
@@ -159,7 +161,18 @@ def create_backup_view(request):
             location="",
             note=data["note"],
         )
-        _audit(request, "backup.create", target=name, detail=f"{len(container)} bytes")
+        _audit(
+            request,
+            "backup.create",
+            target=name,
+            detail=f"{len(container)} bytes",
+            data={
+                "file": name,
+                "size": len(container),
+                "sha256": digest,
+                "database": data["database"],
+            },
+        )
         response = HttpResponse(container, content_type="application/octet-stream")
         response["Content-Disposition"] = f'attachment; filename="{name}"'
         return response
@@ -228,17 +241,7 @@ def restore_view(request):
             messages.error(request, f"Restore failed: {exc}")
             return redirect("admin:dbs_backup_restore")
 
-        if form.cleaned_data["dry_run"]:
-            summary = (
-                f"Dry run: {result.records_would_load} records and "
-                f"{result.files_would_write} files would be restored; nothing changed."
-            )
-        else:
-            healed = " Corruption was detected and repaired." if result.healed else ""
-            summary = (
-                f"Restored {result.records_loaded} records and "
-                f"{result.files_written} files.{healed}"
-            )
+        summary = _restore_summary(result, form.cleaned_data["dry_run"])
         _audit(request, "backup.restore", target=upload.name or "upload", detail=summary)
         messages.success(request, summary)
         return redirect("admin:dbs_backup_restore")
@@ -246,6 +249,97 @@ def restore_view(request):
         request,
         "admin/dbs/restore.html",
         {"title": "Restore from an uploaded backup", "form": form},
+    )
+
+
+def _restore_summary(result, dry_run):
+    if dry_run:
+        return (
+            f"Dry run: {result.records_would_load} records and "
+            f"{result.files_would_write} files would be restored; nothing changed."
+        )
+    healed = " Corruption was detected and repaired." if result.healed else ""
+    return (
+        f"Restored {result.records_loaded} records and "
+        f"{result.files_written} files.{healed}"
+    )
+
+
+@superuser_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def restore_record(request, pk):
+    record = BackupRecord.objects.filter(pk=pk).first()
+    path = record.local_path() if record is not None else None
+    if path is None:
+        raise Http404
+    form = RestoreRecordForm(request.POST or None, filename=record.filename)
+    if request.method == "POST" and form.is_valid():
+        dry_run = form.cleaned_data["dry_run"]
+        with open(path, "rb") as fh:
+            data = fh.read()
+        details = {
+            "file": record.filename,
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "dry_run": dry_run,
+            "flushed": form.cleaned_data["flush"],
+        }
+        try:
+            result = with_passphrase(
+                lambda secret: restore_backup(
+                    data, secret, dry_run=dry_run, flush=form.cleaned_data["flush"]
+                ),
+                form.cleaned_data["passphrase"] or None,
+            )
+        except DBSError as exc:
+            _audit(
+                request,
+                "backup.restore",
+                target=record.filename,
+                detail=str(exc),
+                succeeded=False,
+                data=details,
+            )
+            messages.error(request, f"Restore failed: {exc}")
+            return redirect("admin:dbs_backup_restore_record", pk=record.pk)
+        summary = _restore_summary(result, dry_run)
+        _audit(request, "backup.restore", target=record.filename, detail=summary, data=details)
+        messages.success(request, summary)
+        return redirect("admin:dbs_backup_restore_record", pk=record.pk)
+    return _page(
+        request,
+        "admin/dbs/restore_record.html",
+        {"title": f"Restore {record.filename}", "form": form, "record": record},
+    )
+
+
+@superuser_required
+@never_cache
+def health(request):
+    from .health import report
+
+    return _page(
+        request,
+        "admin/dbs/health.html",
+        {"title": "Backup health", "report": report()},
+    )
+
+
+@superuser_required
+@never_cache
+def connection(request):
+    from .connection import details
+
+    info = details()
+    return _page(
+        request,
+        "admin/dbs/connection.html",
+        {
+            "title": "Connection details",
+            "details": info,
+            "snippet": json.dumps(info, indent=2),
+        },
     )
 
 
@@ -364,6 +458,7 @@ def wiki(request, page="index"):
         "passphrases": "Passphrases and SECRET_KEY",
         "targets": "SFTP targets and the console",
         "scheduling": "Scheduled backups",
+        "manager": "The DBS manager",
         "restore": "Restoring",
         "commands": "Command reference",
         "upgrading": "Upgrading",

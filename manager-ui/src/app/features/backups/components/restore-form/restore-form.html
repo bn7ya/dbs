@@ -1,0 +1,115 @@
+<form class="dialog-form" (ngSubmit)="restore()" novalidate>
+  @if (formFailure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <p class="text-secondary">{{ 'backups.restore.body' | t }}</p>
+
+  <div class="restore-form__facts">
+    <dl class="restore-form__fact">
+      <dt class="text-label text-secondary">{{ 'backups.restore.backup' | t }}</dt>
+      <dd><bdi class="restore-form__code" dir="ltr">{{ file.name }}</bdi></dd>
+    </dl>
+    <dl class="restore-form__fact">
+      <dt class="text-label text-secondary">{{ 'backups.restore.server' | t }}</dt>
+      <dd><bdi dir="auto">{{ file.server_name }}</bdi></dd>
+    </dl>
+  </div>
+
+  @if (targetServers().length > 0) {
+    <mat-form-field>
+      <mat-label>{{ 'backups.restore.target' | t }}</mat-label>
+      <mat-select
+        name="target_server"
+        [canSelectNullableOptions]="true"
+        [appFieldError]="targetError()"
+        [ngModel]="targetServer()"
+        [ngModelOptions]="{ standalone: true }"
+        (ngModelChange)="targetServer.set($event)"
+      >
+        <mat-option [value]="null">{{ 'backups.restore.sameServer' | t }}</mat-option>
+        @for (each of targetServers(); track each.id) {
+          <mat-option [value]="each.id"><bdi dir="auto">{{ each.name }}</bdi></mat-option>
+        }
+      </mat-select>
+      <mat-hint>{{ 'backups.restore.targetHint' | t }}</mat-hint>
+      @if (targetError(); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
+  }
+
+  <fieldset class="restore-form__choice" [attr.aria-describedby]="modeId + '-hint'">
+    <legend class="text-label">{{ 'backups.restore.mode' | t }}</legend>
+    <mat-radio-group
+      class="restore-form__options"
+      name="mode"
+      [ngModel]="mode()"
+      [ngModelOptions]="{ standalone: true }"
+      (ngModelChange)="setMode($event)"
+    >
+      @for (each of modes; track each) {
+        <mat-radio-button [value]="each">{{ 'backups.restore.modes.' + each | t }}</mat-radio-button>
+      }
+    </mat-radio-group>
+    <small class="text-sm text-secondary" [id]="modeId + '-hint'">{{ 'backups.restore.modeHint.' + mode() | t }}</small>
+  </fieldset>
+
+  <app-password-input
+    [label]="'password.label' | t"
+    [hint]="'backups.restore.passwordHint' | t"
+    [error]="passwordError()"
+    name="account_password"
+    autocomplete="current-password"
+    [ngModel]="accountPassword()"
+    (ngModelChange)="setAccountPassword($event)"
+  />
+
+  <!-- FSI … PDI: the name keeps its own direction inside the hint in either language. -->
+  <mat-form-field>
+    <mat-label>{{ 'backups.restore.serverName' | t }}</mat-label>
+    <input
+      matInput
+      [appFieldError]="nameErrorText()"
+      name="server_name"
+      dir="auto"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      [ngModel]="serverName()"
+      (ngModelChange)="setServerName($event)"
+    />
+    <mat-hint>{{ 'backups.restore.serverNameHint' | t: { name: '⁨' + restoreOnto() + '⁩' } }}</mat-hint>
+    @if (nameErrorText(); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button
+      matButton="outlined"
+      type="button"
+      [disabled]="sending() !== null"
+      [attr.aria-busy]="sending() === 'rehearse'"
+      (click)="rehearse()"
+    >
+      @if (sending() === 'rehearse') {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (sending() === 'rehearse' ? 'backups.restore.rehearsing' : 'backups.restore.rehearse') | t }}
+    </button>
+    <button
+      matButton="filled"
+      class="app-danger"
+      type="submit"
+      [disabled]="sending() !== null"
+      [attr.aria-busy]="sending() === 'restore'"
+    >
+      @if (sending() === 'restore') {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (sending() === 'restore' ? 'backups.restore.working' : 'backups.restore.submit') | t }}
+    </button>
+  </div>
+</form>

@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
+from dbs import audit
 from dbs.conf import setting
 from dbs.models import AnomalyEvent, AuditEvent, Lockout, SecurityPolicy, SessionEvent
 from dbs.security import detector
@@ -51,10 +52,9 @@ class Command(BaseCommand):
         user = self._user(options)
         removed, _ = Lockout.objects.filter(user=user).delete()
         detector.forget(user.pk)
-        AuditEvent.objects.create(
-            actor=None,
-            action="security.unlock",
-            target_name=user.get_username(),
+        audit.record(
+            "security.unlock",
+            target=user.get_username(),
             detail="cleared from the command line",
         )
         if removed:

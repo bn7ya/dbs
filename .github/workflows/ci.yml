@@ -37,6 +37,32 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]" "Django~=${{ matrix.django }}.0"
       - run: python -m pytest --cov=dbs --cov-report=term-missing
+      - run: python -m pytest tests/manager --ds=tests.manager.settings
+
+  manager-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: manager-ui/package-lock.json
+      - run: npm ci
+        working-directory: manager-ui
+      - run: npm run lint
+        working-directory: manager-ui
+      - run: npx ng test --watch=false
+        working-directory: manager-ui
+      - run: npm run build:package
+        working-directory: manager-ui
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install build
+          python -m build
+          python scripts/check_wheel.py dist/*.whl
 
   test-postgres:
     runs-on: ubuntu-latest

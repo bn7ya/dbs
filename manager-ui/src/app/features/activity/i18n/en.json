@@ -1,0 +1,105 @@
+{
+  "activity": {
+    "title": "Activity",
+    "subtitle": "Every action taken in DBS, newest first.",
+    "filters": {
+      "status": "Status",
+      "action": "Action",
+      "allStatuses": "All statuses",
+      "allActions": "All actions",
+      "clear": "Clear filters"
+    },
+    "list": {
+      "label": "Activity",
+      "when": "When",
+      "action": "Action",
+      "status": "Status",
+      "server": "Server",
+      "target": "Target",
+      "by": "By",
+      "ip": "IP address",
+      "scheduled": "Scheduled task",
+      "serverDeleted": "Deleted",
+      "none": "—",
+      "pages": "Activity pages"
+    },
+    "empty": {
+      "title": "No activity yet",
+      "body": "Actions taken in DBS are listed here.",
+      "serverBody": "Actions taken on this server are listed here."
+    },
+    "noMatch": {
+      "title": "No matching activity",
+      "body": "Try another status or action."
+    },
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed"
+    },
+    "actions": {
+      "server": {
+        "create": "Add server",
+        "update": "Edit server",
+        "delete": "Delete server",
+        "check": "Connection check",
+        "repin": "Pin host key",
+        "passphrase_reveal": "Show backup passphrase",
+        "fingerprint": "Get host key",
+        "keypair": "Create SSH key",
+        "discover": "Find django-dbs settings",
+        "passphrase_capture": "Save backup passphrase"
+      },
+      "backup": {
+        "take": "Back up server",
+        "run": "Run backup plan",
+        "verify": "Verify backup",
+        "restore": "Restore backup",
+        "download": "Download backup",
+        "upload": "Upload backup",
+        "delete": "Delete backup",
+        "undo_delete": "Undo backup delete",
+        "retention": "Delete old backups",
+        "expire": "Remove deleted backup files"
+      },
+      "plan": {
+        "create": "Add backup plan",
+        "update": "Edit backup plan",
+        "delete": "Delete backup plan"
+      },
+      "files": {
+        "download": "Download file",
+        "upload": "Upload file",
+        "create_folder": "Create folder",
+        "delete": "Delete file or folder"
+      },
+      "env": {
+        "pull": "Pull .env file",
+        "reveal": "Show .env values",
+        "push": "Push .env file"
+      },
+      "auth": {
+        "sign_in": "Sign in",
+        "sign_in_failed": "Failed sign-in",
+        "sign_out": "Sign out"
+      },
+      "account": {
+        "setup": "First account created"
+      },
+      "redeploy": {
+        "run": "Move to another server",
+        "check": "Move: check the other server",
+        "env": "Move: push the .env file",
+        "migrate": "Move: run the migrations",
+        "restore": "Move: restore the backup",
+        "archives": "Move: unpack the folder archives",
+        "final_check": "Move: check again"
+      },
+      "manager": {
+        "export": "Export DBS data",
+        "import": "Import DBS data"
+      }
+    }
+  }
+}

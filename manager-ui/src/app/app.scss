@@ -1,0 +1,11 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+
+.app__content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}

@@ -1,0 +1,206 @@
+<mat-card appearance="outlined">
+  <mat-card-content class="files">
+    <div class="files__header">
+      <div class="files__intro">
+        <h2>{{ 'files.title' | t }}</h2>
+        <p class="text-sm text-secondary">{{ 'files.body' | t }}</p>
+      </div>
+      @if (!noFolders()) {
+        <div class="files__header-actions">
+          <!-- The native picker is hidden from layout, tab order and the accessibility tree; the button opens it. -->
+          <input #picker type="file" hidden (change)="onFileChosen(picker)" />
+          <button
+            #uploadButton
+            matButton="outlined"
+            type="button"
+            [disabled]="current() === null || uploading()"
+            [attr.aria-busy]="uploading()"
+            (click)="picker.click()"
+          >
+            @if (uploading()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ 'files.upload.action' | t }}
+          </button>
+          <button matButton="outlined" type="button" [disabled]="current() === null" (click)="newFolder()">
+            {{ 'files.newFolder.action' | t }}
+          </button>
+        </div>
+      }
+    </div>
+
+    <div class="files__body">
+      @if (noFolders()) {
+        <app-empty-state
+          icon="fa-solid fa-folder"
+          [headingLevel]="3"
+          [title]="'files.noFolders.title' | t"
+          [description]="'files.noFolders.body' | t"
+        >
+          <a matButton="filled" [routerLink]="overviewLink()">{{ 'files.noFolders.action' | t }}</a>
+        </app-empty-state>
+      } @else {
+        @if (pickRoot() || crumbs().length > 0) {
+          <div #location class="files__location" tabindex="-1">
+            @if (pickRoot()) {
+              <mat-form-field class="files__root">
+                <mat-label>{{ 'files.location.root' | t }}</mat-label>
+                <mat-select [ngModel]="root()" (ngModelChange)="onRoot($event)">
+                  @for (option of rootOptions(); track option) {
+                    <mat-option [value]="option"><bdi dir="auto">{{ option }}</bdi></mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
+            @if (crumbs().length > 0) {
+              <app-breadcrumb code [items]="crumbs()" [label]="'files.location.trail' | t" />
+            }
+          </div>
+        }
+
+        @if (upload(); as upload) {
+          <div class="files__upload">
+            <div class="files__upload-status">
+              <span><bdi class="files__code" dir="auto">{{ upload.name }}</bdi></span>
+              <span class="text-sm text-secondary" [id]="uploadLabelId">
+                {{ (uploadProgress() === null ? 'files.upload.storing' : 'files.upload.working') | t }}
+              </span>
+              <mat-progress-bar
+                [attr.aria-labelledby]="uploadLabelId"
+                [mode]="uploadProgress() === null ? 'indeterminate' : 'determinate'"
+                [value]="uploadProgress() ?? 0"
+              />
+            </div>
+            @if (uploadProgress() !== null) {
+              <button
+                matButton
+                type="button"
+                [attr.aria-label]="'files.upload.cancelLabel' | t: { name: upload.name }"
+                (click)="cancelUpload()"
+              >
+                {{ 'actions.cancel' | t }}
+              </button>
+            }
+          </div>
+        }
+
+        @if (error(); as failure) {
+          <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+          <div>
+            <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+          </div>
+        } @else if (pending()) {
+          <div class="files__skeleton" aria-busy="true">
+            @for (line of skeletonLines; track line) {
+              <app-skeleton />
+            }
+          </div>
+        } @else if (empty()) {
+          <app-empty-state
+            icon="fa-solid fa-folder"
+            [headingLevel]="3"
+            [title]="'files.empty.title' | t"
+            [description]="'files.empty.body' | t"
+          />
+        } @else {
+          <div class="table-scroll">
+            <table
+              mat-table
+              [dataSource]="rows()"
+              [attr.aria-label]="'files.title' | t"
+              [attr.aria-busy]="loading()"
+            >
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'files.list.name' | t }}</th>
+                <td mat-cell *matCellDef="let row">
+                  <div class="files__name">
+                    <i class="files__icon" [class]="iconOf(row)" aria-hidden="true"></i>
+                    @if (row.kind === 'folder') {
+                      <a
+                        [routerLink]="[]"
+                        [queryParams]="{ path: row.path }"
+                        [attr.aria-label]="'files.list.open' | t: { name: row.name }"
+                      >
+                        <bdi class="files__code" dir="auto">{{ row.name }}</bdi>
+                      </a>
+                    } @else {
+                      <div class="files__stack">
+                        <bdi class="files__code" dir="auto">{{ row.name }}</bdi>
+                        <!-- A link is listed as itself and not followed; neither it nor a special file opens. -->
+                        @if (row.kind !== 'file') {
+                          <app-status-tag severity="neutral" [label]="'files.list.kind.' + row.kind | t" />
+                        }
+                      </div>
+                    }
+                  </div>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="size">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="files__end">{{ 'files.list.size' | t }}</th>
+                <td mat-cell *matCellDef="let row" class="files__end">
+                  @if (row.kind === 'folder') {
+                    <span class="text-sm text-muted">{{ 'files.list.none' | t }}</span>
+                  } @else {
+                    <bdi class="files__size">{{ row.size | fileSize }}</bdi>
+                  }
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="modified">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'files.list.modified' | t }}</th>
+                <td mat-cell *matCellDef="let row">{{ row.modified | appDate }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ 'files.list.actions' | t }}</th>
+                <td mat-cell *matCellDef="let row">
+                  <div class="files__actions">
+                    @if (row.kind === 'file') {
+                      <a
+                        matButton
+                        [href]="downloadUrl(row)"
+                        [attr.download]="row.name"
+                        [attr.aria-label]="'files.download.label' | t: { name: row.name }"
+                      >
+                        {{ 'files.download.action' | t }}
+                      </a>
+                    }
+                    <button
+                      matButton
+                      class="app-danger"
+                      type="button"
+                      [disabled]="isDeleting(row)"
+                      [attr.aria-busy]="isDeleting(row)"
+                      [attr.aria-label]="'files.delete.label' | t: { name: row.name }"
+                      (click)="remove(row)"
+                    >
+                      @if (isDeleting(row)) {
+                        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                      }
+                      {{ 'actions.delete' | t }}
+                    </button>
+                  </div>
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="['name', 'size', 'modified', 'actions']"></tr>
+              <tr mat-row *matRowDef="let row; columns: ['name', 'size', 'modified', 'actions']"></tr>
+            </table>
+          </div>
+          @if (paginated()) {
+            <nav [attr.aria-label]="'files.list.pages' | t">
+              <mat-paginator
+                [length]="count()"
+                [pageIndex]="page()"
+                [pageSize]="pageSize()"
+                [pageSizeOptions]="pageSizes"
+                (page)="onPaged($event)"
+              />
+            </nav>
+          }
+        }
+      }
+    </div>
+  </mat-card-content>
+</mat-card>

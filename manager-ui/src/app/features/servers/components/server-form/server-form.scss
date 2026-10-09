@@ -1,0 +1,57 @@
+@use "layout" as *;
+
+.server-form__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  padding-block-start: var(--app-space-5);
+}
+
+// Host and port read as one address: the port keeps a narrow track beside the host, and wraps
+// under it when the dialog is narrower than both.
+.server-form__address {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-5);
+
+  > :first-child {
+    flex: 1 1 calc($card-max / 2);
+  }
+
+  > :last-child {
+    flex: 0 1 calc($card-max / 4);
+  }
+}
+
+.server-form__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(calc($card-max / 2), 100%), 1fr));
+  gap: var(--app-space-5);
+}
+
+.server-form__choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.server-form__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-5);
+}
+
+.server-form__check {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.server-form__error {
+  font-size: var(--app-text--1);
+  color: var(--app-color-danger);
+}

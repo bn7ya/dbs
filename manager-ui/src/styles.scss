@@ -1,0 +1,24 @@
+@use "sass:meta";
+@use "@angular/cdk" as cdk;
+@use "tokens";
+
+@layer reset, base, material, app;
+
+@layer reset {
+  @include meta.load-css("reset");
+}
+
+@layer base {
+  @include cdk.a11y-visually-hidden();
+  @include meta.load-css("base");
+  @include meta.load-css("typography");
+}
+
+@layer material {
+  @include meta.load-css("material");
+}
+
+@layer app {
+  @include meta.load-css("dialog");
+  @include meta.load-css("table");
+}

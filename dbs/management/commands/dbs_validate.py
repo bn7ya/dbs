@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import os
+
 from django.core.management.base import BaseCommand, CommandError
 
+from dbs import audit
 from dbs._cli import resolve_read_passphrase
 from dbs.engine import validate_backup
 from dbs.exceptions import InvalidPassphrase
@@ -21,24 +25,28 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        try:
-            with open(options["input"], "rb") as fh:
-                data = fh.read()
-        except OSError as exc:
-            raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
+        name = os.path.basename(options["input"])
+        with audit.track("backup.validate", target=name, data={"file": name}) as entry:
+            try:
+                with open(options["input"], "rb") as fh:
+                    data = fh.read()
+            except OSError as exc:
+                raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
+            entry.data.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
 
-        if options.get("passphrase"):
-            given = options["passphrase"]
-            passphrase = resolve_read_passphrase(None if given == "__prompt__" else given)
-            result = with_passphrase(
-                lambda secret: _decrypt_checked(data, secret), passphrase
-            )
-        else:
-            result = validate_backup(data)
-        style = self.style.SUCCESS if result.ok else self.style.ERROR
-        self.stdout.write(style(result.summary()))
-        if not result.ok:
-            raise CommandError("Validation failed.")
+            if options.get("passphrase"):
+                given = options["passphrase"]
+                passphrase = resolve_read_passphrase(None if given == "__prompt__" else given)
+                result = with_passphrase(
+                    lambda secret: _decrypt_checked(data, secret), passphrase
+                )
+            else:
+                result = validate_backup(data)
+            entry.data.update(ok=bool(result.ok), decrypted=result.decrypted_ok)
+            style = self.style.SUCCESS if result.ok else self.style.ERROR
+            self.stdout.write(style(result.summary()))
+            if not result.ok:
+                raise CommandError("Validation failed.")
 
 
 def _decrypt_checked(data, secret):

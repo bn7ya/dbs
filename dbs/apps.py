@@ -11,9 +11,15 @@ class DbsConfig(AppConfig):
     def ready(self):
         from django.utils.module_loading import autodiscover_modules
 
+        from django.core.signals import request_started
+
+        from .schedule_runner import ensure_started
+
         autodiscover_modules("dbs")
         install_hyphen_aliases()
         from .security import signals  # noqa: F401
+
+        request_started.connect(ensure_started, dispatch_uid="dbs.schedule_runner")
 
 
 def install_hyphen_aliases():

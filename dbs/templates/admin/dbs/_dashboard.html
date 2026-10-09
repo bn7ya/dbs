@@ -2,6 +2,17 @@
 
 <div class="dbs-grid">
   <section class="dbs-card">
+    <h2>Schedule and health</h2>
+    <p>{{ schedule }}.{% if schedule.enabled and schedule.next_run_at %} Next backup {{ schedule.next_run_at|date:"Y-m-d H:i" }}.{% endif %}</p>
+    <p>Health: <strong class="dbs-status dbs-status-{{ health.status }}">{{ health.status }}</strong>
+       {% if health.last_backup_at %}— last backup {{ health.last_backup_at|date:"Y-m-d H:i" }}{% endif %}</p>
+    <p><a class="button" href="{% url 'admin:dbs_backupschedule_changelist' %}">Change frequency</a>
+       <a class="button" href="{% url 'admin:dbs_health' %}">Health detail</a>
+       <a class="button" href="{% url 'admin:dbs_auditevent_changelist' %}">Audit trail</a>
+       <a class="button" href="{% url 'admin:dbs_connection' %}">Connection details</a></p>
+  </section>
+
+  <section class="dbs-card">
     <h2>Backups</h2>
     {% if records %}
     <table>

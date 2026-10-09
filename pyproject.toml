@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-dbs"
-version = "0.4.0"
+version = "0.5.0"
 description = "Redundant, self-healing, encrypted single-file backup for Django projects."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -39,6 +39,10 @@ dependencies = [
     "argon2-cffi>=21.3",
     "reedsolo>=1.7",
     "scikit-learn>=1.3",
+    "paramiko>=3",
+    "djangorestframework>=3.15",
+    "waitress>=3",
+    "tomli>=1.1.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +59,7 @@ dev = [
 
 [project.scripts]
 dbs-client = "dbs.client.cli:main"
+django_dbs = "dbs.manager.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/bn7ya/dbs"
@@ -74,6 +79,8 @@ dbs = [
     "static/dbs/*",
     "templates/admin/dbs/*.html",
     "templates/admin/dbs/wiki/*.html",
+    "manager/static/dbs_manager/**/*",
+    "manager/templates/dbs_manager/*.html",
 ]
 
 [tool.ruff]

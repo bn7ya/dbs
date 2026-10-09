@@ -93,6 +93,70 @@ def test_an_unapplied_dbs_migration_is_reported_and_applied():
         call_command("migrate", "dbs", verbosity=0)
 
 
+@pytest.mark.django_db(transaction=True)
+def test_the_audit_trail_step_applies_its_migration():
+    call_command("migrate", "dbs", "0002", verbosity=0)
+    try:
+        step = upgrade.AuditTrail()
+
+        reported = step.check()
+        applied = step.fix()
+
+        assert reported.level == ACTION
+        assert reported.remedy == "python manage.py migrate dbs"
+        assert applied.level == FIXED
+        assert step.check().level == OK
+    finally:
+        call_command("migrate", "dbs", verbosity=0)
+
+
+@pytest.mark.django_db
+def test_a_schedule_left_in_settings_points_at_the_panel(settings):
+    settings.DBS_SCHEDULE_INTERVAL = "6h"
+
+    finding = upgrade.ScheduleInDatabase().check()
+
+    assert finding.level == WARN
+    assert "/admin/dbs/backupschedule/" in finding.remedy
+
+
+@pytest.mark.django_db
+def test_an_enabled_schedule_is_reported_as_current(settings):
+    from dbs.models import BackupSchedule
+
+    settings.DBS_SCHEDULE_INTERVAL = "6h"
+    BackupSchedule.objects.create(enabled=True, interval="6h")
+
+    assert upgrade.ScheduleInDatabase().check().level == OK
+
+
+def test_a_missing_backup_directory_is_reported(settings):
+    settings.DBS_BACKUP_DIR = None
+
+    finding = upgrade.BackupDirectory().check()
+
+    assert finding.level == WARN
+    assert "DBS_BACKUP_DIR" in finding.remedy
+
+
+def test_a_backup_directory_is_fine(settings, tmp_path):
+    settings.DBS_BACKUP_DIR = str(tmp_path)
+
+    assert upgrade.BackupDirectory().check().level == OK
+
+
+def test_an_unknown_scheduler_mode_blocks(settings):
+    settings.DBS_SCHEDULER = "cron"
+
+    assert upgrade.SchedulerMode().check().level == ACTION
+
+
+def test_a_known_scheduler_mode_is_fine(settings):
+    settings.DBS_SCHEDULER = "command"
+
+    assert upgrade.SchedulerMode().check().level == OK
+
+
 @pytest.mark.django_db
 def test_a_missing_guard_middleware_is_reported(settings):
     settings.MIDDLEWARE = [
@@ -394,3 +458,29 @@ def test_a_custom_get_queryset_is_left_alone(monkeypatch):
     )
 
     assert finding.message == "no backed-up model has a default manager that hides rows"
+
+
+def test_the_dependencies_step_checks_what_the_manager_needs():
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == OK
+    assert "waitress" in finding.message and "rest_framework" in finding.message
+
+
+def test_a_missing_manager_dependency_is_reported(monkeypatch):
+    import importlib
+
+    real_import = importlib.import_module
+
+    def without_waitress(name, *args, **kwargs):
+        if name == "waitress":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", without_waitress)
+
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == ACTION
+    assert "waitress" in finding.message and "paramiko" not in finding.message
+    assert "django-dbs>=0.5" in finding.remedy

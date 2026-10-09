@@ -1,0 +1,84 @@
+<main id="main" class="setup">
+  <mat-card appearance="outlined" class="setup__card">
+    <mat-card-content class="setup__content">
+      <header class="setup__header">
+        <h1>{{ 'setup.title' | t }}</h1>
+        <p class="text-secondary">{{ 'setup.subtitle' | t }}</p>
+      </header>
+
+      @if (error(); as failure) {
+        <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+      }
+
+      @if (done()) {
+        <a matButton="filled" routerLink="/sign-in">{{ 'setup.signIn' | t }}</a>
+      } @else {
+        <form class="setup__form" novalidate (ngSubmit)="submit()">
+          @if (!tokenFromLink()) {
+            <mat-form-field>
+              <mat-label>{{ 'setup.token' | t }}</mat-label>
+              <input
+                matInput
+                name="token"
+                autocomplete="off"
+                dir="ltr"
+                [appFieldError]="tokenError()"
+                [ngModel]="key()"
+                (ngModelChange)="key.set($event)"
+              />
+              <mat-hint>{{ 'setup.tokenHint' | t }}</mat-hint>
+              @if (tokenError(); as message) {
+                <mat-error>{{ message }}</mat-error>
+              }
+            </mat-form-field>
+          }
+
+          <mat-form-field>
+            <mat-label>{{ 'setup.username' | t }}</mat-label>
+            <input
+              matInput
+              name="username"
+              autocomplete="username"
+              dir="auto"
+              [appFieldError]="usernameError()"
+              [ngModel]="username()"
+              (ngModelChange)="username.set($event)"
+            />
+            @if (usernameError(); as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+
+          <app-password-input
+            [label]="'setup.password' | t"
+            [error]="passwordError()"
+            name="password"
+            autocomplete="new-password"
+            [ngModel]="password()"
+            (ngModelChange)="password.set($event)"
+          />
+
+          <app-password-input
+            [label]="'setup.confirm' | t"
+            [error]="confirmInvalid() ? ('setup.errors.confirmMismatch' | t) : ''"
+            name="confirm"
+            autocomplete="new-password"
+            [ngModel]="confirm()"
+            (ngModelChange)="confirm.set($event)"
+          />
+
+          <button matButton="filled" class="setup__submit" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+            @if (busy()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (busy() ? 'setup.working' : 'setup.submit') | t }}
+          </button>
+        </form>
+      }
+
+      <footer>
+        <app-locale-switcher />
+      </footer>
+    </mat-card-content>
+  </mat-card>
+</main>

@@ -1,0 +1,55 @@
+@if (server(); as current) {
+  <div class="server">
+    <header class="server__header">
+      <a matButton routerLink="/servers">{{ 'servers.page.back' | t }}</a>
+      <div class="server__title">
+        <h1><bdi dir="auto">{{ current.name }}</bdi></h1>
+        <app-check-status-tag [status]="current.last_check_status" />
+      </div>
+      <p class="text-secondary">
+        <bdi class="server__address" dir="ltr">{{ current.username }}&#64;{{ current.host }}:{{ current.port }}</bdi>
+      </p>
+    </header>
+
+    <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" [attr.aria-label]="'servers.page.sections' | t">
+      @for (tab of tabs; track tab.path) {
+        <a
+          mat-tab-link
+          [routerLink]="tab.path"
+          routerLinkActive
+          #active="routerLinkActive"
+          [routerLinkActiveOptions]="tabMatch"
+          [active]="active.isActive"
+        >
+          {{ tab.labelKey | t }}
+        </a>
+      }
+    </nav>
+
+    <mat-tab-nav-panel #panel>
+      <router-outlet />
+    </mat-tab-nav-panel>
+  </div>
+} @else if (missing()) {
+  <app-empty-state
+    icon="fa-solid fa-server"
+    [headingLevel]="1"
+    [title]="'servers.page.missing.title' | t"
+    [description]="'servers.page.missing.body' | t"
+  >
+    <a matButton="filled" routerLink="/servers">{{ 'servers.page.back' | t }}</a>
+  </app-empty-state>
+} @else if (error(); as failure) {
+  <div class="server__failure">
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    <div>
+      <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+    </div>
+  </div>
+} @else {
+  <div class="server" aria-busy="true">
+    @for (line of skeletonLines; track line) {
+      <app-skeleton />
+    }
+  </div>
+}

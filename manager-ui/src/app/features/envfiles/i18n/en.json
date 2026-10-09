@@ -1,0 +1,78 @@
+{
+  "envfiles": {
+    "title": ".env file",
+    "body": "Versions of this file, newest first. Values show only after you enter your password.",
+    "pull": {
+      "action": "Pull now",
+      "working": "Pulling…",
+      "created": "New version kept.",
+      "unchanged": "No change since the last version."
+    },
+    "noPath": {
+      "title": "No .env file set",
+      "body": "Set the path of the server's .env file under Settings on Overview.",
+      "action": "Go to Overview"
+    },
+    "empty": {
+      "title": "No versions yet",
+      "body": "Pull the file from the server to keep its first version."
+    },
+    "list": {
+      "label": "Versions",
+      "when": "When",
+      "source": "Source",
+      "size": "Size",
+      "keys": "Keys",
+      "by": "By {name}",
+      "pages": "Version pages"
+    },
+    "source": {
+      "pulled": "Pulled",
+      "pushed": "Pushed",
+      "scheduled": "Daily snapshot"
+    },
+    "detail": {
+      "title": "Selected version",
+      "path": "Path",
+      "size": "Size",
+      "keys": "Keys: {count}",
+      "noKeys": "This version sets no keys.",
+      "masked": "••••••",
+      "hidden": "Value hidden"
+    },
+    "reveal": {
+      "show": "Show values",
+      "hide": "Hide values",
+      "label": "File content",
+      "copy": "Copy content",
+      "copied": "Content copied.",
+      "copyUnavailable": "Copying is not available here. Select the content and copy it.",
+      "download": "Download as file",
+      "prompt": {
+        "title": "Show values",
+        "body": "Enter your password to show the values of this version."
+      }
+    },
+    "compare": {
+      "action": "Compare with the previous version",
+      "title": "Changes since the previous version",
+      "added": "Added keys",
+      "removed": "Removed keys",
+      "changed": "Changed values",
+      "none": "No difference in keys or values.",
+      "first": "This is the first version kept."
+    },
+    "push": {
+      "action": "Push this version to the server",
+      "confirmTitle": "Replace the .env file on the server?",
+      "confirmBody": "The file on the server now is kept as a version first. Then this version takes its place.",
+      "confirmAccept": "Continue",
+      "prompt": {
+        "title": "Push this version",
+        "body": "Enter your password to replace the .env file on the server with this version.",
+        "submit": "Push version"
+      },
+      "done": "Version pushed to the server."
+    }
+  }
+}

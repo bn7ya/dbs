@@ -18,8 +18,12 @@
   <a href="{% dbs_dashboard_url %}">Dashboard</a>
   <a href="{% url 'admin:dbs_backup_create' %}">Take a backup</a>
   <a href="{% url 'admin:dbs_backup_restore' %}">Restore</a>
+  <a href="{% url 'admin:dbs_backupschedule_changelist' %}">Schedule</a>
+  <a href="{% url 'admin:dbs_health' %}">Health</a>
+  <a href="{% url 'admin:dbs_auditevent_changelist' %}">Audit</a>
   <a href="{% url 'admin:dbs_backuptarget_changelist' %}">SFTP targets</a>
   <a href="{% url 'admin:dbs_security' %}">Security</a>
+  <a href="{% url 'admin:dbs_connection' %}">Connection</a>
   <a href="{% url 'admin:dbs_wiki_index' %}">Wiki</a>
 </nav>
 {% block dbs_content %}{% endblock %}

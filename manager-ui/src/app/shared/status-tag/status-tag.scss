@@ -1,0 +1,34 @@
+:host {
+  display: inline-flex;
+  gap: var(--app-space-1);
+  align-items: center;
+  padding-block: var(--app-space-1);
+  padding-inline: var(--app-space-2);
+  font-size: var(--app-text--1);
+  font-weight: var(--app-weight-medium);
+  line-height: var(--app-leading-tight);
+  color: var(--app-color-on-surface-variant);
+  white-space: nowrap;
+  background: var(--app-color-neutral-container);
+  border-radius: var(--app-radius-sm);
+}
+
+:host(.status-tag--success) {
+  color: var(--app-color-on-success-container);
+  background: var(--app-color-success-container);
+}
+
+:host(.status-tag--info) {
+  color: var(--app-color-on-info-container);
+  background: var(--app-color-info-container);
+}
+
+:host(.status-tag--warning) {
+  color: var(--app-color-on-warning-container);
+  background: var(--app-color-warning-container);
+}
+
+:host(.status-tag--danger) {
+  color: var(--app-color-on-danger-container);
+  background: var(--app-color-danger-container);
+}

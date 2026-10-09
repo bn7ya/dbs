@@ -1,0 +1,10 @@
+<i class="toast__icon" [class]="icon()" aria-hidden="true"></i>
+<div matSnackBarLabel class="toast__text">
+  <p class="toast__summary">{{ message.summary }}</p>
+  @if (message.detail) {
+    <p class="toast__detail">{{ message.detail }}</p>
+  }
+</div>
+<button matIconButton type="button" class="toast__close" [attr.aria-label]="'components.close' | t" (click)="dismiss()">
+  <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+</button>

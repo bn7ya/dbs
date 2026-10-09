@@ -23,6 +23,7 @@ ADMIN_ACTIONS = (
     ("/backuptarget/", "target_write"),
     ("/panel/setup/", "target_write"),
     ("/securitypolicy/", "target_write"),
+    ("/backupschedule/", "target_write"),
 )
 
 

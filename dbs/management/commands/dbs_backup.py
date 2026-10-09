@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import os
+
 from django.core.management.base import BaseCommand, CommandError
 
+from dbs import audit
 from dbs._cli import passphrase_source, resolve_passphrase
 from dbs.crypto.kdf import KDFParams
 from dbs.engine import create_backup
@@ -42,18 +46,32 @@ class Command(BaseCommand):
         if options["block_size"]:
             extra["block_size"] = options["block_size"]
 
-        try:
-            container = create_backup(
-                passphrase,
-                using=options["database"],
-                compress=not options["no_compress"],
-                verify=not options["no_verify"],
-                kdf_params=kdf_params,
-                output=options["output"],
-                **extra,
+        output = options["output"]
+        with audit.track(
+            "backup.create",
+            target=os.path.basename(output),
+            data={"file": os.path.basename(output), "database": options["database"]},
+        ) as entry:
+            try:
+                container = create_backup(
+                    passphrase,
+                    using=options["database"],
+                    compress=not options["no_compress"],
+                    verify=not options["no_verify"],
+                    kdf_params=kdf_params,
+                    output=output,
+                    **extra,
+                )
+            except DBSError as exc:
+                raise CommandError(f"Backup failed: {exc}") from exc
+            digest = hashlib.sha256(container).hexdigest()
+            entry.data.update(
+                size=len(container),
+                sha256=digest,
+                verified=not options["no_verify"],
+                compressed=not options["no_compress"],
             )
-        except DBSError as exc:
-            raise CommandError(f"Backup failed: {exc}") from exc
+            audit.record_backup(output, container, digest, options["database"])
 
         source = passphrase_source(
             options.get("passphrase"), from_stdin=options["passphrase_stdin"]
@@ -65,3 +83,4 @@ class Command(BaseCommand):
             )
         )
         self.stdout.write(f"Passphrase came from {source}.")
+

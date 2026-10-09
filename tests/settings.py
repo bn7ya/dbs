@@ -69,7 +69,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # A throwaway media root so FileField round-trips have somewhere to live.
 MEDIA_ROOT = tempfile.mkdtemp(prefix="dbs-media-")
+DBS_BACKUP_DIR = tempfile.mkdtemp(prefix="dbs-backups-")
 
 USE_TZ = True
 
 STATIC_URL = "/static/"
+
+DBS_SCHEDULER = "off"

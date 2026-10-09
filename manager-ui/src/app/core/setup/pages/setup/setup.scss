@@ -1,0 +1,40 @@
+@use "layout" as *;
+
+.setup {
+  display: grid;
+  place-items: center;
+  min-block-size: 100dvh;
+  padding-block: var(--app-space-7);
+  padding-inline: var(--app-space-4);
+
+  @include from($screen-md) {
+    padding-inline: var(--app-space-6);
+  }
+}
+
+.setup__card {
+  inline-size: 100%;
+  max-inline-size: $card-max;
+}
+
+.setup__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-7);
+}
+
+.setup__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.setup__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.setup__submit {
+  margin-block-start: var(--app-space-3);
+}

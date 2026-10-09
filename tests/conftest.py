@@ -2,6 +2,7 @@
 
 import os
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from django.utils import timezone
@@ -10,6 +11,15 @@ from dbs.crypto.kdf import KDFParams
 from tests.fake_ssh import FakeParamiko
 
 CLOCK_ENV = "DBS_TEST_HOUR"
+MANAGER_SETTINGS = "tests.manager.settings"
+MANAGER_TESTS = Path(__file__).parent / "manager"
+
+
+def pytest_ignore_collect(collection_path, config):
+    if os.environ.get("DJANGO_SETTINGS_MODULE") == MANAGER_SETTINGS:
+        return None
+    inside = Path(collection_path) == MANAGER_TESTS or MANAGER_TESTS in Path(collection_path).parents
+    return True if inside else None
 
 # Fast KDF parameters so the suite isn't dominated by Argon2 cost. Real backups
 # use the much stronger defaults in ``KDFParams``.
