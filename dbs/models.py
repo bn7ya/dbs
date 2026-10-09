@@ -174,23 +174,49 @@ class BackupRecord(models.Model):
         return candidate if os.path.isfile(candidate) else None
 
 
+class AuditStatus(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    RUNNING = "running", "Running"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED = "failed", "Failed"
+
+
 class AuditEvent(models.Model):
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
     )
     action = models.CharField(max_length=64)
-    target_name = models.CharField(max_length=128, blank=True, default="")
+    target_name = models.CharField(max_length=1024, blank=True, default="")
     detail = models.TextField(blank=True, default="")
+    data = models.JSONField(blank=True, default=dict)
+    status = models.CharField(
+        max_length=16, choices=AuditStatus.choices, default=AuditStatus.SUCCEEDED
+    )
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    subject = models.CharField(max_length=64, blank=True, default="")
     remote_addr = models.CharField(max_length=64, blank=True, default="")
     succeeded = models.BooleanField(default=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("-created_at",)
-        indexes = [models.Index(fields=["-created_at"])]
+        indexes = [
+            models.Index(fields=["-created_at"]),
+            models.Index(fields=["status", "-created_at"]),
+            models.Index(fields=["action", "-created_at"]),
+            models.Index(fields=["subject", "-created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.action} by {self.actor_id or 'system'}"
+
+    @property
+    def duration(self):
+        if self.started_at is None or self.finished_at is None:
+            return None
+        return self.finished_at - self.started_at
 
 
 class SecurityPolicy(models.Model):

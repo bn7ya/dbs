@@ -93,6 +93,23 @@ def test_an_unapplied_dbs_migration_is_reported_and_applied():
         call_command("migrate", "dbs", verbosity=0)
 
 
+@pytest.mark.django_db(transaction=True)
+def test_the_audit_trail_step_applies_its_migration():
+    call_command("migrate", "dbs", "0002", verbosity=0)
+    try:
+        step = upgrade.AuditTrail()
+
+        reported = step.check()
+        applied = step.fix()
+
+        assert reported.level == ACTION
+        assert reported.remedy == "python manage.py migrate dbs"
+        assert applied.level == FIXED
+        assert step.check().level == OK
+    finally:
+        call_command("migrate", "dbs", verbosity=0)
+
+
 @pytest.mark.django_db
 def test_a_missing_guard_middleware_is_reported(settings):
     settings.MIDDLEWARE = [

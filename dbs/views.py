@@ -11,6 +11,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
+from . import audit
 from .conf import setting
 from .engine import create_backup, restore_backup
 from .exceptions import DBSError
@@ -39,16 +40,17 @@ CONSOLE_ACTIONS = {
 }
 
 
-def _audit(request, action, target="", detail="", succeeded=True):
+def _audit(request, action, target="", detail="", succeeded=True, data=None):
     from .security.features import client_address
 
-    AuditEvent.objects.create(
+    audit.record(
+        action,
         actor=request.user,
-        action=action[:64],
-        target_name=target[:128],
-        detail=detail[:4000],
-        remote_addr=client_address(request)[:64],
-        succeeded=succeeded,
+        target=target,
+        detail=detail,
+        data=data,
+        status=audit.SUCCEEDED if succeeded else audit.FAILED,
+        remote_addr=client_address(request),
     )
 
 
@@ -159,7 +161,18 @@ def create_backup_view(request):
             location="",
             note=data["note"],
         )
-        _audit(request, "backup.create", target=name, detail=f"{len(container)} bytes")
+        _audit(
+            request,
+            "backup.create",
+            target=name,
+            detail=f"{len(container)} bytes",
+            data={
+                "file": name,
+                "size": len(container),
+                "sha256": digest,
+                "database": data["database"],
+            },
+        )
         response = HttpResponse(container, content_type="application/octet-stream")
         response["Content-Disposition"] = f'attachment; filename="{name}"'
         return response

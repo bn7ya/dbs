@@ -117,6 +117,34 @@ class Migrations(Step):
         return self.fixed("applied the pending dbs migrations")
 
 
+class AuditTrail(Step):
+    name = "audit trail"
+    since = "0.5.0"
+    fixable = True
+    migration = ("dbs", "0003_audit_outcome")
+
+    def check(self):
+        from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
+        from django.db.migrations.recorder import MigrationRecorder
+
+        try:
+            applied = MigrationRecorder(connections[DEFAULT_DB_ALIAS]).applied_migrations()
+        except DatabaseError as exc:
+            return self.warn(f"could not read migration state: {exc}")
+        if self.migration in applied:
+            return self.ok("backups, restores and validations record their outcome")
+        return self.action(
+            "the audit trail cannot record outcomes until dbs.0003 is applied",
+            "python manage.py migrate dbs",
+        )
+
+    def fix(self):
+        from django.core.management import call_command
+
+        call_command("migrate", "dbs", verbosity=0)
+        return self.fixed("applied the audit trail migration")
+
+
 class Dependencies(Step):
     name = "dependencies"
     since = "0.3.0"
@@ -297,6 +325,7 @@ class AiInstructions(Step):
 STEPS = (
     InstalledApp,
     Migrations,
+    AuditTrail,
     Dependencies,
     AdminPanel,
     GuardMiddleware,
