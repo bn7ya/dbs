@@ -6,7 +6,7 @@ from uuid import UUID
 from django.conf import settings
 from rest_framework.exceptions import APIException, ErrorDetail, ValidationError
 
-from dbs import audit
+from dbs import audit, validate_backup
 from dbs.manager.accounts.exceptions import InvalidPassword, TooManyAttempts
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
@@ -26,7 +26,11 @@ from dbs.manager.redeploy.exceptions import (
     TargetNotReady,
 )
 from dbs.manager.runner import get_runner
-from dbs.manager.servers.exceptions import PassphraseMissing, RemoteCommandFailed
+from dbs.manager.servers.exceptions import (
+    PassphraseMissing,
+    RemoteCommandFailed,
+    RestoreFailed,
+)
 from dbs.manager.servers.services import ServerConnectionService, ServerService
 from dbs.manager.vault import open_stream
 
@@ -191,7 +195,7 @@ class RedeployService:
             raise TargetNotReady()
         return {"status": checked.last_check_status}
 
-    def _migrate(self, target: Any, actor: Any) -> dict[str, Any]:
+    def _manage(self, target: Any, actor: Any, *arguments: str) -> Any:
         connections = ServerConnectionService(actor)
         profile = connections.dbs_profile(target)
         env = (
@@ -200,17 +204,35 @@ class RedeployService:
             else None
         )
         with connections.open(target) as remote:
-            result = remote.run(
-                [profile.python, profile.manage, "migrate", "--noinput"],
+            return remote.run(
+                [profile.python, profile.manage, *arguments],
                 cwd=profile.project_dir,
                 env=env,
                 timeout=settings.BACKUP_EXEC_TIMEOUT,
             )
+
+    def _migrate(self, target: Any, actor: Any) -> dict[str, Any]:
+        result = self._manage(target, actor, "migrate", "--noinput")
         if not result.ok:
             raise RemoteCommandFailed(
                 output=f"{result.stdout}\n{result.stderr}".strip()[-500:]
             )
         return {}
+
+    def _migrated(self, target: Any, actor: Any) -> bool:
+        return bool(self._manage(target, actor, "migrate", "--check", "--noinput").ok)
+
+    def _validate(self, file: Any, actor: Any) -> dict[str, Any]:
+        passphrase = ServerConnectionService(actor).backup_passphrase(file.server)
+        try:
+            with BackupStorage().open_read(file.storage_path) as handle:
+                data = handle.read()
+        except FileNotFoundError as exc:
+            raise BackupMissing() from exc
+        result = validate_backup(data, passphrase)
+        if not (result.ok and result.decrypted_ok):
+            raise RestoreFailed()
+        return {"validated": True, "target_not_migrated": True}
 
     def _restore(
         self, detail: dict[str, Any], target: Any, actor: Any
@@ -218,6 +240,8 @@ class RedeployService:
         file = self.files.find_including_deleted(UUID(detail["backup"]))
         if file is None or file.removed_at is not None:
             raise BackupMissing()
+        if detail["rehearsal"] and not self._migrated(target, actor):
+            return self._validate(file, actor)
         connections = ServerConnectionService(actor)
         try:
             handle = BackupStorage().open_read(file.storage_path)

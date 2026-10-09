@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from dbs.models import AuditEvent
+
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import vault_contexts as backup_contexts
@@ -138,6 +140,7 @@ def world(admin, tmp_path, monkeypatch):
             [PYTHON, "manage.py", "migrate", "--noinput"],
             (0, "No migrations to apply.\n", ""),
         ),
+        ([PYTHON, "manage.py", "migrate", "--check", "--noinput"], (0, "", "")),
     ):
         hosts.answer(TARGET, argv, result)
     hosts.answer(TARGET, [PYTHON, "manage.py", "dbs_restore"], restore)
@@ -202,10 +205,38 @@ def test_a_rehearsal_checks_and_dry_runs_the_restore_only(api, world, run_jobs):
     assert "--dry-run" in restore["argv"]
     assert world["sent"]["extracted"] == []
     assert all(
-        run["argv"][2] != "migrate"
+        run["argv"][2:] != ["migrate", "--noinput"]
         for run in world["hosts"].runs(TARGET)
         if len(run["argv"]) > 2
     )
+
+
+@pytest.mark.django_db
+def test_a_rehearsal_onto_an_unmigrated_target_checks_the_backup_here(
+    api, world, run_jobs
+):
+    from dbs.crypto.kdf import KDFParams
+    from dbs.engine import create_backup
+
+    world["hosts"].answer(
+        TARGET, [PYTHON, "manage.py", "migrate", "--check", "--noinput"], (1, "", "unapplied")
+    )
+    container = create_backup(
+        BACKUP_PASSPHRASE, kdf_params=KDFParams(time_cost=1, memory_cost=8192, parallelism=1)
+    )
+    real = stored_file(
+        world["source"], "web-1-20261009-040000Z.dbs", BackupFile.Kind.DBS, container
+    )
+
+    with run_jobs():
+        response = api.post(REDEPLOY, body(world, backup=str(real.pk)), format="json")
+
+    job = job_of(api, response)
+    assert job["status"] == "succeeded"
+    assert ("restore", "succeeded") in statuses(job)
+    assert world["sent"]["restores"] == []
+    restore = AuditEvent.objects.get(action="redeploy.restore")
+    assert restore.data == {"validated": True, "target_not_migrated": True}
 
 
 @pytest.mark.django_db
