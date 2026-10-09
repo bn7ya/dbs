@@ -8,7 +8,8 @@
        {% if health.last_backup_at %}— last backup {{ health.last_backup_at|date:"Y-m-d H:i" }}{% endif %}</p>
     <p><a class="button" href="{% url 'admin:dbs_backupschedule_changelist' %}">Change frequency</a>
        <a class="button" href="{% url 'admin:dbs_health' %}">Health detail</a>
-       <a class="button" href="{% url 'admin:dbs_auditevent_changelist' %}">Audit trail</a></p>
+       <a class="button" href="{% url 'admin:dbs_auditevent_changelist' %}">Audit trail</a>
+       <a class="button" href="{% url 'admin:dbs_connection' %}">Connection details</a></p>
   </section>
 
   <section class="dbs-card">

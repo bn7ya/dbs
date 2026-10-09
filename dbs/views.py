@@ -328,6 +328,23 @@ def health(request):
 
 @superuser_required
 @never_cache
+def connection(request):
+    from .connection import details
+
+    info = details()
+    return _page(
+        request,
+        "admin/dbs/connection.html",
+        {
+            "title": "Connection details",
+            "details": info,
+            "snippet": json.dumps(info, indent=2),
+        },
+    )
+
+
+@superuser_required
+@never_cache
 def download(request, pk):
     record = BackupRecord.objects.filter(pk=pk).first()
     if record is None:

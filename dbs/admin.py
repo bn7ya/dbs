@@ -223,6 +223,11 @@ class PanelAdmin(SuperuserOnlyAdmin):
                 name="dbs_health",
             ),
             path(
+                "connection/",
+                self.admin_site.admin_view(views.connection),
+                name="dbs_connection",
+            ),
+            path(
                 "wiki/",
                 self.admin_site.admin_view(views.wiki),
                 name="dbs_wiki_index",

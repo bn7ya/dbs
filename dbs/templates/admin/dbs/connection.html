@@ -1,0 +1,52 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block dbs_content %}
+<h1>Connection details</h1>
+<p class="dbs-lede">A DBS manager reaches this project over SSH and runs its management
+commands. Copy these details into the manager's <strong>Add a server</strong> step, or
+run <code>python manage.py dbs connection --json</code> on this server to get the same text.</p>
+
+<section class="dbs-card">
+  <table>
+    <tr><th>Host</th><td>{{ details.hostname }}</td></tr>
+    <tr><th>SSH user</th><td>{{ details.ssh_user|default:"-" }}</td></tr>
+    <tr><th>Project directory</th><td><code>{{ details.project_dir }}</code></td></tr>
+    <tr><th>Python</th><td><code>{{ details.python_path }}</code></td></tr>
+    <tr><th>manage.py</th><td><code>{{ details.manage_path|default:"-" }}</code></td></tr>
+    <tr><th>Settings module</th><td><code>{{ details.settings_module|default:"-" }}</code></td></tr>
+    <tr><th>Backup directory</th><td><code>{{ details.remote_backup_dir|default:"not set" }}</code></td></tr>
+    <tr><th>.env file</th><td><code>{{ details.env_path|default:"none found" }}</code></td></tr>
+    <tr><th>DBS version</th><td>{{ details.dbs_version }}</td></tr>
+    {% for key in details.host_keys %}
+    <tr><th>Host key</th><td>{{ key.type }} <code>{{ key.fingerprint }}</code></td></tr>
+    {% empty %}
+    <tr><th>Host key</th><td>No readable host key in /etc/ssh; compare the fingerprint the manager shows with <code>ssh-keyscan</code>.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section class="dbs-card">
+  <h2>Let the manager in</h2>
+  <p>Add the manager's public key as one line in
+     <code>~{{ details.ssh_user|default:"user" }}/.ssh/authorized_keys</code> for the user that
+     owns the project directory. The manager shows that line when it creates a key for this server.</p>
+</section>
+
+<section class="dbs-card">
+  <h2>Snippet</h2>
+  <pre id="dbs-snippet" class="dbs-output">{{ snippet }}</pre>
+  <p><button type="button" class="button" id="dbs-copy">Copy</button></p>
+</section>
+
+<script>
+(function () {
+  var button = document.getElementById("dbs-copy");
+  var snippet = document.getElementById("dbs-snippet");
+  button.addEventListener("click", function () {
+    navigator.clipboard.writeText(snippet.textContent).then(function () {
+      button.textContent = "Copied";
+    });
+  });
+})();
+</script>
+{% endblock %}
