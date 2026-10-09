@@ -42,6 +42,12 @@ export interface RestoreRequest {
   readonly rehearse: boolean;
   readonly account_password?: string;
   readonly server_name?: string;
+  readonly target_server?: string;
+}
+
+export interface TargetServer {
+  readonly id: string;
+  readonly name: string;
 }
 
 export interface RestoreResult {

@@ -1,6 +1,6 @@
 import type { Page } from '@core/http/api.types';
 import type { Job } from '@core/jobs/job.types';
-import type { BackupFile, BackupPlan } from '../data/backups.types';
+import type { BackupFile, BackupPlan, TargetServer } from '../data/backups.types';
 
 export const SERVER_ID = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001';
 
@@ -109,6 +109,10 @@ export const VERIFIED: BackupFile = {
   plan: PLAN.id,
   plan_name: PLAN.name,
 };
+
+export const STAGING: TargetServer = { id: '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002', name: 'staging-web' };
+
+export const TARGET_SERVERS: readonly TargetServer[] = [{ id: SERVER_ID, name: 'production-web' }, STAGING];
 
 export const JOB_ID = 9;
 

@@ -33,6 +33,7 @@ import type {
   PlanSettings,
   RestoreRequest,
   RestoreResult,
+  TargetServer,
   UnfinishedJob,
   UploadEvent,
   VerifyOutcome,
@@ -414,8 +415,21 @@ export class BackupsStore {
     return restore.rehearse ? 'rehearse' : 'restore';
   }
 
+  private readonly targetsWanted = signal(false);
+
+  private readonly targetsResource = rxResource({
+    params: () => (this.targetsWanted() ? (this.server() ?? undefined) : undefined),
+    stream: () => this.api.targetServers(),
+  });
+
+  readonly targetServers = computed<readonly TargetServer[]>(() => {
+    const page = this.targetsResource.hasValue() ? this.targetsResource.value() : undefined;
+    return (page?.results ?? []).filter((each) => each.id !== this.server());
+  });
+
   resetRestoreForm(): void {
     this.restoreError.set(null);
+    this.targetsWanted.set(true);
   }
 
   async restore(file: BackupFile, request: RestoreRequest): Promise<boolean> {

@@ -12,11 +12,14 @@ import type {
   PlanListQuery,
   PlanUpdate,
   RestoreRequest,
+  TargetServer,
   UnfinishedJob,
   UploadEvent,
 } from './backups.types';
 
 const UNFINISHED_JOBS_PAGE_SIZE = 100;
+
+const TARGET_SERVERS_PAGE_SIZE = 100;
 
 @Injectable({ providedIn: 'root' })
 export class BackupsApi {
@@ -45,6 +48,11 @@ export class BackupsApi {
 
   restore(id: string, request: RestoreRequest): Observable<JobStarted> {
     return this.http.post<JobStarted>(`${this.base}/${id}/restore/`, request);
+  }
+
+  targetServers(): Observable<Page<TargetServer>> {
+    const params = new HttpParams().set('page', 1).set('page_size', TARGET_SERVERS_PAGE_SIZE);
+    return this.http.get<Page<TargetServer>>('/api/servers/', { params });
   }
 
   remove(id: string): Observable<void> {

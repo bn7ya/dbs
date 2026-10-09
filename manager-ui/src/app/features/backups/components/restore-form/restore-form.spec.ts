@@ -1,6 +1,9 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { MATERIAL_ANIMATIONS } from '@angular/material/core';
+import { MatSelectHarness } from '@angular/material/select/testing';
 import { provideRouter } from '@angular/router';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { NEVER } from 'rxjs';
@@ -13,7 +16,7 @@ import { JobWatcher } from '@core/jobs/job-watcher';
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
 import { BackupsStore } from '../../state/backups.store';
-import { FILE, JOB_ID, SERVER_ID } from '../../testing/backups.fixtures';
+import { FILE, JOB_ID, SERVER_ID, STAGING, TARGET_SERVERS, pageOf } from '../../testing/backups.fixtures';
 import { RestoreForm } from './restore-form';
 
 const PASSWORD = 'correct-horse-battery-staple';
@@ -23,7 +26,7 @@ describe('RestoreForm', () => {
   let close: ReturnType<typeof vi.fn>;
   let fixture: ComponentFixture<RestoreForm>;
 
-  const open = (): RestoreForm => {
+  const open = async (targets = TARGET_SERVERS): Promise<RestoreForm> => {
     close = vi.fn();
     localStorage.setItem('locale', 'en');
     TestBed.configureTestingModule({
@@ -36,6 +39,7 @@ describe('RestoreForm', () => {
         provideRouter([]),
         { provide: MatDialogRef, useValue: { close } },
         { provide: MAT_DIALOG_DATA, useValue: { data: { file: FILE } } },
+        { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });
@@ -43,6 +47,13 @@ describe('RestoreForm', () => {
     vi.spyOn(TestBed.inject(Toaster), 'add').mockReturnValue(undefined);
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(RestoreForm);
+    (
+      await vi.waitFor(() => {
+        TestBed.tick();
+        return http.expectOne((request) => request.url === '/api/servers/');
+      })
+    ).flush(pageOf(targets));
+    TestBed.tick();
     return fixture.componentInstance;
   };
 
@@ -60,8 +71,8 @@ describe('RestoreForm', () => {
     vi.restoreAllMocks();
   });
 
-  it('names the file and the server, and starts on merge', () => {
-    const form = open();
+  it('names the file and the server, and starts on merge', async () => {
+    const form = await open();
     const text = rendered().textContent ?? '';
 
     expect(text).toContain(FILE.name);
@@ -74,7 +85,7 @@ describe('RestoreForm', () => {
   });
 
   it('rehearses with neither the password nor the name, then closes', async () => {
-    const form = open();
+    const form = await open();
     form.setMode('replace');
 
     const rehearsing = form.rehearse();
@@ -89,7 +100,7 @@ describe('RestoreForm', () => {
   });
 
   it('holds a restore for real until the password is there and the name matches, and says why', async () => {
-    const form = open();
+    const form = await open();
 
     await form.restore();
 
@@ -109,7 +120,7 @@ describe('RestoreForm', () => {
   });
 
   it('restores for real with the password and the name, spaces around it aside', async () => {
-    const form = open();
+    const form = await open();
     form.setAccountPassword(PASSWORD);
     form.setServerName(`  ${FILE.server_name} `);
 
@@ -128,7 +139,7 @@ describe('RestoreForm', () => {
   });
 
   it('says a wrong password under its field, and stops once it is typed again', async () => {
-    const form = open();
+    const form = await open();
     form.setAccountPassword('wrong');
     form.setServerName(FILE.server_name);
 
@@ -148,8 +159,55 @@ describe('RestoreForm', () => {
     expect(form.passwordRejected()).toBe(false);
   });
 
+  it('offers every other server, and restores onto the one chosen with its name typed', async () => {
+    const form = await open();
+    const select = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatSelectHarness);
+    await select.open();
+    const options = await select.getOptions();
+    expect(await Promise.all(options.map((option) => option.getText()))).toEqual(['This server', STAGING.name]);
+    await options[1].click();
+    expect(form.targetServer()).toBe(STAGING.id);
+    expect(rendered().textContent).toContain(`Type \u2068${STAGING.name}\u2069 to restore.`);
+
+    form.setAccountPassword(PASSWORD);
+    form.setServerName(FILE.server_name);
+    await form.restore();
+    http.expectNone(`/api/backups/${FILE.id}/restore/`);
+    expect(form.nameError()).toBe('name_mismatch');
+
+    form.setServerName(STAGING.name);
+    const restoring = form.restore();
+    const request = restoreRequest();
+    expect(request.request.body).toEqual({
+      mode: 'merge',
+      rehearse: false,
+      account_password: PASSWORD,
+      server_name: STAGING.name,
+      target_server: STAGING.id,
+    });
+    request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
+    await restoring;
+    expect(close).toHaveBeenCalledWith(true);
+  });
+
+  it('rehearses onto the other server too', async () => {
+    const form = await open();
+    form.targetServer.set(STAGING.id);
+
+    const rehearsing = form.rehearse();
+    const request = restoreRequest();
+    expect(request.request.body).toEqual({ mode: 'merge', rehearse: true, target_server: STAGING.id });
+    request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
+    await rehearsing;
+  });
+
+  it('leaves the choice out when there is no other server', async () => {
+    await open([TARGET_SERVERS[0]]);
+    expect(rendered().querySelector('mat-select')).toBeNull();
+  });
+
   it('says above the form what is not about a field', async () => {
-    const form = open();
+    const form = await open();
 
     const rehearsing = form.rehearse();
     restoreRequest().flush(

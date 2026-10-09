@@ -152,6 +152,9 @@
       "body": "Restoring loads this backup into the server's database and files. A rehearsal runs the whole restore, then rolls it back.",
       "backup": "Backup",
       "server": "Server",
+      "target": "Restore onto",
+      "sameServer": "This server",
+      "targetHint": "To restore onto another server, choose it here.",
       "mode": "How",
       "modes": {
         "merge": "Merge",

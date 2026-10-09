@@ -16,6 +16,29 @@
     </dl>
   </div>
 
+  @if (targetServers().length > 0) {
+    <mat-form-field>
+      <mat-label>{{ 'backups.restore.target' | t }}</mat-label>
+      <mat-select
+        name="target_server"
+        [canSelectNullableOptions]="true"
+        [appFieldError]="targetError()"
+        [ngModel]="targetServer()"
+        [ngModelOptions]="{ standalone: true }"
+        (ngModelChange)="targetServer.set($event)"
+      >
+        <mat-option [value]="null">{{ 'backups.restore.sameServer' | t }}</mat-option>
+        @for (each of targetServers(); track each.id) {
+          <mat-option [value]="each.id"><bdi dir="auto">{{ each.name }}</bdi></mat-option>
+        }
+      </mat-select>
+      <mat-hint>{{ 'backups.restore.targetHint' | t }}</mat-hint>
+      @if (targetError(); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
+  }
+
   <fieldset class="restore-form__choice" [attr.aria-describedby]="modeId + '-hint'">
     <legend class="text-label">{{ 'backups.restore.mode' | t }}</legend>
     <mat-radio-group
@@ -56,7 +79,7 @@
       [ngModel]="serverName()"
       (ngModelChange)="setServerName($event)"
     />
-    <mat-hint>{{ 'backups.restore.serverNameHint' | t: { name: '⁨' + file.server_name + '⁩' } }}</mat-hint>
+    <mat-hint>{{ 'backups.restore.serverNameHint' | t: { name: '⁨' + restoreOnto() + '⁩' } }}</mat-hint>
     @if (nameErrorText(); as message) {
       <mat-error>{{ message }}</mat-error>
     }
