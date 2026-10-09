@@ -8,7 +8,6 @@ import { Skeleton } from 'primeng/skeleton';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { injectDialogRef } from '@shared/dialogs/dialogs';
-import { Field } from '@shared/field/field';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { uniqueId } from '@shared/unique-id';
 import type { HostKey } from '../../data/servers.types';
@@ -23,7 +22,6 @@ import { HostKeyFacts } from '../host-key-facts/host-key-facts';
     Checkbox,
     Message,
     Skeleton,
-    Field,
     PasswordInput,
     HostKeyFacts,
     ErrorTextPipe,

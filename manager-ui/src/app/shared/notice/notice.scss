@@ -1,0 +1,42 @@
+:host {
+  display: flex;
+  gap: var(--app-space-3);
+  align-items: flex-start;
+  padding-block: var(--app-space-3);
+  padding-inline: var(--app-space-4);
+  color: var(--app-color-on-info-container);
+  background: var(--app-color-info-container);
+  border-radius: var(--app-radius-md);
+}
+
+:host(.notice--success) {
+  color: var(--app-color-on-success-container);
+  background: var(--app-color-success-container);
+}
+
+:host(.notice--warning) {
+  color: var(--app-color-on-warning-container);
+  background: var(--app-color-warning-container);
+}
+
+:host(.notice--danger) {
+  color: var(--app-color-on-danger-container);
+  background: var(--app-color-danger-container);
+}
+
+.notice__icon {
+  flex: none;
+  margin-block-start: var(--app-space-1);
+}
+
+.notice__body {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.notice__close {
+  flex: none;
+  margin-block: calc(-1 * var(--app-space-3));
+  margin-inline-end: calc(-1 * var(--app-space-3));
+  color: inherit;
+}

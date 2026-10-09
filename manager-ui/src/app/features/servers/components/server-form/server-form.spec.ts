@@ -2,7 +2,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
@@ -26,8 +26,8 @@ describe('ServerForm', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
-        { provide: DynamicDialogRef, useValue: { close } },
-        { provide: DynamicDialogConfig, useValue: { data } },
+        { provide: MatDialogRef, useValue: { close } },
+        { provide: MAT_DIALOG_DATA, useValue: { data } },
       ],
     });
     http = TestBed.inject(HttpTestingController);

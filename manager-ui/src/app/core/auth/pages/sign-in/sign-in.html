@@ -1,48 +1,45 @@
 <main id="main" class="sign-in">
-  <p-card class="sign-in__card">
-    <div class="sign-in__content">
+  <mat-card appearance="outlined" class="sign-in__card">
+    <mat-card-content class="sign-in__content">
       <header class="sign-in__header">
         <h1>{{ 'auth.signIn.title' | t }}</h1>
         <p class="text-secondary">{{ 'auth.signIn.subtitle' | t }}</p>
       </header>
 
       @if (error(); as failure) {
-        <p-message severity="error">{{ failure | errorText }}</p-message>
+        <app-notice severity="danger">{{ failure | errorText }}</app-notice>
       }
 
       <form class="sign-in__form" novalidate (ngSubmit)="submit()">
-        <app-field
-          [label]="'auth.signIn.username' | t"
-          [error]="usernameInvalid() ? ('auth.errors.usernameRequired' | t) : ''"
-        >
+        <mat-form-field>
+          <mat-label>{{ 'auth.signIn.username' | t }}</mat-label>
           <input
-            pInputText
-            appFieldControl
+            matInput
             name="username"
             autocomplete="username"
             dir="auto"
-            fluid
+            [appFieldError]="usernameInvalid() ? ('auth.errors.usernameRequired' | t) : ''"
             [placeholder]="'auth.signIn.usernamePlaceholder' | t"
             [ngModel]="username()"
             (ngModelChange)="username.set($event)"
           />
-        </app-field>
+          @if (usernameInvalid()) {
+            <mat-error>{{ 'auth.errors.usernameRequired' | t }}</mat-error>
+          }
+        </mat-form-field>
 
-        <app-field
+        <app-password-input
           [label]="'auth.signIn.password' | t"
           [error]="passwordInvalid() ? ('auth.errors.passwordRequired' | t) : ''"
-        >
-          <app-password-input
-            name="password"
-            [placeholder]="'auth.signIn.passwordPlaceholder' | t"
-            [ngModel]="password()"
-            (ngModelChange)="password.set($event)"
-          />
-        </app-field>
+          name="password"
+          [placeholder]="'auth.signIn.passwordPlaceholder' | t"
+          [ngModel]="password()"
+          (ngModelChange)="password.set($event)"
+        />
 
-        <button pButton class="sign-in__submit" type="submit" fluid [disabled]="busy()" [attr.aria-busy]="busy()">
+        <button matButton="filled" class="sign-in__submit" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
           @if (busy()) {
-            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
           }
           {{ (busy() ? 'auth.signIn.working' : 'auth.signIn.submit') | t }}
         </button>
@@ -51,6 +48,6 @@
       <footer>
         <app-locale-switcher />
       </footer>
-    </div>
-  </p-card>
+    </mat-card-content>
+  </mat-card>
 </main>

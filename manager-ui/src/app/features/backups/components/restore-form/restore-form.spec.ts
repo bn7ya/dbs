@@ -2,7 +2,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MessageService } from 'primeng/api';
 import { providePrimeNG } from 'primeng/config';
 import { NEVER } from 'rxjs';
@@ -36,10 +36,10 @@ describe('RestoreForm', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
-        { provide: DynamicDialogRef, useValue: { close } },
+        { provide: MatDialogRef, useValue: { close } },
         providePrimeNG(),
         MessageService,
-        { provide: DynamicDialogConfig, useValue: { data: { file: FILE } } },
+        { provide: MAT_DIALOG_DATA, useValue: { data: { file: FILE } } },
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });
@@ -100,7 +100,7 @@ describe('RestoreForm', () => {
     http.expectNone(`/api/backups/${FILE.id}/restore/`);
     expect(form.passwordMissing()).toBe(true);
     expect(form.nameError()).toBe('name_mismatch');
-    const fields = rendered().querySelectorAll('.field__error');
+    const fields = rendered().querySelectorAll('.field__error, mat-error');
     expect(Array.from(fields, (each) => each.textContent?.trim())).toEqual([
       'Enter your password.',
       "Type the server's name exactly as shown.",

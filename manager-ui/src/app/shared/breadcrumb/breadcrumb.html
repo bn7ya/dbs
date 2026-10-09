@@ -1,0 +1,24 @@
+<nav class="breadcrumb" [attr.aria-label]="label()">
+  <ol class="breadcrumb__list" role="list">
+    @for (item of items(); track $index; let last = $last) {
+      <li class="breadcrumb__item">
+        @if (last) {
+          <span class="breadcrumb__link" aria-current="page">
+            @if (item.icon) {
+              <i [class]="item.icon" aria-hidden="true"></i>
+            }
+            <bdi dir="auto" [class.breadcrumb__code]="code()">{{ item.label }}</bdi>
+          </span>
+        } @else {
+          <a class="breadcrumb__link" [routerLink]="item.link" [queryParams]="item.queryParams">
+            @if (item.icon) {
+              <i [class]="item.icon" aria-hidden="true"></i>
+            }
+            <bdi dir="auto" [class.breadcrumb__code]="code()">{{ item.label }}</bdi>
+          </a>
+          <i class="fa-solid fa-chevron-right breadcrumb__separator" aria-hidden="true"></i>
+        }
+      </li>
+    }
+  </ol>
+</nav>

@@ -1,13 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { SelectButton } from 'primeng/selectbutton';
+import { MatButtonToggle, MatButtonToggleGroup } from '@angular/material/button-toggle';
 
 import { LocaleStore } from '../locale.store';
 import type { Locale, LocaleOption } from '../locale.types';
 
 @Component({
   selector: 'app-locale-switcher',
-  imports: [FormsModule, SelectButton],
+  imports: [MatButtonToggleGroup, MatButtonToggle],
   templateUrl: './locale-switcher.html',
   styleUrl: './locale-switcher.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -3,7 +3,7 @@
 @use "fonts";
 @use "tokens";
 
-@layer reset, base, primeng, app;
+@layer reset, base, primeng, material, app;
 
 @layer reset {
   @include meta.load-css("reset");
@@ -13,6 +13,10 @@
   @include cdk.a11y-visually-hidden();
   @include meta.load-css("base");
   @include meta.load-css("typography");
+}
+
+@layer material {
+  @include meta.load-css("material");
 }
 
 @layer app {

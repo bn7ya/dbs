@@ -50,18 +50,15 @@
             }
           </div>
 
-          <app-field
+          <app-password-input
             [label]="'password.label' | t"
             [hint]="'servers.review.passwordHint' | t"
             [error]="passwordMissing() ? ('password.required' | t) : rejected() ? ('invalid_password' | errorText) : ''"
-          >
-            <app-password-input
-              name="password"
-              autocomplete="current-password"
-              [ngModel]="password()"
-              (ngModelChange)="password.set($event)"
-            />
-          </app-field>
+            name="password"
+            autocomplete="current-password"
+            [ngModel]="password()"
+            (ngModelChange)="password.set($event)"
+          />
         }
       }
     </section>

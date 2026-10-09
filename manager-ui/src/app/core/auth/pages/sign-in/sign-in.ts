@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatButton } from '@angular/material/button';
+import { MatCard, MatCardContent } from '@angular/material/card';
+import { MatError, MatFormField, MatLabel } from '@angular/material/form-field';
+import { MatInput } from '@angular/material/input';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ButtonDirective } from 'primeng/button';
-import { Card } from 'primeng/card';
-import { InputText } from 'primeng/inputtext';
-import { Message } from 'primeng/message';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleSwitcher } from '@core/i18n/locale-switcher/locale-switcher';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
-import { Field } from '@shared/field/field';
-import { FieldControl } from '@shared/field/field-control';
+import { FieldError } from '@shared/field/field-error';
+import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { AuthStore } from '../../state/auth.store';
 
@@ -18,13 +18,16 @@ import { AuthStore } from '../../state/auth.store';
   selector: 'app-sign-in',
   imports: [
     FormsModule,
-    ButtonDirective,
-    Card,
-    InputText,
-    Message,
+    MatButton,
+    MatCard,
+    MatCardContent,
+    MatFormField,
+    MatLabel,
+    MatError,
+    MatInput,
+    Notice,
     PasswordInput,
-    Field,
-    FieldControl,
+    FieldError,
     LocaleSwitcher,
     TranslatePipe,
     ErrorTextPipe,

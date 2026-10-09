@@ -1,20 +1,20 @@
 import { Injectable, inject } from '@angular/core';
-import { MessageService } from 'primeng/api';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
-import type { ToastMessage, ToastSeverity } from './toaster.types';
-
-const PRIME_SEVERITY: Readonly<Record<ToastSeverity, 'success' | 'info' | 'warn' | 'error'>> = {
-  success: 'success',
-  info: 'info',
-  warning: 'warn',
-  danger: 'error',
-};
+import { Toast } from './toast/toast';
+import { TOAST_DURATION_MS, type ToastMessage } from './toaster.types';
 
 @Injectable({ providedIn: 'root' })
 export class Toaster {
-  private readonly messages = inject(MessageService);
+  private readonly snackBar = inject(MatSnackBar);
 
   add(message: ToastMessage): void {
-    this.messages.add({ severity: PRIME_SEVERITY[message.severity], summary: message.summary, detail: message.detail });
+    this.snackBar.openFromComponent(Toast, {
+      data: message,
+      duration: TOAST_DURATION_MS,
+      horizontalPosition: 'end',
+      verticalPosition: 'top',
+      politeness: message.severity === 'danger' ? 'assertive' : 'polite',
+    });
   }
 }

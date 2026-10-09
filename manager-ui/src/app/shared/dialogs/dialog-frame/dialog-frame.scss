@@ -1,0 +1,20 @@
+:host {
+  display: grid;
+  grid-template:
+    "title close" auto
+    "content content" 1fr / minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.dialog-frame__title {
+  grid-area: title;
+}
+
+.dialog-frame__content {
+  grid-area: content;
+}
+
+.dialog-frame__close {
+  grid-area: close;
+  margin-inline-end: var(--app-space-3);
+}

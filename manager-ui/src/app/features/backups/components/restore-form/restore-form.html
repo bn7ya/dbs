@@ -36,18 +36,15 @@
     <small class="text-sm text-secondary" [id]="modeId + '-hint'">{{ 'backups.restore.modeHint.' + mode() | t }}</small>
   </fieldset>
 
-  <app-field
+  <app-password-input
     [label]="'password.label' | t"
     [hint]="'backups.restore.passwordHint' | t"
     [error]="passwordError()"
-  >
-    <app-password-input
-      name="account_password"
-      autocomplete="current-password"
-      [ngModel]="accountPassword()"
-      (ngModelChange)="setAccountPassword($event)"
-    />
-  </app-field>
+    name="account_password"
+    autocomplete="current-password"
+    [ngModel]="accountPassword()"
+    (ngModelChange)="setAccountPassword($event)"
+  />
 
   <!-- FSI … PDI: the name keeps its own direction inside the hint in either language. -->
   <app-field

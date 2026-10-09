@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "DBS Interface",
+    "name": "DBS",
     "skipToContent": "Skip to content"
   },
   "nav": {
@@ -55,7 +55,7 @@
     "name_taken": "This name is already in use.",
     "absolute_path_required": "Use a full path that starts with / and has no .. in it.",
     "not_found": "This no longer exists.",
-    "network": "Can't reach DBS Interface. Check your connection and try again.",
+    "network": "Can't reach DBS. Check your connection and try again.",
     "invalid_password": "The password is not correct.",
     "authentication_failed": "The username or password is not correct.",
     "host_key_changed": "The server presented a different host key.",
@@ -109,6 +109,7 @@
     "previousPage": "Previous page",
     "page": "Page {page}",
     "rowsPerPage": "Rows per page",
-    "empty": "No results found"
+    "empty": "No results found",
+    "range": "{start}–{end} of {total}"
   }
 }

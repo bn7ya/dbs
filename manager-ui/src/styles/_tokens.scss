@@ -47,10 +47,19 @@
   --app-color-primary: light-dark(#7a5c12, #e2bd62);
   --app-color-on-primary: light-dark(#ffffff, #241a00);
   --app-color-danger: light-dark(#b3261e, #ffb4ab);
+  --app-color-on-danger: light-dark(#ffffff, #690005);
   --app-color-danger-container: light-dark(#fce8e6, #3d1512);
   --app-color-on-danger-container: light-dark(#601410, #ffdad6);
   --app-color-success: light-dark(#1b6e3c, #7fd6a0);
+  --app-color-success-container: light-dark(#e3f4e8, #10301c);
+  --app-color-on-success-container: light-dark(#0f3d21, #b8f0cb);
   --app-color-warning: light-dark(#8a5300, #ffc566);
+  --app-color-warning-container: light-dark(#fdf0dc, #3a2600);
+  --app-color-on-warning-container: light-dark(#4a2c00, #ffddb0);
+  --app-color-info: light-dark(#2e5a9c, #a8c7fa);
+  --app-color-info-container: light-dark(#e6eefb, #142a4a);
+  --app-color-on-info-container: light-dark(#13305c, #d6e3ff);
+  --app-color-neutral-container: light-dark(#ecebe7, #2a2a2d);
   --app-color-focus: light-dark(#0b57d0, #a8c7fa);
 
   --app-shadow-1: 0 0.0625rem 0.125rem rgb(0 0 0 / 8%), 0 0.25rem 0.75rem rgb(0 0 0 / 6%);
@@ -58,6 +67,7 @@
 
   --app-duration-short: 120ms;
   --app-duration-medium: 240ms;
+  --app-duration-shimmer: 1.6s;
   --app-easing-standard: cubic-bezier(0.2, 0, 0, 1);
 
   --app-layer-skip-link: 1200;

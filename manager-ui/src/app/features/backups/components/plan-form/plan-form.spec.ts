@@ -2,7 +2,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MessageService } from 'primeng/api';
 import { providePrimeNG } from 'primeng/config';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -33,10 +33,10 @@ describe('PlanForm', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
-        { provide: DynamicDialogRef, useValue: { close } },
+        { provide: MatDialogRef, useValue: { close } },
         providePrimeNG(),
         MessageService,
-        { provide: DynamicDialogConfig, useValue: { data } },
+        { provide: MAT_DIALOG_DATA, useValue: { data } },
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });

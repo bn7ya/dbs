@@ -145,31 +145,25 @@
                 ></textarea>
               </app-field>
 
-              <app-field
+              <app-password-input
                 [label]="'servers.form.keyPassphrase.label' | t"
                 [hint]="(keyPassphraseSaved() ? 'servers.form.secretSaved' : 'servers.form.keyPassphrase.hint') | t"
                 [error]="error('key_passphrase') | errorText"
-              >
-                <app-password-input
-                  name="key_passphrase"
-                  autocomplete="new-password"
-                  [ngModel]="draft().key_passphrase"
-                  (ngModelChange)="update('key_passphrase', $event)"
-                />
-              </app-field>
+                name="key_passphrase"
+                autocomplete="new-password"
+                [ngModel]="draft().key_passphrase"
+                (ngModelChange)="update('key_passphrase', $event)"
+              />
             } @else {
-              <app-field
+              <app-password-input
                 [label]="'servers.form.password.label' | t"
                 [hint]="passwordSaved() ? ('servers.form.secretSaved' | t) : ''"
                 [error]="error('password') | errorText"
-              >
-                <app-password-input
-                  name="password"
-                  autocomplete="new-password"
-                  [ngModel]="draft().password"
-                  (ngModelChange)="update('password', $event)"
-                />
-              </app-field>
+                name="password"
+                autocomplete="new-password"
+                [ngModel]="draft().password"
+                (ngModelChange)="update('password', $event)"
+              />
             }
           </div>
         </ng-template>
@@ -378,39 +372,27 @@
             </app-field>
 
             @if (!editing) {
-              <app-field
+              <app-password-input
                 [label]="'servers.form.backupPassphrase.label' | t"
                 [hint]="'servers.form.backupPassphrase.hint' | t"
                 [error]="error('backup_passphrase') | errorText"
-              >
-                <app-password-input
-                  name="backup_passphrase"
-                  autocomplete="new-password"
-                  [ngModel]="draft().backup_passphrase"
-                  (ngModelChange)="update('backup_passphrase', $event)"
-                />
-              </app-field>
+                name="backup_passphrase"
+                autocomplete="new-password"
+                [ngModel]="draft().backup_passphrase"
+                (ngModelChange)="update('backup_passphrase', $event)"
+              />
             }
 
             @if (passwordShown()) {
-              <app-field
+              <app-password-input
                 [label]="'password.label' | t"
                 [hint]="'servers.form.accountPassword.hint' | t"
-                [error]="
-                  passwordMissing()
-                    ? ('password.required' | t)
-                    : passwordRejected()
-                      ? ('invalid_password' | errorText)
-                      : ''
-                "
-              >
-                <app-password-input
-                  name="account_password"
-                  autocomplete="current-password"
-                  [ngModel]="accountPassword()"
-                  (ngModelChange)="setAccountPassword($event)"
-                />
-              </app-field>
+                [error]="passwordMissing() ? ('password.required' | t) : passwordRejected() ? ('invalid_password' | errorText) : ''"
+                name="account_password"
+                autocomplete="current-password"
+                [ngModel]="accountPassword()"
+                (ngModelChange)="setAccountPassword($event)"
+              />
             }
           </div>
         </ng-template>

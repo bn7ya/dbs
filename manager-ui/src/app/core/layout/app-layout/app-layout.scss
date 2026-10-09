@@ -23,13 +23,8 @@
   align-items: center;
   justify-content: space-between;
   padding-block: var(--app-space-2);
-  padding-inline: var(--app-space-4);
-  background: var(--app-color-surface);
+  white-space: normal;
   border-block-end: var(--app-border-width) solid var(--app-color-outline);
-
-  @include from($screen-md) {
-    padding-inline: var(--app-space-6);
-  }
 }
 
 .app-layout__brand {
@@ -46,10 +41,8 @@
   align-items: center;
 }
 
-.app-layout__user {
-  display: inline-flex;
-  gap: var(--app-space-2);
-  align-items: center;
+.app-layout__menu-icon {
+  margin-inline-end: var(--app-space-3);
 }
 
 .app-layout__nav {
@@ -57,6 +50,7 @@
   padding: var(--app-space-3);
 
   @include from($screen-md) {
+    min-inline-size: $nav-width;
     padding-block: var(--app-space-6);
     padding-inline: var(--app-space-4) 0;
   }

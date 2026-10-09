@@ -1,0 +1,18 @@
+<h2 mat-dialog-title>{{ options.title }}</h2>
+<mat-dialog-content class="confirm-dialog__content">
+  <p>{{ options.message }}</p>
+  @if (options.detail) {
+    <p class="text-secondary">{{ options.detail }}</p>
+  }
+</mat-dialog-content>
+<mat-dialog-actions>
+  <button matButton type="button" [mat-dialog-close]="false">{{ options.rejectLabel }}</button>
+  <button
+    matButton="filled"
+    type="button"
+    [class.app-danger]="options.acceptSeverity === 'danger'"
+    [mat-dialog-close]="true"
+  >
+    {{ options.acceptLabel }}
+  </button>
+</mat-dialog-actions>

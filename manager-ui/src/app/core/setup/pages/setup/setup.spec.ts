@@ -21,7 +21,7 @@ describe('SetupPage', () => {
   };
 
   const errors = (): string[] =>
-    Array.from(rendered().querySelectorAll('.field__error')).map((node) => node.textContent?.trim() ?? '');
+    Array.from(rendered().querySelectorAll('mat-error')).map((node) => node.textContent?.trim() ?? '');
 
   const fill = (): void => {
     page.username.set(' sara ');

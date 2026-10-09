@@ -1,42 +1,34 @@
-import { EnvironmentInjector, Injectable, Injector, inject, runInInjectionContext, type Type } from '@angular/core';
-import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { EMPTY, firstValueFrom, map, take, type Observable } from 'rxjs';
+import { Injectable, Injector, inject, type Type } from '@angular/core';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { firstValueFrom, shareReplay, type Observable } from 'rxjs';
 
-import { LocaleStore } from '@core/i18n/locale.store';
-import type { DialogHandle, DialogOptions } from './dialogs.types';
+import { DialogFrame } from './dialog-frame/dialog-frame';
+import type { DialogHandle, DialogOptions, DialogPayload } from './dialogs.types';
 
 @Injectable()
 export class Dialogs {
-  private readonly locale = inject(LocaleStore);
-  // DynamicDialog builds its content from the injector the service was made in; made here, a feature store provided by the route stays visible.
-  private readonly service = runInInjectionContext(
-    Injector.create({ providers: [], parent: inject(EnvironmentInjector) }),
-    () => new DialogService(),
-  );
+  private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
 
   open<R, D = undefined>(component: Type<unknown>, options: DialogOptions<D>): DialogHandle<R> {
-    const ref: DynamicDialogRef<unknown> | null = this.service.open(component, {
-      header: this.locale.translate(options.titleKey),
-      data: options.data,
-      modal: true,
-      closable: true,
-      closeOnEscape: true,
-      rtl: this.locale.isRtl(),
-      styleClass: `app-dialog app-dialog--${options.size ?? 'md'}`,
+    const ref = this.dialog.open<DialogFrame, DialogPayload<D | undefined>, R>(DialogFrame, {
+      data: { titleKey: options.titleKey, component, data: options.data },
+      injector: this.injector,
+      panelClass: ['app-dialog', `app-dialog--${options.size ?? 'md'}`],
+      maxWidth: '',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
     });
-    const closed: Observable<R | undefined> =
-      ref === null ? EMPTY : ref.onClose.pipe(take(1), map((result: unknown) => result as R | undefined));
-    return {
-      closed,
-      whenClosed: () => firstValueFrom(closed, { defaultValue: undefined }),
-    };
+    const closed: Observable<R | undefined> = ref.afterClosed().pipe(shareReplay(1));
+    const result = firstValueFrom(closed, { defaultValue: undefined });
+    return { closed, whenClosed: () => result };
   }
 }
 
 export function injectDialogData<D>(): D {
-  return inject(DynamicDialogConfig<D>).data as D;
+  return inject<DialogPayload<D>>(MAT_DIALOG_DATA).data;
 }
 
-export function injectDialogRef<R>(): DynamicDialogRef<unknown> & { close(result?: R): void } {
-  return inject(DynamicDialogRef);
+export function injectDialogRef<R>(): MatDialogRef<unknown, R> {
+  return inject<MatDialogRef<unknown, R>>(MatDialogRef);
 }

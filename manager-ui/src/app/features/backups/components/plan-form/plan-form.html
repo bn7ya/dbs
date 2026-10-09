@@ -197,18 +197,15 @@
   </app-field>
 
   @if (passwordShown()) {
-    <app-field
+    <app-password-input
       [label]="'password.label' | t"
       [hint]="'backups.plans.form.passwordHint' | t"
       [error]="passwordError()"
-    >
-      <app-password-input
-        name="account_password"
-        autocomplete="current-password"
-        [ngModel]="accountPassword()"
-        (ngModelChange)="setAccountPassword($event)"
-      />
-    </app-field>
+      name="account_password"
+      autocomplete="current-password"
+      [ngModel]="accountPassword()"
+      (ngModelChange)="setAccountPassword($event)"
+    />
   }
 
   <div class="dialog-actions">

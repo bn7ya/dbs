@@ -435,7 +435,7 @@ describe('EnvfilesPage', () => {
     await settle();
     harness.detectChanges();
 
-    expect(element().querySelector('p-message')?.textContent).toContain("Can't reach DBS Interface.");
+    expect(element().querySelector('p-message')?.textContent).toContain("Can't reach DBS.");
     buttonNamed('Try again')?.click();
     TestBed.tick();
     listRequest().flush(pageOf([VERSION]));

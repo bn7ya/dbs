@@ -1,18 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ButtonDirective } from 'primeng/button';
-import { Message } from 'primeng/message';
+import { MatButton } from '@angular/material/button';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { injectDialogData, injectDialogRef } from '../dialogs/dialogs';
-import { Field } from '../field/field';
+import { Notice } from '../notice/notice';
 import { PasswordInput } from '../password-input/password-input';
 import type { PasswordPromptData } from './password-prompt.types';
 
 @Component({
   selector: 'app-password-prompt',
-  imports: [FormsModule, ButtonDirective, Message, PasswordInput, Field, ErrorTextPipe, TranslatePipe],
+  imports: [FormsModule, MatButton, Notice, PasswordInput, ErrorTextPipe, TranslatePipe],
   templateUrl: './password-prompt.html',
   styleUrl: './password-prompt.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

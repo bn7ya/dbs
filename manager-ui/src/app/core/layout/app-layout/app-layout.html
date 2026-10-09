@@ -1,21 +1,38 @@
 <div class="app-layout">
-  <header class="app-layout__header">
+  <mat-toolbar class="app-layout__header">
     <a class="app-layout__brand" routerLink="/">{{ 'app.name' | t }}</a>
 
     <div class="app-layout__account">
-      <p class="app-layout__user text-secondary">
-        <i class="fa-solid fa-circle-user" aria-hidden="true"></i>
-        <bdi dir="auto">{{ displayName() }}</bdi>
-      </p>
       <app-locale-switcher />
-      <button pButton type="button" severity="secondary" variant="text" size="small" [disabled]="signingOut()" (click)="signOut()">
-        {{ 'auth.signOut' | t }}
+      <button matButton type="button" [matMenuTriggerFor]="account" [disabled]="signingOut()">
+        <i matButtonIcon class="fa-solid fa-circle-user" aria-hidden="true"></i>
+        <bdi dir="auto">{{ displayName() }}</bdi>
       </button>
+      <mat-menu #account="matMenu" xPosition="before">
+        <button mat-menu-item type="button" (click)="signOut()">
+          <i class="fa-solid fa-right-from-bracket app-layout__menu-icon" aria-hidden="true"></i>
+          <span>{{ 'auth.signOut' | t }}</span>
+        </button>
+      </mat-menu>
     </div>
-  </header>
+  </mat-toolbar>
 
   <nav class="app-layout__nav" [attr.aria-label]="'nav.label' | t">
-    <p-menu [model]="items()" />
+    <mat-nav-list>
+      @for (section of sections; track section.path) {
+        <a
+          mat-list-item
+          routerLinkActive
+          #active="routerLinkActive"
+          [routerLink]="['/', section.path]"
+          [activated]="active.isActive"
+          [attr.aria-current]="active.isActive ? 'page' : null"
+        >
+          <i matListItemIcon [class]="section.icon" aria-hidden="true"></i>
+          <span matListItemTitle>{{ section.labelKey | t }}</span>
+        </a>
+      }
+    </mat-nav-list>
   </nav>
 
   <main id="main" class="app-layout__content">
