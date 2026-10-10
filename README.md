@@ -233,6 +233,10 @@ pip install django-dbs
 django_dbs run
 ```
 
+If the shell says `django_dbs` is not recognized, pip put the script in a folder that is not
+on your `PATH`. Run `python -m dbs.manager run` instead, or install with
+`pipx install django-dbs`.
+
 The first run creates a data folder, a local SQLite database and a secret key, starts the
 manager on `http://127.0.0.1:8765` and opens your browser at a one-time setup page. Choose a
 username and password; they are stored, hashed, in that local database. The next
@@ -576,6 +580,9 @@ django_dbs paths · --version
 dbs-client COMMAND                      [--server NAME] [--config PATH]
 ```
 
+`python -m dbs.manager COMMAND` is the same as `django_dbs COMMAND`, and
+`python -m dbs.client COMMAND` the same as `dbs-client COMMAND`.
+
 `dbs schedule` with no plan flags follows the panel's schedule; with `--interval`,
 `--output-dir`, `--keep`, `--push` or `--keep-remote` it runs that plan instead, as it always
 has. `python manage.py django-dbs` is the same umbrella under its older name, and
@@ -695,6 +702,12 @@ network to the trusted list.
 
 **`django_dbs run` shows "the interface was not built".** You installed from a source
 checkout. Install from PyPI, or build it once with `scripts/build_manager_ui.sh`.
+
+**`django_dbs` is not recognized / command not found.** pip installed the script into a
+folder that is not on your `PATH`, common with Windows user installs and
+`pip install --user`; pip prints that folder in a warning during the install. Add it to
+`PATH`, or run `python -m dbs.manager run` instead. `dbs-client` works the same way as
+`python -m dbs.client`.
 
 **The manager cannot reach a server.** Re-run the wizard's *Check* step: it names whether
 the SSH login, the host key, the project path or the server's django-dbs version is the

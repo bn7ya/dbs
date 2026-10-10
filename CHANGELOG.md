@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `python -m dbs.manager` runs the manager, for when pip installs `django_dbs` into a folder
+  that is not on `PATH`. The README and the panel's wiki explain the fix, and
+  `python -m dbs.client` does the same for `dbs-client`.
+
 ## [0.5.0] - 2026-10-09
 
 One `pip install django-dbs` now covers three uses, depending only on where you use it: the
