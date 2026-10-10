@@ -11,6 +11,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
 from dbs import audit
+from dbs.manager.activity import job_leases
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.middleware import current_ip
@@ -121,10 +122,14 @@ class ActivityService:
         )
 
     def start(self, activity_id: int) -> AuditEvent | None:
-        return audit.start(activity_id)
+        started = audit.start(activity_id)
+        if started is not None:
+            job_leases.hold(activity_id)
+        return started
 
     def succeed(self, activity_id: int, detail: dict[str, Any] | None = None) -> None:
         audit.finish(activity_id, data=detail)
+        job_leases.let_go(activity_id)
 
     def fail(
         self,
@@ -133,12 +138,14 @@ class ActivityService:
         detail: dict[str, Any] | None = None,
     ) -> None:
         audit.fail(activity_id, error_code_of(error), data=detail)
+        job_leases.let_go(activity_id)
 
     def progress(self, activity_id: int, detail: dict[str, Any]) -> None:
         self.entries.set_running_data(activity_id, detail)
 
     def interrupt(self, *, idle_since: datetime | None = None) -> int:
-        return audit.interrupt(idle_since=idle_since)
+        keep = job_leases.live() if idle_since is None else []
+        return audit.interrupt(idle_since=idle_since, keep=keep)
 
 
 def sweep_stale_jobs() -> int:

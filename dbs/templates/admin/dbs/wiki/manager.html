@@ -11,11 +11,23 @@ instead, or install with <code>pipx install django-dbs</code>.</p>
 <p>It opens in your browser and looks after many servers over SSH: it takes and pulls their
 backups, keeps their <code>.env</code> versions and folder archives, and can restore a
 project onto a new server when the old one goes down.</p>
+<h2>From a terminal</h2>
+<p>Everything the manager's interface does is also a command, on the same data and the same
+audit trail:</p>
+<pre><code>django_dbs server add web --host app.example.com --user deploy --ssh-password
+django_dbs backup take --all
+django_dbs backup list --server web</code></pre>
+<p><code>server add</code> shows the host key fingerprint to confirm, finds this project and
+the Python that has django-dbs, and checks the server. Actions the interface protects with
+your password ask for it in the terminal too. <code>django_dbs AREA VERB --help</code> lists
+the rest: <code>server</code>, <code>backup</code>, <code>plan</code>,
+<code>activity</code>, <code>env</code>, <code>files</code> and <code>redeploy</code>.</p>
 <h2>Letting it reach this project</h2>
 <ol>
   <li>Open <a href="{% url 'admin:dbs_connection' %}">Connection</a> and press
       <em>Copy</em>.</li>
-  <li>In the manager, choose <em>Add a server</em> and paste the snippet. Without one, the
+  <li>In the manager, choose <em>Add a server</em> and paste the snippet, or run
+      <code>django_dbs server add</code>. Without one, the
       manager searches the server for the project once it can sign in, and
       <em>Browse the server</em> lets you pick its folder from the server's own folders.</li>
   <li>Confirm the host key fingerprint matches the one shown on the Connection page.</li>

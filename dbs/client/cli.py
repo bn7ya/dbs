@@ -24,6 +24,10 @@ from .sample import SAMPLE_CONFIG
 
 logger = logging.getLogger("dbs")
 
+DEPRECATED = (
+    "dbs-client is deprecated and will be removed. Move its servers into the manager "
+    "with: django_dbs server import-profiles, then use: django_dbs backup take"
+)
 SERVER_COMMANDS = ("test-connection", "list", "backup", "pull", "push", "prune", "schedule")
 
 
@@ -125,6 +129,8 @@ def main(argv=None) -> int:
         return 1
     except KeyboardInterrupt:
         return 1
+    finally:
+        print(DEPRECATED, file=sys.stderr)
 
 
 def _dispatch(args) -> int:

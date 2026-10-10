@@ -18,6 +18,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The wizard searches for the project as soon as the server is added, lists every project it
   finds, and fills in the rest for the one chosen. `POST /api/servers/{id}/discover/` accepts a
   `project_dir` to look inside one folder.
+- **The manager from a terminal.** Everything the manager's interface does is also a
+  `django_dbs` command: `server add|edit|remove|check|discover|browse|…`,
+  `backup take SERVER… | --all`, `backup list|verify|restore|download|upload|delete`,
+  `plan`, `activity`, `env`, `files` and `redeploy start`. The commands and the web API call
+  the same services and validate with the same serializers, so a server added in one shows
+  in the other, `--json` prints what the API returns, and the activity log records both
+  under the account that acted (`--as NAME`, or the only account). Actions the interface
+  guards with the account password ask for it here too, or read it with `--password-stdin`;
+  secrets are prompted for or read from stdin, never taken as arguments. `server add`
+  confirms the host key, finds the project and its Python, and checks the server.
+- `django_dbs server import-profiles [dbs-client.toml]` adds the servers of a `dbs-client`
+  config to the manager.
+
+### Changed
+
+- The manager's cache lives in its database (table `dbs_manager_cache`, created by its migrations), so
+  the per-server backup lock and the sign-in throttle hold across processes: a backup taken
+  from a terminal and one `django_dbs run` schedules never run on one server together.
+- A running job holds a database lease while it works, and `django_dbs run` starting up fails
+  as interrupted only the jobs whose process is gone, not one a terminal is still running.
+
+### Deprecated
+
+- `dbs-client` prints a deprecation notice on every run and will be removed in a later
+  release. `django_dbs server import-profiles` moves its servers into the manager, and
+  `django_dbs backup take` replaces `dbs-client backup`. The `dbs.client` Python API is
+  unchanged.
 
 ### Fixed
 

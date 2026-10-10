@@ -72,6 +72,10 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   (`dbs/manager/settings.py`), one app labelled `dbs_manager` with a subpackage per slice,
   the job runner and scheduler that replace Celery, and the built interface in
   `dbs/manager/static/dbs_manager/` (generated, not committed).
+- `dbs/manager/terminal/` — the manager's terminal commands (`django_dbs server|backup|plan|
+  activity|env|files|redeploy`). Like the REST views, each verb validates with the slice's
+  serializer and calls the slice's service; neither adapter holds business logic.
+  `parsers.py` imports no Django, so `--help` stays instant.
 - `manager-ui/` — the manager's Angular source (Angular Material, Font Awesome Free).
   `scripts/build_manager_ui.sh` builds it into the package; `manager-ui/CLAUDE.md` holds
   its rules.

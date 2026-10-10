@@ -179,7 +179,7 @@ def _close(event_id, status, *, data=None, error_code="", detail=""):
     return AuditEvent.objects.filter(pk=event_id, status__in=UNFINISHED).update(**fields)
 
 
-def interrupt(*, idle_since=None):
+def interrupt(*, idle_since=None, keep=()):
     from .models import AuditEvent
 
     queued = Q(status=QUEUED)
@@ -187,7 +187,7 @@ def interrupt(*, idle_since=None):
     if idle_since is not None:
         queued &= Q(created_at__lt=idle_since)
         running &= Q(started_at__lt=idle_since)
-    return AuditEvent.objects.filter(queued | running).update(
+    return AuditEvent.objects.filter(queued | running).exclude(pk__in=keep).update(
         status=FAILED,
         succeeded=False,
         error_code=INTERRUPTED,

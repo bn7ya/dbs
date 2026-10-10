@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from dbs.manager.servers.serializers import (
     BrowseListingSerializer,
     BrowseQuerySerializer,
+    CheckedServerSerializer,
     DiscoverRequestSerializer,
     FingerprintRequestSerializer,
     HostKeySerializer,
@@ -40,11 +41,8 @@ class CheckView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk: UUID) -> Response:
-        service = ServerService(request.user)
-        server = service.check(pk)
-        return Response(
-            {**ServerSerializer(server).data, **service.compatibility(server)}
-        )
+        checked = ServerService(request.user).checked(pk)
+        return Response(CheckedServerSerializer(checked).data)
 
 
 class PublicKeyView(APIView):
@@ -60,10 +58,8 @@ class DiscoverView(APIView):
     def post(self, request: Request, pk: UUID) -> Response:
         payload = DiscoverRequestSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
-        project_dir = payload.validated_data.get("project_dir") or None
-        account_password = payload.validated_data.get("account_password", "")
         return Response(
-            DiscoveryService(request.user).discover(pk, project_dir, account_password)
+            DiscoveryService(request.user).discover(pk, **payload.validated_data)
         )
 
 
@@ -73,9 +69,7 @@ class BrowseView(GenericAPIView):
     def get(self, request: Request, pk: UUID) -> Response:
         query = BrowseQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
-        folder = BrowseService(request.user).list(
-            pk, query.validated_data.get("path") or None
-        )
+        folder = BrowseService(request.user).list(pk, **query.validated_data)
         entries: list[object] | None = self.paginate_queryset(folder.entries)
         page = self.get_paginated_response(entries).data
         listing = {

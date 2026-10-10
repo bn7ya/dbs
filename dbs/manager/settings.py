@@ -65,8 +65,8 @@ DATABASES = {
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "dbs-manager",
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "dbs_manager_cache",
     }
 }
 
