@@ -172,6 +172,15 @@
             [ngModel]="draft().project_dir"
             (ngModelChange)="update('project_dir', $event)"
           />
+          <button
+            matIconButton
+            matSuffix
+            type="button"
+            [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.projectDir.label' | t) }"
+            (click)="browse('project_dir')"
+          >
+            <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+          </button>
           <mat-hint>{{ 'servers.form.projectDir.hint' | t }}</mat-hint>
           @if (error('project_dir') | errorText; as message) {
             <mat-error>{{ message }}</mat-error>
@@ -248,6 +257,15 @@
             [ngModel]="draft().remote_backup_dir"
             (ngModelChange)="update('remote_backup_dir', $event)"
           />
+          <button
+            matIconButton
+            matSuffix
+            type="button"
+            [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.remoteBackupDir.label' | t) }"
+            (click)="browse('remote_backup_dir')"
+          >
+            <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+          </button>
           <mat-hint>{{ 'servers.form.remoteBackupDir.hint' | t }}</mat-hint>
           @if (error('remote_backup_dir') | errorText; as message) {
             <mat-error>{{ message }}</mat-error>
@@ -281,6 +299,15 @@
               (matChipInputTokenEnd)="addFileRoot($event)"
             />
           </mat-chip-grid>
+          <button
+            matIconButton
+            matSuffix
+            type="button"
+            [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.fileRoots.label' | t) }"
+            (click)="browse('file_roots')"
+          >
+            <i class="fa-solid fa-folder-plus" aria-hidden="true"></i>
+          </button>
           <mat-hint>{{ 'servers.form.fileRoots.hint' | t }}</mat-hint>
           @if (error('file_roots') | errorText; as message) {
             <mat-error>{{ message }}</mat-error>
@@ -300,6 +327,15 @@
             [ngModel]="draft().env_path"
             (ngModelChange)="update('env_path', $event)"
           />
+          <button
+            matIconButton
+            matSuffix
+            type="button"
+            [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.envPath.label' | t) }"
+            (click)="browse('env_path')"
+          >
+            <i class="fa-regular fa-file" aria-hidden="true"></i>
+          </button>
           <mat-hint>{{ 'servers.form.envPath.hint' | t }}</mat-hint>
           @if (error('env_path') | errorText; as message) {
             <mat-error>{{ message }}</mat-error>

@@ -79,3 +79,6 @@ Also reachable as `manage.py dbs_upgrade` and `manage.py dbs-upgrade`.
 ## `django_dbs` (the manager, outside any project)
 `run [--port] [--host] [--no-browser] [--data-dir] [--database-url]`, `export [FILE]
 [--with-backups]`, `import FILE [--replace]`, `createuser NAME`, `password NAME`, `paths`.
+
+`python -m dbs.manager COMMAND` is the same, for when pip put `django_dbs` in a folder that
+is not on `PATH`; `python -m dbs.client COMMAND` does the same for `dbs-client`.

@@ -11,8 +11,9 @@ const stepIs = async (page: Page, name: string): Promise<void> => {
 };
 
 const fillProject = async (form: Locator, { t }: Journey): Promise<void> => {
-  await form.getByRole('combobox', { name: t('projectFolder') }).fill(SSH.projectDir);
+  await form.getByRole('textbox', { name: t('projectFolder') }).fill(SSH.projectDir);
   await form.getByRole('combobox', { name: t('pythonCommand') }).fill(SSH.python);
+  await form.getByRole('button', { name: t('showMoreSettings') }).click();
   await form.getByRole('textbox', { name: t('remoteBackupFolder') }).fill(SSH.remoteBackupDir);
   for (const remove of await form.getByRole('button', { name: new RegExp(`^${t('remove')} `) }).all()) {
     await remove.click();
@@ -110,8 +111,18 @@ test.describe('adding a server', () => {
 
     await stepIs(page, t('stepProject'));
     await expect(form.getByText(t('serverAdded'))).toBeVisible();
-    await form.getByRole('button', { name: t('findProject') }).click();
     await expect(form.getByRole('button', { name: t('findProject') })).toBeEnabled({ timeout: 60_000 });
+
+    await form.getByRole('button', { name: t('browseServer'), exact: true }).click();
+    const browser = page.getByRole('dialog', { name: t('chooseProjectFolder') });
+    await browser.getByRole('button', { name: SSH.projectDir }).click();
+    await expect(browser.getByText(t('djangoProjectHere'))).toBeVisible({ timeout: 60_000 });
+    await journey.shot(page, 'add-server-browse');
+    await browser.getByRole('button', { name: t('chooseThisFolder') }).click();
+    await expect(browser).toBeHidden();
+    await expect(form.getByRole('textbox', { name: t('projectFolder') })).toHaveValue(SSH.projectDir);
+    await expect(form.getByRole('button', { name: t('findProject') })).toBeEnabled({ timeout: 60_000 });
+
     await fillProject(form, journey);
     await journey.shot(page, 'add-server-project');
     await next.click();

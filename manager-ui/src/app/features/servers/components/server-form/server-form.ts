@@ -1,20 +1,22 @@
 import { ChangeDetectionStrategy, Component, afterRenderEffect, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
-import { MatButton } from '@angular/material/button';
+import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatChipGrid, MatChipInput, MatChipRemove, MatChipRow, type MatChipInputEvent } from '@angular/material/chips';
-import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
+import { MatError, MatFormField, MatHint, MatLabel, MatSuffix } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 import { MatRadioButton, MatRadioGroup } from '@angular/material/radio';
 import { MatStep, MatStepper, MatStepperIcon } from '@angular/material/stepper';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
-import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
+import { Dialogs, injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
 import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import type { AuthMethod, Server, ServerSettings } from '../../data/servers.types';
+import { browseServer } from '../server-browser/browse-server';
+import type { BrowsedField } from '../server-browser/server-browser.types';
 import { ServersStore } from '../../state/servers.store';
 import type {
   AuthMethodOption,
@@ -70,6 +72,7 @@ const STEP_LABELS: Readonly<Record<ServerFormStep, string>> = {
   imports: [
     FormsModule,
     MatButton,
+    MatIconButton,
     MatChipGrid,
     MatChipRow,
     MatChipRemove,
@@ -84,6 +87,7 @@ const STEP_LABELS: Readonly<Record<ServerFormStep, string>> = {
     MatStepper,
     MatStep,
     MatStepperIcon,
+    MatSuffix,
     FieldError,
     Notice,
     PasswordInput,
@@ -97,6 +101,7 @@ const STEP_LABELS: Readonly<Record<ServerFormStep, string>> = {
 export class ServerForm {
   private readonly store = inject(ServersStore);
   private readonly ref = injectDialogRef<Server>();
+  private readonly dialogs = inject(Dialogs);
 
   readonly editing = injectDialogData<ServerFormData>().server;
 
@@ -197,6 +202,21 @@ export class ServerForm {
   update<K extends keyof ServerDraft>(field: K, value: ServerDraft[K]): void {
     this.draft.update((draft) => ({ ...draft, [field]: value }));
     this.edited.update((edited) => new Set(edited).add(field));
+  }
+
+  async browse(field: BrowsedField): Promise<void> {
+    const chosen = await browseServer(this.dialogs, this.editing.id, field, this.draft());
+    if (!chosen) {
+      return;
+    }
+    if (field === 'file_roots') {
+      const roots = this.draft().file_roots;
+      if (!roots.includes(chosen)) {
+        this.update('file_roots', [...roots, chosen]);
+      }
+    } else {
+      this.update(field, chosen);
+    }
   }
 
   setAccountPassword(password: string): void {

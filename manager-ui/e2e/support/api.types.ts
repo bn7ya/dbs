@@ -2,6 +2,10 @@ export interface ServerRecord {
   id: string;
   name: string;
   host_key_fingerprint: string;
+  project_dir: string;
+  python_path: string;
+  remote_backup_dir: string;
+  last_check_status: string;
 }
 
 export interface Page<T> {

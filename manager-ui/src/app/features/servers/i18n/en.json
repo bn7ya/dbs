@@ -243,12 +243,18 @@
         "reread": "Show the key again"
       },
       "project": {
-        "intro": "Find the Django project on the server, or fill in its details.",
+        "intro": "Choose the Django project on the server. DBS finds it, and the Python that has django-dbs, and fills in the rest.",
         "discover": "Find the project",
         "discovering": "Searching…",
-        "found": "Values filled in from the server.",
-        "version": "django-dbs on the server: {version}.",
-        "skip": "Skip"
+        "skip": "Skip",
+        "browse": "Browse the server",
+        "pick": "Projects found on this server",
+        "none": "No Django project was found. Browse the server to choose its folder.",
+        "notProject": "This folder has no manage.py. Choose the folder that holds manage.py.",
+        "ready": "Ready: django-dbs {version} was found for this project.",
+        "noDbs": "The project was found, but no Python on the server could import django-dbs. Install django-dbs in the project's environment, then search again.",
+        "showDetails": "Show more settings",
+        "hideDetails": "Hide more settings"
       },
       "check": {
         "local": "django-dbs here",
@@ -258,7 +264,11 @@
         "health": "Health",
         "ok": "The two versions work together.",
         "old": "django-dbs on the server is older than 0.5.0. Health and connection details are not available until it is upgraded.",
-        "incompatible": "This version of django-dbs on the server does not work with this manager. Install a matching version."
+        "incompatible": "This version of django-dbs on the server does not work with this manager. Install a matching version.",
+        "notFound": "django-dbs was not found with {python}.",
+        "suggestion": "django-dbs {version} was found in {python}.",
+        "usePython": "Use this Python",
+        "chooseAgain": "Choose the project again"
       },
       "health": {
         "ok": "Healthy",
@@ -277,12 +287,41 @@
         "done": "The test backup worked.",
         "openServer": "Open the server",
         "openBackups": "See its backups"
+      },
+      "password": {
+        "title": "Confirm it is you",
+        "body": "This server's setup is over, so running commands on it needs your password.",
+        "submit": "Continue"
       }
     },
     "move": {
       "title": "Move to another server",
       "body": "Restore this server onto another one, with its .env file and folders.",
       "action": "Move to another server"
+    },
+    "browser": {
+      "title": {
+        "project": "Choose the project folder",
+        "backups": "Choose where backups go on the server",
+        "env": "Choose the .env file",
+        "folder": "Choose a folder to allow"
+      },
+      "home": "Home",
+      "up": "Up one folder",
+      "trail": "Current folder",
+      "projects": "Django projects found on this server",
+      "isProject": "This folder is a Django project: it holds manage.py.",
+      "empty": "This folder is empty.",
+      "list": "Folders and files",
+      "name": "Name",
+      "size": "Size",
+      "modified": "Modified",
+      "open": "Open {name}",
+      "pick": "Choose {name}",
+      "pages": "Pages",
+      "chooseHere": "Choose this folder",
+      "browseLabel": "Browse the server for: {field}",
+      "truncated": "This folder holds more than 5000 entries. Only the first 5000 are listed."
     }
   },
   "errors": {

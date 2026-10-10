@@ -577,6 +577,8 @@ def test_an_unknown_server_is_not_found(api):
         ("post", "{id}/check/"),
         ("post", "{id}/host-key/"),
         ("post", "{id}/passphrase/"),
+        ("post", "{id}/discover/"),
+        ("get", "{id}/browse/"),
     ],
 )
 def test_every_endpoint_needs_a_session(anonymous, configured_server, method, path):

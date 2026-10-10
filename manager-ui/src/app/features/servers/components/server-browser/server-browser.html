@@ -1,0 +1,140 @@
+<div class="dialog-form browser">
+  <div class="browser__toolbar">
+    <button matButton="outlined" type="button" (click)="home()">
+      <i matButtonIcon class="fa-solid fa-house" aria-hidden="true"></i>
+      {{ 'servers.browser.home' | t }}
+    </button>
+    <button matButton="outlined" type="button" [disabled]="atTop() || path() === null" (click)="up()">
+      <i matButtonIcon class="fa-solid fa-turn-up" aria-hidden="true"></i>
+      {{ 'servers.browser.up' | t }}
+    </button>
+  </div>
+
+  @if (trail().length > 0) {
+    <nav class="browser__trail" [attr.aria-label]="'servers.browser.trail' | t" dir="ltr">
+      @for (crumb of trail(); track crumb.path; let index = $index, last = $last) {
+        @if (index > 1) {
+          <span class="text-muted" aria-hidden="true">/</span>
+        }
+        @if (last) {
+          <span class="browser__crumb browser__crumb--current" aria-current="page">{{ crumb.name }}</span>
+        } @else {
+          <button matButton type="button" class="browser__crumb" (click)="go(crumb.path)">{{ crumb.name }}</button>
+        }
+      }
+    </nav>
+  }
+
+  @if (picksFolders && projects.length > 0) {
+    <section class="browser__projects" [attr.aria-label]="'servers.browser.projects' | t">
+      <h3 class="text-label text-secondary">{{ 'servers.browser.projects' | t }}</h3>
+      <div class="browser__project-list">
+        @for (project of projects; track project) {
+          <button matButton="tonal" type="button" (click)="go(project)">
+            <i matButtonIcon class="fa-solid fa-folder-tree" aria-hidden="true"></i>
+            <bdi class="browser__code" dir="ltr">{{ project }}</bdi>
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  @if (isProject()) {
+    <app-notice severity="success">{{ 'servers.browser.isProject' | t }}</app-notice>
+  }
+
+  @if (truncated()) {
+    <app-notice severity="info">{{ 'servers.browser.truncated' | t }}</app-notice>
+  }
+
+  @if (error(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    <div>
+      <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+    </div>
+  } @else if (pending()) {
+    <div class="browser__skeleton" aria-busy="true">
+      @for (line of skeletonLines; track line) {
+        <app-skeleton />
+      }
+    </div>
+  } @else if (empty()) {
+    <app-empty-state
+      icon="fa-solid fa-folder-open"
+      [headingLevel]="3"
+      [title]="'servers.browser.empty' | t"
+    />
+  } @else {
+    <div class="table-scroll browser__table">
+      <table mat-table [dataSource]="entries()" [attr.aria-label]="'servers.browser.list' | t" [attr.aria-busy]="loading()">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef scope="col">{{ 'servers.browser.name' | t }}</th>
+          <td mat-cell *matCellDef="let row">
+            <div class="browser__name">
+              <i class="browser__icon" [class]="iconOf(row)" aria-hidden="true"></i>
+              @if (opens(row)) {
+                <button
+                  matButton
+                  type="button"
+                  [attr.aria-label]="'servers.browser.open' | t: { name: row.name }"
+                  (click)="go(row.path)"
+                >
+                  <bdi class="browser__code" dir="auto">{{ row.name }}</bdi>
+                </button>
+              } @else if (picks(row)) {
+                <button
+                  matButton
+                  type="button"
+                  [attr.aria-label]="'servers.browser.pick' | t: { name: row.name }"
+                  (click)="choose(row.path)"
+                >
+                  <bdi class="browser__code" dir="auto">{{ row.name }}</bdi>
+                </button>
+              } @else {
+                <bdi class="browser__code browser__plain" dir="auto">{{ row.name }}</bdi>
+              }
+            </div>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="size">
+          <th mat-header-cell *matHeaderCellDef scope="col" class="browser__end">{{ 'servers.browser.size' | t }}</th>
+          <td mat-cell *matCellDef="let row" class="browser__end">
+            @if (row.kind === 'file') {
+              <bdi class="browser__size">{{ row.size | fileSize }}</bdi>
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="modified">
+          <th mat-header-cell *matHeaderCellDef scope="col">{{ 'servers.browser.modified' | t }}</th>
+          <td mat-cell *matCellDef="let row">{{ row.modified | appDate }}</td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+    </div>
+    @if (paginated()) {
+      <nav [attr.aria-label]="'servers.browser.pages' | t">
+        <mat-paginator
+          [length]="count()"
+          [pageIndex]="page()"
+          [pageSize]="pageSize()"
+          [pageSizeOptions]="pageSizes"
+          (page)="onPaged($event)"
+        />
+      </nav>
+    }
+  }
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    @if (picksFolders) {
+      <button matButton="filled" type="button" [disabled]="path() === null || loading()" (click)="chooseHere()">
+        <i matButtonIcon class="fa-solid fa-check" aria-hidden="true"></i>
+        {{ 'servers.browser.chooseHere' | t }}
+      </button>
+    }
+  </div>
+</div>

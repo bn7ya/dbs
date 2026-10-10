@@ -1,3 +1,5 @@
+import type { Page } from '@core/http/api.types';
+
 export type AuthMethod = 'key' | 'password';
 
 export type CheckStatus = 'unknown' | 'ok' | 'problem' | 'failed';
@@ -12,9 +14,16 @@ export interface ServerSummary {
   readonly last_checked_at: string | null;
 }
 
+export interface PythonSuggestion {
+  readonly python_path: string;
+  readonly dbs_version: string;
+}
+
 export interface CheckReport {
   readonly system?: string | null;
   readonly dbs_version?: string | null;
+  readonly dbs_error?: string;
+  readonly python_suggestion?: PythonSuggestion | null;
   readonly backup_command?: boolean | null;
   readonly env_file?: boolean | null;
   readonly roots?: Readonly<Record<string, boolean>>;
@@ -80,6 +89,7 @@ export type ProjectSettings = Pick<
 
 export interface Discovery extends ProjectSettings {
   readonly dbs_version: string | null;
+  readonly is_project: boolean;
   readonly candidates: {
     readonly project_dirs: readonly string[];
     readonly python_paths: readonly string[];
@@ -96,6 +106,7 @@ export interface HealthReport {
 export interface CheckedServer extends Server {
   readonly local_version: string;
   readonly remote_version: string | null;
+  readonly installed: boolean;
   readonly compatible: boolean;
   readonly last_health: HealthReport | null;
 }
@@ -130,6 +141,31 @@ export interface BackupPassphrase {
 
 export interface ServerListQuery {
   readonly search: string;
+  readonly page: number;
+  readonly page_size: number;
+}
+
+export type RemoteEntryKind = 'file' | 'folder' | 'link' | 'other';
+
+export interface RemoteEntry {
+  readonly name: string;
+  readonly path: string;
+  readonly kind: RemoteEntryKind;
+  readonly size: number | null;
+  readonly modified: string | null;
+}
+
+export interface RemoteFolder extends Page<RemoteEntry> {
+  readonly path: string;
+  readonly parent: string | null;
+  readonly home: string;
+  readonly project: boolean;
+  readonly truncated: boolean;
+}
+
+export interface BrowseQuery {
+  readonly server: string;
+  readonly path: string | null;
   readonly page: number;
   readonly page_size: number;
 }

@@ -5,6 +5,9 @@
 <p>The DBS manager is a separate application in the same package. Run it on your own
 machine with:</p>
 <pre><code>django_dbs run</code></pre>
+<p>If the shell says <code>django_dbs</code> is not recognized, pip put the script in a
+folder that is not on your <code>PATH</code>. Run <code>python -m dbs.manager run</code>
+instead, or install with <code>pipx install django-dbs</code>.</p>
 <p>It opens in your browser and looks after many servers over SSH: it takes and pulls their
 backups, keeps their <code>.env</code> versions and folder archives, and can restore a
 project onto a new server when the old one goes down.</p>
@@ -12,7 +15,9 @@ project onto a new server when the old one goes down.</p>
 <ol>
   <li>Open <a href="{% url 'admin:dbs_connection' %}">Connection</a> and press
       <em>Copy</em>.</li>
-  <li>In the manager, choose <em>Add a server</em> and paste the snippet.</li>
+  <li>In the manager, choose <em>Add a server</em> and paste the snippet. Without one, the
+      manager searches the server for the project once it can sign in, and
+      <em>Browse the server</em> lets you pick its folder from the server's own folders.</li>
   <li>Confirm the host key fingerprint matches the one shown on the Connection page.</li>
   <li>Add the key the manager shows to <code>~/.ssh/authorized_keys</code> for the user
       that owns this project.</li>

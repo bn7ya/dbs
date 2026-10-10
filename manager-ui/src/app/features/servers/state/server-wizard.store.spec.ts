@@ -94,9 +94,23 @@ describe('ServerWizardStore', () => {
     const checking = store.check();
     http
       .expectOne(`/api/servers/${SERVER.id}/check/`)
-      .flush({ ...SERVER, local_version: '0.5.0', remote_version: '0.5.0', compatible: true, last_health: null });
+      .flush({ ...SERVER, local_version: '0.5.0', remote_version: '0.5.0', installed: true, compatible: true, last_health: null });
     await checking;
     expect(store.checked()?.compatible).toBe(true);
+  });
+
+  it('switches to another Python and checks again', async () => {
+    await created();
+
+    const switching = store.usePython('/srv/app/venv/bin/python');
+    const patch = http.expectOne(`/api/servers/${SERVER.id}/`);
+    expect(patch.request.body).toEqual({ python_path: '/srv/app/venv/bin/python' });
+    patch.flush({ ...SERVER, python_path: '/srv/app/venv/bin/python' });
+    const check = await vi.waitFor(() => http.expectOne(`/api/servers/${SERVER.id}/check/`));
+    check.flush({ ...SERVER, local_version: '0.5.0', remote_version: '0.5.0', installed: true, compatible: true, last_health: null });
+
+    expect((await switching)?.remote_version).toBe('0.5.0');
+    expect(store.server()?.python_path).toBe('/srv/app/venv/bin/python');
   });
 
   it('captures the passphrase and follows the test backup to its end', async () => {

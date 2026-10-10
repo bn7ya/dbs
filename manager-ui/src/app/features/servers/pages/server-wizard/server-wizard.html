@@ -310,6 +310,10 @@
             <div class="wizard__step">
               <p class="text-secondary">{{ 'servers.wizard.project.intro' | t }}</p>
               <div class="wizard__actions">
+                <button matButton="filled" type="button" [disabled]="!created()" (click)="browse('project_dir')">
+                  <i matButtonIcon class="fa-solid fa-folder-tree" aria-hidden="true"></i>
+                  {{ 'servers.wizard.project.browse' | t }}
+                </button>
                 <button
                   matButton="outlined"
                   type="button"
@@ -329,13 +333,35 @@
               @if (discoverError(); as failure) {
                 <app-notice severity="danger">{{ failure | errorText }}</app-notice>
               }
-              @if (discovery(); as found) {
-                <app-notice severity="info">
-                  {{ 'servers.wizard.project.found' | t }}
-                  @if (found.dbs_version; as version) {
-                    {{ 'servers.wizard.project.version' | t: { version } }}
-                  }
-                </app-notice>
+
+              @if (projects().length > 1) {
+                <fieldset class="wizard__choice">
+                  <legend class="text-label">{{ 'servers.wizard.project.pick' | t }}</legend>
+                  <mat-radio-group
+                    class="wizard__options wizard__options--stacked"
+                    name="project_choice"
+                    [ngModel]="draft().project_dir"
+                    (ngModelChange)="chooseProject($event)"
+                  >
+                    @for (candidate of projects(); track candidate) {
+                      <mat-radio-button [value]="candidate" [disabled]="discovering()">
+                        <bdi class="wizard__code" dir="ltr">{{ candidate }}</bdi>
+                      </mat-radio-button>
+                    }
+                  </mat-radio-group>
+                </fieldset>
+              }
+
+              @if (currentDiscovery(); as found) {
+                @if (!found.project_dir) {
+                  <app-notice severity="warning">{{ 'servers.wizard.project.none' | t }}</app-notice>
+                } @else if (!found.is_project) {
+                  <app-notice severity="warning">{{ 'servers.wizard.project.notProject' | t }}</app-notice>
+                } @else if (found.dbs_version; as version) {
+                  <app-notice severity="success">{{ 'servers.wizard.project.ready' | t: { version } }}</app-notice>
+                } @else {
+                  <app-notice severity="warning">{{ 'servers.wizard.project.noDbs' | t }}</app-notice>
+                }
               }
               @if (projectError(); as failure) {
                 <app-notice severity="danger">{{ failure | errorText }}</app-notice>
@@ -349,16 +375,20 @@
                   dir="ltr"
                   autocomplete="off"
                   spellcheck="false"
-                  [matAutocomplete]="projectDirs"
                   [appFieldError]="error('project_dir') | errorText"
                   [ngModel]="draft().project_dir"
                   (ngModelChange)="update('project_dir', $event)"
                 />
-                <mat-autocomplete #projectDirs="matAutocomplete">
-                  @for (candidate of discovery()?.candidates?.project_dirs ?? []; track candidate) {
-                    <mat-option [value]="candidate"><bdi dir="ltr">{{ candidate }}</bdi></mat-option>
-                  }
-                </mat-autocomplete>
+                <button
+                  matIconButton
+                  matSuffix
+                  type="button"
+                  [disabled]="!created()"
+                  [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.projectDir.label' | t) }"
+                  (click)="browse('project_dir')"
+                >
+                  <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                </button>
                 <mat-hint>{{ 'servers.form.projectDir.hint' | t }}</mat-hint>
                 @if (error('project_dir') | errorText; as message) {
                   <mat-error>{{ message }}</mat-error>
@@ -387,6 +417,30 @@
                 </mat-form-field>
 
                 <mat-form-field>
+                  <mat-label>{{ 'servers.form.settingsModule.label' | t }}</mat-label>
+                  <input
+                    matInput
+                    name="settings_module"
+                    dir="ltr"
+                    autocomplete="off"
+                    spellcheck="false"
+                    [placeholder]="'servers.form.settingsModule.placeholder' | t"
+                    [ngModel]="draft().settings_module"
+                    (ngModelChange)="update('settings_module', $event)"
+                  />
+                  <mat-hint>{{ 'servers.form.settingsModule.hint' | t }}</mat-hint>
+                </mat-form-field>
+              </div>
+
+              <div>
+                <button matButton type="button" [attr.aria-expanded]="detailsOpen()" aria-controls="wizard-details" (click)="toggleDetails()">
+                  <i matButtonIcon class="fa-solid" [class.fa-chevron-up]="detailsOpen()" [class.fa-chevron-down]="!detailsOpen()" aria-hidden="true"></i>
+                  {{ (detailsOpen() ? 'servers.wizard.project.hideDetails' : 'servers.wizard.project.showDetails') | t }}
+                </button>
+              </div>
+
+              <div id="wizard-details" class="wizard__details" [hidden]="!detailsOpen()">
+                <mat-form-field>
                   <mat-label>{{ 'servers.form.managePath.label' | t }}</mat-label>
                   <input
                     matInput
@@ -399,93 +453,108 @@
                   />
                   <mat-hint>{{ 'servers.form.managePath.hint' | t }}</mat-hint>
                 </mat-form-field>
-              </div>
 
-              <mat-form-field>
-                <mat-label>{{ 'servers.form.settingsModule.label' | t }}</mat-label>
-                <input
-                  matInput
-                  name="settings_module"
-                  dir="ltr"
-                  autocomplete="off"
-                  spellcheck="false"
-                  [placeholder]="'servers.form.settingsModule.placeholder' | t"
-                  [ngModel]="draft().settings_module"
-                  (ngModelChange)="update('settings_module', $event)"
-                />
-                <mat-hint>{{ 'servers.form.settingsModule.hint' | t }}</mat-hint>
-              </mat-form-field>
-
-              <mat-form-field>
-                <mat-label>{{ 'servers.form.remoteBackupDir.label' | t }}</mat-label>
-                <input
-                  matInput
-                  name="remote_backup_dir"
-                  dir="ltr"
-                  autocomplete="off"
-                  spellcheck="false"
-                  required
-                  [appFieldError]="error('remote_backup_dir') | errorText"
-                  [ngModel]="draft().remote_backup_dir"
-                  (ngModelChange)="update('remote_backup_dir', $event)"
-                />
-                <mat-hint>{{ 'servers.form.remoteBackupDir.hint' | t }}</mat-hint>
-                @if (error('remote_backup_dir') | errorText; as message) {
-                  <mat-error>{{ message }}</mat-error>
-                }
-              </mat-form-field>
-
-              <mat-form-field>
-                <mat-label>{{ 'servers.form.fileRoots.label' | t }}</mat-label>
-                <mat-chip-grid
-                  #roots
-                  [appFieldError]="error('file_roots') | errorText"
-                  [attr.aria-label]="'servers.form.fileRoots.label' | t"
-                >
-                  @for (root of draft().file_roots; track $index) {
-                    <mat-chip-row (removed)="removeFileRoot($index)">
-                      <bdi dir="ltr">{{ root }}</bdi>
-                      <button matChipRemove type="button" [attr.aria-label]="'servers.form.fileRoots.remove' | t: { path: root }">
-                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                      </button>
-                    </mat-chip-row>
-                  }
+                <mat-form-field>
+                  <mat-label>{{ 'servers.form.remoteBackupDir.label' | t }}</mat-label>
                   <input
-                    name="file_roots"
+                    matInput
+                    name="remote_backup_dir"
                     dir="ltr"
                     autocomplete="off"
                     spellcheck="false"
-                    [placeholder]="'servers.form.fileRoots.placeholder' | t"
-                    [matChipInputFor]="roots"
-                    [matChipInputSeparatorKeyCodes]="separators"
-                    [matChipInputAddOnBlur]="true"
-                    (matChipInputTokenEnd)="addFileRoot($event)"
+                    required
+                    [appFieldError]="error('remote_backup_dir') | errorText"
+                    [ngModel]="draft().remote_backup_dir"
+                    (ngModelChange)="update('remote_backup_dir', $event)"
                   />
-                </mat-chip-grid>
-                <mat-hint>{{ 'servers.form.fileRoots.hint' | t }}</mat-hint>
-                @if (error('file_roots') | errorText; as message) {
-                  <mat-error>{{ message }}</mat-error>
-                }
-              </mat-form-field>
+                  <button
+                    matIconButton
+                    matSuffix
+                    type="button"
+                    [disabled]="!created()"
+                    [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.remoteBackupDir.label' | t) }"
+                    (click)="browse('remote_backup_dir')"
+                  >
+                    <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                  </button>
+                  <mat-hint>{{ 'servers.form.remoteBackupDir.hint' | t }}</mat-hint>
+                  @if (error('remote_backup_dir') | errorText; as message) {
+                    <mat-error>{{ message }}</mat-error>
+                  }
+                </mat-form-field>
 
-              <mat-form-field>
-                <mat-label>{{ 'servers.form.envPath.label' | t }}</mat-label>
-                <input
-                  matInput
-                  name="env_path"
-                  dir="ltr"
-                  autocomplete="off"
-                  spellcheck="false"
-                  [placeholder]="'servers.form.envPath.placeholder' | t"
-                  [appFieldError]="error('env_path') | errorText"
-                  [ngModel]="draft().env_path"
-                  (ngModelChange)="update('env_path', $event)"
-                />
-                <mat-hint>{{ 'servers.form.envPath.hint' | t }}</mat-hint>
-                @if (error('env_path') | errorText; as message) {
-                  <mat-error>{{ message }}</mat-error>
-                }
-              </mat-form-field>
+                <mat-form-field>
+                  <mat-label>{{ 'servers.form.fileRoots.label' | t }}</mat-label>
+                  <mat-chip-grid
+                    #roots
+                    [appFieldError]="error('file_roots') | errorText"
+                    [attr.aria-label]="'servers.form.fileRoots.label' | t"
+                  >
+                    @for (root of draft().file_roots; track $index) {
+                      <mat-chip-row (removed)="removeFileRoot($index)">
+                        <bdi dir="ltr">{{ root }}</bdi>
+                        <button matChipRemove type="button" [attr.aria-label]="'servers.form.fileRoots.remove' | t: { path: root }">
+                          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                      </mat-chip-row>
+                    }
+                    <input
+                      name="file_roots"
+                      dir="ltr"
+                      autocomplete="off"
+                      spellcheck="false"
+                      [placeholder]="'servers.form.fileRoots.placeholder' | t"
+                      [matChipInputFor]="roots"
+                      [matChipInputSeparatorKeyCodes]="separators"
+                      [matChipInputAddOnBlur]="true"
+                      (matChipInputTokenEnd)="addFileRoot($event)"
+                    />
+                  </mat-chip-grid>
+                  <button
+                    matIconButton
+                    matSuffix
+                    type="button"
+                    [disabled]="!created()"
+                    [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.fileRoots.label' | t) }"
+                    (click)="browse('file_roots')"
+                  >
+                    <i class="fa-solid fa-folder-plus" aria-hidden="true"></i>
+                  </button>
+                  <mat-hint>{{ 'servers.form.fileRoots.hint' | t }}</mat-hint>
+                  @if (error('file_roots') | errorText; as message) {
+                    <mat-error>{{ message }}</mat-error>
+                  }
+                </mat-form-field>
+
+                <mat-form-field>
+                  <mat-label>{{ 'servers.form.envPath.label' | t }}</mat-label>
+                  <input
+                    matInput
+                    name="env_path"
+                    dir="ltr"
+                    autocomplete="off"
+                    spellcheck="false"
+                    [placeholder]="'servers.form.envPath.placeholder' | t"
+                    [appFieldError]="error('env_path') | errorText"
+                    [ngModel]="draft().env_path"
+                    (ngModelChange)="update('env_path', $event)"
+                  />
+                  <button
+                    matIconButton
+                    matSuffix
+                    type="button"
+                    [disabled]="!created()"
+                    [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.envPath.label' | t) }"
+                    (click)="browse('env_path')"
+                  >
+                    <i class="fa-regular fa-file" aria-hidden="true"></i>
+                  </button>
+                  <mat-hint>{{ 'servers.form.envPath.hint' | t }}</mat-hint>
+                  @if (error('env_path') | errorText; as message) {
+                    <mat-error>{{ message }}</mat-error>
+                  }
+                </mat-form-field>
+              </div>
             </div>
           </mat-step>
 
@@ -536,7 +605,38 @@
                     </div>
                   }
                 </dl>
-                @if (incompatible()) {
+                @if (notInstalled()) {
+                  <app-notice severity="danger">
+                    {{ 'servers.wizard.check.notFound' | t: { python: checkedPython() } }}
+                    @if (dbsError(); as reason) {
+                      <span class="wizard__reason"><bdi class="wizard__code" dir="ltr">{{ reason }}</bdi></span>
+                    }
+                  </app-notice>
+                  @if (suggestion(); as found) {
+                    <app-notice severity="info">
+                      {{ 'servers.wizard.check.suggestion' | t: { version: found.dbs_version, python: suggestedPython() } }}
+                    </app-notice>
+                  }
+                  <div class="wizard__actions">
+                    @if (suggestion()) {
+                      <button
+                        matButton="filled"
+                        type="button"
+                        [disabled]="checking() || savingProject()"
+                        [attr.aria-busy]="checking() || savingProject()"
+                        (click)="useSuggestedPython()"
+                      >
+                        @if (checking() || savingProject()) {
+                          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                        }
+                        {{ 'servers.wizard.check.usePython' | t }}
+                      </button>
+                    }
+                    <button matButton="outlined" type="button" (click)="chooseProjectAgain()">
+                      {{ 'servers.wizard.check.chooseAgain' | t }}
+                    </button>
+                  </div>
+                } @else if (incompatible()) {
                   <app-notice severity="danger">{{ 'servers.wizard.check.incompatible' | t }}</app-notice>
                 } @else if (remoteTooOld()) {
                   <app-notice severity="warning">{{ 'servers.wizard.check.old' | t }}</app-notice>

@@ -1,0 +1,70 @@
+:host {
+  display: block;
+}
+
+.browser__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.browser__trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-1);
+  font-family: var(--app-font-mono);
+}
+
+.browser__crumb--current {
+  padding-inline: var(--app-space-3);
+  font-weight: var(--app-weight-bold);
+}
+
+.browser__projects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.browser__project-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.browser__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.browser__name {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.browser__icon {
+  flex: none;
+  color: var(--app-color-on-surface-variant);
+}
+
+// A name is code: one family, and a long one wraps anywhere rather than push the table wider.
+.browser__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.browser__plain {
+  padding-inline: var(--app-space-3);
+}
+
+.browser__end {
+  text-align: end;
+}
+
+.browser__size {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

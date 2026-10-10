@@ -13,4 +13,10 @@ trusted list in setup.</p>
 <h2>The scheduler will not start</h2>
 <p>It needs an output directory: pass <code>--output-dir</code> or set
 <code>DBS_BACKUP_DIR</code>.</p>
+<h2><code>django_dbs</code> is not recognized / command not found</h2>
+<p>pip installed the script into a folder that is not on your <code>PATH</code>, common with
+Windows user installs and <code>pip install --user</code>; pip prints that folder in a
+warning during the install. Add it to <code>PATH</code>, or run
+<code>python -m dbs.manager run</code> instead. <code>dbs-client</code> works the same way as
+<code>python -m dbs.client</code>.</p>
 {% endblock %}

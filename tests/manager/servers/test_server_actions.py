@@ -96,6 +96,8 @@ def test_a_server_with_everything_in_place_is_ok(
     assert body["last_check_report"] == {
         "system": "Linux 6.1.0-18-amd64",
         "dbs_version": "0.4.0",
+        "dbs_error": "",
+        "python_suggestion": None,
         "backup_command": True,
         "env_file": True,
         "roots": {MEDIA_ROOT: True},
@@ -172,11 +174,39 @@ def test_a_probe_that_fails_marks_only_its_own_item(
     assert body["last_check_report"] == {
         "system": None,
         "dbs_version": None,
+        "dbs_error": "ModuleNotFoundError: No module named 'dbs'",
+        "python_suggestion": None,
         "backup_command": False,
         "env_file": True,
         "roots": {MEDIA_ROOT: True},
         "remote_backup_dir": False,
     }
+
+
+@pytest.mark.django_db
+def test_a_missing_django_dbs_names_the_python_that_has_it(
+    api, monkeypatch, configured_server
+):
+    remote = healthy_remote()
+    remote.paths |= {f"{PROJECT_DIR}/venv/bin/python"}
+    remote.answers = {
+        **remote.answers,
+        (PYTHON, "-c", DBS_VERSION): Result(127, "", f"sh: 1: {PYTHON}: not found"),
+        (f"{PROJECT_DIR}/venv/bin/python", "-c", DBS_VERSION): Result(0, "0.5.0\n"),
+    }
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+
+    body = api.post(check(configured_server.pk)).json()
+
+    report = body["last_check_report"]
+    assert (body["remote_version"], body["installed"]) == (None, False)
+    assert report["dbs_error"] == f"sh: 1: {PYTHON}: not found"
+    assert report["python_suggestion"] == {
+        "python_path": f"{PROJECT_DIR}/venv/bin/python",
+        "dbs_version": "0.5.0",
+    }
+    configured_server.refresh_from_db()
+    assert configured_server.python_path == PYTHON
 
 
 @pytest.mark.django_db
@@ -202,6 +232,8 @@ def test_what_is_not_configured_is_not_looked_at(api, admin, monkeypatch, host_k
     assert body["last_check_report"] == {
         "system": "Linux 6.1.0-18-amd64",
         "dbs_version": "0.4.0",
+        "dbs_error": "",
+        "python_suggestion": None,
         "backup_command": None,
         "env_file": None,
         "roots": {},

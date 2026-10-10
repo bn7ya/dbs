@@ -36,5 +36,6 @@ def compatibility(remote_version: str | None) -> dict:
     return {
         "local_version": local_version(),
         "remote_version": remote_version,
+        "installed": remote_version is not None,
         "compatible": at_least(remote_version, COMPATIBLE_FROM),
     }

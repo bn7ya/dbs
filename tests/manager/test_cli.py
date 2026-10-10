@@ -147,6 +147,22 @@ def test_version_and_help_need_no_django(capsys):
     assert cli.main([]) == 2
 
 
+def test_python_dash_m_runs_the_manager_without_the_script_on_path():
+    from dbs import __version__
+
+    result = subprocess.run(
+        [sys.executable, "-m", "dbs.manager", "--version"],
+        cwd=ROOT,
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=BOOT_SECONDS,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"django_dbs {__version__}"
+
+
 def test_paths_names_every_file(tmp_path, capsys):
     assert cli.main(["paths", "--data-dir", str(tmp_path / "home")]) == 0
 

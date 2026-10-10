@@ -1,4 +1,5 @@
 from .server_actions import (
+    BrowseView,
     CheckView,
     DiscoverView,
     FingerprintView,
@@ -10,6 +11,7 @@ from .server_actions import (
 from .servers import ServerDetailView, ServerListView
 
 __all__ = [
+    "BrowseView",
     "CheckView",
     "DiscoverView",
     "FingerprintView",

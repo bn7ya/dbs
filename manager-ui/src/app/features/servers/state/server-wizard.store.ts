@@ -68,9 +68,25 @@ export class ServerWizardStore {
     }
   }
 
-  discover(): Promise<Discovery | null> {
+  discover(projectDir?: string, accountPassword?: string): Promise<Discovery | null> {
     const id = this.server()?.id;
-    return id ? this.run(this.api.discover(id), this.discovering, this.discoverError) : Promise.resolve(null);
+    return id
+      ? this.run(this.api.discover(id, projectDir, accountPassword), this.discovering, this.discoverError)
+      : Promise.resolve(null);
+  }
+
+  async usePython(pythonPath: string, accountPassword?: string): Promise<CheckedServer | null> {
+    const id = this.server()?.id;
+    if (!id) {
+      return null;
+    }
+    const changes = { python_path: pythonPath, ...(accountPassword ? { account_password: accountPassword } : {}) };
+    const saved = await this.run(this.api.update(id, changes), this.savingProject, this.projectError);
+    if (!saved) {
+      return null;
+    }
+    this.server.update((current) => (current ? { ...current, ...saved } : current));
+    return this.check();
   }
 
   async saveProject(settings: ProjectSettings): Promise<boolean> {

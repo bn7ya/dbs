@@ -6,6 +6,54 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `python -m dbs.manager` runs the manager, for when pip installs `django_dbs` into a folder
+  that is not on `PATH`. The README and the panel's wiki explain the fix, and
+  `python -m dbs.client` does the same for `dbs-client`.
+- **Browse the server.** The manager's add-server wizard and server settings open the server's
+  folders and files in a dialog, so the project, the backup folder, the allowed folders and the
+  `.env` file are picked rather than typed. `GET /api/servers/{id}/browse/?path=` lists what the
+  server's SSH user can read; it never writes.
+- The wizard searches for the project as soon as the server is added, lists every project it
+  finds, and fills in the rest for the one chosen. `POST /api/servers/{id}/discover/` accepts a
+  `project_dir` to look inside one folder.
+
+### Fixed
+
+- A server whose django-dbs lives in a virtualenv was reported as not recognized. Discovery now
+  tries every Python it can find — any virtualenv in or next to the project (found by its
+  `pyvenv.cfg`, whatever its name), `~/.virtualenvs`, `python3`, `python` — and keeps the one
+  that imports django-dbs. When the saved Python cannot, the check reports the error it got
+  and suggests the Python that has django-dbs, applied with one click.
+- A check that found django-dbs missing said the server's version "does not work with this
+  manager". It now says django-dbs was not found.
+- After one check that did not pass, the wizard could no longer save a corrected project
+  folder or Python without the account password it never asks for. The setup window now stays
+  open until a check passes.
+- Choosing another project while the wizard was still reading the last one could save the new
+  folder with the old project's Python and backup folder. *Next* now waits for the search to
+  finish, and what was found is shown only for the folder in the field.
+
+### Security
+
+- The manager runs a virtualenv's Python, or a project's `manage.py`, that it found by itself
+  only when the folder is owned by the SSH user or root and nobody else can write to it
+  (group write is accepted for the SSH user's own group, as a `002` umask leaves it). A
+  virtualenv planted next to the project by another account on a shared server is never run,
+  and a project folder you choose yourself is always used.
+- The version probe no longer imports from the folder it runs in, so a `dbs.py` or `dbs/` in
+  the project folder can neither run nor fake the reported version.
+- Discovery runs commands on the server, so once a server's setup is over (an hour after it
+  was added, or once a check has passed) it asks for the account password, as changing the
+  server's settings already does. A `manage.py` placed through the Files tab can no longer be run
+  by anyone who only holds a signed-in session.
+- The ownership rule also covers the folder that holds a virtualenv or a found project, so one
+  cannot be swapped out through a parent folder other accounts can write to.
+- Browsing keeps at most 5000 entries of a folder and says when it stopped, and one search
+  tries at most 8 Pythons, so neither a huge folder nor a home full of virtualenvs can tie up
+  the manager.
+
 ## [0.5.0] - 2026-10-09
 
 One `pip install django-dbs` now covers three uses, depending only on where you use it: the

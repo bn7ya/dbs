@@ -241,14 +241,30 @@ the backend permission is the boundary.
   overview runs the connection check, shows the settings, edits them in a two-step dialog
   (connection, django-dbs and folders), re-pins a changed host key, reveals the backup passphrase
   behind the account password, links to the move, and deletes. Secrets are write-only; an edit that
-  changes more than the name asks for the account password.
+  changes more than the name asks for the account password. Every path field in the dialog has a
+  browse button.
+- **server browser** (`components/server-browser/`, a dialog in the servers feature) — the server's
+  folders and files as the SSH user sees them, through `ServerBrowserStore` (provided by the dialog
+  itself) and `GET /api/servers/{id}/browse/`: Home, Up, a left-to-right trail, the projects
+  discovery found as quick picks, a notice when the folder holds `manage.py`, and a paged
+  `mat-table`, with a notice when the folder was cut at 5000 entries. In `folder` mode it closes with the folder on screen; in `file` mode a file row closes
+  it with that file. `browseServer()` in `browse-server.ts` opens it for one path field and picks
+  where it starts; the wizard and the edit dialog both call it.
 - **server wizard** (`/servers/new`, in the servers feature) — a linear vertical `mat-stepper`:
   the optional connection snippet (`manage.py dbs connection --json`, parsed in
   `connection-snippet.ts`), address and host key (fingerprint compared with the snippet's), sign-in
   (create a key pair, paste a key, or a password; the server is created here, and a generated
-  public key is shown to copy into `authorized_keys`), project (discovery fills the fields and
-  offers candidates), check (the two django-dbs versions must be compatible), the optional backup
-  passphrase capture, and a test backup. Steps up to sign-in lock once the server exists.
+  public key is shown to copy into `authorized_keys`), project (discovery runs on arrival, inside
+  the snippet's folder when there is one; several projects found are a radio group, and choosing
+  one, or one picked in the server browser, discovers inside it; the folders and `.env` sit behind
+  "Show more settings", opened by itself when one of them has an error), check (runs on arrival;
+  the two django-dbs versions must be compatible; when the saved Python cannot import django-dbs
+  it shows the error and offers the Python discovery found with it, saved and re-checked in one
+  click), the optional backup passphrase capture, and a test backup. Steps up to sign-in lock once
+  the server exists. A discovery the developer did not ask for keeps a snippet's Python unless it
+  found one that imports django-dbs. When discovery or "Use this Python" answers that the account
+  password is required (the setup window is over), the wizard asks through `PasswordPrompt` and
+  retries with it; that ask is kept out of the page's own notices.
 - **redeploy** (`/servers/:serverId/move`) — move a server onto another one: target, django-dbs
   backup, `.env` version, folder archives, migrate and flush. A rehearsal needs no password; a real
   move needs the account password and the target's name typed out. The job's steps render as a list
@@ -288,9 +304,10 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | GET/PATCH/DELETE | `/api/servers/{id}/` | `ServerUpdate` → `Server` |
 | POST | `/api/servers/fingerprint/` | `{host, port}` → `{key_type, line, fingerprint}` |
 | GET | `/api/servers/{id}/public-key/` | → `{public_key}`; `no_private_key` on a password server |
-| POST | `/api/servers/{id}/discover/` | `{}` → `Discovery` (fields plus `candidates`) |
+| POST | `/api/servers/{id}/discover/` | `{project_dir?, account_password?}` → `Discovery` (fields, `dbs_version`, `is_project`, `candidates`); the password is required once setup is over |
+| GET | `/api/servers/{id}/browse/?path=&page=&page_size=` | → `RemoteFolder` (`path`, `parent`, `home`, `project`, `truncated`, page of entries); no `path` is the home folder |
 | POST | `/api/servers/{id}/passphrase/capture/` | `{}` → `{captured}` |
-| POST | `/api/servers/{id}/check/` | → `Server` with `local_version`, `remote_version`, `compatible`, `last_health` |
+| POST | `/api/servers/{id}/check/` | → `Server` with `local_version`, `remote_version`, `installed`, `compatible`, `last_health`; the report adds `dbs_error` and `python_suggestion` |
 | POST | `/api/servers/{id}/host-key/` | `{host_key, password}` → `Server` |
 | POST | `/api/servers/{id}/passphrase/` | `{password}` → `{passphrase}` |
 | GET | `/api/backups/?server=&page=&page_size=` | → page of `BackupFile` |

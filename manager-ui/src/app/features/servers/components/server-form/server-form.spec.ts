@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
+import { Dialogs } from '@shared/dialogs/dialogs';
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
 import type { Server } from '../../data/servers.types';
@@ -21,9 +22,13 @@ import type { ServerFormData } from './server-form.types';
 describe('ServerForm', () => {
   let http: HttpTestingController;
   let close: ReturnType<typeof vi.fn>;
+  let browsed: ReturnType<typeof vi.fn>;
+  let chosen: string | undefined;
 
   const open = (data: ServerFormData): ServerForm => {
     close = vi.fn();
+    chosen = undefined;
+    browsed = vi.fn(() => ({ whenClosed: () => Promise.resolve(chosen) }));
     TestBed.configureTestingModule({
       providers: [
         ServersStore,
@@ -32,6 +37,7 @@ describe('ServerForm', () => {
         provideRouter([]),
         { provide: MatDialogRef, useValue: { close } },
         { provide: MAT_DIALOG_DATA, useValue: { data } },
+        { provide: Dialogs, useValue: { open: browsed } },
       ],
     });
     http = TestBed.inject(HttpTestingController);
@@ -155,6 +161,28 @@ describe('ServerForm', () => {
 
     form.removeFileRoot(SERVER.file_roots.length);
     expect(form.draft().file_roots).toEqual([...SERVER.file_roots, '/srv/app/uploads']);
+  });
+
+  it('fills a path, or adds an allowed folder, from the folder chosen on the server', async () => {
+    const form = open({ server: SERVER });
+
+    chosen = '/srv/app/uploads';
+    await form.browse('file_roots');
+    await form.browse('file_roots');
+    expect(form.draft().file_roots).toEqual([...SERVER.file_roots, '/srv/app/uploads']);
+    expect(browsed.mock.calls[0][1]).toMatchObject({
+      titleKey: 'servers.browser.title.folder',
+      data: { serverId: SERVER.id, start: SERVER.project_dir, mode: 'folder' },
+    });
+
+    chosen = '/etc/app.env';
+    await form.browse('env_path');
+    expect(form.draft().env_path).toBe('/etc/app.env');
+    expect(browsed.mock.calls[2][1]).toMatchObject({ data: { mode: 'file' } });
+
+    chosen = undefined;
+    await form.browse('project_dir');
+    expect(form.draft().project_dir).toBe(SERVER.project_dir);
   });
 
   it('edits a server in two steps, either of which opens at once', async () => {

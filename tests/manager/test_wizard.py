@@ -196,12 +196,33 @@ def test_after_an_hour_a_check_or_for_someone_else_paths_need_the_password(api, 
     other = UserRepository().create(username="omar", password=PASSWORD)
     theirs = create(other, name="web-2")
     checked = create(admin, name="web-3")
-    ServerRepository().update(checked, last_checked_at=timezone.now())
+    ServerRepository().update(
+        checked,
+        last_checked_at=timezone.now(),
+        last_check_status=Server.CheckStatus.OK,
+    )
 
     for server in (older, theirs, checked):
         response = api.patch(url(server), {"project_dir": "/srv/found"}, format="json")
         assert response.status_code == 400
         assert response.json()["error"]["fields"] == {"account_password": ["required"]}
+
+
+@pytest.mark.django_db
+def test_a_check_that_did_not_pass_leaves_the_paths_open_to_fix(api, admin):
+    server = create(admin)
+    ServerRepository().update(
+        server,
+        last_checked_at=timezone.now(),
+        last_check_status=Server.CheckStatus.PROBLEM,
+    )
+
+    response = api.patch(
+        url(server), {"python_path": "/srv/app/venv/bin/python"}, format="json"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["python_path"] == "/srv/app/venv/bin/python"
 
 
 @pytest.fixture
@@ -245,13 +266,13 @@ def test_discovery_finds_the_project_over_sftp(api, admin, project, monkeypatch)
         "file_roots": [],
         "env_path": f"{app}/.env",
         "dbs_version": None,
+        "is_project": True,
         "candidates": {
             "project_dirs": [app, str(project["blog"])],
-            "python_paths": [f"{app}/.venv/bin/python", "python3"],
+            "python_paths": [f"{app}/.venv/bin/python", "python3", "python"],
         },
     }
-    [run] = hosts.runs("10.0.0.5")
-    assert run["argv"] == [
+    assert hosts.runs("10.0.0.5")[-1]["argv"] == [
         f"{app}/.venv/bin/python",
         "manage.py",
         "dbs",
@@ -297,7 +318,7 @@ def test_discovery_prefers_what_the_project_says_about_itself(
     assert body["file_roots"] == ["/srv/media"]
     assert body["env_path"] == "/etc/shop.env"
     assert body["dbs_version"] == "0.5.0"
-    assert hosts.runs("10.0.0.5")[0]["setup"][-1].endswith("shop.settings.prod")
+    assert hosts.runs("10.0.0.5")[-1]["setup"][-1].endswith("shop.settings.prod")
 
 
 @pytest.mark.django_db
@@ -310,7 +331,66 @@ def test_discovery_with_no_project_suggests_defaults(api, admin, tmp_path, monke
     body = api.post(url(server, "discover/")).json()
 
     assert body["project_dir"] == "" and body["python_path"] == "python3"
-    assert body["candidates"] == {"project_dirs": [], "python_paths": ["python3"]}
+    assert body["candidates"] == {
+        "project_dirs": [],
+        "python_paths": ["python3", "python"],
+    }
+
+
+@pytest.mark.django_db
+def test_discovery_finds_a_virtualenv_of_any_name_that_has_django_dbs(
+    api, admin, project, monkeypatch
+):
+    server = create(admin)
+    app = project["app"]
+    (app / "shop-env" / "bin").mkdir(parents=True)
+    (app / "shop-env" / "pyvenv.cfg").write_text("home = /usr/bin\n")
+    hosts = scripted_hosts(monkeypatch)
+    venv = f"{app}/shop-env/bin/python"
+    hosts.answer("10.0.0.5", [venv, "-c", DBS_VERSION], (0, "0.5.0\n", ""))
+
+    body = api.post(url(server, "discover/")).json()
+
+    assert body["python_path"] == venv
+    assert body["dbs_version"] == "0.5.0"
+    assert body["candidates"]["python_paths"] == [
+        f"{app}/.venv/bin/python",
+        venv,
+        "python3",
+        "python",
+    ]
+    assert hosts.runs("10.0.0.5")[-1]["argv"][:3] == [venv, "manage.py", "dbs"]
+
+
+@pytest.mark.django_db
+def test_discovery_of_a_chosen_folder_skips_the_search(
+    api, admin, project, monkeypatch
+):
+    server = create(admin)
+    hosts = scripted_hosts(monkeypatch)
+    blog = str(project["blog"])
+    hosts.answer("10.0.0.5", ["python3", "-c", DBS_VERSION], (0, "0.5.0\n", ""))
+
+    body = api.post(url(server, "discover/"), {"project_dir": blog}).json()
+
+    assert body["project_dir"] == blog
+    assert body["is_project"] is True
+    assert body["python_path"] == "python3"
+    assert body["dbs_version"] == "0.5.0"
+    assert body["candidates"]["project_dirs"] == [blog]
+
+
+@pytest.mark.django_db
+def test_discovery_refuses_a_relative_folder(api, admin, monkeypatch):
+    server = create(admin)
+    scripted_hosts(monkeypatch)
+
+    response = api.post(url(server, "discover/"), {"project_dir": "srv/app"})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["fields"] == {
+        "project_dir": ["absolute_path_required"]
+    }
 
 
 @pytest.mark.django_db
