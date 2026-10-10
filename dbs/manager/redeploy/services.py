@@ -89,6 +89,7 @@ class RedeployService:
         password: str = "",
         confirm_name: str = "",
     ) -> Any:
+        archives = list(dict.fromkeys(archives))
         source = self.servers.get(source_server)
         target = self.servers.get(target_server)
         if source.pk == target.pk:

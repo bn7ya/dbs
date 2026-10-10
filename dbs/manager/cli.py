@@ -5,11 +5,12 @@ import getpass
 import json
 import os
 import signal
-import socket
 import sys
 import webbrowser
 
 from . import paths
+from .processes import abandoned
+from .terminal import CommandFailed, parsers
 from .conf import (
     DATABASE_URL_ENV,
     DEFAULT_HOST,
@@ -25,10 +26,6 @@ from .conf import (
 PROG = "django_dbs"
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
 SERVER_THREADS = 8
-
-
-class CommandFailed(Exception):
-    pass
 
 
 class VersionAction(argparse.Action):
@@ -146,7 +143,13 @@ def build_parser():
     database_option(restore)
     restore.set_defaults(handler=command_import)
 
+    parsers.register(commands, location)
     return parser
+
+
+def location(parser):
+    data_dir_option(parser)
+    database_option(parser)
 
 
 def main(argv=None):
@@ -156,10 +159,22 @@ def main(argv=None):
         parser.print_help()
         return 2
     try:
+        if isinstance(args.handler, str):
+            return command_terminal(args)
         return args.handler(args) or 0
     except CommandFailed as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print(f"{PROG}: stopped.", file=sys.stderr)
+        return 130
+
+
+def command_terminal(args):
+    setup_django(resolve(args), args.database_url)
+    from .terminal.dispatch import dispatch
+
+    return dispatch(args)
 
 
 def resolve(args):
@@ -309,25 +324,6 @@ def command_import(args):
     return 0
 
 
-def pid_running(pid):
-    if os.name != "posix":
-        return True
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def abandoned(owner):
-    host, _, pid = owner.rpartition(":")
-    if host != socket.gethostname() or not pid.isdigit():
-        return False
-    return int(pid) != os.getpid() and not pid_running(int(pid))
-
-
 def take_instance_lease(owner):
     from dbs import leases
 
@@ -408,8 +404,9 @@ def warn_if_exposed(host):
 def command_run(args):
     data_dir = resolve(args)
     setup_django(data_dir, args.database_url, args.host)
-    from dbs import audit, leases
+    from dbs import leases
 
+    from .activity.services import ActivityService
     from .runner import get_runner
     from .scheduler import Scheduler
 
@@ -421,7 +418,7 @@ def command_run(args):
     scheduler = Scheduler()
     server = None
     try:
-        audit.interrupt()
+        ActivityService(None).interrupt()
         runner.start()
         scheduler.start()
         server = create_server(args.host, args.port)

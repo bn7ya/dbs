@@ -3,6 +3,7 @@ import os
 import queue
 import re
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from dbs.manager import cli, paths
+from dbs.manager import cli, paths, processes
 
 ROOT = Path(__file__).resolve().parents[2]
 URL = re.compile(r"running at (http://\S+)")
@@ -192,11 +193,12 @@ def test_the_browser_is_sent_to_a_reachable_address():
 
 
 def test_a_lease_left_by_a_dead_process_on_this_host_is_abandoned(monkeypatch):
-    monkeypatch.setattr(cli, "pid_running", lambda pid: False)
+    monkeypatch.setattr(processes, "pid_running", lambda pid: False)
+    host = socket.gethostname()
 
-    assert cli.abandoned(f"{cli.socket.gethostname()}:4242")
-    assert not cli.abandoned("another-host:4242")
-    assert not cli.abandoned(f"{cli.socket.gethostname()}:{os.getpid()}")
+    assert processes.abandoned(f"{host}:4242")
+    assert not processes.abandoned("another-host:4242")
+    assert not processes.abandoned(f"{host}:{os.getpid()}")
 
 
 def test_run_boots_answers_and_refuses_a_second_instance(tmp_path):

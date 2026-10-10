@@ -80,5 +80,21 @@ Also reachable as `manage.py dbs_upgrade` and `manage.py dbs-upgrade`.
 `run [--port] [--host] [--no-browser] [--data-dir] [--database-url]`, `export [FILE]
 [--with-backups]`, `import FILE [--replace]`, `createuser NAME`, `password NAME`, `paths`.
 
+Everything the manager's interface does is also a command, on the same data:
+- `server list|show|add|edit|remove|check|discover|browse|public-key|host-key|passphrase|capture-passphrase|import-profiles`
+- `backup list|take|verify|restore|download|upload|delete|undo-delete` (`take SERVER…` or `--all`)
+- `plan list|show|add|edit|remove|run`, `activity list|show`
+- `env list|pull|compare|reveal|push`, `files list|download|upload|mkdir|delete`
+- `redeploy start --from SERVER --to SERVER --backup ID [--real]`
+
+Each takes `--as NAME` (the account to act as; defaults to the only one), `--json` (the web
+API's output) and `--password-stdin` (for actions that need the account password). Secrets
+are prompted for or read from stdin, never passed as arguments; confirmations need `--yes`
+from a script. `server add` confirms the host key, finds the project and its Python, and
+checks the server.
+
+`dbs-client` is deprecated: prefer `django_dbs server import-profiles` and
+`django_dbs backup take`.
+
 `python -m dbs.manager COMMAND` is the same, for when pip put `django_dbs` in a folder that
 is not on `PATH`; `python -m dbs.client COMMAND` does the same for `dbs-client`.
