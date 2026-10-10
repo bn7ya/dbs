@@ -51,6 +51,10 @@ export class Api {
     });
   }
 
+  async server(id: string): Promise<ServerRecord> {
+    return this.get<ServerRecord>(`/api/servers/${id}/`);
+  }
+
   async findServers(nameStartsWith: string): Promise<ServerRecord[]> {
     const page = await this.get<Page<ServerRecord>>(
       `/api/servers/?search=${encodeURIComponent(nameStartsWith)}&page_size=100`,

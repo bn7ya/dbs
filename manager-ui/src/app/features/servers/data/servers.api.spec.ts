@@ -83,4 +83,30 @@ describe('ServersApi', () => {
     expect(reveal.request.method).toBe('POST');
     expect(reveal.request.body).toEqual({ password: 'secret' });
   });
+
+  it('discovers by searching, or inside the folder the developer chose', () => {
+    void firstValueFrom(api.discover(SERVER.id));
+    expect(http.expectOne(`/api/servers/${SERVER.id}/discover/`).request.body).toEqual({});
+
+    void firstValueFrom(api.discover(SERVER.id, '/srv/blog'));
+    expect(http.expectOne(`/api/servers/${SERVER.id}/discover/`).request.body).toEqual({ project_dir: '/srv/blog' });
+
+    void firstValueFrom(api.discover(SERVER.id, '/srv/blog', 'secret'));
+    expect(http.expectOne(`/api/servers/${SERVER.id}/discover/`).request.body).toEqual({
+      project_dir: '/srv/blog',
+      account_password: 'secret',
+    });
+  });
+
+  it('browses a folder on the server, the home folder when no path is given', () => {
+    void firstValueFrom(api.browse({ server: SERVER.id, path: null, page: 1, page_size: 50 }));
+    http.expectOne(`/api/servers/${SERVER.id}/browse/?page=1&page_size=50`).flush({});
+
+    void firstValueFrom(api.browse({ server: SERVER.id, path: '/srv/app', page: 2, page_size: 50 }));
+    const request = http.expectOne((r) => r.url === `/api/servers/${SERVER.id}/browse/`);
+    expect(request.request.method).toBe('GET');
+    expect(request.request.params.get('path')).toBe('/srv/app');
+    expect(request.request.params.get('page')).toBe('2');
+    request.flush({});
+  });
 });

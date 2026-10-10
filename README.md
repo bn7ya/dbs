@@ -273,9 +273,16 @@ manage accounts without a browser; add `--password-stdin` to script them.
    whether it matches the one in the snippet. Nothing connects until you confirm it.
 3. **Choose how to sign in.** Let the manager create a key — it shows the one line to add to
    the server's `~/.ssh/authorized_keys` — or paste a key or a password.
-4. **Find the project.** The manager looks for `manage.py`, the virtualenv's Python and the
-   settings module, and asks the project itself when DBS 0.5 or later is installed there.
-5. **Check versions.** The server's django-dbs is compared with the manager's.
+4. **Choose the project.** The manager searches the server for `manage.py` as soon as the
+   server is added and lists every project it finds. *Browse the server* opens the server's
+   folders and files so you can pick the project, the backup folder, the allowed folders and
+   the `.env` file instead of typing them. For the chosen project it tries every Python it
+   can find — any virtualenv in or next to the project, `~/.virtualenvs`, then `python3` —
+   and keeps the one that has django-dbs. A virtualenv or project it found by itself is run
+   only when it belongs to the SSH user or root and no other account can write to it.
+5. **Check versions.** The server's django-dbs is compared with the manager's. If the saved
+   Python cannot import django-dbs, the check says so, shows the error, and offers the Python
+   that has it with one click.
 6. **Store the passphrase** (optional), read from the server so you never retype it.
 7. **Take a test backup**, and watch it arrive.
 
@@ -712,6 +719,12 @@ folder that is not on your `PATH`, common with Windows user installs and
 **The manager cannot reach a server.** Re-run the wizard's *Check* step: it names whether
 the SSH login, the host key, the project path or the server's django-dbs version is the
 problem.
+
+**The manager says django-dbs is "Not found" on a server that has it.** The manager runs the
+Python saved for that server over a non-interactive SSH login, which loads no virtualenv. The
+check names the Python it used and the error it got, and offers the Python where django-dbs
+is installed; choose *Use this Python*. Or open the server's settings and pick the project
+again with *Browse the server*.
 
 ---
 

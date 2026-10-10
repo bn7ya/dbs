@@ -6,20 +6,18 @@ import re
 from typing import Any
 from uuid import UUID
 
-from rest_framework.exceptions import APIException
-
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.servers.gateways import EntryKind, RemoteHost
 from dbs.manager.servers.models import DEFAULT_REMOTE_BACKUP_DIR, Server
+from dbs.manager.servers.services import pythons
 from dbs.manager.servers.services.connection_service import ServerConnectionService
+from dbs.manager.servers.services.pythons import quiet
 from dbs.manager.servers.services.server_service import ServerService
 
 SEARCH_ROOTS = ("~", "/srv", "/var/www", "/opt")
 SEARCH_DEPTH = 2
 ENTRIES_PER_FOLDER = 500
 MANAGE = "manage.py"
-PYTHON_CANDIDATES = (".venv/bin/python", "venv/bin/python", "env/bin/python")
-BARE_PYTHON = "python3"
 MANAGE_MAX_BYTES = 64 * 1024
 SETTINGS_MODULE = re.compile(
     "DJANGO_SETTINGS_MODULE[\"']\\s*,\\s*[\"']([A-Za-z_][\\w.]*)[\"']"
@@ -44,46 +42,50 @@ class DiscoveryService:
         self.connections = ServerConnectionService(user)
         self.activity = ActivityService(user)
 
-    def discover(self, server_id: UUID) -> dict[str, Any]:
+    def discover(
+        self,
+        server_id: UUID,
+        project_dir: str | None = None,
+        account_password: str = "",
+    ) -> dict[str, Any]:
         server = self.servers.get(server_id)
+        self.servers.require_step_up(server, account_password)
         with self.activity.track(DISCOVER, server=server, target=server.name) as entry:
+            self.servers.confirm_step_up(account_password)
             with self.connections.open(server) as remote:
-                found = self._found(server, remote)
+                found = self._found(server, remote, project_dir)
             entry.detail = {
                 "project_dir": found["project_dir"],
                 "dbs_version": found["dbs_version"],
             }
             return found
 
-    def _found(self, server: Server, remote: RemoteHost) -> dict[str, Any]:
-        projects = project_dirs(remote)
+    def _found(
+        self, server: Server, remote: RemoteHost, chosen: str | None
+    ) -> dict[str, Any]:
+        projects = [chosen] if chosen else project_dirs(remote)
         project = projects[0] if projects else ""
-        pythons = python_paths(remote, project) if project else [BARE_PYTHON]
+        candidates = pythons.candidates(remote, project)
+        usable = pythons.with_dbs(remote, candidates, project or None)
         found = {
             "project_dir": project,
-            "python_path": pythons[0],
+            "python_path": usable.python_path if usable else candidates[0],
             "manage_path": MANAGE,
             "settings_module": settings_module(remote, project) if project else "",
             "remote_backup_dir": server.remote_backup_dir or DEFAULT_REMOTE_BACKUP_DIR,
             "file_roots": [],
             "env_path": env_path(remote, project) if project else "",
-            "dbs_version": None,
+            "dbs_version": usable.dbs_version if usable else None,
+            "is_project": bool(project) and is_project(remote, project),
         }
-        if project:
+        if project and (chosen or pythons.trusted_with_parent(remote, project)):
             found.update(connection_details(remote, found))
-        found["candidates"] = {"project_dirs": projects, "python_paths": pythons}
+        found["candidates"] = {"project_dirs": projects, "python_paths": candidates}
         return found
 
 
-def _quiet(call, *args, default=None):
-    try:
-        return call(*args)
-    except APIException:
-        return default
-
-
 def project_dirs(remote: RemoteHost) -> list[str]:
-    home = _quiet(remote.realpath, ".")
+    home = quiet(remote.realpath, ".")
     found: list[str] = []
     for root in SEARCH_ROOTS:
         start = home if root == "~" else root
@@ -93,7 +95,7 @@ def project_dirs(remote: RemoteHost) -> list[str]:
 
 
 def _search(remote: RemoteHost, folder: str, depth: int, found: list[str]) -> None:
-    entries = _quiet(remote.listdir, folder, default=[])
+    entries = quiet(remote.listdir, folder, default=[])
     names = {entry.name: entry for entry in entries[:ENTRIES_PER_FOLDER]}
     manage = names.get(MANAGE)
     if manage is not None and manage.kind == EntryKind.FILE:
@@ -106,16 +108,12 @@ def _search(remote: RemoteHost, folder: str, depth: int, found: list[str]) -> No
             _search(remote, posixpath.join(folder, name), depth - 1, found)
 
 
-def python_paths(remote: RemoteHost, project: str) -> list[str]:
-    candidates = [posixpath.join(project, relative) for relative in PYTHON_CANDIDATES]
-    existing = [
-        path for path in candidates if _quiet(remote.exists, path, default=False)
-    ]
-    return [*existing, BARE_PYTHON]
+def is_project(remote: RemoteHost, folder: str) -> bool:
+    return bool(quiet(remote.exists, posixpath.join(folder, MANAGE), default=False))
 
 
 def settings_module(remote: RemoteHost, project: str) -> str:
-    content = _quiet(
+    content = quiet(
         remote.read_small, posixpath.join(project, MANAGE), MANAGE_MAX_BYTES
     )
     if not content:
@@ -126,7 +124,7 @@ def settings_module(remote: RemoteHost, project: str) -> str:
 
 def env_path(remote: RemoteHost, project: str) -> str:
     path = posixpath.join(project, ".env")
-    return path if _quiet(remote.exists, path, default=False) else ""
+    return path if quiet(remote.exists, path, default=False) else ""
 
 
 def connection_details(remote: RemoteHost, found: dict[str, Any]) -> dict[str, Any]:
@@ -135,7 +133,7 @@ def connection_details(remote: RemoteHost, found: dict[str, Any]) -> dict[str, A
         if found["settings_module"]
         else None
     )
-    result = _quiet(
+    result = quiet(
         lambda: remote.run(
             [found["python_path"], found["manage_path"], "dbs", "connection", "--json"],
             cwd=found["project_dir"],

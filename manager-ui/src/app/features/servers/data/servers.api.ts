@@ -6,11 +6,13 @@ import type { Page } from '@core/http/api.types';
 import type { JobStarted } from '@core/jobs/job.types';
 import type {
   BackupPassphrase,
+  BrowseQuery,
   CheckedServer,
   CreatedServer,
   Discovery,
   PassphraseCapture,
   PublicKey,
+  RemoteFolder,
   HostKey,
   HostKeyRepin,
   HostKeyTarget,
@@ -42,8 +44,19 @@ export class ServersApi {
     return this.http.get<PublicKey>(`${this.base}/${id}/public-key/`);
   }
 
-  discover(id: string): Observable<Discovery> {
-    return this.http.post<Discovery>(`${this.base}/${id}/discover/`, {});
+  discover(id: string, projectDir?: string, accountPassword?: string): Observable<Discovery> {
+    return this.http.post<Discovery>(`${this.base}/${id}/discover/`, {
+      ...(projectDir ? { project_dir: projectDir } : {}),
+      ...(accountPassword ? { account_password: accountPassword } : {}),
+    });
+  }
+
+  browse(query: BrowseQuery): Observable<RemoteFolder> {
+    let params = new HttpParams().set('page', query.page).set('page_size', query.page_size);
+    if (query.path !== null) {
+      params = params.set('path', query.path);
+    }
+    return this.http.get<RemoteFolder>(`${this.base}/${query.server}/browse/`, { params });
   }
 
   capturePassphrase(id: string): Observable<PassphraseCapture> {

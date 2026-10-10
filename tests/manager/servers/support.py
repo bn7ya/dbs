@@ -16,6 +16,7 @@ from paramiko import SFTPAttributes
 from dbs import create_backup
 from dbs.crypto.kdf import KDFParams
 from dbs.manager.servers.exceptions import RemoteCommandFailed
+from dbs.manager.servers.gateways import EntryKind, RemoteEntry
 from dbs.manager.servers.services.server_service import DBS_VERSION
 
 PASSWORD = "correct-horse-battery-staple"
@@ -24,6 +25,7 @@ KEY_PASSPHRASE = "key-passphrase-93ab7e"
 BACKUP_PASSPHRASE = "backup-passphrase-41c7d9"
 
 PYTHON = "/srv/app/.venv/bin/python"
+HOME = "/home/deploy"
 PROJECT_DIR = "/srv/app"
 ENV_PATH = "/srv/app/.env"
 MEDIA_ROOT = "/srv/app/media"
@@ -107,6 +109,23 @@ class FakeRemote:
         if path in self.unreadable:
             raise RemoteCommandFailed()
         return path in self.paths
+
+    def realpath(self, path: str) -> str:
+        return HOME if path == "." else path
+
+    def listdir(self, folder: str) -> list:
+        return []
+
+    def lstat(self, path: str) -> RemoteEntry:
+        return RemoteEntry(
+            name=os.path.basename(path),
+            path=path,
+            kind=EntryKind.FOLDER,
+            size=None,
+            mtime=None,
+            permissions=0o755,
+            uid=0,
+        )
 
 
 def healthy_remote() -> FakeRemote:
@@ -249,6 +268,9 @@ class LocalSftp:
                 attributes(os.lstat(os.path.join(path, name)), name)
                 for name in os.listdir(path)
             ]
+
+    def listdir_iter(self, path: str) -> Iterator[SFTPAttributes]:
+        yield from self.listdir_attr(path)
 
     def open(self, path: str, mode: str = "r") -> LocalFile:
         with as_sftp_server():

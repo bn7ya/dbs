@@ -419,6 +419,23 @@ class RemoteHost:
             for entry in entries
         ]
 
+    def listdir_limited(
+        self, folder: str, limit: int
+    ) -> tuple[list[RemoteEntry], bool]:
+        sftp = self.sftp
+        kept: list[RemoteEntry] = []
+        truncated = False
+        try:
+            for entry in sftp.listdir_iter(folder):
+                if len(kept) < limit:
+                    path = posixpath.join(folder, entry.filename)
+                    kept.append(_entry(entry.filename, path, entry))
+                else:
+                    truncated = True
+        except SFTP_ERRORS as exc:
+            raise _translated(exc, folder) from exc
+        return kept, truncated
+
     @contextmanager
     def stream_file(
         self, path: str, limit: int | None = None

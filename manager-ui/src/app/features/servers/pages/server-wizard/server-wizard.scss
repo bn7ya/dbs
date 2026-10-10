@@ -95,3 +95,22 @@
   font-size: var(--app-text--1);
   color: var(--app-color-danger);
 }
+
+.wizard__options--stacked {
+  flex-direction: column;
+}
+
+.wizard__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.wizard__details[hidden] {
+  display: none;
+}
+
+.wizard__reason {
+  display: block;
+  margin-block-start: var(--app-space-2);
+}

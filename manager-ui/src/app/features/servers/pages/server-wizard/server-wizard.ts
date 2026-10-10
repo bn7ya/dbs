@@ -1,25 +1,31 @@
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
-import { ChangeDetectionStrategy, Component, afterRenderEffect, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, afterRenderEffect, computed, inject, signal, type Signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatAutocomplete, MatAutocompleteTrigger } from '@angular/material/autocomplete';
-import { MatButton } from '@angular/material/button';
+import { MatButton, MatIconButton } from '@angular/material/button';
 import { MatCard, MatCardContent } from '@angular/material/card';
 import { MatCheckbox } from '@angular/material/checkbox';
 import { MatChipGrid, MatChipInput, MatChipRemove, MatChipRow, type MatChipInputEvent } from '@angular/material/chips';
 import { MatOption } from '@angular/material/core';
-import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
+import { MatError, MatFormField, MatHint, MatLabel, MatSuffix } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 import { MatRadioButton, MatRadioGroup } from '@angular/material/radio';
 import { MatStep, MatStepper, MatStepperIcon } from '@angular/material/stepper';
 import { RouterLink } from '@angular/router';
 
+import type { ApiError } from '@core/http/api.types';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { CopyButton } from '@shared/copy-button/copy-button';
+import { Dialogs } from '@shared/dialogs/dialogs';
+import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
+import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { StatusTag } from '@shared/status-tag/status-tag';
+import { browseServer } from '../../components/server-browser/browse-server';
+import type { BrowsedField } from '../../components/server-browser/server-browser.types';
 import { parseSnippet, versionBelow } from '../../data/connection-snippet';
 import type { Discovery, HostKey, ProjectSettings, ServerCreate } from '../../data/servers.types';
 import { ServerWizardStore } from '../../state/server-wizard.store';
@@ -33,6 +39,10 @@ const HEALTH_SUPPORT = '0.5.0';
 
 const ABSOLUTE_PATH = /^\//;
 
+const DEFAULT_PYTHON = 'python3';
+
+const DETAIL_FIELDS: readonly WizardField[] = ['remote_backup_dir', 'env_path', 'file_roots'];
+
 const NEW_DRAFT: WizardDraft = {
   name: '',
   host: '',
@@ -43,7 +53,7 @@ const NEW_DRAFT: WizardDraft = {
   key_passphrase: '',
   password: '',
   project_dir: '',
-  python_path: 'python3',
+  python_path: DEFAULT_PYTHON,
   manage_path: 'manage.py',
   settings_module: '',
   remote_backup_dir: '/var/backups/dbs',
@@ -74,6 +84,7 @@ const FIELD_STEPS: Readonly<Partial<Record<WizardField, WizardStep>>> = {
     MatAutocomplete,
     MatAutocompleteTrigger,
     MatButton,
+    MatIconButton,
     MatCard,
     MatCardContent,
     MatCheckbox,
@@ -92,6 +103,7 @@ const FIELD_STEPS: Readonly<Partial<Record<WizardField, WizardStep>>> = {
     MatStep,
     MatStepper,
     MatStepperIcon,
+    MatSuffix,
     CopyButton,
     FieldError,
     Notice,
@@ -100,12 +112,14 @@ const FIELD_STEPS: Readonly<Partial<Record<WizardField, WizardStep>>> = {
     ErrorTextPipe,
     TranslatePipe,
   ],
+  providers: [Dialogs],
   templateUrl: './server-wizard.html',
   styleUrl: './server-wizard.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ServerWizardPage {
   private readonly store = inject(ServerWizardStore);
+  private readonly dialogs = inject(Dialogs);
 
   readonly steps = STEPS;
   readonly signInChoices = SIGN_IN_CHOICES;
@@ -123,6 +137,8 @@ export class ServerWizardPage {
   readonly hostKey = signal<HostKey | null>(null);
   readonly hostKeyConfirmed = signal(false);
   readonly discovery = signal<Discovery | null>(null);
+  readonly projects = signal<readonly string[]>([]);
+  private readonly detailsShown = signal(false);
 
   readonly server = this.store.server;
   readonly publicKey = this.store.publicKey;
@@ -137,9 +153,9 @@ export class ServerWizardPage {
   readonly readingKey = this.store.readingKey;
   readonly keyError = this.store.keyError;
   readonly discovering = this.store.discovering;
-  readonly discoverError = this.store.discoverError;
+  readonly discoverError = computed(() => withoutPasswordAsk(this.store.discoverError()));
   readonly savingProject = this.store.savingProject;
-  readonly projectError = this.store.projectError;
+  readonly projectError = computed(() => withoutPasswordAsk(this.store.projectError()));
   readonly checking = this.store.checking;
   readonly checkError = this.store.checkError;
   readonly capturing = this.store.capturing;
@@ -148,7 +164,12 @@ export class ServerWizardPage {
   readonly backupError = this.store.backupError;
 
   readonly created = computed(() => this.server() !== null);
-  readonly busy = computed(() => this.creating() || this.savingProject() || this.checking());
+  readonly busy = computed(() => this.creating() || this.savingProject() || this.checking() || this.discovering());
+
+  readonly currentDiscovery = computed(() => {
+    const found = this.discovery();
+    return found !== null && !this.discovering() && found.project_dir === this.draft().project_dir.trim() ? found : null;
+  });
 
   readonly fingerprintMatch = computed<FingerprintMatch | null>(() => {
     const key = this.hostKey();
@@ -164,7 +185,22 @@ export class ServerWizardPage {
     return remote !== null && remote !== undefined && versionBelow(remote, HEALTH_SUPPORT);
   });
 
-  readonly incompatible = computed(() => this.checked()?.compatible === false);
+  readonly notInstalled = computed(() => this.checked()?.installed === false);
+
+  readonly incompatible = computed(() => {
+    const checked = this.checked();
+    return checked !== null && checked.installed && !checked.compatible;
+  });
+
+  readonly dbsError = computed(() => this.checked()?.last_check_report?.dbs_error ?? '');
+
+  readonly suggestion = computed(() => this.checked()?.last_check_report?.python_suggestion ?? null);
+
+  readonly checkedPython = computed(() => isolated(this.checked()?.python_path ?? ''));
+
+  readonly suggestedPython = computed(() => isolated(this.suggestion()?.python_path ?? ''));
+
+  readonly detailsOpen = computed(() => this.detailsShown() || DETAIL_FIELDS.some((field) => this.error(field) !== null));
 
   readonly authorizedKeysPath = computed(() => `~${this.draft().username}/.ssh/authorized_keys`);
 
@@ -222,22 +258,64 @@ export class ServerWizardPage {
     this.hostKey.set(await this.store.fetchHostKey({ host: host.trim(), port: port ?? 22 }));
   }
 
-  async discover(): Promise<void> {
-    const found = await this.store.discover();
+  async discover(projectDir?: string, chosen = false): Promise<void> {
+    const found = await this.withPassword(
+      (password) => this.store.discover(projectDir, password),
+      this.store.discoverError,
+    );
     if (!found) {
       return;
     }
     this.discovery.set(found);
-    this.draft.update((draft) => ({
-      ...draft,
-      project_dir: found.project_dir || draft.project_dir,
-      python_path: found.python_path || draft.python_path,
-      manage_path: found.manage_path || draft.manage_path,
-      settings_module: found.settings_module || draft.settings_module,
-      remote_backup_dir: found.remote_backup_dir || draft.remote_backup_dir,
-      file_roots: found.file_roots.length > 0 ? found.file_roots : draft.file_roots,
-      env_path: found.env_path || draft.env_path,
-    }));
+    if (projectDir === undefined || this.projects().length === 0) {
+      this.projects.set(found.candidates.project_dirs);
+    }
+    this.draft.update((draft) => mergeDiscovery(draft, found, chosen));
+  }
+
+  chooseProject(path: string | null): void {
+    if (path && path !== this.draft().project_dir) {
+      this.update('project_dir', path);
+      void this.discover(path, true);
+    }
+  }
+
+  toggleDetails(): void {
+    this.detailsShown.update((shown) => !shown);
+  }
+
+  async browse(field: BrowsedField): Promise<void> {
+    const id = this.server()?.id;
+    if (!id) {
+      return;
+    }
+    const chosen = await browseServer(this.dialogs, id, field, this.draft(), this.projects());
+    if (!chosen) {
+      return;
+    }
+    if (field === 'project_dir') {
+      this.update('project_dir', chosen);
+      await this.discover(chosen, true);
+    } else if (field === 'file_roots') {
+      const roots = this.draft().file_roots;
+      if (!roots.includes(chosen)) {
+        this.update('file_roots', [...roots, chosen]);
+      }
+    } else {
+      this.update(field, chosen);
+    }
+  }
+
+  async useSuggestedPython(): Promise<void> {
+    const suggestion = this.suggestion();
+    if (suggestion) {
+      this.update('python_path', suggestion.python_path);
+      await this.withPassword((password) => this.store.usePython(suggestion.python_path, password), this.store.projectError);
+    }
+  }
+
+  chooseProjectAgain(): void {
+    this.step.set(STEPS.indexOf('project'));
   }
 
   rereadPublicKey(): void {
@@ -262,9 +340,13 @@ export class ServerWizardPage {
 
   skipProject(): void {
     this.step.set(STEPS.indexOf('check'));
+    void this.store.check();
   }
 
   async advance(): Promise<void> {
+    if (this.busy()) {
+      return;
+    }
     const step = STEPS[this.step()];
     this.attempted.update((attempted) => new Set(attempted).add(step));
     if (!this.stepReady(step)) {
@@ -281,6 +363,40 @@ export class ServerWizardPage {
       return;
     }
     this.step.update((index) => Math.min(index + 1, STEPS.length - 1));
+    this.arrive(STEPS[this.step()]);
+  }
+
+  private async withPassword<T>(
+    attempt: (password?: string) => Promise<T | null>,
+    failure: Signal<ApiError | null>,
+  ): Promise<T | null> {
+    const first = await attempt();
+    if (first !== null || !asksForPassword(failure())) {
+      return first;
+    }
+    let answer: T | null = null;
+    const data: PasswordPromptData = {
+      titleKey: 'servers.wizard.password.title',
+      bodyKey: 'servers.wizard.password.body',
+      submitKey: 'servers.wizard.password.submit',
+      submit: async (password) => {
+        answer = await attempt(password);
+        return answer !== null;
+      },
+      error: failure,
+    };
+    await this.dialogs
+      .open<boolean, PasswordPromptData>(PasswordPrompt, { titleKey: data.titleKey, data, size: 'sm' })
+      .whenClosed();
+    return answer;
+  }
+
+  private arrive(step: WizardStep): void {
+    if (step === 'project' && this.discovery() === null) {
+      void this.discover(this.draft().project_dir.trim() || undefined);
+    } else if (step === 'check') {
+      void this.store.check();
+    }
   }
 
   private checkPassed(): boolean {
@@ -374,6 +490,34 @@ function problemsIn(
     problems.set('file_roots', 'absolute_path_required');
   }
   return problems;
+}
+
+function asksForPassword(error: ApiError | null): boolean {
+  return (error?.fields?.['account_password'] ?? []).length > 0;
+}
+
+function withoutPasswordAsk(error: ApiError | null): ApiError | null {
+  return asksForPassword(error) ? null : error;
+}
+
+function mergeDiscovery(draft: WizardDraft, found: Discovery, chosen: boolean): WizardDraft {
+  const verified = found.dbs_version !== null;
+  const keepPython = !verified && !chosen && draft.python_path.trim() !== DEFAULT_PYTHON;
+  return {
+    ...draft,
+    project_dir: found.project_dir || draft.project_dir,
+    python_path: keepPython ? draft.python_path : found.python_path || draft.python_path,
+    manage_path: found.manage_path || draft.manage_path,
+    settings_module: chosen ? found.settings_module : found.settings_module || draft.settings_module,
+    remote_backup_dir: found.remote_backup_dir || draft.remote_backup_dir,
+    file_roots: found.file_roots.length > 0 ? found.file_roots : draft.file_roots,
+    env_path: chosen ? found.env_path : found.env_path || draft.env_path,
+  };
+}
+
+// LRI ... PDI: a path reads left to right inside a sentence of either language.
+function isolated(text: string): string {
+  return `⁦${text}⁩`;
 }
 
 function projectOf(draft: WizardDraft): ProjectSettings {

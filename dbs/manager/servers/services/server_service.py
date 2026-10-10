@@ -32,7 +32,7 @@ from dbs.manager.servers.gateways import (
 )
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.repositories import ServerRepository
-from dbs.manager.servers.services import vault_contexts
+from dbs.manager.servers.services import pythons, vault_contexts
 from dbs.manager.servers.services.connection_service import ServerConnectionService
 from dbs.manager.vault import seal_text
 
@@ -66,7 +66,7 @@ SETUP_WINDOW = timedelta(hours=1)
 HEALTH_STATUSES = ("ok", "warn", "error")
 
 CONNECTION_ERRORS = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
-DBS_VERSION = "import dbs; print(dbs.__version__)"
+DBS_VERSION = pythons.VERSION_PROBE
 REPORTED_OUTPUT_LIMIT = 200
 
 INVALID_HOST_KEY = "Paste the host key as one line, for example 'ssh-ed25519 AAAA...'."
@@ -217,7 +217,7 @@ class ServerService:
         changed = _changed(server, changes)
         free = (
             UNGUARDED_FIELDS | SETUP_FIELDS
-            if self._in_setup(server)
+            if self.in_setup(server)
             else UNGUARDED_FIELDS
         )
         guarded = not free.issuperset(changed)
@@ -236,13 +236,27 @@ class ServerService:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(lambda: self.servers.update(server, **changes))
 
-    def _in_setup(self, server: Server) -> bool:
+    def require_step_up(self, server: Server, account_password: str) -> None:
+        if not account_password and not self.in_setup(server):
+            raise ValidationError(
+                {
+                    "account_password": [
+                        ErrorDetail(ACCOUNT_PASSWORD_REQUIRED, code="required"),
+                    ]
+                }
+            )
+
+    def confirm_step_up(self, account_password: str) -> None:
+        if account_password:
+            AccountService(self.user).confirm_password(account_password)
+
+    def in_setup(self, server: Server) -> bool:
         return (
             self.user is not None
             and self.user.is_authenticated
             and server.created_by_id == self.user.pk
             and server.created_at > timezone.now() - SETUP_WINDOW
-            and server.last_checked_at is None
+            and server.last_check_status != Server.CheckStatus.OK
         )
 
     def delete(self, server_id: UUID) -> None:
@@ -338,9 +352,8 @@ class ServerService:
     def _inspect(self, server: Server, remote: RemoteHost) -> dict[str, Any]:
         project_dir = server.project_dir or None
         system = _output(remote, ["uname", "-sr"])
-        dbs_version = _output(
-            remote, [server.python_path, "-c", DBS_VERSION], cwd=project_dir
-        )
+        probe = pythons.probe(remote, server.python_path, project_dir)
+        dbs_version = probe.version
         backup_command = None
         if project_dir:
             env = (
@@ -357,6 +370,12 @@ class ServerService:
         return {
             "system": system,
             "dbs_version": dbs_version,
+            "dbs_error": probe.error,
+            "python_suggestion": (
+                None
+                if dbs_version is not None or project_dir is None
+                else _python_suggestion(server, remote, project_dir)
+            ),
             "backup_command": backup_command,
             "env_file": _exists(remote, server.env_path) if server.env_path else None,
             "roots": {root: _exists(remote, root) for root in server.file_roots},
@@ -468,6 +487,20 @@ def _output(
     if not result.ok or not lines:
         return None
     return lines[-1][:REPORTED_OUTPUT_LIMIT]
+
+
+def _python_suggestion(
+    server: Server, remote: RemoteHost, project_dir: str
+) -> dict[str, str] | None:
+    others = [
+        python
+        for python in pythons.candidates(remote, project_dir)
+        if python != server.python_path
+    ]
+    found = pythons.with_dbs(remote, others, project_dir)
+    if found is None:
+        return None
+    return {"python_path": found.python_path, "dbs_version": found.dbs_version}
 
 
 def _succeeds(

@@ -15,7 +15,9 @@ project onto a new server when the old one goes down.</p>
 <ol>
   <li>Open <a href="{% url 'admin:dbs_connection' %}">Connection</a> and press
       <em>Copy</em>.</li>
-  <li>In the manager, choose <em>Add a server</em> and paste the snippet.</li>
+  <li>In the manager, choose <em>Add a server</em> and paste the snippet. Without one, the
+      manager searches the server for the project once it can sign in, and
+      <em>Browse the server</em> lets you pick its folder from the server's own folders.</li>
   <li>Confirm the host key fingerprint matches the one shown on the Connection page.</li>
   <li>Add the key the manager shows to <code>~/.ssh/authorized_keys</code> for the user
       that owns this project.</li>
