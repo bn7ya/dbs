@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from dataclasses import replace
 
 import pytest
 
 import dbs
+from dbs.manager.servers.gateways import RemoteHost
 from dbs.manager.servers.gateways.ssh_gateway import build_script
 from dbs.manager.servers.services import discovery_service
 from dbs.manager.servers.services.pythons import VERSION_PROBE
@@ -32,13 +34,30 @@ def browse(server_id):
     return f"/api/servers/{server_id}/browse/"
 
 
-def venv(folder, mode=0o755, owner=-1, group=-1):
+def venv(folder, mode=0o755):
     (folder / "bin").mkdir(parents=True)
     (folder / "pyvenv.cfg").write_text("home = /usr/bin\n")
     for path in (folder, folder / "bin"):
         path.chmod(mode)
-        os.chown(path, owner, group)
     return f"{folder}/bin/python"
+
+
+def owned_by_another(monkeypatch, python, *, uid=None, gid=None):
+    bin_folder = os.path.dirname(python)
+    marked = {bin_folder, os.path.dirname(bin_folder)}
+    listed = RemoteHost.lstat
+
+    def lstat(self, path):
+        entry = listed(self, path)
+        if path not in marked:
+            return entry
+        return replace(
+            entry,
+            uid=entry.uid if uid is None else uid,
+            gid=entry.gid if gid is None else gid,
+        )
+
+    monkeypatch.setattr(RemoteHost, "lstat", lstat)
 
 
 @pytest.fixture
@@ -68,8 +87,10 @@ def test_a_virtualenv_others_can_write_is_never_run(
     api, configured_server, site, monkeypatch
 ):
     open_to_all = venv(site["srv"] / "shared-env", mode=0o777)
-    shared_group = venv(site["srv"] / "team-env", mode=0o775, group=OTHER_ID)
-    someone_elses = venv(site["srv"] / "their-env", owner=OTHER_ID)
+    shared_group = venv(site["srv"] / "team-env", mode=0o775)
+    owned_by_another(monkeypatch, shared_group, gid=OTHER_ID)
+    someone_elses = venv(site["srv"] / "their-env")
+    owned_by_another(monkeypatch, someone_elses, uid=OTHER_ID)
     own = venv(site["app"] / "own-env")
     own_group = venv(site["app"] / "umask-env", mode=0o775)
     hosts = scripted_hosts(monkeypatch)
