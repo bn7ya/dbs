@@ -201,4 +201,46 @@ describe('ServerForm', () => {
     expect(fixture.componentInstance.step()).toBe(1);
     localStorage.clear();
   });
+  it('needs a service and a folder before it saves a server that runs in Docker Compose', async () => {
+    const form = open({ server: { ...SERVER, project_dir: '' } });
+    form.updateRuntime({ runtime: 'compose' });
+    form.step.set(1);
+
+    await form.advance();
+
+    expect(form.error('compose_service')).toBe('compose_service_required');
+    expect(form.error('project_dir')).toBe('compose_folder_required');
+    http.expectNone(`/api/servers/${SERVER.id}/`);
+  });
+
+  it('sends the runtime, the service and the compose files when it saves', async () => {
+    const form = open({ server: SERVER });
+    form.updateRuntime({ runtime: 'compose', compose_service: 'backend' });
+    form.updateRuntime({ compose_files: ['compose.yaml', 'compose.prod.yaml'] });
+    form.setAccountPassword('correct-horse-battery-staple');
+    form.step.set(1);
+
+    const saving = form.advance();
+    const request = http.expectOne(`/api/servers/${SERVER.id}/`);
+    expect(request.request.body).toMatchObject({
+      runtime: 'compose',
+      compose_service: 'backend',
+      compose_files: ['compose.yaml', 'compose.prod.yaml'],
+      account_password: 'correct-horse-battery-staple',
+    });
+    request.flush({ ...SERVER, runtime: 'compose', compose_service: 'backend' });
+    await saving;
+
+    expect(close).toHaveBeenCalled();
+  });
+
+  it('refuses a compose file that climbs out of the folder', async () => {
+    const form = open({ server: SERVER });
+    form.updateRuntime({ runtime: 'compose', compose_service: 'backend', compose_files: ['../other.yaml'] });
+    form.step.set(1);
+
+    await form.advance();
+
+    expect(form.error('compose_files')).toBe('invalid');
+  });
 });

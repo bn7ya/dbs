@@ -24,6 +24,9 @@ from dbs.manager.adapters.problems import problem
 from dbs.manager.terminal.session import TerminalSession
 
 SETTING_FIELDS = (
+    "runtime",
+    "compose_service",
+    "compose_files",
     "project_dir",
     "python_path",
     "manage_path",
@@ -40,6 +43,9 @@ SHOWN_FIELDS = (
     "username",
     "auth_method",
     "host_key_fingerprint",
+    "runtime",
+    "compose_service",
+    "compose_files",
     "project_dir",
     "python_path",
     "manage_path",
@@ -194,7 +200,15 @@ def discover(session: TerminalSession) -> int:
         return 0
     session.out.fields(
         found,
-        ("project_dir", "python_path", "settings_module", "env_path", "dbs_version"),
+        (
+            "runtime",
+            "compose_service",
+            "project_dir",
+            "python_path",
+            "settings_module",
+            "env_path",
+            "dbs_version",
+        ),
     )
     candidates = found.get("candidates", {})
     others = [
@@ -384,7 +398,10 @@ def _discover_and_save(
     if settled.error:
         _say(session, f"Could not look around {server.name}: {settled.error}")
     elif settled.found and settled.found["project_dir"]:
-        _say(session, f"Found the project in {settled.found['project_dir']}.")
+        found = settled.found
+        service = found.get("compose_service")
+        where = f" (Docker Compose service {service})" if service else ""
+        _say(session, f"Found the project in {found['project_dir']}{where}.")
     else:
         _say(
             session,

@@ -31,6 +31,8 @@ const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
   missing: { icon: 'fa-solid fa-circle-xmark', muted: false },
   notSet: { icon: 'fa-solid fa-circle-minus', muted: true },
   notChecked: { icon: 'fa-solid fa-circle-question', muted: true },
+  running: { icon: 'fa-solid fa-circle-check', muted: false },
+  stopped: { icon: 'fa-solid fa-circle-xmark', muted: false },
 };
 
 @Component({
@@ -79,8 +81,16 @@ export class ServerOverviewPage {
       return null;
     }
     const report = server.last_check_report;
+    const compose = report.compose;
+    const composeRows: readonly ReportRow[] = compose
+      ? [
+          valueRow('servers.check.report.docker', compose.version, 'missing'),
+          { labelKey: 'servers.check.report.service', value: null, presence: compose.running ? 'running' : 'stopped' },
+        ]
+      : [];
     const rows: readonly ReportRow[] = [
       valueRow('servers.check.report.system', report.system, 'notChecked'),
+      ...composeRows,
       valueRow('servers.check.report.dbsVersion', report.dbs_version, 'missing'),
       presenceRow('servers.check.report.backupCommand', report.backup_command),
       server.env_path
@@ -89,7 +99,7 @@ export class ServerOverviewPage {
       presenceRow('servers.check.report.remoteBackupDir', report.remote_backup_dir),
     ];
     const roots = server.file_roots.map((path) => ({ path, presence: presenceOf(report.roots?.[path]) }));
-    return { rows, roots };
+    return { rows, roots, dockerSaid: compose?.error ?? '' };
   });
 
   readonly settings = computed<readonly SettingRow[]>(() => {
@@ -222,9 +232,20 @@ function settingRows(server: Server): readonly SettingRow[] {
           savedRow('servers.settings.keyPassphrase', server.has_key_passphrase),
         ]
       : [savedRow('servers.settings.password', server.has_password)];
+  const compose =
+    server.runtime === 'compose'
+      ? [
+          codeRow('servers.settings.composeService', server.compose_service),
+          server.compose_files.length > 0
+            ? codeRow('servers.settings.composeFiles', server.compose_files.join(' '))
+            : { labelKey: 'servers.settings.composeFiles', textKey: 'servers.settings.composeDefault' },
+        ]
+      : [];
   return [
     { labelKey: 'servers.settings.authMethod', textKey: `servers.authMethod.${server.auth_method}` },
     ...secrets,
+    { labelKey: 'servers.settings.runtime', textKey: `servers.runtime.${server.runtime}` },
+    ...compose,
     codeRow('servers.settings.projectDir', server.project_dir),
     codeRow('servers.settings.pythonPath', server.python_path),
     codeRow('servers.settings.managePath', server.manage_path),

@@ -358,7 +358,11 @@
                 } @else if (!found.is_project) {
                   <app-notice severity="warning">{{ 'servers.wizard.project.notProject' | t }}</app-notice>
                 } @else if (found.dbs_version; as version) {
-                  <app-notice severity="success">{{ 'servers.wizard.project.ready' | t: { version } }}</app-notice>
+                  @if (found.runtime === 'compose') {
+                    <app-notice severity="success">{{ 'servers.wizard.project.readyInService' | t: { version, service: found.compose_service } }}</app-notice>
+                  } @else {
+                    <app-notice severity="success">{{ 'servers.wizard.project.ready' | t: { version } }}</app-notice>
+                  }
                 } @else {
                   <app-notice severity="warning">{{ 'servers.wizard.project.noDbs' | t }}</app-notice>
                 }
@@ -366,6 +370,16 @@
               @if (projectError(); as failure) {
                 <app-notice severity="danger">{{ failure | errorText }}</app-notice>
               }
+
+              <app-runtime-fields
+                [runtime]="draft().runtime"
+                [composeService]="draft().compose_service"
+                [composeFiles]="draft().compose_files"
+                [services]="discovery()?.candidates?.compose_services ?? []"
+                [serviceError]="error('compose_service')"
+                [filesError]="error('compose_files')"
+                (changed)="updateRuntime($event)"
+              />
 
               <mat-form-field>
                 <mat-label>{{ 'servers.form.projectDir.label' | t }}</mat-label>
@@ -389,7 +403,7 @@
                 >
                   <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
                 </button>
-                <mat-hint>{{ 'servers.form.projectDir.hint' | t }}</mat-hint>
+                <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.projectDir.composeHint' : 'servers.form.projectDir.hint') | t }}</mat-hint>
                 @if (error('project_dir') | errorText; as message) {
                   <mat-error>{{ message }}</mat-error>
                 }
@@ -413,7 +427,7 @@
                       <mat-option [value]="candidate"><bdi dir="ltr">{{ candidate }}</bdi></mat-option>
                     }
                   </mat-autocomplete>
-                  <mat-hint>{{ 'servers.form.pythonPath.hint' | t }}</mat-hint>
+                  <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.pythonPath.composeHint' : 'servers.form.pythonPath.hint') | t }}</mat-hint>
                 </mat-form-field>
 
                 <mat-form-field>
@@ -451,7 +465,7 @@
                     [ngModel]="draft().manage_path"
                     (ngModelChange)="update('manage_path', $event)"
                   />
-                  <mat-hint>{{ 'servers.form.managePath.hint' | t }}</mat-hint>
+                  <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.managePath.composeHint' : 'servers.form.managePath.hint') | t }}</mat-hint>
                 </mat-form-field>
 
                 <mat-form-field>

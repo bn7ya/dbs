@@ -104,6 +104,7 @@ class BackupHost:
         dest_dir: str,
         prefix: str,
         keep_remote: int,
+        remote_dir: str | None = None,
     ) -> FetchedBackup:
         self.takes.append(Take(profile, passphrase, dest_dir, prefix, keep_remote))
         if self.failure is not None:

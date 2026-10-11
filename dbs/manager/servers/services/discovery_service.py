@@ -7,7 +7,12 @@ from typing import Any
 from uuid import UUID
 
 from dbs.manager.activity.services import ActivityService
-from dbs.manager.servers.gateways import EntryKind, RemoteHost
+from dbs.manager.servers.gateways import (
+    ComposeService,
+    DbsProfile,
+    EntryKind,
+    RemoteHost,
+)
 from dbs.manager.servers.models import DEFAULT_REMOTE_BACKUP_DIR, Server
 from dbs.manager.servers.services import pythons
 from dbs.manager.servers.services.connection_service import ServerConnectionService
@@ -18,6 +23,14 @@ SEARCH_ROOTS = ("~", "/srv", "/var/www", "/opt")
 SEARCH_DEPTH = 2
 ENTRIES_PER_FOLDER = 500
 MANAGE = "manage.py"
+COMPOSE_FILES = (
+    "compose.yaml",
+    "compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+)
+COMPOSE_PROJECTS_PROBED = 3
+SERVICES_PER_PROJECT = 8
 MANAGE_MAX_BYTES = 64 * 1024
 SETTINGS_MODULE = re.compile(
     "DJANGO_SETTINGS_MODULE[\"']\\s*,\\s*[\"']([A-Za-z_][\\w.]*)[\"']"
@@ -63,11 +76,34 @@ class DiscoveryService:
     def _found(
         self, server: Server, remote: RemoteHost, chosen: str | None
     ) -> dict[str, Any]:
-        projects = [chosen] if chosen else project_dirs(remote)
+        if chosen:
+            projects, composes = (
+                [chosen],
+                [chosen] if has_compose_file(remote, chosen) else [],
+            )
+        else:
+            projects, found_composes = project_folders(remote)
+            composes = [
+                folder
+                for folder in found_composes
+                if pythons.trusted_with_parent(remote, folder)
+            ]
+        for folder in composes[:COMPOSE_PROJECTS_PROBED]:
+            found = compose_found(server, remote, folder)
+            if found is not None:
+                found["candidates"] = {
+                    "project_dirs": list(dict.fromkeys([*composes, *projects])),
+                    "python_paths": list(pythons.BARE_PYTHONS),
+                    "compose_services": found.pop("services"),
+                }
+                return found
         project = projects[0] if projects else ""
         candidates = pythons.candidates(remote, project)
-        usable = pythons.with_dbs(remote, candidates, project or None)
+        usable = pythons.with_dbs(remote, candidates, _host_profile(project))
         found = {
+            "runtime": Server.Runtime.HOST,
+            "compose_service": "",
+            "compose_files": [],
             "project_dir": project,
             "python_path": usable.python_path if usable else candidates[0],
             "manage_path": MANAGE,
@@ -80,8 +116,57 @@ class DiscoveryService:
         }
         if project and (chosen or pythons.trusted_with_parent(remote, project)):
             found.update(connection_details(remote, found))
-        found["candidates"] = {"project_dirs": projects, "python_paths": candidates}
+        found["candidates"] = {
+            "project_dirs": list(dict.fromkeys([*projects, *composes])),
+            "python_paths": candidates,
+            "compose_services": [],
+        }
         return found
+
+
+def _host_profile(project: str) -> DbsProfile:
+    return DbsProfile(python="", manage=MANAGE, project_dir=project or None)
+
+
+def _compose_profile(folder: str, service: str) -> DbsProfile:
+    return DbsProfile(
+        python="", manage=MANAGE, project_dir=folder, compose=ComposeService(service)
+    )
+
+
+def compose_found(
+    server: Server, remote: RemoteHost, folder: str
+) -> dict[str, Any] | None:
+    listed = quiet(
+        remote.run_compose,
+        _compose_profile(folder, ""),
+        ["ps", "--status", "running", "--services"],
+    )
+    if listed is None or not listed.ok:
+        return None
+    services = listed.stdout.split()[:SERVICES_PER_PROJECT]
+    for service in services:
+        usable = pythons.with_dbs(
+            remote, pythons.BARE_PYTHONS, _compose_profile(folder, service)
+        )
+        if usable is not None:
+            return {
+                "runtime": Server.Runtime.COMPOSE,
+                "compose_service": service,
+                "compose_files": [],
+                "project_dir": folder,
+                "python_path": usable.python_path,
+                "manage_path": MANAGE,
+                "settings_module": "",
+                "remote_backup_dir": server.remote_backup_dir
+                or DEFAULT_REMOTE_BACKUP_DIR,
+                "file_roots": [],
+                "env_path": env_path(remote, folder),
+                "dbs_version": usable.dbs_version,
+                "is_project": True,
+                "services": services,
+            }
+    return None
 
 
 def discovered_settings(found: dict[str, Any], chosen: bool) -> dict[str, Any]:
@@ -90,6 +175,10 @@ def discovered_settings(found: dict[str, Any], chosen: bool) -> dict[str, Any]:
         for field in ("project_dir", "manage_path", "remote_backup_dir", "file_roots")
         if found.get(field)
     }
+    if found.get("runtime") and found.get("dbs_version") is not None:
+        settings["runtime"] = found["runtime"]
+        settings["compose_service"] = found.get("compose_service") or ""
+        settings["compose_files"] = list(found.get("compose_files") or [])
     if found.get("python_path") and (found.get("dbs_version") is not None or chosen):
         settings["python_path"] = found["python_path"]
     for field in ("settings_module", "env_path"):
@@ -98,28 +187,46 @@ def discovered_settings(found: dict[str, Any], chosen: bool) -> dict[str, Any]:
     return settings
 
 
-def project_dirs(remote: RemoteHost) -> list[str]:
+def project_folders(remote: RemoteHost) -> tuple[list[str], list[str]]:
     home = quiet(remote.realpath, ".")
     found: list[str] = []
+    composes: list[str] = []
     for root in SEARCH_ROOTS:
         start = home if root == "~" else root
         if start:
-            _search(remote, start, SEARCH_DEPTH, found)
-    return list(dict.fromkeys(found))
+            _search(remote, start, SEARCH_DEPTH, found, composes)
+    return list(dict.fromkeys(found)), list(dict.fromkeys(composes))
 
 
-def _search(remote: RemoteHost, folder: str, depth: int, found: list[str]) -> None:
+def _search(
+    remote: RemoteHost,
+    folder: str,
+    depth: int,
+    found: list[str],
+    composes: list[str],
+) -> None:
     entries = quiet(remote.listdir, folder, default=[])
     names = {entry.name: entry for entry in entries[:ENTRIES_PER_FOLDER]}
     manage = names.get(MANAGE)
     if manage is not None and manage.kind == EntryKind.FILE:
         found.append(folder)
+    if any(
+        names[name].kind == EntryKind.FILE for name in COMPOSE_FILES if name in names
+    ):
+        composes.append(folder)
     if depth == 0:
         return
     for name in sorted(names):
         entry = names[name]
         if entry.kind == EntryKind.FOLDER and not name.startswith("."):
-            _search(remote, posixpath.join(folder, name), depth - 1, found)
+            _search(remote, posixpath.join(folder, name), depth - 1, found, composes)
+
+
+def has_compose_file(remote: RemoteHost, folder: str) -> bool:
+    return any(
+        quiet(remote.exists, posixpath.join(folder, name), default=False)
+        for name in COMPOSE_FILES
+    )
 
 
 def is_project(remote: RemoteHost, folder: str) -> bool:

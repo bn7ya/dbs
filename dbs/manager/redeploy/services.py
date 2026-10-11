@@ -198,17 +198,10 @@ class RedeployService:
 
     def _manage(self, target: Any, actor: Any, *arguments: str) -> Any:
         connections = ServerConnectionService(actor)
-        profile = connections.dbs_profile(target)
-        env = (
-            {"DJANGO_SETTINGS_MODULE": profile.settings_module}
-            if profile.settings_module
-            else None
-        )
         with connections.open(target) as remote:
-            return remote.run(
-                [profile.python, profile.manage, *arguments],
-                cwd=profile.project_dir,
-                env=env,
+            return remote.run_manage(
+                connections.dbs_profile(target),
+                arguments,
                 timeout=settings.BACKUP_EXEC_TIMEOUT,
             )
 

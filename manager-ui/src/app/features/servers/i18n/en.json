@@ -65,8 +65,13 @@
         "backupCommand": "Backup command",
         "envFile": ".env file",
         "remoteBackupDir": "Remote backup folder",
-        "roots": "Allowed folders"
-      }
+        "roots": "Allowed folders",
+        "docker": "Docker Compose",
+        "service": "Compose service"
+      },
+      "running": "Running",
+      "stopped": "Not running",
+      "dockerSaid": "Docker said:"
     },
     "settings": {
       "title": "Settings",
@@ -84,7 +89,11 @@
       "saved": "Saved",
       "notSaved": "Not saved",
       "notSet": "Not set",
-      "updated": "Changes saved."
+      "updated": "Changes saved.",
+      "runtime": "Where it runs",
+      "composeService": "Compose service",
+      "composeFiles": "Compose files",
+      "composeDefault": "The folder's own"
     },
     "hostKey": {
       "title": "Host key",
@@ -173,15 +182,18 @@
       "projectDir": {
         "label": "Project folder",
         "hint": "The folder that holds manage.py.",
-        "placeholder": "/srv/app"
+        "placeholder": "/srv/app",
+        "composeHint": "The folder on the server that holds the compose file."
       },
       "pythonPath": {
         "label": "Python command",
-        "hint": "python3, or the Python of the project's virtual environment."
+        "hint": "python3, or the Python of the project's virtual environment.",
+        "composeHint": "The Python inside the service, such as python."
       },
       "managePath": {
         "label": "manage.py path",
-        "hint": "Relative to the project folder."
+        "hint": "Relative to the project folder.",
+        "composeHint": "Inside the service, relative to the folder it works in."
       },
       "settingsModule": {
         "label": "Settings module",
@@ -205,6 +217,16 @@
       },
       "accountPassword": {
         "hint": "Changing anything but the name needs your password."
+      },
+      "composeService": {
+        "label": "Compose service",
+        "hint": "The service in the compose file that runs Django, such as backend."
+      },
+      "composeFiles": {
+        "label": "Compose files",
+        "hint": "Leave empty to use the folder's own compose file. Add files in the order docker compose -f takes them, pressing Enter after each one.",
+        "placeholder": "compose.prod.yaml",
+        "remove": "Remove {path}"
       }
     },
     "wizard": {
@@ -254,7 +276,8 @@
         "ready": "Ready: django-dbs {version} was found for this project.",
         "noDbs": "The project was found, but no Python on the server could import django-dbs. Install django-dbs in the project's environment, then search again.",
         "showDetails": "Show more settings",
-        "hideDetails": "Hide more settings"
+        "hideDetails": "Hide more settings",
+        "readyInService": "Ready: django-dbs {version} was found in the {service} service."
       },
       "check": {
         "local": "django-dbs here",
@@ -322,6 +345,11 @@
       "chooseHere": "Choose this folder",
       "browseLabel": "Browse the server for: {field}",
       "truncated": "This folder holds more than 5000 entries. Only the first 5000 are listed."
+    },
+    "runtime": {
+      "label": "Where the project runs",
+      "host": "On the server",
+      "compose": "In a Docker Compose service"
     }
   },
   "errors": {
@@ -330,6 +358,8 @@
     "host_key_unconfirmed": "Compare the fingerprints first.",
     "snippet_invalid": "This is not valid JSON. Paste the whole snippet.",
     "snippet_not_dbs": "This is not a DBS connection snippet.",
-    "no_private_key": "This server signs in with a password, so it has no key."
+    "no_private_key": "This server signs in with a password, so it has no key.",
+    "compose_service_required": "Name the Compose service that runs the project.",
+    "compose_folder_required": "Enter the folder that holds the compose file."
   }
 }

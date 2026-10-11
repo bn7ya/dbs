@@ -81,6 +81,11 @@ PARTIAL_FILE_MODE = 0o600
 TRANSFER_WINDOW = 4 * 1024 * 1024
 NAME_MAX_BYTES = 255
 PARTIAL_NAME_BYTES = NAME_MAX_BYTES - len(".") - len(".part-") - 16
+DOCKER = "docker"
+CONTAINER_TMP = "/tmp"
+CONTAINER_BACKUP_PREFIX = ".dbs-backup-"
+CONTAINER_ROOT = "0"
+LOCAL_FILE_MODE = 0o600
 
 
 @dataclass(frozen=True)
@@ -96,11 +101,38 @@ class Credentials:
 
 
 @dataclass(frozen=True)
+class ComposeService:
+    service: str
+    files: tuple[str, ...] = ()
+
+    def argv(self, *arguments: str) -> list[str]:
+        files = [part for path in self.files for part in ("-f", path)]
+        return [DOCKER, "compose", *files, *arguments]
+
+    def exec_argv(
+        self,
+        command: Sequence[str],
+        *,
+        settings_module: str | None = None,
+        user: str | None = None,
+    ) -> list[str]:
+        options = ["-T"]
+        options += ["-u", user] if user else []
+        options += (
+            ["-e", f"DJANGO_SETTINGS_MODULE={settings_module}"]
+            if settings_module
+            else []
+        )
+        return self.argv("exec", *options, self.service, *command)
+
+
+@dataclass(frozen=True)
 class DbsProfile:
     python: str
     manage: str
     project_dir: str | None = None
     settings_module: str | None = None
+    compose: ComposeService | None = None
 
 
 @dataclass(frozen=True)
@@ -206,6 +238,82 @@ class RemoteHost:
         except TRANSPORT_ERRORS as exc:
             raise RemoteCommandFailed() from exc
 
+    def run_python(
+        self,
+        profile: DbsProfile,
+        arguments: Sequence[str],
+        *,
+        python: str | None = None,
+        stdin_line: str | None = None,
+        timeout: float | None = None,
+        with_settings: bool = True,
+    ) -> RemoteResult:
+        command = [python or profile.python, *arguments]
+        settings_module = profile.settings_module if with_settings else None
+        if profile.compose is None:
+            return self.run(
+                command,
+                cwd=profile.project_dir,
+                env={"DJANGO_SETTINGS_MODULE": settings_module}
+                if settings_module
+                else None,
+                stdin_line=stdin_line,
+                timeout=timeout,
+            )
+        return self.run(
+            profile.compose.exec_argv(command, settings_module=settings_module),
+            cwd=profile.project_dir,
+            stdin_line=stdin_line,
+            timeout=timeout,
+        )
+
+    def run_manage(
+        self,
+        profile: DbsProfile,
+        arguments: Sequence[str],
+        *,
+        stdin_line: str | None = None,
+        timeout: float | None = None,
+    ) -> RemoteResult:
+        return self.run_python(
+            profile,
+            [profile.manage, *arguments],
+            stdin_line=stdin_line,
+            timeout=timeout,
+        )
+
+    def run_compose(
+        self,
+        profile: DbsProfile,
+        arguments: Sequence[str],
+        *,
+        timeout: float | None = None,
+    ) -> RemoteResult:
+        if profile.compose is None:
+            raise ValueError("This project does not run in Docker Compose.")
+        return self.run(
+            profile.compose.argv(*arguments), cwd=profile.project_dir, timeout=timeout
+        )
+
+    def compose_version(self) -> RemoteResult:
+        return self.run([DOCKER, "compose", "version", "--short"])
+
+    def run_in_container(
+        self,
+        profile: DbsProfile,
+        command: Sequence[str],
+        *,
+        user: str | None = None,
+        timeout: float | None = None,
+    ) -> RemoteResult:
+        if profile.compose is None:
+            raise ValueError("This project does not run in Docker Compose.")
+        return self.run(
+            profile.compose.exec_argv(command, user=user),
+            cwd=profile.project_dir,
+            timeout=timeout,
+        )
+
     def take_dbs_backup(
         self,
         *,
@@ -214,8 +322,18 @@ class RemoteHost:
         dest_dir: str,
         prefix: str,
         keep_remote: int,
+        remote_dir: str | None = None,
     ) -> FetchedBackup:
         self.sftp
+        if profile.compose is not None:
+            return self._take_from_container(
+                profile=profile,
+                passphrase=passphrase,
+                dest_dir=dest_dir,
+                prefix=prefix,
+                keep_remote=keep_remote,
+                remote_dir=remote_dir or self.session.target.remote_dir,
+            )
         target = self.session.target
         name = available_local_name(dest_dir, prefix)
         local_path = os.path.join(dest_dir, name)
@@ -250,12 +368,87 @@ class RemoteHost:
             Path(local_path).unlink(missing_ok=True)
             raise RemoteCommandFailed(output=_tail(str(exc), passphrase)) from exc
 
-        structure = validate_backup(Path(local_path).read_bytes())
-        if not structure.ok:
-            Path(local_path).unlink(missing_ok=True)
-            raise BackupInvalid(output=_tail(structure.summary(), passphrase))
+        _require_backup(local_path, passphrase)
         remote_path = self.session.path_for(name) if keep_remote else ""
         return FetchedBackup(local_path=local_path, remote_path=remote_path)
+
+    @sensitive_variables("passphrase")
+    def _take_from_container(
+        self,
+        *,
+        profile: DbsProfile,
+        passphrase: str,
+        dest_dir: str,
+        prefix: str,
+        keep_remote: int,
+        remote_dir: str,
+    ) -> FetchedBackup:
+        compose = cast(ComposeService, profile.compose)
+        name = available_local_name(dest_dir, prefix)
+        local_path = os.path.join(dest_dir, name)
+        host_path = posixpath.join(remote_dir, name)
+        inside = posixpath.join(
+            CONTAINER_TMP, f"{CONTAINER_BACKUP_PREFIX}{secrets.token_hex(8)}.dbs"
+        )
+        self._make_dirs(remote_dir)
+        try:
+            made = self.run_manage(
+                profile,
+                ["dbs_backup", inside, "--passphrase-stdin"],
+                stdin_line=passphrase,
+                timeout=settings.BACKUP_EXEC_TIMEOUT,
+            )
+            if not made.ok:
+                raise RemoteCommandFailed(
+                    output=_tail(f"{made.stdout}\n{made.stderr}", passphrase)
+                )
+            copied = self.run_compose(
+                profile,
+                ["cp", f"{compose.service}:{inside}", host_path],
+                timeout=settings.BACKUP_EXEC_TIMEOUT,
+            )
+            if not copied.ok:
+                raise RemoteCommandFailed(output=_tail(copied.stderr or copied.stdout))
+        finally:
+            self._remove_in_container(profile, inside)
+        try:
+            with self.stream_file(host_path) as chunks:
+                with os.fdopen(
+                    os.open(
+                        local_path,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                        LOCAL_FILE_MODE,
+                    ),
+                    "wb",
+                ) as local:
+                    for chunk in chunks:
+                        local.write(chunk)
+        except BaseException:
+            Path(local_path).unlink(missing_ok=True)
+            raise
+        _require_backup(local_path, passphrase)
+        if keep_remote == 0:
+            self.remove(host_path)
+            return FetchedBackup(local_path=local_path, remote_path="")
+        self.prune(remote_dir, _backup_pattern(prefix), keep_remote)
+        return FetchedBackup(local_path=local_path, remote_path=host_path)
+
+    def _remove_in_container(
+        self, profile: DbsProfile, path: str, *, user: str | None = None
+    ) -> None:
+        with suppress(RemoteCommandFailed):
+            self.run_in_container(profile, ["rm", "-f", path], user=user)
+
+    def _hand_to_container_user(self, profile: DbsProfile, path: str) -> None:
+        owner = self.run_in_container(profile, ["id", "-u"])
+        uid = owner.stdout.strip().splitlines()[-1:] if owner.ok else []
+        if not uid or not uid[0].isdigit():
+            raise RestoreFailed(output=_tail(owner.stderr or owner.stdout))
+        handed = self.run_in_container(
+            profile, ["chown", uid[0], path], user=CONTAINER_ROOT
+        )
+        if not handed.ok:
+            raise RestoreFailed(output=_tail(handed.stderr or handed.stdout))
 
     @sensitive_variables("passphrase")
     def restore_dbs_backup(
@@ -272,29 +465,24 @@ class RemoteHost:
         path = posixpath.join(remote_dir, name)
         self._make_dirs(remote_dir)
         self.write_new(source, remote_dir, name, mode=RESTORE_FILE_MODE)
-        argv = [
-            profile.python,
-            profile.manage,
-            "dbs_restore",
-            path,
-            "--passphrase-stdin",
-        ]
-        argv += ["--flush"] if flush else []
-        argv += ["--dry-run"] if dry_run else []
-        env = (
-            {"DJANGO_SETTINGS_MODULE": profile.settings_module}
-            if profile.settings_module
-            else None
+        inside = (
+            path if profile.compose is None else posixpath.join(CONTAINER_TMP, name)
         )
+        arguments = ["dbs_restore", inside, "--passphrase-stdin"]
+        arguments += ["--flush"] if flush else []
+        arguments += ["--dry-run"] if dry_run else []
         try:
-            result = self.run(
-                argv,
-                cwd=profile.project_dir,
-                env=env,
+            if profile.compose is not None:
+                self._copy_into_container(profile, path, inside)
+            result = self.run_manage(
+                profile,
+                arguments,
                 stdin_line=passphrase,
                 timeout=settings.BACKUP_EXEC_TIMEOUT,
             )
         finally:
+            if profile.compose is not None:
+                self._remove_in_container(profile, inside, user=CONTAINER_ROOT)
             copy_left = self._removed_or_left(path)
         if not result.ok:
             output = _tail(f"{result.stdout}\n{result.stderr}", passphrase)
@@ -304,6 +492,17 @@ class RemoteHost:
         return _restore_report(
             result.stdout, flush=flush, dry_run=dry_run, copy_left=copy_left
         )
+
+    def _copy_into_container(self, profile: DbsProfile, path: str, inside: str) -> None:
+        compose = cast(ComposeService, profile.compose)
+        copied = self.run_compose(
+            profile,
+            ["cp", path, f"{compose.service}:{inside}"],
+            timeout=settings.BACKUP_EXEC_TIMEOUT,
+        )
+        if not copied.ok:
+            raise RestoreFailed(output=_tail(copied.stderr or copied.stdout))
+        self._hand_to_container_user(profile, inside)
 
     def extract_archive(
         self,
@@ -634,6 +833,17 @@ class RemoteHost:
         return found.group(1)
 
 
+def _backup_pattern(prefix: str) -> re.Pattern[str]:
+    return re.compile(re.escape(prefix) + r"-\d{8}-\d{6}Z(?:-\d+)?\.dbs")
+
+
+def _require_backup(local_path: str, passphrase: str) -> None:
+    structure = validate_backup(Path(local_path).read_bytes())
+    if not structure.ok:
+        Path(local_path).unlink(missing_ok=True)
+        raise BackupInvalid(output=_tail(structure.summary(), passphrase))
+
+
 def _restore_report(
     stdout: str, *, flush: bool, dry_run: bool, copy_left: str
 ) -> RestoreReport:
@@ -838,6 +1048,8 @@ def _transforms(relocate: Mapping[str, str]) -> list[str]:
         new_member = posixpath.normpath(new).strip("/")
         if not old_member or not new_member or old_member == new_member:
             continue
-        replacement = new_member.replace("\\", "\\\\").replace("|", "\\|").replace("&", "\\&")
+        replacement = (
+            new_member.replace("\\", "\\\\").replace("|", "\\|").replace("&", "\\&")
+        )
         rules.append(f"--transform=s|^{_sed_literal(old_member)}/|{replacement}/|")
     return rules

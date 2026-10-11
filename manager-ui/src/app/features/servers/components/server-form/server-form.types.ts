@@ -1,4 +1,4 @@
-import type { AuthMethod, Server } from '../../data/servers.types';
+import type { AuthMethod, Runtime, Server } from '../../data/servers.types';
 
 export interface ServerFormData {
   readonly server: Server;
@@ -15,6 +15,9 @@ export interface ServerDraft {
   readonly private_key: string;
   readonly key_passphrase: string;
   readonly password: string;
+  readonly runtime: Runtime;
+  readonly compose_service: string;
+  readonly compose_files: readonly string[];
   readonly project_dir: string;
   readonly python_path: string;
   readonly manage_path: string;

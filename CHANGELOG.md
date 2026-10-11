@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Projects in Docker Compose.** A manager server can say its Django runs in a Docker Compose
+  service (`runtime`, `compose_service`, `compose_files`; *Where the project runs* in the
+  wizard and the server's settings; `--runtime compose --compose-service SERVICE
+  --compose-file FILE` in the terminal; the same fields over MCP). The manager then runs every `manage.py` command —
+  the check, backups, restores, the passphrase and the redeploy's migrations — inside that
+  service with `docker compose exec -T`, from the project folder, and moves backups in and out
+  of the container with `docker compose cp`, removing the copies it made. Discovery asks Docker
+  which services run beside a Compose file and finds the one whose Python has django-dbs. The
+  check reports Docker's version and whether the service is running. Servers already in the
+  manager keep running on the host; the manager's migration `0003_server_runtime` adds the
+  fields and applies itself the next time any `django_dbs` command starts.
 - `python -m dbs.manager` runs the manager, for when pip installs `django_dbs` into a folder
   that is not on `PATH`. The README and the panel's wiki explain the fix, and
   `python -m dbs.client` does the same for `dbs-client`.

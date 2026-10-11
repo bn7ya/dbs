@@ -95,6 +95,13 @@ are prompted for or read from stdin, never passed as arguments; confirmations ne
 from a script. `server add` confirms the host key, finds the project and its Python, and
 checks the server.
 
+For a project whose Django runs in a Docker Compose service, `server add|edit` take
+`--runtime compose --compose-service SERVICE [--compose-file FILE]…` with `--project-dir` set
+to the folder holding the Compose files; `--python` and `--manage` are then paths inside the
+container. The manager runs `docker compose exec -T SERVICE python manage.py …` from that
+folder and moves backups with `docker compose cp`. Discovery finds such a project by itself
+when the service is running and its image has django-dbs.
+
 `django_dbs mcp [--as NAME]` is an MCP server over stdio for Claude
 (`claude mcp add dbs -- django_dbs mcp`). Its tools read everything, add and check servers,
 take, verify and save backups, add and run plans, keep `.env` versions (key names only) and

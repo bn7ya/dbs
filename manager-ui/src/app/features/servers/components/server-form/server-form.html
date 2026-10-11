@@ -159,6 +159,15 @@
       <div class="server-form__step">
         <p class="text-secondary">{{ 'servers.form.projectIntro' | t }}</p>
 
+        <app-runtime-fields
+          [runtime]="draft().runtime"
+          [composeService]="draft().compose_service"
+          [composeFiles]="draft().compose_files"
+          [serviceError]="error('compose_service')"
+          [filesError]="error('compose_files')"
+          (changed)="updateRuntime($event)"
+        />
+
         <mat-form-field>
           <mat-label>{{ 'servers.form.projectDir.label' | t }}</mat-label>
           <input
@@ -181,7 +190,7 @@
           >
             <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
           </button>
-          <mat-hint>{{ 'servers.form.projectDir.hint' | t }}</mat-hint>
+          <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.projectDir.composeHint' : 'servers.form.projectDir.hint') | t }}</mat-hint>
           @if (error('project_dir') | errorText; as message) {
             <mat-error>{{ message }}</mat-error>
           }
@@ -200,7 +209,7 @@
               [ngModel]="draft().python_path"
               (ngModelChange)="update('python_path', $event)"
             />
-            <mat-hint>{{ 'servers.form.pythonPath.hint' | t }}</mat-hint>
+            <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.pythonPath.composeHint' : 'servers.form.pythonPath.hint') | t }}</mat-hint>
             @if (error('python_path') | errorText; as message) {
               <mat-error>{{ message }}</mat-error>
             }
@@ -218,7 +227,7 @@
               [ngModel]="draft().manage_path"
               (ngModelChange)="update('manage_path', $event)"
             />
-            <mat-hint>{{ 'servers.form.managePath.hint' | t }}</mat-hint>
+            <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.managePath.composeHint' : 'servers.form.managePath.hint') | t }}</mat-hint>
             @if (error('manage_path') | errorText; as message) {
               <mat-error>{{ message }}</mat-error>
             }

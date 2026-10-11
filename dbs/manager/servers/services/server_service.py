@@ -26,6 +26,7 @@ from dbs.manager.servers.exceptions import (
     SSHUnreachable,
 )
 from dbs.manager.servers.gateways import (
+    DbsProfile,
     HostKey,
     RemoteHost,
     fetch_host_key,
@@ -45,6 +46,8 @@ PLAIN_FIELDS = (
     "host",
     "port",
     "username",
+    "runtime",
+    "compose_service",
     "python_path",
     "manage_path",
     "settings_module",
@@ -54,6 +57,9 @@ REQUIRED_PATH_FIELDS = ("remote_backup_dir",)
 UNGUARDED_FIELDS = frozenset({"name"})
 SETUP_FIELDS = frozenset(
     {
+        "runtime",
+        "compose_service",
+        "compose_files",
         "project_dir",
         "python_path",
         "manage_path",
@@ -75,6 +81,8 @@ ABSOLUTE_PATH_REQUIRED = (
     "Use an absolute path that starts with / and has no '..' in it."
 )
 NAME_TAKEN = "Another server already has this name."
+COMPOSE_SERVICE_REQUIRED = "Name the Docker Compose service that runs the project."
+COMPOSE_FOLDER_REQUIRED = "Enter the folder that holds the compose file."
 PRIVATE_KEY_REQUIRED = "Paste the private key this server accepts."
 PASSWORD_REQUIRED = "Enter the password this server accepts."
 ACCOUNT_PASSWORD_REQUIRED = "Enter your own password to change this."
@@ -168,6 +176,7 @@ class ServerService:
         errors: Errors = {}
         fields = {name: data[name] for name in PLAIN_FIELDS if name in data}
         fields |= self._paths(data, errors)
+        fields |= self._runtime(data, errors, current=None)
         fields |= self._pinned(data["host_key"], errors)
         fields |= self._credentials(data, errors, data["auth_method"], current=None)
         if self.servers.name_in_use(data["name"]):
@@ -224,6 +233,7 @@ class ServerService:
         errors: Errors = {}
         changes = {name: data[name] for name in PLAIN_FIELDS if name in data}
         changes |= self._paths(data, errors)
+        changes |= self._runtime(data, errors, current=server)
         changes |= self._credentials(
             data, errors, data.get("auth_method", server.auth_method), current=server
         )
@@ -349,10 +359,8 @@ class ServerService:
             Action.PASSPHRASE_CAPTURE, server=server, target=server.name
         ):
             with self.connections.open(server) as remote:
-                result = remote.run(
-                    [server.python_path, server.manage_path, "dbs_key", "--show"],
-                    cwd=server.project_dir or None,
-                    env=_settings_env(server),
+                result = remote.run_manage(
+                    self.connections.dbs_profile(server), ["dbs_key", "--show"]
                 )
             lines = result.stdout.strip().splitlines()
             if not result.ok or not lines or not lines[-1].strip():
@@ -368,47 +376,40 @@ class ServerService:
         if not versions.at_least(remote_version, versions.HEALTH_FROM):
             return None
         try:
-            result = remote.run(
-                [server.python_path, server.manage_path, "dbs", "health", "--json"],
-                cwd=server.project_dir or None,
-                env=_settings_env(server),
+            result = remote.run_manage(
+                self.connections.dbs_profile(server), ["dbs", "health", "--json"]
             )
         except RemoteCommandFailed:
             return None
         return _health_report(result.stdout)
 
     def _inspect(self, server: Server, remote: RemoteHost) -> dict[str, Any]:
+        profile = self.connections.dbs_profile(server)
         project_dir = server.project_dir or None
         system = _output(remote, ["uname", "-sr"])
-        probe = pythons.probe(remote, server.python_path, project_dir)
+        compose = _compose_report(remote, profile) if profile.compose else None
+        probe = pythons.probe(remote, profile)
         dbs_version = probe.version
         backup_command = None
         if project_dir:
-            env = (
-                {"DJANGO_SETTINGS_MODULE": server.settings_module}
-                if server.settings_module
-                else None
-            )
-            backup_command = _succeeds(
-                remote,
-                [server.python_path, server.manage_path, "dbs_backup", "--help"],
-                cwd=project_dir,
-                env=env,
-            )
-        return {
+            backup_command = _succeeds(remote, profile, ["dbs_backup", "--help"])
+        report = {
             "system": system,
             "dbs_version": dbs_version,
             "dbs_error": probe.error,
             "python_suggestion": (
                 None
                 if dbs_version is not None or project_dir is None
-                else _python_suggestion(server, remote, project_dir)
+                else _python_suggestion(server, remote, profile)
             ),
             "backup_command": backup_command,
             "env_file": _exists(remote, server.env_path) if server.env_path else None,
             "roots": {root: _exists(remote, root) for root in server.file_roots},
             "remote_backup_dir": _exists(remote, server.remote_backup_dir),
         }
+        if compose is not None:
+            report["compose"] = compose
+        return report
 
     def _record(
         self, server: Server, status: str, error: str, report: dict[str, Any]
@@ -443,6 +444,36 @@ class ServerService:
                 )
             else:
                 cleaned["file_roots"] = list(dict.fromkeys(roots))
+        return cleaned
+
+    def _runtime(
+        self, data: dict[str, Any], errors: Errors, *, current: Server | None
+    ) -> dict[str, Any]:
+        cleaned: dict[str, Any] = {}
+        if "compose_files" in data:
+            cleaned["compose_files"] = list(dict.fromkeys(data["compose_files"]))
+
+        def value(name: str, default: Any) -> Any:
+            if name in data:
+                return data[name]
+            return getattr(current, name) if current is not None else default
+
+        if value("runtime", Server.Runtime.HOST) != Server.Runtime.COMPOSE:
+            return cleaned
+        if not value("compose_service", ""):
+            _add(
+                errors,
+                "compose_service",
+                COMPOSE_SERVICE_REQUIRED,
+                "compose_service_required",
+            )
+        if not value("project_dir", ""):
+            _add(
+                errors,
+                "project_dir",
+                COMPOSE_FOLDER_REQUIRED,
+                "compose_folder_required",
+            )
         return cleaned
 
     def _pinned(self, line: str, errors: Errors) -> dict[str, str]:
@@ -518,27 +549,53 @@ def _output(
 
 
 def _python_suggestion(
-    server: Server, remote: RemoteHost, project_dir: str
+    server: Server, remote: RemoteHost, profile: DbsProfile
 ) -> dict[str, str] | None:
-    others = [
-        python
-        for python in pythons.candidates(remote, project_dir)
-        if python != server.python_path
-    ]
-    found = pythons.with_dbs(remote, others, project_dir)
+    found_here = (
+        pythons.BARE_PYTHONS
+        if profile.compose
+        else pythons.candidates(remote, server.project_dir)
+    )
+    others = [python for python in found_here if python != server.python_path]
+    found = pythons.with_dbs(remote, others, profile)
     if found is None:
         return None
     return {"python_path": found.python_path, "dbs_version": found.dbs_version}
 
 
-def _succeeds(
-    remote: RemoteHost, argv: list[str], *, cwd: str, env: dict[str, str] | None
-) -> bool:
+def _succeeds(remote: RemoteHost, profile: DbsProfile, arguments: list[str]) -> bool:
     try:
-        ok: bool = remote.run(argv, cwd=cwd, env=env).ok
+        ok: bool = remote.run_manage(profile, arguments).ok
         return ok
     except RemoteCommandFailed:
         return False
+
+
+def _compose_report(remote: RemoteHost, profile: DbsProfile) -> dict[str, Any]:
+    service = profile.compose.service if profile.compose else ""
+    try:
+        version = remote.compose_version()
+    except RemoteCommandFailed:
+        return {"version": None, "error": "", "running": False}
+    if not version.ok:
+        return {"version": None, "error": _last_line(version), "running": False}
+    reported = version.stdout.strip()[:REPORTED_OUTPUT_LIMIT]
+    try:
+        listed = remote.run_compose(
+            profile, ["ps", "--status", "running", "--services"]
+        )
+    except RemoteCommandFailed:
+        return {"version": reported, "error": "", "running": False}
+    return {
+        "version": reported,
+        "error": "" if listed.ok else _last_line(listed),
+        "running": listed.ok and service in listed.stdout.split(),
+    }
+
+
+def _last_line(result: Any) -> str:
+    lines = (result.stderr or result.stdout).strip().splitlines()
+    return lines[-1][:REPORTED_OUTPUT_LIMIT] if lines else ""
 
 
 def _exists(remote: RemoteHost, path: str) -> bool:
@@ -549,19 +606,15 @@ def _exists(remote: RemoteHost, path: str) -> bool:
 
 
 def _ready(report: dict[str, Any]) -> bool:
+    compose = report.get("compose")
     return (
-        report["dbs_version"] is not None
+        (compose is None or (compose["version"] is not None and compose["running"]))
+        and report["dbs_version"] is not None
         and report["backup_command"] is not False
         and report["env_file"] is not False
         and all(report["roots"].values())
         and report["remote_backup_dir"]
     )
-
-
-def _settings_env(server: Server) -> dict[str, str] | None:
-    if not server.settings_module:
-        return None
-    return {"DJANGO_SETTINGS_MODULE": server.settings_module}
 
 
 def _health_report(stdout: str) -> dict[str, Any] | None:

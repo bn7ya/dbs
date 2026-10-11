@@ -242,7 +242,10 @@ the backend permission is the boundary.
   (connection, django-dbs and folders), re-pins a changed host key, reveals the backup passphrase
   behind the account password, links to the move, and deletes. Secrets are write-only; an edit that
   changes more than the name asks for the account password. Every path field in the dialog has a
-  browse button.
+  browse button. Where the project runs (on the server, or in a Docker Compose service with its
+  service name and compose files) is `components/runtime-fields/`, which the dialog and the wizard
+  share with `composeProblems()`; the check of a Compose server adds Docker Compose's version and
+  whether the service is running, and what Docker said when it would not run.
 - **server browser** (`components/server-browser/`, a dialog in the servers feature) — the server's
   folders and files as the SSH user sees them, through `ServerBrowserStore` (provided by the dialog
   itself) and `GET /api/servers/{id}/browse/`: Home, Up, a left-to-right trail, the projects
@@ -256,7 +259,9 @@ the backend permission is the boundary.
   (create a key pair, paste a key, or a password; the server is created here, and a generated
   public key is shown to copy into `authorized_keys`), project (discovery runs on arrival, inside
   the snippet's folder when there is one; several projects found are a radio group, and choosing
-  one, or one picked in the server browser, discovers inside it; the folders and `.env` sit behind
+  one, or one picked in the server browser, discovers inside it; a search that finds django-dbs in
+  a Compose service switches the runtime to Compose with that service, and the services found are
+  offered to pick from; the folders and `.env` sit behind
   "Show more settings", opened by itself when one of them has an error), check (runs on arrival;
   the two django-dbs versions must be compatible; when the saved Python cannot import django-dbs
   it shows the error and offers the Python discovery found with it, saved and re-checked in one
@@ -300,14 +305,14 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | GET | `/api/dashboard/` | → `{servers, storage_bytes, last_export_at, recent_failures}` |
 | GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at}` |
 | GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` |
-| POST | `/api/servers/` | `ServerCreate` (`host_key`, `generate_key?`, project fields) → `Server` with `public_key?`, `authorized_keys_hint?` |
+| POST | `/api/servers/` | `ServerCreate` (`host_key`, `generate_key?`, project fields, `runtime`, `compose_service`, `compose_files`) → `Server` with `public_key?`, `authorized_keys_hint?` |
 | GET/PATCH/DELETE | `/api/servers/{id}/` | `ServerUpdate` → `Server` |
 | POST | `/api/servers/fingerprint/` | `{host, port}` → `{key_type, line, fingerprint}` |
 | GET | `/api/servers/{id}/public-key/` | → `{public_key}`; `no_private_key` on a password server |
-| POST | `/api/servers/{id}/discover/` | `{project_dir?, account_password?}` → `Discovery` (fields, `dbs_version`, `is_project`, `candidates`); the password is required once setup is over |
+| POST | `/api/servers/{id}/discover/` | `{project_dir?, account_password?}` → `Discovery` (fields with `runtime`, `compose_service`, `compose_files`; `dbs_version`, `is_project`, `candidates` with `compose_services`); the password is required once setup is over |
 | GET | `/api/servers/{id}/browse/?path=&page=&page_size=` | → `RemoteFolder` (`path`, `parent`, `home`, `project`, `truncated`, page of entries); no `path` is the home folder |
 | POST | `/api/servers/{id}/passphrase/capture/` | `{}` → `{captured}` |
-| POST | `/api/servers/{id}/check/` | → `Server` with `local_version`, `remote_version`, `installed`, `compatible`, `last_health`; the report adds `dbs_error` and `python_suggestion` |
+| POST | `/api/servers/{id}/check/` | → `Server` with `local_version`, `remote_version`, `installed`, `compatible`, `last_health`; the report adds `dbs_error`, `python_suggestion` and, for a Compose server, `compose: {version, error, running}` |
 | POST | `/api/servers/{id}/host-key/` | `{host_key, password}` → `Server` |
 | POST | `/api/servers/{id}/passphrase/` | `{password}` → `{passphrase}` |
 | GET | `/api/backups/?server=&page=&page_size=` | → page of `BackupFile` |

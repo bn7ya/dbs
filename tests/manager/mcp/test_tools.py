@@ -315,3 +315,39 @@ def test_redeploys_are_always_rehearsals(mcp, world):  # noqa: F811
 def test_unknown_references_are_named(mcp, admin):
     assert mcp("get_server", server="nope").text == "there is no server named 'nope'."
     assert mcp("get_plan", plan="nope").text == "'nope' is not a plan id."
+
+
+@pytest.mark.django_db
+def test_a_compose_server_is_added_with_its_service(
+    mcp, admin, offered, monkeypatch, tmp_path
+):
+    from tests.manager.servers.compose import ComposeHost, connected_to
+
+    backups = tmp_path / "host" / "backups"
+    backups.mkdir(parents=True)
+    connected_to(monkeypatch, ComposeHost(tmp_path / "container"))
+    key = mcp("fingerprint_host", host="10.0.0.7", port=22).data
+
+    added = mcp(
+        "add_server",
+        name="shop",
+        host="10.0.0.7",
+        username="deploy",
+        host_key=key["line"],
+        auth_method="password",
+        password=SSH_PASSWORD,
+        runtime="compose",
+        compose_service="backend",
+        compose_files=["compose.yaml"],
+        project_dir="/srv/shop",
+        python_path="python",
+        remote_backup_dir=str(backups),
+    )
+
+    assert added.ok, added.text
+    assert (added.data["runtime"], added.data["compose_service"]) == (
+        "compose",
+        "backend",
+    )
+    assert added.data["check"]["status"] == Server.CheckStatus.OK
+    assert SSH_PASSWORD not in added.raw

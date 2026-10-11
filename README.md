@@ -301,6 +301,41 @@ manage accounts without a browser; add `--password-stdin` to script them.
 The project never contacts the manager and keeps nothing about it. A backup the manager
 asks for is audited on the server like any other backup.
 
+### A project that runs in Docker Compose
+
+When the project's Django runs in a Docker Compose service, the manager runs every
+`manage.py` command inside that service with `docker compose exec`, from the project folder on
+the server. Choose **In a Docker Compose service** under *Where the project runs*, in the
+wizard or in the server's settings, or from a terminal:
+
+```bash
+django_dbs server add shop --host shop.example.com --user deploy --ssh-password \
+  --runtime compose --compose-service backend \
+  --compose-file compose.yaml --compose-file compose.prod.yaml --project-dir /srv/shop
+```
+
+| Setting | |
+|---|---|
+| Project folder | the folder on the server that holds the Compose files; every command runs from it |
+| Compose service | the service whose container runs Django, such as `backend` |
+| Compose files | the files passed with `-f`, in order; with none, Docker uses the folder's default Compose file |
+| Python and `manage.py` | paths inside the container, such as `python` and `manage.py` |
+
+The SSH user must be able to run `docker compose` — usually as a member of the `docker` group,
+which gives that user root on the server, so give it to the user that already deploys the
+project. The service must be running, with django-dbs installed in its image.
+
+When the search finds a Compose file in a folder that no other account can write to, it asks
+Docker which services are running there and tries `python3` and `python` in each, so a project
+whose image has django-dbs is found and filled in by itself. The check reports Docker's version and whether the service is running,
+and names the service when django-dbs is missing from it.
+
+A backup is written to a temporary file inside the container, copied out to the backup folder
+on the server with `docker compose cp`, then pulled and validated; the temporary file is
+removed whether or not the backup succeeded. A restore copies the backup into the container,
+gives it to the container's user, restores it and removes both copies. The project needs no
+volume for its backups. A redeploy runs its `migrate` and restore steps inside the service too.
+
 ### The same manager from a terminal
 
 Everything the interface does is also a `django_dbs` command. Both call the same code and
@@ -311,6 +346,7 @@ account that acted.
 ```bash
 django_dbs server add shop --host shop.example.com --user deploy --ssh-password
 django_dbs server add blog --host 203.0.113.7 --user deploy --key-file ~/.ssh/blog --project-dir /srv/blog
+django_dbs server edit shop --runtime compose --compose-service backend
 django_dbs server list
 django_dbs backup take --all          # one after another, with a summary; exits 1 if one failed
 django_dbs backup list --server shop

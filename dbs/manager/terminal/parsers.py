@@ -62,9 +62,36 @@ def _yes(parser) -> None:
 
 
 def _server_settings(parser) -> None:
-    parser.add_argument("--project-dir", help="The folder that holds manage.py.")
-    parser.add_argument("--python", dest="python_path", help="The Python to run.")
-    parser.add_argument("--manage", dest="manage_path", help="The manage.py to run.")
+    parser.add_argument(
+        "--runtime",
+        choices=("host", "compose"),
+        help="Where the project runs: on the server itself, or in a Docker Compose service.",
+    )
+    parser.add_argument(
+        "--compose-service",
+        help="The Docker Compose service that runs the project, such as backend.",
+    )
+    parser.add_argument(
+        "--compose-file",
+        dest="compose_files",
+        action="append",
+        metavar="PATH",
+        help="A compose file to pass to docker compose -f. Repeat for more, in order.",
+    )
+    parser.add_argument(
+        "--project-dir",
+        help="The folder that holds manage.py, or the compose file for --runtime compose.",
+    )
+    parser.add_argument(
+        "--python",
+        dest="python_path",
+        help="The Python to run; inside the service for --runtime compose.",
+    )
+    parser.add_argument(
+        "--manage",
+        dest="manage_path",
+        help="The manage.py to run; inside the service for --runtime compose.",
+    )
     parser.add_argument(
         "--settings", dest="settings_module", help="DJANGO_SETTINGS_MODULE to use."
     )

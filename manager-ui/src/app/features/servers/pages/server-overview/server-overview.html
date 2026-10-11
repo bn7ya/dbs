@@ -47,6 +47,12 @@
             }
           </dl>
 
+          @if (found.dockerSaid; as said) {
+            <app-notice severity="warning">
+              {{ 'servers.check.dockerSaid' | t }} <bdi class="overview__code" dir="ltr">{{ said }}</bdi>
+            </app-notice>
+          }
+
           @if (found.roots.length > 0) {
             <div class="overview__roots">
               <h3>{{ 'servers.check.report.roots' | t }}</h3>

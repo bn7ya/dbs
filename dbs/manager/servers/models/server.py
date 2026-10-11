@@ -14,6 +14,10 @@ class Server(BaseModel):
         KEY = "key", "Private key"
         PASSWORD = "password", "Password"
 
+    class Runtime(models.TextChoices):
+        HOST = "host", "On the server"
+        COMPOSE = "compose", "In a Docker Compose service"
+
     class CheckStatus(models.TextChoices):
         UNKNOWN = "unknown", "Not checked"
         OK = "ok", "Ready"
@@ -36,6 +40,11 @@ class Server(BaseModel):
     host_key = models.TextField()
     host_key_fingerprint = models.CharField(max_length=100)
 
+    runtime = models.CharField(
+        max_length=16, choices=Runtime.choices, default=Runtime.HOST
+    )
+    compose_service = models.CharField(max_length=100, blank=True)
+    compose_files = models.JSONField(default=list, blank=True)
     project_dir = models.CharField(max_length=512, blank=True)
     python_path = models.CharField(max_length=512, default="python3")
     manage_path = models.CharField(max_length=255, default="manage.py")
@@ -68,6 +77,10 @@ class Server(BaseModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def in_compose(self) -> bool:
+        return self.runtime == self.Runtime.COMPOSE
 
     @property
     def host_key_type(self) -> str:

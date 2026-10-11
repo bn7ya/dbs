@@ -8,7 +8,7 @@ from typing import Any, TypeVar
 
 from rest_framework.exceptions import APIException
 
-from dbs.manager.servers.gateways import EntryKind, RemoteHost
+from dbs.manager.servers.gateways import DbsProfile, EntryKind, RemoteHost
 
 VERSION_PROBE = (
     "import sys; sys.path[:] = [p for p in sys.path if p not in ('', '.')]; "
@@ -96,9 +96,11 @@ def candidates(remote: RemoteHost, project: str) -> list[str]:
     return list(dict.fromkeys([*usable, *BARE_PYTHONS]))
 
 
-def probe(remote: RemoteHost, python: str, cwd: str | None) -> Probe:
+def probe(remote: RemoteHost, profile: DbsProfile, python: str | None = None) -> Probe:
     try:
-        result = remote.run([python, "-c", VERSION_PROBE], cwd=cwd)
+        result = remote.run_python(
+            profile, ["-c", VERSION_PROBE], python=python, with_settings=False
+        )
     except APIException:
         return Probe(version=None, error="")
     output = result.stdout.strip().splitlines()
@@ -110,10 +112,10 @@ def probe(remote: RemoteHost, python: str, cwd: str | None) -> Probe:
 
 
 def with_dbs(
-    remote: RemoteHost, pythons: Sequence[str], cwd: str | None
+    remote: RemoteHost, pythons: Sequence[str], profile: DbsProfile
 ) -> Found | None:
     for python in _bounded(pythons):
-        version = probe(remote, python, cwd).version
+        version = probe(remote, profile, python).version
         if version is not None:
             return Found(python_path=python, dbs_version=version)
     return None
