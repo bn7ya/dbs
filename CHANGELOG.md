@@ -80,6 +80,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A PostgreSQL backup taken while the project was in use could fail its own restore.** Each
   model was read in a snapshot of its own, so a row committed mid-backup could arrive without
   the row it points at. A backup now reads every model from one `REPEATABLE READ` snapshot.
+- **Damage in both copies of one block was unrecoverable** even with every byte intact in one
+  copy or the other. Such a block is now rebuilt codeword by codeword from both copies, with
+  the bytes where they differ treated as erasures.
 
 ### Security
 

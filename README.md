@@ -789,14 +789,18 @@ presents a different key raises `HostKeyError`.
 On write, the encrypted stream is split into blocks. Each block gets a BLAKE2b hash and a
 layer of Reed-Solomon parity, and the whole stream is stored **twice**, header and manifest
 included. On read, each block is taken from whichever copy verifies, and sparse bit-flips
-are corrected in place even when *both* copies are hit. Every recovered block is checked
+are corrected in place even when *both* copies are hit. A block that neither copy yields on
+its own is rebuilt from both, one 255-byte codeword at a time: each codeword comes from
+whichever copy decodes, and where the two copies disagree those bytes are treated as
+erasures, of which Reed-Solomon corrects twice as many. Every recovered block is checked
 against its stored hash. A freshly written backup is re-read and verified end to end before
 the command reports success.
 
-**Recoverable:** whole-block loss in one copy, and sparse byte errors in both copies up to
-the parity budget (about 8 bytes per 255-byte codeword by default). **Not recoverable:** a
-block destroyed beyond the parity budget in both copies — DBS then refuses to restore and
-names the failed blocks.
+**Recoverable:** whole-block loss in one copy; sparse byte errors in both copies up to the
+parity budget (about 8 bytes per codeword by default); and damage in both copies of the same
+block, as long as each codeword survives in one copy or the copies differ in at most 16 of
+its bytes. **Not recoverable:** a codeword destroyed beyond that in both copies — DBS then
+refuses to restore and names the failed blocks.
 
 ## Security model
 

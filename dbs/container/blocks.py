@@ -59,6 +59,7 @@ class RepairReport:
     blocks_direct: int = 0
     blocks_rs_corrected: int = 0
     blocks_used_b: int = 0
+    blocks_merged: int = 0
     copies_available: int = 2
     failed_blocks: list[int] = field(default_factory=list)
 
@@ -71,6 +72,7 @@ class RepairReport:
         return self.ok and bool(
             self.blocks_rs_corrected
             or self.blocks_used_b
+            or self.blocks_merged
             or self.copies_available < 2
         )
 
@@ -86,6 +88,8 @@ class RepairReport:
                 f"{self.blocks_rs_corrected} Reed-Solomon corrected",
                 f"{self.blocks_used_b} restored from the second copy",
             ]
+            if self.blocks_merged:
+                details.append(f"{self.blocks_merged} rebuilt from both copies")
             if self.copies_available < 2:
                 details.append(
                     "one payload copy lost to truncation; "
@@ -127,6 +131,47 @@ def _decode_block(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:
     return data if _hash(data) == data_hash else None
 
 
+def _decode_codeword(rsc: RSCodec, codeword: bytes, erasures=None) -> bytes | None:
+    try:
+        decoded = rsc.decode(codeword, erase_pos=erasures) if erasures else rsc.decode(codeword)
+    except ReedSolomonError:
+        return None
+    except Exception:
+        return None
+    return bytes(decoded[0]) if isinstance(decoded, tuple) else bytes(decoded)
+
+
+def _rebuild_codeword(rsc: RSCodec, first: bytes, second: bytes) -> bytes | None:
+    for codeword in (first, second):
+        data = _decode_codeword(rsc, codeword)
+        if data is not None:
+            return data
+    differing = [index for index, (a, b) in enumerate(zip(first, second)) if a != b]
+    if not differing or len(differing) > rsc.nsym:
+        return None
+    for codeword in (first, second):
+        data = _decode_codeword(rsc, codeword, differing)
+        if data is not None:
+            return data
+    return None
+
+
+def _rebuild_from_both(rsc: RSCodec, encoded: list[bytes], data_hash: str) -> bytes | None:
+    if len(encoded) != 2 or len(encoded[0]) != len(encoded[1]):
+        return None
+    first, second = encoded
+    pieces: list[bytes] = []
+    for start in range(0, len(first), rsc.nsize):
+        piece = _rebuild_codeword(
+            rsc, first[start : start + rsc.nsize], second[start : start + rsc.nsize]
+        )
+        if piece is None:
+            return None
+        pieces.append(piece)
+    data = b"".join(pieces)
+    return data if _hash(data) == data_hash else None
+
+
 def repair_copies(
     copy_a: bytes | None,
     copy_b: bytes | None,
@@ -147,8 +192,8 @@ def repair_copies(
         chosen: bytes | None = None
         used_b = False
         needed_rs = False
-        for label, source in sources:
-            encoded = source[offset : offset + enc_len]
+        encoded_copies = [source[offset : offset + enc_len] for _, source in sources]
+        for (label, _), encoded in zip(sources, encoded_copies):
             stored_intact = _hash(encoded) == enc_hash
             data = _decode_block(rsc, encoded, data_hash)
             if data is not None:
@@ -158,11 +203,20 @@ def repair_copies(
                 break
         offset += enc_len
 
+        merged = False
+        if chosen is None:
+            chosen = _rebuild_from_both(rsc, encoded_copies, data_hash)
+            merged = chosen is not None
+
         if chosen is None:
             report.failed_blocks.append(index)
             chunks.append(b"")
             continue
 
+        if merged:
+            report.blocks_merged += 1
+            chunks.append(chosen)
+            continue
         if used_b:
             report.blocks_used_b += 1
         if needed_rs:
