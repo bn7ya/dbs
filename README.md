@@ -579,6 +579,12 @@ python manage.py dbs restore backup.dbs --flush     # replace instead of merge
 * **File writes are confined** to `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS` if unset).
 * **Migration drift is reported**, naming the apps that moved on since the backup.
 * **Sequences are reset**, so the next row your project creates does not collide.
+* **Rows the backup leaves out are found again by name.** `migrate` recreates content types
+  and permissions on every server, numbered in the order that server migrated, so a backup
+  refers to them, and to any other model it does not carry that has a natural key, by that
+  key: a group's permissions as `["change_order", "store", "order"]`, a generic relation's
+  content type as `["store", "order"]`. A permission the target no longer has is left out
+  with a warning; a foreign key it cannot find stops the restore and names the row.
 
 Rows are saved the way `loaddata` saves them, with `raw=True`. A `post_save` receiver with
 side effects should return early on raw saves:

@@ -69,6 +69,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Choosing another project while the wizard was still reading the last one could save the new
   folder with the old project's Python and backup folder. *Next* now waits for the search to
   finish, and what was found is shown only for the folder in the field.
+- **A restore could hand out the wrong permissions.** Content types and permissions are left
+  out of a backup because `migrate` recreates them, but rows referred to them by id, and a
+  database migrated in another order numbers them differently. Restored onto a fresh server,
+  a group or a user could receive another model's permissions, and a generic relation could
+  point at the wrong model, with no error. A relation to a model the backup does not carry is
+  now written by natural key and found again by name on restore. A permission the target
+  lacks is left out with a warning; a foreign key it cannot find stops the restore and names
+  the row. Older backups still restore, with a warning naming the models they refer to by id.
+- **A PostgreSQL backup taken while the project was in use could fail its own restore.** Each
+  model was read in a snapshot of its own, so a row committed mid-backup could arrive without
+  the row it points at. A backup now reads every model from one `REPEATABLE READ` snapshot.
 
 ### Security
 
