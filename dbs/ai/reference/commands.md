@@ -27,9 +27,11 @@ Without it, only structure and block integrity are checked.
 `--database`, `--once`, plus the `dbs backup` cost flags.
 
 With none of the plan flags (`--interval`, `--output-dir`, `--prefix`, `--keep`, `--push`,
-`--keep-remote`) and the panel's schedule turned on, it follows the panel: it ticks every
+`--keep-remote`) it follows the panel, whether its schedule is on yet or not: it ticks every
 minute and takes the same database lease as the in-process scheduler, so both can run
-safely. With plan flags it runs that plan, as before.
+safely, and it backs up only while the panel's schedule is on. With plan flags it runs that
+plan, as before; so does a project that still sets `DBS_SCHEDULE_INTERVAL` while the
+panel's schedule is off.
 
 `SIGTERM` stops the loop immediately. Run one fixed-plan scheduler per output directory.
 Retention only touches files matching `prefix-YYYYMMDD-HHMMSSZ.dbs`.

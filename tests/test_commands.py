@@ -7,6 +7,8 @@ from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from dbs import audit
+from dbs.models import AuditEvent
 from tests.testapp.models import Author, Book, Tag
 
 PASS = "cli-pass-phrase"
@@ -42,6 +44,20 @@ def test_cli_backup_restore_validate(tmp_path):
     call_command("dbs_restore", str(backup_file), passphrase=PASS, stdout=rout)
     assert "Restored" in rout.getvalue()
     assert Book.objects.get(title="Command Line").author.name == "Grace"
+
+
+@pytest.mark.django_db
+def test_an_output_path_that_cannot_be_written_is_reported(tmp_path, monkeypatch):
+    monkeypatch.setenv("DBS_PASSPHRASE", "commands-pass-phrase")
+    blocker = tmp_path / "a-file"
+    blocker.write_text("not a folder")
+    target = blocker / "backup.dbs"
+
+    with pytest.raises(CommandError) as excinfo:
+        call_command("dbs_backup", str(target), kdf_time=1, kdf_memory=8192)
+
+    assert str(target) in str(excinfo.value)
+    assert AuditEvent.objects.get(action="backup.create").status == audit.FAILED
 
 
 @pytest.mark.django_db

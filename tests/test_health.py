@@ -79,6 +79,22 @@ def test_an_unset_backup_directory_warns(settings):
 
 
 @pytest.mark.django_db
+def test_a_backup_directory_that_cannot_be_created_is_an_error(settings, tmp_path):
+    blocker = tmp_path / "a-file"
+    blocker.write_text("not a folder")
+    settings.DBS_BACKUP_DIR = str(blocker / "backups")
+
+    assert checks(health.report())["backup directory"].status == health.ERROR
+
+
+@pytest.mark.django_db
+def test_a_nested_backup_directory_not_created_yet_is_writable(settings, tmp_path):
+    settings.DBS_BACKUP_DIR = str(tmp_path / "nested" / "backups")
+
+    assert checks(health.report())["backup directory"].status == health.OK
+
+
+@pytest.mark.django_db
 def test_a_silent_scheduler_warns(backup_dir, scheduled, settings):
     settings.DBS_SCHEDULER = "thread"
     assert checks(health.report())["scheduler"].status == health.WARN

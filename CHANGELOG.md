@@ -83,6 +83,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Damage in both copies of one block was unrecoverable** even with every byte intact in one
   copy or the other. Such a block is now rebuilt codeword by codeword from both copies, with
   the bytes where they differ treated as erasures.
+- `dbs schedule` with no plan flags followed the panel only when its schedule was already on
+  at start; otherwise it ran a 24-hour loop of its own and never noticed the panel. It now
+  always follows the panel, unless `DBS_SCHEDULE_INTERVAL` is still set, and `dbs upgrade`
+  warns when `DBS_SCHEDULER = "command"` and the panel's schedule is off.
+- `dbs backup` and `dbs schedule` given a folder they cannot write ended in a traceback; they
+  now name the path and the reason. `dbs upgrade` checks that `DBS_BACKUP_DIR` can be
+  written, and Health no longer reports a nested folder that is not created yet as
+  unwritable.
 
 ### Security
 

@@ -832,6 +832,11 @@ worker has served a request since it started, or the server runs uWSGI without
 
 **"Set DBS_BACKUP_DIR"** — the schedule, restore from a stored backup and health need it.
 
+**"Cannot keep backups in …"** — the user DBS runs as cannot create or write that folder.
+Point `DBS_BACKUP_DIR` at one it can. In a container that runs as a non-root user, create
+the folder in the image and give it to that user, or a new volume mounted there is owned
+by root.
+
 **The panel logged me out.** `python manage.py dbs security unlock USERNAME`, then add your
 network to the trusted list.
 
@@ -885,6 +890,10 @@ overwrites a backup.
 `DBS_SCHEDULE_INTERVAL`, turn the schedule on once in the panel, or keep running
 `dbs schedule --interval …` as before. Projects behind uWSGI without threads should set
 `DBS_SCHEDULER = "command"`.
+
+**From 0.5.0:** `dbs schedule` with no flags now always follows the panel. If its schedule is
+off, the command waits for it instead of backing up every 24 hours; turn the schedule on, or
+pass `--interval`. `dbs upgrade` says so when it applies.
 
 ## Development
 
