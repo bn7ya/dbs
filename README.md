@@ -10,7 +10,7 @@ together. The file is *redundant* and *self-healing*. It holds **two copies** of
 plus **Reed-Solomon parity**, so silent corruption is detected and repaired when you
 restore, instead of quietly poisoning the data you were relying on.
 
-## One install, three ways to use it
+## One install, four ways to use it
 
 ```bash
 pip install django-dbs
@@ -23,6 +23,7 @@ What you get depends only on where you use it:
 | add `"dbs"` to a project's `INSTALLED_APPS` | **The backup library** — `manage.py dbs backup / restore / validate` |
 | …and open `/admin/dbs/` as a superuser | **The panel** — backup frequency, restore, health and an audit trail, with no extra setup |
 | run `django_dbs run` in a terminal | **The DBS manager** — a local app that looks after many servers, pulls their backups and moves a project to a new server when the old one goes down. Every action it has is also a command: `django_dbs server add`, `django_dbs backup take --all` |
+| run `claude mcp add dbs -- django_dbs mcp` | **Claude at the controls** — ask Claude to add your servers, take and verify backups, set up plans and rehearse restores. It never sees a secret and cannot restore for real or delete anything |
 
 Nothing else to install: no Node, no Docker, no Redis, no separate database server.
 
@@ -30,6 +31,7 @@ Nothing else to install: no Node, no Docker, no Redis, no separate database serv
 [In your Django project](#1-in-your-django-project) ·
 [The panel](#2-the-panel-at-admindbs) ·
 [The DBS manager](#3-the-dbs-manager) ·
+[Claude and MCP](#let-claude-control-the-manager) ·
 [When a server goes down](#when-a-server-goes-down) ·
 [Restoring](#restoring) ·
 [Passphrases](#passphrases) ·
@@ -660,6 +662,16 @@ python manage.py dbs ai --check    # CI: fail if the installed copy has drifted
 
 The instructions live inside the installed package under `dbs/ai/`, so they always match
 the version you have.
+
+To let Claude operate the manager itself — add servers, take and verify backups, set up
+plans — connect its MCP server:
+
+```bash
+claude mcp add dbs -- django_dbs mcp
+```
+
+[Let Claude control the manager](#let-claude-control-the-manager) lists what Claude can and
+cannot do.
 
 ---
 
