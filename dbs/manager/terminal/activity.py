@@ -5,8 +5,9 @@ from dbs.manager.activity.serializers import (
     ActivitySerializer,
 )
 from dbs.manager.activity.services import ActivityService
-from dbs.manager.terminal import CommandFailed, jobs, references
-from dbs.manager.terminal.forms import validated
+from dbs.manager.adapters import jobs, references
+from dbs.manager.terminal import CommandFailed
+from dbs.manager.adapters.forms import validated
 from dbs.manager.terminal.session import TerminalSession
 
 LIST_COLUMNS = (

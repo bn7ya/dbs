@@ -343,7 +343,7 @@ def test_check_names_the_python_that_has_django_dbs(
     ran = terminal("server", "check", "web-1")
 
     assert ran.code == 1
-    assert f"--python {PYTHON}" in ran.out
+    assert f"set the server's Python to {PYTHON}" in ran.out
 
 
 @pytest.mark.django_db

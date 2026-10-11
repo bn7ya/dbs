@@ -1,0 +1,2 @@
+class AdapterError(Exception):
+    pass

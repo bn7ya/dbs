@@ -8,7 +8,6 @@ from rest_framework.exceptions import APIException
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
     AddedServerSerializer,
-    CheckedServerSerializer,
     HostKeySerializer,
     ServerCreateSerializer,
     ServerListSerializer,
@@ -18,9 +17,10 @@ from dbs.manager.servers.serializers import (
 from dbs.manager.servers.serializers.browse import BrowseEntrySerializer
 from dbs.manager.servers.services import BrowseService, DiscoveryService, ServerService
 from dbs.manager.servers.services.discovery_service import discovered_settings
-from dbs.manager.terminal import CommandFailed, references
-from dbs.manager.terminal.forms import validated
-from dbs.manager.terminal.output import problem
+from dbs.manager.adapters import references, servers
+from dbs.manager.terminal import CommandFailed
+from dbs.manager.adapters.forms import validated
+from dbs.manager.adapters.problems import problem
 from dbs.manager.terminal.session import TerminalSession
 
 SETTING_FIELDS = (
@@ -380,26 +380,17 @@ def _given_settings(args: Any) -> dict[str, Any]:
 def _discover_and_save(
     session: TerminalSession, server: Server, project: str | None, given: dict[str, Any]
 ) -> Server:
-    try:
-        found = DiscoveryService(session.user).discover(server.pk, project_dir=project)
-    except APIException as exc:
-        _say(session, f"Could not look around {server.name}: {problem(exc)}")
-        return server
-    changes = {
-        key: value
-        for key, value in discovered_settings(found, chosen=bool(project)).items()
-        if key not in given
-    }
-    if found["project_dir"]:
-        _say(session, f"Found the project in {found['project_dir']}.")
+    settled = servers.settle(session.user, server, project, given)
+    if settled.error:
+        _say(session, f"Could not look around {server.name}: {settled.error}")
+    elif settled.found and settled.found["project_dir"]:
+        _say(session, f"Found the project in {settled.found['project_dir']}.")
     else:
         _say(
             session,
             "Found no Django project; set one with: django_dbs server edit --project-dir",
         )
-    if changes:
-        server = ServerService(session.user).update(server.pk, **changes)
-    return server
+    return settled.server
 
 
 def _report_check(session: TerminalSession, chosen: list[Server]) -> int:
@@ -411,65 +402,17 @@ def _report_check(session: TerminalSession, chosen: list[Server]) -> int:
 def _checked(
     session: TerminalSession, chosen: list[Server]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    service = ServerService(session.user)
-    rows = []
-    results = []
-    for server in chosen:
-        try:
-            checked = service.checked(server.pk)
-        except APIException as exc:
-            rows.append(
-                {"name": server.name, "status": "failed", "problem": problem(exc)}
-            )
-            results.append(
-                {"id": str(server.pk), "name": server.name, "error": problem(exc)}
-            )
-            continue
-        data = CheckedServerSerializer(checked).data
-        results.append(data)
-        rows.append(
-            {
-                "name": checked.server.name,
-                "status": checked.server.last_check_status,
-                "remote_version": data.get("remote_version"),
-                "problem": _check_problem(checked.server),
-            }
-        )
-    return rows, results
-
-
-def _check_problem(server: Server) -> str:
-    if server.last_check_status == Server.CheckStatus.OK:
-        return ""
-    report = server.last_check_report or {}
-    problems = []
-    if report.get("dbs_version") is None:
-        problems.append(_missing_dbs(server, report))
-    if report.get("backup_command") is False:
-        problems.append("manage.py dbs_backup does not run")
-    if report.get("env_file") is False:
-        problems.append(f"{server.env_path} is missing")
-    problems += [
-        f"{root} is missing"
-        for root, ready in report.get("roots", {}).items()
-        if not ready
+    done = servers.checked(session.user, chosen)
+    rows = [
+        {
+            "name": item.name,
+            "status": item.status,
+            "remote_version": item.remote_version,
+            "problem": item.problem,
+        }
+        for item in done
     ]
-    if report and not report.get("remote_backup_dir"):
-        problems.append(f"{server.remote_backup_dir} is missing")
-    return "; ".join(problems) or server.last_check_error
-
-
-def _missing_dbs(server: Server, report: dict[str, Any]) -> str:
-    suggestion = report.get("python_suggestion")
-    if suggestion:
-        other = suggestion["python_path"]
-        return (
-            f"django-dbs is not in {server.python_path} but {other} has it; run: "
-            f"django_dbs server edit {server.name} --python {other}"
-        )
-    error = report.get("dbs_error")
-    reason = f" ({error})" if error else ""
-    return f"django-dbs is not installed for {server.python_path}{reason}"
+    return rows, [item.result for item in done]
 
 
 def _say(session: TerminalSession, message: str) -> None:

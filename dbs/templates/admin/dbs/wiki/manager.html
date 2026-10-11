@@ -22,6 +22,11 @@ the Python that has django-dbs, and checks the server. Actions the interface pro
 your password ask for it in the terminal too. <code>django_dbs AREA VERB --help</code> lists
 the rest: <code>server</code>, <code>backup</code>, <code>plan</code>,
 <code>activity</code>, <code>env</code>, <code>files</code> and <code>redeploy</code>.</p>
+<h2>With Claude</h2>
+<p><code>django_dbs mcp</code> lets Claude add servers, take and verify backups, set up plans
+and rehearse restores (<code>claude mcp add dbs -- django_dbs mcp</code>). It never reveals a
+secret, never takes your account password, and cannot restore for real, remove or delete
+anything.</p>
 <h2>Letting it reach this project</h2>
 <ol>
   <li>Open <a href="{% url 'admin:dbs_connection' %}">Connection</a> and press

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import os
-import shutil
 from pathlib import Path
 from typing import Any
 
 from django.core.files.uploadedfile import UploadedFile
-from rest_framework.exceptions import APIException
 
 from dbs.manager.backups.serializers import (
     BackupFileSerializer,
@@ -14,9 +12,9 @@ from dbs.manager.backups.serializers import (
 )
 from dbs.manager.backups.services import BackupService
 from dbs.manager.servers.services import ServerService
-from dbs.manager.terminal import CommandFailed, jobs, references
-from dbs.manager.terminal.forms import validated
-from dbs.manager.terminal.output import problem
+from dbs.manager.adapters import backups, jobs, references
+from dbs.manager.terminal import CommandFailed
+from dbs.manager.adapters.forms import validated
 from dbs.manager.terminal.session import TerminalSession
 
 LIST_COLUMNS = (
@@ -53,38 +51,33 @@ def list_backups(session: TerminalSession) -> int:
 
 def take(session: TerminalSession) -> int:
     chosen = references.servers(session.user, session.args.servers, session.args.all)
-    service = BackupService(session.user)
-    rows = []
-    results = []
-    for server in chosen:
-        if not session.out.as_json:
-            print(f"Backing up {server.name}...", flush=True)
-        try:
-            entry = jobs.finished(session.user, service.take(server.pk))
-        except APIException as exc:
-            rows.append({"server": server.name, "result": f"failed: {problem(exc)}"})
-            results.append({"server": server.name, "error": problem(exc)})
-            continue
-        results.append(jobs.described(session.user, entry))
-        detail = entry.data or {}
-        rows.append(
-            {
-                "server": server.name,
-                "result": "ok"
-                if jobs.succeeded(entry)
-                else f"failed: {jobs.failure(entry)}",
-                "backup": detail.get("backup"),
-                "size": detail.get("size"),
-            }
-        )
-    session.out.table(rows, TAKE_COLUMNS, empty="", data=results)
-    return 0 if all(row["result"] == "ok" for row in rows) else 1
+    taken = backups.take(
+        session.user, chosen, starting=lambda server: _starting(session, server)
+    )
+    rows = [
+        {
+            "server": item.server,
+            "result": "ok" if item.ok else f"failed: {item.error}",
+            "backup": item.backup,
+            "size": item.size,
+        }
+        for item in taken
+    ]
+    session.out.table(
+        rows, TAKE_COLUMNS, empty="", data=[item.as_dict() for item in taken]
+    )
+    return 0 if all(item.ok for item in taken) else 1
+
+
+def _starting(session: TerminalSession, server: Any) -> None:
+    if not session.out.as_json:
+        print(f"Backing up {server.name}...", flush=True)
 
 
 def verify(session: TerminalSession) -> int:
     file_id = references.identifier(session.args.backup, "backup")
     entry = jobs.finished(session.user, BackupService(session.user).verify(file_id))
-    return jobs.outcome(session, entry, "Verified the backup.")
+    return session.outcome(entry, "Verified the backup.")
 
 
 def restore(session: TerminalSession) -> int:
@@ -102,31 +95,16 @@ def restore(session: TerminalSession) -> int:
     job = service.restore(file_id, **validated(RestoreSerializer, body))
     entry = jobs.finished(session.user, job)
     done = "Restored" if args.real else "Rehearsed restoring"
-    return jobs.outcome(session, entry, f"{done} {file.name} onto {target.name}.")
+    return session.outcome(entry, f"{done} {file.name} onto {target.name}.")
 
 
 def download(session: TerminalSession) -> int:
     file_id = references.identifier(session.args.backup, "backup")
-    fetched = BackupService(session.user).download(file_id)
-    target = Path(session.args.output or fetched.name)
-    if target.is_dir():
-        target = target / fetched.name
-    try:
-        with target.open("xb") as handle:
-            if hasattr(fetched.content, "read"):
-                shutil.copyfileobj(fetched.content, handle)
-            else:
-                for chunk in fetched.content:
-                    handle.write(chunk)
-    except FileExistsError:
-        raise CommandFailed(
-            f"{target} already exists; nothing was overwritten."
-        ) from None
-    finally:
-        fetched.content.close()
+    target = Path(session.args.output or BackupService(session.user).get(file_id).name)
+    saved = backups.save(session.user, file_id, target)
+    size = saved.stat().st_size
     session.out.say(
-        f"Saved {target} ({fetched.size} bytes).",
-        {"path": str(target.resolve()), "size": fetched.size},
+        f"Saved {saved} ({size} bytes).", {"path": str(saved.resolve()), "size": size}
     )
     return 0
 

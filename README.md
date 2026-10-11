@@ -345,6 +345,46 @@ A command that takes a backup waits for it and prints the result. It can run whi
 `django_dbs run` is open: both take the same per-server lock, so a scheduled backup and one
 from the terminal never run on one server at the same time.
 
+### Let Claude control the manager
+
+`django_dbs mcp` is an MCP server, so Claude can fill the manager and look after the backups
+for you. It runs on your machine, on the same data folder, and calls the same code as the
+interface and the terminal.
+
+```bash
+claude mcp add dbs -- django_dbs mcp            # Claude Code
+claude mcp add dbs -- django_dbs mcp --as sara  # when the manager has several accounts
+```
+
+For Claude Desktop, add it to `claude_desktop_config.json`:
+
+```json
+{ "mcpServers": { "dbs": { "command": "django_dbs", "args": ["mcp"] } } }
+```
+
+Use the full path to `django_dbs`, or `"command": "python", "args": ["-m", "dbs.manager",
+"mcp"]`, if it is not on your `PATH`. Then ask, for example, *"add my server
+shop.example.com, user deploy, and back up every server"*.
+
+What Claude can do:
+- see the overview, servers, backups, plans, activity, `.env` versions (key names only) and
+  server files;
+- add a server, with an SSH password, a key file on this machine (the manager reads the file,
+  Claude only names it), or a new key. Claude first shows you the host key fingerprint and
+  waits for your yes;
+- change a server's name or address, check servers, find a project and its Python;
+- take, verify and save backups, add and run plans, and keep `.env` versions;
+- rehearse a restore or a move to another server, which changes nothing.
+
+What Claude cannot do: reveal a passphrase or a `.env` value, restore or redeploy for real,
+push a `.env`, remove a server, delete backups or files, or re-pin a host key. The MCP server
+never takes your account password, so anything the interface protects with it — changing a
+checked server's paths, archive and collect plans — comes back to you to do in the interface
+or the terminal. Everything Claude does is in **Activity** under the account it acts as.
+
+An SSH password you give Claude passes through the conversation. Prefer a key file or a new
+key when that matters to you.
+
 ### Backups, plans, files and `.env`
 
 Each server has tabs for **Backups** (take one now, upload one, verify, download, restore),
@@ -651,6 +691,7 @@ django_dbs plan    list|show|add|edit|remove|run
 django_dbs activity list|show  ·  django_dbs env list|pull|compare|reveal|push
 django_dbs files   list|download|upload|mkdir|delete  ·  django_dbs redeploy start
                                         [--as NAME] [--json] [--password-stdin] [--data-dir] [--database-url]
+django_dbs mcp                          [--as NAME] [--data-dir] [--database-url]
 
 dbs-client COMMAND                      [--server NAME] [--config PATH]   (deprecated)
 ```

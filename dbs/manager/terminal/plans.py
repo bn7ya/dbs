@@ -9,8 +9,9 @@ from dbs.manager.backups.serializers import (
 )
 from dbs.manager.backups.services import BackupPlanService
 from dbs.manager.servers.services import ServerService
-from dbs.manager.terminal import CommandFailed, jobs, references
-from dbs.manager.terminal.forms import validated
+from dbs.manager.adapters import jobs, references
+from dbs.manager.terminal import CommandFailed
+from dbs.manager.adapters.forms import validated
 from dbs.manager.terminal.session import TerminalSession
 
 LIST_COLUMNS = (
@@ -116,7 +117,7 @@ def run(session: TerminalSession) -> int:
     if not session.out.as_json:
         print(f"Running {plan.name}...", flush=True)
     entry = jobs.finished(session.user, service.run(plan.pk))
-    return jobs.outcome(session, entry, f"Ran the plan {plan.name}.")
+    return session.outcome(entry, f"Ran the plan {plan.name}.")
 
 
 def _plan_id(session: TerminalSession) -> Any:

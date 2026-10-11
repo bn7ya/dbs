@@ -12,8 +12,21 @@ Location = Callable[[argparse.ArgumentParser], None]
 
 
 def register(commands, location: Location) -> None:
-    for build in (servers, backups, plans, activity, envfiles, files, redeploy):
+    for build in (servers, backups, plans, activity, envfiles, files, redeploy, mcp):
         build(commands, location)
+
+
+def mcp(commands, location: Location) -> None:
+    help_text = "Let Claude drive the manager: an MCP server on stdin and stdout."
+    serve = commands.add_parser("mcp", help=help_text, description=help_text)
+    serve.set_defaults(handler="mcp.server:serve")
+    location(serve)
+    serve.add_argument(
+        "--as",
+        dest="account",
+        metavar="NAME",
+        help="The account Claude acts as. Defaults to the only account.",
+    )
 
 
 def _area(commands, name: str, help_text: str):
@@ -94,17 +107,19 @@ def _ssh_auth(parser):
 def servers(commands, location: Location) -> None:
     verbs = _area(commands, "server", "Add, change, check and remove servers.")
 
-    found = _verb(verbs, "list", "List the servers.", "servers:list_servers", location)
+    found = _verb(
+        verbs, "list", "List the servers.", "terminal.servers:list_servers", location
+    )
     found.add_argument("--search", help="Only servers whose name or host has this.")
 
-    show = _verb(verbs, "show", "Show one server.", "servers:show", location)
+    show = _verb(verbs, "show", "Show one server.", "terminal.servers:show", location)
     show.add_argument("server", help="The server's name or id.")
 
     add = _verb(
         verbs,
         "add",
         "Add a server: confirm its host key, find its project, and check it.",
-        "servers:add",
+        "terminal.servers:add",
         location,
     )
     add.add_argument("name", help="A name for this server.")
@@ -132,7 +147,9 @@ def servers(commands, location: Location) -> None:
     _server_settings(add)
     _yes(add)
 
-    edit = _verb(verbs, "edit", "Change a server's settings.", "servers:edit", location)
+    edit = _verb(
+        verbs, "edit", "Change a server's settings.", "terminal.servers:edit", location
+    )
     edit.add_argument("server", help="The server's name or id.")
     edit.add_argument("--name", help="A new name.")
     edit.add_argument("--host", help="A new address.")
@@ -146,7 +163,9 @@ def servers(commands, location: Location) -> None:
     )
     _server_settings(edit)
 
-    remove = _verb(verbs, "remove", "Remove a server.", "servers:remove", location)
+    remove = _verb(
+        verbs, "remove", "Remove a server.", "terminal.servers:remove", location
+    )
     remove.add_argument("server", help="The server's name or id.")
     _yes(remove)
 
@@ -154,7 +173,7 @@ def servers(commands, location: Location) -> None:
         verbs,
         "check",
         "Check that servers are reachable and ready.",
-        "servers:check",
+        "terminal.servers:check",
         location,
     )
     check.add_argument("servers", nargs="*", metavar="SERVER")
@@ -164,7 +183,7 @@ def servers(commands, location: Location) -> None:
         verbs,
         "discover",
         "Find the project and the Python that has django-dbs.",
-        "servers:discover",
+        "terminal.servers:discover",
         location,
     )
     discover.add_argument("server", help="The server's name or id.")
@@ -174,7 +193,11 @@ def servers(commands, location: Location) -> None:
     )
 
     browse = _verb(
-        verbs, "browse", "List a folder on a server.", "servers:browse", location
+        verbs,
+        "browse",
+        "List a folder on a server.",
+        "terminal.servers:browse",
+        location,
     )
     browse.add_argument("server", help="The server's name or id.")
     browse.add_argument("path", nargs="?", help="The folder. Defaults to home.")
@@ -183,7 +206,7 @@ def servers(commands, location: Location) -> None:
         verbs,
         "public-key",
         "Print a server's public key.",
-        "servers:public_key",
+        "terminal.servers:public_key",
         location,
     )
     public.add_argument("server", help="The server's name or id.")
@@ -192,7 +215,7 @@ def servers(commands, location: Location) -> None:
         verbs,
         "host-key",
         "Pin the host key a server offers now.",
-        "servers:host_key",
+        "terminal.servers:host_key",
         location,
     )
     repin.add_argument("server", help="The server's name or id.")
@@ -203,7 +226,7 @@ def servers(commands, location: Location) -> None:
         verbs,
         "passphrase",
         "Show the passphrase a server's backups use.",
-        "servers:passphrase",
+        "terminal.servers:passphrase",
         location,
     )
     passphrase.add_argument("server", help="The server's name or id.")
@@ -212,7 +235,7 @@ def servers(commands, location: Location) -> None:
         verbs,
         "capture-passphrase",
         "Read the backup passphrase from the server itself.",
-        "servers:capture_passphrase",
+        "terminal.servers:capture_passphrase",
         location,
     )
     capture.add_argument("server", help="The server's name or id.")
@@ -221,7 +244,7 @@ def servers(commands, location: Location) -> None:
         verbs,
         "import-profiles",
         "Add the servers of a dbs-client config file.",
-        "servers:import_profiles",
+        "terminal.servers:import_profiles",
         location,
     )
     profiles.add_argument(
@@ -235,21 +258,27 @@ def servers(commands, location: Location) -> None:
 def backups(commands, location: Location) -> None:
     verbs = _area(commands, "backup", "Take, verify, restore and keep backups.")
 
-    found = _verb(verbs, "list", "List the backups.", "backups:list_backups", location)
+    found = _verb(
+        verbs, "list", "List the backups.", "terminal.backups:list_backups", location
+    )
     found.add_argument("--server", help="Only this server's backups.")
 
     take = _verb(
         verbs,
         "take",
         "Take a backup of one, several or every server.",
-        "backups:take",
+        "terminal.backups:take",
         location,
     )
     take.add_argument("servers", nargs="*", metavar="SERVER")
     take.add_argument("--all", action="store_true", help="Back up every server.")
 
     verify = _verb(
-        verbs, "verify", "Verify a backup end to end.", "backups:verify", location
+        verbs,
+        "verify",
+        "Verify a backup end to end.",
+        "terminal.backups:verify",
+        location,
     )
     verify.add_argument("backup", help="The backup's id.")
 
@@ -257,7 +286,7 @@ def backups(commands, location: Location) -> None:
         verbs,
         "restore",
         "Restore a backup. Rehearses unless --real is given.",
-        "backups:restore",
+        "terminal.backups:restore",
         location,
     )
     restore.add_argument("backup", help="The backup's id.")
@@ -274,26 +303,32 @@ def backups(commands, location: Location) -> None:
         verbs,
         "download",
         "Save a backup to this computer.",
-        "backups:download",
+        "terminal.backups:download",
         location,
     )
     download.add_argument("backup", help="The backup's id.")
     download.add_argument("-o", "--output", help="Where to save it.")
 
     upload = _verb(
-        verbs, "upload", "Keep a file from this computer.", "backups:upload", location
+        verbs,
+        "upload",
+        "Keep a file from this computer.",
+        "terminal.backups:upload",
+        location,
     )
     upload.add_argument("server", help="The server it belongs to.")
     upload.add_argument("file", help="The file to keep.")
 
-    delete = _verb(verbs, "delete", "Delete a backup.", "backups:delete", location)
+    delete = _verb(
+        verbs, "delete", "Delete a backup.", "terminal.backups:delete", location
+    )
     delete.add_argument("backup", help="The backup's id.")
 
     undo = _verb(
         verbs,
         "undo-delete",
         "Bring back a deleted backup.",
-        "backups:undo_delete",
+        "terminal.backups:undo_delete",
         location,
     )
     undo.add_argument("backup", help="The backup's id.")
@@ -325,20 +360,22 @@ def _plan_fields(parser) -> None:
 def plans(commands, location: Location) -> None:
     verbs = _area(commands, "plan", "Plan backups that run on their own.")
 
-    found = _verb(verbs, "list", "List the plans.", "plans:list_plans", location)
+    found = _verb(
+        verbs, "list", "List the plans.", "terminal.plans:list_plans", location
+    )
     found.add_argument("--server", help="Only this server's plans.")
 
-    show = _verb(verbs, "show", "Show one plan.", "plans:show", location)
+    show = _verb(verbs, "show", "Show one plan.", "terminal.plans:show", location)
     show.add_argument("plan", help="The plan's id.")
 
-    add = _verb(verbs, "add", "Add a plan.", "plans:add", location)
+    add = _verb(verbs, "add", "Add a plan.", "terminal.plans:add", location)
     add.add_argument("server", help="The server's name or id.")
     add.add_argument("name", help="A name for the plan.")
     add.add_argument("--kind", choices=PLAN_KINDS, required=True)
     _plan_fields(add)
     add.add_argument("--disabled", action="store_true", help="Add it switched off.")
 
-    edit = _verb(verbs, "edit", "Change a plan.", "plans:edit", location)
+    edit = _verb(verbs, "edit", "Change a plan.", "terminal.plans:edit", location)
     edit.add_argument("plan", help="The plan's id.")
     edit.add_argument("--name", help="A new name.")
     _plan_fields(edit)
@@ -346,10 +383,10 @@ def plans(commands, location: Location) -> None:
     switch.add_argument("--enable", dest="enabled", action="store_true", default=None)
     switch.add_argument("--disable", dest="enabled", action="store_false")
 
-    remove = _verb(verbs, "remove", "Remove a plan.", "plans:remove", location)
+    remove = _verb(verbs, "remove", "Remove a plan.", "terminal.plans:remove", location)
     remove.add_argument("plan", help="The plan's id.")
 
-    run = _verb(verbs, "run", "Run a plan now.", "plans:run", location)
+    run = _verb(verbs, "run", "Run a plan now.", "terminal.plans:run", location)
     run.add_argument("plan", help="The plan's id.")
 
 
@@ -357,7 +394,11 @@ def activity(commands, location: Location) -> None:
     verbs = _area(commands, "activity", "Read what the manager did.")
 
     found = _verb(
-        verbs, "list", "List recent activity.", "activity:list_activity", location
+        verbs,
+        "list",
+        "List recent activity.",
+        "terminal.activity:list_activity",
+        location,
     )
     found.add_argument("--server", help="Only this server's activity.")
     found.add_argument("--action", help="Only this action, for example backup.take.")
@@ -366,7 +407,7 @@ def activity(commands, location: Location) -> None:
         "--limit", type=int, default=ACTIVITY_LIMIT, help="How many to show."
     )
 
-    show = _verb(verbs, "show", "Show one entry.", "activity:show", location)
+    show = _verb(verbs, "show", "Show one entry.", "terminal.activity:show", location)
     show.add_argument("entry", help="The entry's number.")
 
 
@@ -374,23 +415,35 @@ def envfiles(commands, location: Location) -> None:
     verbs = _area(commands, "env", "Keep versions of a server's .env file.")
 
     found = _verb(
-        verbs, "list", "List the kept versions.", "envfiles:list_versions", location
+        verbs,
+        "list",
+        "List the kept versions.",
+        "terminal.envfiles:list_versions",
+        location,
     )
     found.add_argument("server", help="The server's name or id.")
 
     pull = _verb(
-        verbs, "pull", "Keep the .env file as it is now.", "envfiles:pull", location
+        verbs,
+        "pull",
+        "Keep the .env file as it is now.",
+        "terminal.envfiles:pull",
+        location,
     )
     pull.add_argument("server", help="The server's name or id.")
 
     compare = _verb(
-        verbs, "compare", "Show which keys differ.", "envfiles:compare", location
+        verbs,
+        "compare",
+        "Show which keys differ.",
+        "terminal.envfiles:compare",
+        location,
     )
     compare.add_argument("version", help="The version's id.")
     compare.add_argument("other", help="The version to compare it with.")
 
     reveal = _verb(
-        verbs, "reveal", "Print a kept version.", "envfiles:reveal", location
+        verbs, "reveal", "Print a kept version.", "terminal.envfiles:reveal", location
     )
     reveal.add_argument("version", help="The version's id.")
 
@@ -398,7 +451,7 @@ def envfiles(commands, location: Location) -> None:
         verbs,
         "push",
         "Write a kept version back to its server.",
-        "envfiles:push",
+        "terminal.envfiles:push",
         location,
     )
     push.add_argument("version", help="The version's id.")
@@ -407,31 +460,35 @@ def envfiles(commands, location: Location) -> None:
 def files(commands, location: Location) -> None:
     verbs = _area(commands, "files", "Work with the files on a server.")
 
-    found = _verb(verbs, "list", "List a folder.", "files:list_folder", location)
+    found = _verb(
+        verbs, "list", "List a folder.", "terminal.files:list_folder", location
+    )
     found.add_argument("server", help="The server's name or id.")
     found.add_argument(
         "path", nargs="?", help="The folder. Defaults to the first root."
     )
 
-    download = _verb(verbs, "download", "Save a file here.", "files:download", location)
+    download = _verb(
+        verbs, "download", "Save a file here.", "terminal.files:download", location
+    )
     download.add_argument("server", help="The server's name or id.")
     download.add_argument("path", help="The file on the server.")
     download.add_argument("-o", "--output", help="Where to save it.")
 
     upload = _verb(
-        verbs, "upload", "Put a file on the server.", "files:upload", location
+        verbs, "upload", "Put a file on the server.", "terminal.files:upload", location
     )
     upload.add_argument("server", help="The server's name or id.")
     upload.add_argument("folder", help="The folder on the server.")
     upload.add_argument("file", help="The file here.")
 
-    folder = _verb(verbs, "mkdir", "Make a folder.", "files:mkdir", location)
+    folder = _verb(verbs, "mkdir", "Make a folder.", "terminal.files:mkdir", location)
     folder.add_argument("server", help="The server's name or id.")
     folder.add_argument("folder", help="The folder to make it in.")
     folder.add_argument("name", help="The new folder's name.")
 
     delete = _verb(
-        verbs, "delete", "Delete a file or folder.", "files:delete", location
+        verbs, "delete", "Delete a file or folder.", "terminal.files:delete", location
     )
     delete.add_argument("server", help="The server's name or id.")
     delete.add_argument("path", help="What to delete.")
@@ -444,7 +501,7 @@ def redeploy(commands, location: Location) -> None:
         verbs,
         "start",
         "Restore a server's backup onto another server. Rehearses unless --real.",
-        "redeploy:start",
+        "terminal.redeploy:start",
         location,
     )
     start.add_argument(

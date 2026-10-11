@@ -66,7 +66,7 @@ def test_take_reports_a_server_already_backing_up_and_fails(
 
 @pytest.mark.django_db
 def test_take_needs_servers_or_all(terminal, admin, two_servers):
-    assert "--all" in terminal("backup", "take").err
+    assert "choose all of them" in terminal("backup", "take").err
     assert "not both" in terminal("backup", "take", "shop", "--all").err
 
 

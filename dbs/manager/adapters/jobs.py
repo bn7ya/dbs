@@ -7,7 +7,6 @@ from rest_framework.exceptions import APIException
 from dbs import audit
 from dbs.manager.activity.serializers import ActivitySerializer
 from dbs.manager.activity.services import ActivityService
-from dbs.manager.terminal import CommandFailed
 from dbs.models import AuditEvent
 
 
@@ -39,13 +38,3 @@ def _messages() -> dict[str, str]:
         waiting.extend(kind.__subclasses__())
         found.setdefault(kind.default_code, str(kind.default_detail))
     return found
-
-
-def outcome(session: Any, entry: AuditEvent, done: str) -> int:
-    if succeeded(entry):
-        session.out.say(done, described(session.user, entry))
-        return 0
-    if session.out.as_json:
-        session.out.json(described(session.user, entry))
-        return 1
-    raise CommandFailed(f"failed: {failure(entry)}")

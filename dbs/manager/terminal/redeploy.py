@@ -4,8 +4,8 @@ from typing import Any
 
 from dbs.manager.redeploy.serializers import RedeploySerializer
 from dbs.manager.redeploy.services import RedeployService
-from dbs.manager.terminal import jobs, references
-from dbs.manager.terminal.forms import validated
+from dbs.manager.adapters import jobs, references
+from dbs.manager.adapters.forms import validated
 from dbs.manager.terminal.session import TerminalSession
 
 
@@ -40,4 +40,4 @@ def start(session: TerminalSession) -> int:
         for step in (entry.data or {}).get("steps", []):
             print(f"  {step['step']:<12} {step['status']}")
     done = "Redeployed" if args.real else "Rehearsed redeploying"
-    return jobs.outcome(session, entry, f"{done} {source.name} onto {target.name}.")
+    return session.outcome(entry, f"{done} {source.name} onto {target.name}.")

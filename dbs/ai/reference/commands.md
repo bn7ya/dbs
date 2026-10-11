@@ -93,6 +93,12 @@ are prompted for or read from stdin, never passed as arguments; confirmations ne
 from a script. `server add` confirms the host key, finds the project and its Python, and
 checks the server.
 
+`django_dbs mcp [--as NAME]` is an MCP server over stdio for Claude
+(`claude mcp add dbs -- django_dbs mcp`). Its tools read everything, add and check servers,
+take, verify and save backups, add and run plans, keep `.env` versions (key names only) and
+rehearse restores and redeploys. It never takes the account password and has no tool that
+reveals a secret, restores or redeploys for real, removes or deletes.
+
 `dbs-client` is deprecated: prefer `django_dbs server import-profiles` and
 `django_dbs backup take`.
 

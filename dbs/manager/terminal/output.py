@@ -4,8 +4,6 @@ import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, Union
 
-from rest_framework.exceptions import APIException
-
 Column = tuple[str, Union[str, Callable[[Mapping[str, Any]], Any]]]
 
 EMPTY = "-"
@@ -76,22 +74,6 @@ def text(value: Any) -> str:
 
 def label(name: str) -> str:
     return name.replace("_", " ")
-
-
-def problem(exc: APIException) -> str:
-    return _flatten(exc.detail)
-
-
-def _flatten(detail: Any, field: str = "") -> str:
-    if isinstance(detail, dict):
-        return "; ".join(
-            _flatten(value, key if key != "non_field_errors" else "")
-            for key, value in detail.items()
-        )
-    if isinstance(detail, list):
-        return "; ".join(_flatten(item, field) for item in detail)
-    message = str(detail)
-    return f"{label(field)}: {message}" if field else message
 
 
 def _line(cells: Sequence[str], widths: Sequence[int]) -> str:

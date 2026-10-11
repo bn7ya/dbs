@@ -30,6 +30,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   confirms the host key, finds the project and its Python, and checks the server.
 - `django_dbs server import-profiles [dbs-client.toml]` adds the servers of a `dbs-client`
   config to the manager.
+- **Claude can drive the manager.** `django_dbs mcp` is an MCP server over stdio
+  (`claude mcp add dbs -- django_dbs mcp`), built in with no new dependency. Its 27 tools call
+  the same services as the interface and the terminal: an overview, servers (add with an SSH
+  password, a key file or a new key after you confirm the host key fingerprint; change, check,
+  discover, browse), backups (take on several servers, verify, save, rehearse a restore),
+  plans, activity, `.env` versions by key name, server files and a rehearsed redeploy. It never
+  takes the account password, never returns a secret, and has no tool that restores or
+  redeploys for real, removes, deletes, pushes a `.env` or re-pins a host key.
 
 ### Changed
 

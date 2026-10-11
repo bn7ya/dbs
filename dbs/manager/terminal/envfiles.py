@@ -7,7 +7,7 @@ from dbs.manager.envfiles.serializers import (
     EnvVersionSerializer,
 )
 from dbs.manager.envfiles.services import EnvFileService
-from dbs.manager.terminal import references
+from dbs.manager.adapters import references
 from dbs.manager.terminal.output import text
 from dbs.manager.terminal.session import TerminalSession
 

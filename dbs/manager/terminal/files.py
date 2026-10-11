@@ -4,7 +4,8 @@ from pathlib import Path
 
 from dbs.manager.files.serializers import FileEntrySerializer
 from dbs.manager.files.services import FileService
-from dbs.manager.terminal import CommandFailed, references
+from dbs.manager.adapters import references
+from dbs.manager.terminal import CommandFailed
 from dbs.manager.terminal.backups import local_file
 from dbs.manager.terminal.session import TerminalSession
 
