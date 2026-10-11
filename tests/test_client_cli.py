@@ -292,3 +292,12 @@ def _moment(hour):
     import datetime
 
     return datetime.datetime(2026, 1, 1, hour, 0, 0, tzinfo=datetime.timezone.utc)
+
+
+def test_every_run_says_it_is_deprecated_and_where_to_go(tmp_path, capsys):
+    assert main(["init", "--print"]) == 0
+
+    captured = capsys.readouterr()
+    assert "deprecated" in captured.err
+    assert "django_dbs server import-profiles" in captured.err
+    assert "deprecated" not in captured.out

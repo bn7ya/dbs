@@ -159,3 +159,17 @@ class ServerCreateSerializer(ServerSettingsSerializer):
                 {"auth_method": [ErrorDetail(REQUIRED, code="required")]}
             )
         return attrs
+
+
+class AddedServerSerializer(serializers.BaseSerializer):
+    def to_representation(self, instance):
+        body = dict(ServerSerializer(instance.server).data)
+        if instance.public_key:
+            body["public_key"] = instance.public_key
+            body["authorized_keys_hint"] = instance.authorized_keys_hint
+        return body
+
+
+class CheckedServerSerializer(serializers.BaseSerializer):
+    def to_representation(self, instance):
+        return {**ServerSerializer(instance.server).data, **instance.compatibility}

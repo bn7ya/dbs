@@ -84,6 +84,20 @@ class DiscoveryService:
         return found
 
 
+def discovered_settings(found: dict[str, Any], chosen: bool) -> dict[str, Any]:
+    settings: dict[str, Any] = {
+        field: found[field]
+        for field in ("project_dir", "manage_path", "remote_backup_dir", "file_roots")
+        if found.get(field)
+    }
+    if found.get("python_path") and (found.get("dbs_version") is not None or chosen):
+        settings["python_path"] = found["python_path"]
+    for field in ("settings_module", "env_path"):
+        if chosen or found.get(field):
+            settings[field] = found.get(field) or ""
+    return settings
+
+
 def project_dirs(remote: RemoteHost) -> list[str]:
     home = quiet(remote.realpath, ".")
     found: list[str] = []

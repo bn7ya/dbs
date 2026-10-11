@@ -22,7 +22,7 @@ What you get depends only on where you use it:
 |---|---|
 | add `"dbs"` to a project's `INSTALLED_APPS` | **The backup library** — `manage.py dbs backup / restore / validate` |
 | …and open `/admin/dbs/` as a superuser | **The panel** — backup frequency, restore, health and an audit trail, with no extra setup |
-| run `django_dbs run` in a terminal | **The DBS manager** — a local app that looks after many servers, pulls their backups and moves a project to a new server when the old one goes down |
+| run `django_dbs run` in a terminal | **The DBS manager** — a local app that looks after many servers, pulls their backups and moves a project to a new server when the old one goes down. Every action it has is also a command: `django_dbs server add`, `django_dbs backup take --all` |
 
 Nothing else to install: no Node, no Docker, no Redis, no separate database server.
 
@@ -299,6 +299,92 @@ manage accounts without a browser; add `--password-stdin` to script them.
 The project never contacts the manager and keeps nothing about it. A backup the manager
 asks for is audited on the server like any other backup.
 
+### The same manager from a terminal
+
+Everything the interface does is also a `django_dbs` command. Both call the same code and
+the same data folder, so a server added in a terminal appears in the browser, a backup the
+browser took is listed in the terminal, and the **Activity** page records both under the
+account that acted.
+
+```bash
+django_dbs server add shop --host shop.example.com --user deploy --ssh-password
+django_dbs server add blog --host 203.0.113.7 --user deploy --key-file ~/.ssh/blog --project-dir /srv/blog
+django_dbs server list
+django_dbs backup take --all          # one after another, with a summary; exits 1 if one failed
+django_dbs backup list --server shop
+django_dbs plan add shop nightly --kind dbs --every 1440 --keep 14
+django_dbs server remove blog
+```
+
+`server add` goes through the wizard's steps. It shows the host key fingerprint and asks you
+to confirm it (`--host-key` or `--yes` from a script), finds the project and the Python that
+has django-dbs, saves them and checks the server. `--generate-key` prints the line to add to
+`authorized_keys` instead.
+
+| Area | Commands |
+|---|---|
+| `server` | `list` · `show` · `add` · `edit` · `remove` · `check SERVER… \| --all` · `discover [--save]` · `browse [PATH]` · `public-key` · `host-key` · `passphrase` · `capture-passphrase` · `import-profiles` |
+| `backup` | `list` · `take SERVER… \| --all` · `verify` · `restore --mode merge\|replace [--to SERVER] [--real]` · `download [-o PATH]` · `upload` · `delete` · `undo-delete` |
+| `plan` | `list` · `show` · `add` · `edit` · `remove` · `run` |
+| `activity` | `list [--server] [--action] [--status] [--limit]` · `show` |
+| `env` | `list` · `pull` · `compare` · `reveal` · `push` |
+| `files` | `list` · `download` · `upload` · `mkdir` · `delete` |
+| `redeploy` | `start --from SERVER --to SERVER --backup ID [--real]` |
+
+A server is named by its name or its id; a backup, plan or `.env` version by the id that
+`list` prints. Every command takes `--json`, which prints exactly what the web API returns.
+
+The terminal follows the interface's rules. Commands act as a manager account: the only one,
+or the one named with `--as NAME`. An action the interface protects with your password —
+changing a checked server's paths, revealing a passphrase or a `.env`, restoring or
+redeploying for real — asks for it here too, or reads it with `--password-stdin`. Secrets are
+typed at a prompt or read from stdin, never passed as arguments. Removing a server asks you
+to type its name unless you pass `--yes`.
+
+A command that takes a backup waits for it and prints the result. It can run while
+`django_dbs run` is open: both take the same per-server lock, so a scheduled backup and one
+from the terminal never run on one server at the same time.
+
+### Let Claude control the manager
+
+`django_dbs mcp` is an MCP server, so Claude can fill the manager and look after the backups
+for you. It runs on your machine, on the same data folder, and calls the same code as the
+interface and the terminal.
+
+```bash
+claude mcp add dbs -- django_dbs mcp            # Claude Code
+claude mcp add dbs -- django_dbs mcp --as sara  # when the manager has several accounts
+```
+
+For Claude Desktop, add it to `claude_desktop_config.json`:
+
+```json
+{ "mcpServers": { "dbs": { "command": "django_dbs", "args": ["mcp"] } } }
+```
+
+Use the full path to `django_dbs`, or `"command": "python", "args": ["-m", "dbs.manager",
+"mcp"]`, if it is not on your `PATH`. Then ask, for example, *"add my server
+shop.example.com, user deploy, and back up every server"*.
+
+What Claude can do:
+- see the overview, servers, backups, plans, activity, `.env` versions (key names only) and
+  server files;
+- add a server, with an SSH password, a key file on this machine (the manager reads the file,
+  Claude only names it), or a new key. Claude first shows you the host key fingerprint and
+  waits for your yes;
+- change a server's name or address, check servers, find a project and its Python;
+- take, verify and save backups, add and run plans, and keep `.env` versions;
+- rehearse a restore or a move to another server, which changes nothing.
+
+What Claude cannot do: reveal a passphrase or a `.env` value, restore or redeploy for real,
+push a `.env`, remove a server, delete backups or files, or re-pin a host key. The MCP server
+never takes your account password, so anything the interface protects with it — changing a
+checked server's paths, archive and collect plans — comes back to you to do in the interface
+or the terminal. Everything Claude does is in **Activity** under the account it acts as.
+
+An SSH password you give Claude passes through the conversation. Prefer a key file or a new
+key when that matters to you.
+
 ### Backups, plans, files and `.env`
 
 Each server has tabs for **Backups** (take one now, upload one, verify, download, restore),
@@ -352,6 +438,21 @@ manager is running on that data folder.
 ---
 
 ## Pulling backups from a terminal
+
+> **`dbs-client` is deprecated** and will be removed in a later release. Every run now says
+> so on stderr. The manager's own commands do the same work across many servers, with one
+> audit trail; `django_dbs server import-profiles dbs-client.toml` adds the servers of your
+> config to the manager.
+>
+> | `dbs-client` | `django_dbs` |
+> |---|---|
+> | `test-connection` | `server check SERVER` |
+> | `backup` | `backup take SERVER` (or `--all`) |
+> | `list` | `backup list --server SERVER` |
+> | `pull` | `backup download ID` |
+> | `push PATH` | `backup upload SERVER PATH` |
+> | `schedule` · `prune` | `plan add SERVER NAME --every MINUTES --keep N` |
+> | `validate PATH` | `python manage.py dbs validate PATH` |
 
 `dbs-client` is the manager without the interface: it asks a server for a fresh backup and
 downloads it over one SSH connection, from a script or cron.
@@ -584,8 +685,18 @@ django_dbs createuser NAME              [--password-stdin]
 django_dbs password NAME                [--password-stdin]
 django_dbs paths · --version
 
-dbs-client COMMAND                      [--server NAME] [--config PATH]
+django_dbs server  list|show|add|edit|remove|check|discover|browse|public-key|host-key|passphrase|capture-passphrase|import-profiles
+django_dbs backup  list|take|verify|restore|download|upload|delete|undo-delete
+django_dbs plan    list|show|add|edit|remove|run
+django_dbs activity list|show  ·  django_dbs env list|pull|compare|reveal|push
+django_dbs files   list|download|upload|mkdir|delete  ·  django_dbs redeploy start
+                                        [--as NAME] [--json] [--password-stdin] [--data-dir] [--database-url]
+django_dbs mcp                          [--as NAME] [--data-dir] [--database-url]
+
+dbs-client COMMAND                      [--server NAME] [--config PATH]   (deprecated)
 ```
+
+`django_dbs AREA VERB --help` lists each command's options.
 
 `python -m dbs.manager COMMAND` is the same as `django_dbs COMMAND`, and
 `python -m dbs.client COMMAND` the same as `dbs-client COMMAND`.
@@ -716,9 +827,16 @@ folder that is not on your `PATH`, common with Windows user installs and
 `PATH`, or run `python -m dbs.manager run` instead. `dbs-client` works the same way as
 `python -m dbs.client`.
 
-**The manager cannot reach a server.** Re-run the wizard's *Check* step: it names whether
-the SSH login, the host key, the project path or the server's django-dbs version is the
-problem.
+**The manager cannot reach a server.** Re-run the wizard's *Check* step, or
+`django_dbs server check SERVER`: it names whether the SSH login, the host key, the project
+path or the server's django-dbs version is the problem.
+
+**A terminal command says "pick the account to act as".** The manager has more than one
+account; add `--as NAME`.
+
+**A terminal command says it asks for a secret to be typed.** It ran without a terminal, as
+from cron. Pass the password on stdin with `--password-stdin` (or the SSH password with
+`--ssh-password-stdin`), and `--yes` for confirmations.
 
 **The manager says django-dbs is "Not found" on a server that has it.** The manager runs the
 Python saved for that server over a non-interactive SSH login, which loads no virtualenv. The

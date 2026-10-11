@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
@@ -112,6 +113,19 @@ def _changed(server: Server, changes: dict[str, Any]) -> list[str]:
     return sorted(names)
 
 
+@dataclass(frozen=True)
+class AddedServer:
+    server: Server
+    public_key: str | None = None
+    authorized_keys_hint: str | None = None
+
+
+@dataclass(frozen=True)
+class CheckedServer:
+    server: Server
+    compatibility: dict[str, Any]
+
+
 class ServerService:
     def __init__(self, user: User | AnonymousUser | None) -> None:
         self.user: User | AnonymousUser | None = user
@@ -138,6 +152,16 @@ class ServerService:
             key = fetch_host_key(host, port)
             entry.detail = {"fingerprint": key.fingerprint}
             return key
+
+    def add(self, **data: Any) -> AddedServer:
+        if not data.pop("generate_key", False):
+            return AddedServer(server=self.create(**data))
+        server, public_key = self.create_with_key(**data)
+        return AddedServer(
+            server=server,
+            public_key=public_key,
+            authorized_keys_hint=keys.authorized_keys_hint(public_key, server.username),
+        )
 
     def create(self, **data: Any) -> Server:
         data.pop("generate_key", None)
@@ -310,6 +334,10 @@ class ServerService:
             entry.detail = {"status": status}
             self.servers.update(server, last_health=health)
             return self._record(server, status, "", report)
+
+    def checked(self, server_id: UUID) -> CheckedServer:
+        server = self.check(server_id)
+        return CheckedServer(server=server, compatibility=self.compatibility(server))
 
     def compatibility(self, server: Server) -> dict[str, Any]:
         remote = (server.last_check_report or {}).get("dbs_version")

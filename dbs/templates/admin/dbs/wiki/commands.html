@@ -9,6 +9,17 @@ python manage.py dbs schedule [--interval 6h] [--once]
 python manage.py dbs key --show
 python manage.py dbs security status|unlock USER|retrain|purge
 python manage.py dbs ai [--agents] [--check]</code></pre>
+<p>The standalone manager, outside any project:</p>
+<pre><code>django_dbs run [--port] [--host] [--no-browser]
+django_dbs server list|show|add|edit|remove|check|discover|browse
+django_dbs backup list|take|verify|restore|download|upload|delete|undo-delete
+django_dbs plan list|show|add|edit|remove|run
+django_dbs activity list|show
+django_dbs env list|pull|compare|reveal|push
+django_dbs files list|download|upload|mkdir|delete
+django_dbs redeploy start --from SERVER --to SERVER --backup ID</code></pre>
+<p><code>dbs-client</code> is deprecated; <code>django_dbs server import-profiles</code> moves
+its servers into the manager.</p>
 <p><code>python manage.py django-dbs</code> is the same command under its old name.
 The original <code>dbs_backup</code>, <code>dbs_restore</code>, <code>dbs_validate</code> and
 <code>dbs_schedule</code> commands still work unchanged.</p>

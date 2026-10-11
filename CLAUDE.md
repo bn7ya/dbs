@@ -72,6 +72,14 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   (`dbs/manager/settings.py`), one app labelled `dbs_manager` with a subpackage per slice,
   the job runner and scheduler that replace Celery, and the built interface in
   `dbs/manager/static/dbs_manager/` (generated, not committed).
+- `dbs/manager/terminal/` — the manager's terminal commands (`django_dbs server|backup|plan|
+  activity|env|files|redeploy`). Like the REST views, each verb validates with the slice's
+  serializer and calls the slice's service; neither adapter holds business logic.
+  `parsers.py` imports no Django, so `--help` stays instant.
+- `dbs/manager/mcp/` — `django_dbs mcp`, the MCP server Claude drives: `protocol.py` is
+  JSON-RPC over stdio with no Django, `tools.py` the tools, each calling a slice's service.
+- `dbs/manager/adapters/` — the glue the terminal and MCP share: references by name or id,
+  serializer validation, job results, the check summary, multi-server takes.
 - `manager-ui/` — the manager's Angular source (Angular Material, Font Awesome Free).
   `scripts/build_manager_ui.sh` builds it into the package; `manager-ui/CLAUDE.md` holds
   its rules.
@@ -128,6 +136,9 @@ version to read them before it offers giving them up.
   package: no PEP 695 generics, `Self`, `StrEnum`, `datetime.UTC` or
   `CheckConstraint(condition=...)`.
 - Remote commands are fixed argument lists; passphrases travel on stdin.
+- The MCP server never accepts the account password, never returns a secret, and offers no
+  tool that restores or redeploys for real, removes, deletes, pushes a `.env` or re-pins a host
+  key. `tests/manager/mcp/test_tools.py` enforces the list; keep it when adding tools.
 - The built interface is generated at release time and never committed.
 
 ## Client constraint
