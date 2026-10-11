@@ -4,6 +4,8 @@ export type AuthMethod = 'key' | 'password';
 
 export type CheckStatus = 'unknown' | 'ok' | 'problem' | 'failed';
 
+export type Runtime = 'host' | 'compose';
+
 export interface ServerSummary {
   readonly id: string;
   readonly name: string;
@@ -19,8 +21,15 @@ export interface PythonSuggestion {
   readonly dbs_version: string;
 }
 
+export interface ComposeReport {
+  readonly version: string | null;
+  readonly error: string;
+  readonly running: boolean;
+}
+
 export interface CheckReport {
   readonly system?: string | null;
+  readonly compose?: ComposeReport;
   readonly dbs_version?: string | null;
   readonly dbs_error?: string;
   readonly python_suggestion?: PythonSuggestion | null;
@@ -37,6 +46,9 @@ export interface Server extends ServerSummary {
   readonly has_password: boolean;
   readonly host_key_type: string;
   readonly host_key_fingerprint: string;
+  readonly runtime: Runtime;
+  readonly compose_service: string;
+  readonly compose_files: readonly string[];
   readonly project_dir: string;
   readonly python_path: string;
   readonly manage_path: string;
@@ -59,6 +71,9 @@ export interface ServerSettings {
   readonly private_key?: string;
   readonly key_passphrase?: string;
   readonly password?: string;
+  readonly runtime: Runtime;
+  readonly compose_service: string;
+  readonly compose_files: readonly string[];
   readonly project_dir: string;
   readonly python_path: string;
   readonly manage_path: string;
@@ -84,7 +99,16 @@ export interface PublicKey {
 
 export type ProjectSettings = Pick<
   ServerSettings,
-  'project_dir' | 'python_path' | 'manage_path' | 'settings_module' | 'remote_backup_dir' | 'file_roots' | 'env_path'
+  | 'runtime'
+  | 'compose_service'
+  | 'compose_files'
+  | 'project_dir'
+  | 'python_path'
+  | 'manage_path'
+  | 'settings_module'
+  | 'remote_backup_dir'
+  | 'file_roots'
+  | 'env_path'
 >;
 
 export interface Discovery extends ProjectSettings {
@@ -93,6 +117,7 @@ export interface Discovery extends ProjectSettings {
   readonly candidates: {
     readonly project_dirs: readonly string[];
     readonly python_paths: readonly string[];
+    readonly compose_services: readonly string[];
   };
 }
 

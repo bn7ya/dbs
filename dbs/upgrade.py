@@ -154,6 +154,7 @@ class ScheduleInDatabase(Step):
         from django.db import DatabaseError
 
         from .models import BackupSchedule
+        from .schedule_runner import COMMAND, mode
 
         try:
             schedule = BackupSchedule.objects.order_by("pk").first()
@@ -165,6 +166,13 @@ class ScheduleInDatabase(Step):
             return self.warn(
                 "DBS_SCHEDULE_INTERVAL is set, but the frequency is now set in the DBS panel",
                 "turn the schedule on at /admin/dbs/backupschedule/",
+            )
+        if mode() == COMMAND:
+            return self.warn(
+                "`dbs schedule` follows the DBS panel, where scheduled backups are off, "
+                "so it takes none",
+                "turn the schedule on at /admin/dbs/backupschedule/, or run "
+                "`dbs schedule --interval 24h` to keep a fixed interval",
             )
         return self.ok("scheduled backups are off; turn them on at /admin/dbs/backupschedule/")
 
@@ -205,6 +213,7 @@ class BackupDirectory(Step):
     since = "0.5.0"
 
     def check(self):
+        from .io import can_write_into
         from .schedule_runner import backup_directory
 
         directory = backup_directory()
@@ -213,6 +222,11 @@ class BackupDirectory(Step):
                 "DBS_BACKUP_DIR is not set, so the panel cannot schedule backups, restore "
                 "a stored backup or report backup health",
                 'DBS_BACKUP_DIR = BASE_DIR / "backups"',
+            )
+        if not can_write_into(directory):
+            return self.warn(
+                f"{directory} is not writable by this user, so scheduled backups will fail",
+                'DBS_BACKUP_DIR = BASE_DIR / "backups"  # or a folder this user can write',
             )
         return self.ok(f"backups are kept in {directory}")
 

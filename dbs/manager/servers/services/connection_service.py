@@ -8,7 +8,13 @@ from uuid import UUID
 from rest_framework.exceptions import NotFound
 
 from dbs.manager.servers.exceptions import PassphraseMissing
-from dbs.manager.servers.gateways import Credentials, DbsProfile, RemoteHost, connect
+from dbs.manager.servers.gateways import (
+    ComposeService,
+    Credentials,
+    DbsProfile,
+    RemoteHost,
+    connect,
+)
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.repositories import ServerRepository
 from dbs.manager.servers.services import vault_contexts
@@ -71,6 +77,14 @@ class ServerConnectionService:
             manage=server.manage_path,
             project_dir=server.project_dir or None,
             settings_module=server.settings_module or None,
+            compose=(
+                ComposeService(
+                    service=server.compose_service,
+                    files=tuple(server.compose_files),
+                )
+                if server.in_compose
+                else None
+            ),
         )
 
     def backup_passphrase(self, server: Server) -> str:

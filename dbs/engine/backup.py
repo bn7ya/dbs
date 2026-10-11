@@ -53,13 +53,19 @@ def create_backup(
     skipped_files: list[str] = []
     seen_roots: set[str] = set()
 
+    carried = frozenset(model_list)
+    connection = connections[using]
+    pin_snapshot = connection.vendor == "postgresql" and not connection.in_atomic_block
+
     with transaction.atomic(using=using):
+        if pin_snapshot:
+            read_from_one_snapshot(connection)
         for model in model_list:
             config = introspect.config_for(registry, model)
             excluded = introspect.excluded_fields(model, config)
             file_field_types = introspect.file_fields(model, config)
 
-            records = serialize_model(model, config, excluded)
+            records = serialize_model(model, config, excluded, carried)
             records_all.extend(records)
             stats_models.append({"model": _label(model), "count": len(records)})
 
@@ -91,7 +97,7 @@ def create_backup(
         "version": 1,
         "created": created,
         "django_version": django.get_version(),
-        "migrations": migration_state(connections[using]),
+        "migrations": migration_state(connection),
         "stats": {
             "models": stats_models,
             "records": len(records_all),
@@ -136,6 +142,11 @@ def create_backup(
         len(container),
     )
     return container
+
+
+def read_from_one_snapshot(connection) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
 
 
 def migration_state(connection) -> dict[str, str]:

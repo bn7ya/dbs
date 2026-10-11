@@ -64,6 +64,8 @@ class Command(BaseCommand):
                 )
             except DBSError as exc:
                 raise CommandError(f"Backup failed: {exc}") from exc
+            except OSError as exc:
+                raise CommandError(f"Cannot write {output}: {exc.strerror or exc}.") from exc
             digest = hashlib.sha256(container).hexdigest()
             entry.data.update(
                 size=len(container),

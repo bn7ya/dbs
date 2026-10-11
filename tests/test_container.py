@@ -130,3 +130,37 @@ def test_truncation_into_copy_a_raises():
     a_off, _b_off, copy_len = copy_offsets(blob)
     with pytest.raises(ContainerError, match="truncated"):
         read_container(blob[: a_off + copy_len // 2])
+
+
+def test_damage_in_both_copies_at_different_places_is_rebuilt_from_both():
+    data = os.urandom(200_000)
+    enc, plan = encode_copy(data)
+    a, b = bytearray(enc), bytearray(enc)
+    a[1000:1040] = b"\xff" * 40
+    b[30_000:30_040] = b"\xaa" * 40
+    recovered, report = repair_copies(bytes(a), bytes(b), plan)
+    assert recovered == data
+    assert report.healed and report.blocks_merged == 1
+    assert "rebuilt from both copies" in report.summary()
+
+
+def test_the_same_bytes_damaged_differently_in_both_copies_are_rebuilt():
+    data = os.urandom(200_000)
+    enc, plan = encode_copy(data)
+    a, b = bytearray(enc), bytearray(enc)
+    for i in range(500, 512):
+        a[i] = enc[i] ^ 0x0F
+        b[i] = enc[i] ^ 0xF0
+    recovered, report = repair_copies(bytes(a), bytes(b), plan)
+    assert recovered == data
+    assert report.blocks_merged == 1
+
+
+def test_one_copy_alone_cannot_be_rebuilt_from_both():
+    data = os.urandom(200_000)
+    enc, plan = encode_copy(data)
+    a = bytearray(enc)
+    a[1000:1040] = b"\xff" * 40
+    recovered, report = repair_copies(bytes(a), None, plan)
+    assert recovered is None
+    assert 0 in report.failed_blocks

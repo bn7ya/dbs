@@ -301,6 +301,41 @@ manage accounts without a browser; add `--password-stdin` to script them.
 The project never contacts the manager and keeps nothing about it. A backup the manager
 asks for is audited on the server like any other backup.
 
+### A project that runs in Docker Compose
+
+When the project's Django runs in a Docker Compose service, the manager runs every
+`manage.py` command inside that service with `docker compose exec`, from the project folder on
+the server. Choose **In a Docker Compose service** under *Where the project runs*, in the
+wizard or in the server's settings, or from a terminal:
+
+```bash
+django_dbs server add shop --host shop.example.com --user deploy --ssh-password \
+  --runtime compose --compose-service backend \
+  --compose-file compose.yaml --compose-file compose.prod.yaml --project-dir /srv/shop
+```
+
+| Setting | |
+|---|---|
+| Project folder | the folder on the server that holds the Compose files; every command runs from it |
+| Compose service | the service whose container runs Django, such as `backend` |
+| Compose files | the files passed with `-f`, in order; with none, Docker uses the folder's default Compose file |
+| Python and `manage.py` | paths inside the container, such as `python` and `manage.py` |
+
+The SSH user must be able to run `docker compose` — usually as a member of the `docker` group,
+which gives that user root on the server, so give it to the user that already deploys the
+project. The service must be running, with django-dbs installed in its image.
+
+When the search finds a Compose file in a folder that no other account can write to, it asks
+Docker which services are running there and tries `python3` and `python` in each, so a project
+whose image has django-dbs is found and filled in by itself. The check reports Docker's version and whether the service is running,
+and names the service when django-dbs is missing from it.
+
+A backup is written to a temporary file inside the container, copied out to the backup folder
+on the server with `docker compose cp`, then pulled and validated; the temporary file is
+removed whether or not the backup succeeded. A restore copies the backup into the container,
+gives it to the container's user, restores it and removes both copies. The project needs no
+volume for its backups. A redeploy runs its `migrate` and restore steps inside the service too.
+
 ### The same manager from a terminal
 
 Everything the interface does is also a `django_dbs` command. Both call the same code and
@@ -311,6 +346,7 @@ account that acted.
 ```bash
 django_dbs server add shop --host shop.example.com --user deploy --ssh-password
 django_dbs server add blog --host 203.0.113.7 --user deploy --key-file ~/.ssh/blog --project-dir /srv/blog
+django_dbs server edit shop --runtime compose --compose-service backend
 django_dbs server list
 django_dbs backup take --all          # one after another, with a summary; exits 1 if one failed
 django_dbs backup list --server shop
@@ -579,6 +615,12 @@ python manage.py dbs restore backup.dbs --flush     # replace instead of merge
 * **File writes are confined** to `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS` if unset).
 * **Migration drift is reported**, naming the apps that moved on since the backup.
 * **Sequences are reset**, so the next row your project creates does not collide.
+* **Rows the backup leaves out are found again by name.** `migrate` recreates content types
+  and permissions on every server, numbered in the order that server migrated, so a backup
+  refers to them, and to any other model it does not carry that has a natural key, by that
+  key: a group's permissions as `["change_order", "store", "order"]`, a generic relation's
+  content type as `["store", "order"]`. A permission the target no longer has is left out
+  with a warning; a foreign key it cannot find stops the restore and names the row.
 
 Rows are saved the way `loaddata` saves them, with `raw=True`. A `post_save` receiver with
 side effects should return early on raw saves:
@@ -783,14 +825,18 @@ presents a different key raises `HostKeyError`.
 On write, the encrypted stream is split into blocks. Each block gets a BLAKE2b hash and a
 layer of Reed-Solomon parity, and the whole stream is stored **twice**, header and manifest
 included. On read, each block is taken from whichever copy verifies, and sparse bit-flips
-are corrected in place even when *both* copies are hit. Every recovered block is checked
+are corrected in place even when *both* copies are hit. A block that neither copy yields on
+its own is rebuilt from both, one 255-byte codeword at a time: each codeword comes from
+whichever copy decodes, and where the two copies disagree those bytes are treated as
+erasures, of which Reed-Solomon corrects twice as many. Every recovered block is checked
 against its stored hash. A freshly written backup is re-read and verified end to end before
 the command reports success.
 
-**Recoverable:** whole-block loss in one copy, and sparse byte errors in both copies up to
-the parity budget (about 8 bytes per 255-byte codeword by default). **Not recoverable:** a
-block destroyed beyond the parity budget in both copies — DBS then refuses to restore and
-names the failed blocks.
+**Recoverable:** whole-block loss in one copy; sparse byte errors in both copies up to the
+parity budget (about 8 bytes per codeword by default); and damage in both copies of the same
+block, as long as each codeword survives in one copy or the copies differ in at most 16 of
+its bytes. **Not recoverable:** a codeword destroyed beyond that in both copies — DBS then
+refuses to restore and names the failed blocks.
 
 ## Security model
 
@@ -821,6 +867,11 @@ worker has served a request since it started, or the server runs uWSGI without
 `--enable-threads`; use `DBS_SCHEDULER = "command"` and `manage.py dbs schedule`.
 
 **"Set DBS_BACKUP_DIR"** — the schedule, restore from a stored backup and health need it.
+
+**"Cannot keep backups in …"** — the user DBS runs as cannot create or write that folder.
+Point `DBS_BACKUP_DIR` at one it can. In a container that runs as a non-root user, create
+the folder in the image and give it to that user, or a new volume mounted there is owned
+by root.
 
 **The panel logged me out.** `python manage.py dbs security unlock USERNAME`, then add your
 network to the trusted list.
@@ -875,6 +926,10 @@ overwrites a backup.
 `DBS_SCHEDULE_INTERVAL`, turn the schedule on once in the panel, or keep running
 `dbs schedule --interval …` as before. Projects behind uWSGI without threads should set
 `DBS_SCHEDULER = "command"`.
+
+**From 0.5.0:** `dbs schedule` with no flags now always follows the panel. If its schedule is
+off, the command waits for it instead of backing up every 24 hours; turn the schedule on, or
+pass `--interval`. `dbs upgrade` says so when it applies.
 
 ## Development
 

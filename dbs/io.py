@@ -26,3 +26,18 @@ def write_atomic(path: str, data: bytes) -> None:
         except FileNotFoundError:
             pass
         raise
+
+
+def nearest_existing(path: str) -> str:
+    probe = os.path.abspath(path)
+    while not os.path.exists(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    return probe
+
+
+def can_write_into(directory: str) -> bool:
+    probe = nearest_existing(directory)
+    return os.path.isdir(probe) and os.access(probe, os.W_OK | os.X_OK)

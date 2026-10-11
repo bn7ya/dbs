@@ -42,6 +42,9 @@ const SNIPPET = JSON.stringify({
 });
 
 const DISCOVERY: Discovery = {
+  runtime: 'host',
+  compose_service: '',
+  compose_files: [],
   project_dir: '/srv/app',
   python_path: '/srv/app/.venv/bin/python',
   manage_path: 'manage.py',
@@ -51,7 +54,11 @@ const DISCOVERY: Discovery = {
   env_path: '/srv/app/.env',
   dbs_version: '0.5.0',
   is_project: true,
-  candidates: { project_dirs: ['/srv/app', '/srv/blog'], python_paths: ['/srv/app/.venv/bin/python', 'python3', 'python'] },
+  candidates: {
+    project_dirs: ['/srv/app', '/srv/blog'],
+    python_paths: ['/srv/app/.venv/bin/python', 'python3', 'python'],
+    compose_services: [],
+  },
 };
 
 const DONE: Job = { id: 1, action: 'backup.take', status: 'succeeded', detail: {}, error_code: '', finished_at: null };
@@ -278,6 +285,47 @@ describe('ServerWizardPage', () => {
 
     wizard.update('project_dir', '/srv/elsewhere');
     expect(html().textContent).not.toContain('no Python on the server could import django-dbs');
+  });
+
+  it('switches to Docker Compose when the search finds django-dbs in a service, and saves it', async () => {
+    await createWithPassword();
+    await answerDiscovery({
+      ...DISCOVERY,
+      runtime: 'compose',
+      compose_service: 'backend',
+      project_dir: '/srv/shop',
+      python_path: 'python3',
+      settings_module: '',
+      env_path: '/srv/shop/.env',
+      candidates: { project_dirs: ['/srv/shop'], python_paths: ['python3', 'python'], compose_services: ['db', 'backend'] },
+    });
+
+    expect(wizard.draft()).toMatchObject({ runtime: 'compose', compose_service: 'backend', project_dir: '/srv/shop' });
+    expect(html().textContent).toContain('Ready: django-dbs 0.5.0 was found in the backend service.');
+    expect(html().textContent).toContain('The folder on the server that holds the compose file.');
+
+    const saving = wizard.advance();
+    const patch = http.expectOne(`/api/servers/${SERVER.id}/`);
+    expect(patch.request.body).toMatchObject({
+      runtime: 'compose',
+      compose_service: 'backend',
+      compose_files: [],
+      project_dir: '/srv/shop',
+    });
+    patch.flush({ ...SERVER, runtime: 'compose', compose_service: 'backend', project_dir: '/srv/shop' });
+    await saving;
+    http
+      .expectOne(`/api/servers/${SERVER.id}/check/`)
+      .flush({ ...SERVER, local_version: '0.5.0', remote_version: '0.5.0', installed: true, compatible: true, last_health: null });
+    await fixture.whenStable();
+  });
+
+  it('keeps the runtime the reader chose when the search did not find django-dbs', async () => {
+    await createWithPassword();
+    wizard.updateRuntime({ runtime: 'compose', compose_service: 'web' });
+    await answerDiscovery({ ...DISCOVERY, dbs_version: null });
+
+    expect(wizard.draft()).toMatchObject({ runtime: 'compose', compose_service: 'web' });
   });
 
   it('asks for the account password when the server wants it, and keeps asking after a wrong one', async () => {

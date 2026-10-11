@@ -1,4 +1,4 @@
-export type Presence = 'found' | 'missing' | 'notSet' | 'notChecked';
+export type Presence = 'found' | 'missing' | 'notSet' | 'notChecked' | 'running' | 'stopped';
 
 export interface PresenceLook {
   readonly icon: string;
@@ -19,6 +19,7 @@ export interface RootRow {
 export interface CheckReportView {
   readonly rows: readonly ReportRow[];
   readonly roots: readonly RootRow[];
+  readonly dockerSaid: string;
 }
 
 export interface SettingRow {

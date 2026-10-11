@@ -173,6 +173,7 @@ class BackupRunService:
                 dest_dir=str(self.storage.directory(server.pk)),
                 prefix=prefix,
                 keep_remote=keep_remote,
+                remote_dir=server.remote_backup_dir,
             )
         stored = self.storage.keep(fetched.local_path)
         return self._record(

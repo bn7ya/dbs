@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Projects in Docker Compose.** A manager server can say its Django runs in a Docker Compose
+  service (`runtime`, `compose_service`, `compose_files`; *Where the project runs* in the
+  wizard and the server's settings; `--runtime compose --compose-service SERVICE
+  --compose-file FILE` in the terminal; the same fields over MCP). The manager then runs every `manage.py` command —
+  the check, backups, restores, the passphrase and the redeploy's migrations — inside that
+  service with `docker compose exec -T`, from the project folder, and moves backups in and out
+  of the container with `docker compose cp`, removing the copies it made. Discovery asks Docker
+  which services run beside a Compose file and finds the one whose Python has django-dbs. The
+  check reports Docker's version and whether the service is running. Servers already in the
+  manager keep running on the host; the manager's migration `0003_server_runtime` adds the
+  fields and applies itself the next time any `django_dbs` command starts.
 - `python -m dbs.manager` runs the manager, for when pip installs `django_dbs` into a folder
   that is not on `PATH`. The README and the panel's wiki explain the fix, and
   `python -m dbs.client` does the same for `dbs-client`.
@@ -69,6 +80,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Choosing another project while the wizard was still reading the last one could save the new
   folder with the old project's Python and backup folder. *Next* now waits for the search to
   finish, and what was found is shown only for the folder in the field.
+- **A restore could hand out the wrong permissions.** Content types and permissions are left
+  out of a backup because `migrate` recreates them, but rows referred to them by id, and a
+  database migrated in another order numbers them differently. Restored onto a fresh server,
+  a group or a user could receive another model's permissions, and a generic relation could
+  point at the wrong model, with no error. A relation to a model the backup does not carry is
+  now written by natural key and found again by name on restore. A permission the target
+  lacks is left out with a warning; a foreign key it cannot find stops the restore and names
+  the row. Older backups still restore, with a warning naming the models they refer to by id.
+- **A PostgreSQL backup taken while the project was in use could fail its own restore.** Each
+  model was read in a snapshot of its own, so a row committed mid-backup could arrive without
+  the row it points at. A backup now reads every model from one `REPEATABLE READ` snapshot.
+- **Damage in both copies of one block was unrecoverable** even with every byte intact in one
+  copy or the other. Such a block is now rebuilt codeword by codeword from both copies, with
+  the bytes where they differ treated as erasures.
+- `dbs schedule` with no plan flags followed the panel only when its schedule was already on
+  at start; otherwise it ran a 24-hour loop of its own and never noticed the panel. It now
+  always follows the panel, unless `DBS_SCHEDULE_INTERVAL` is still set, and `dbs upgrade`
+  warns when `DBS_SCHEDULER = "command"` and the panel's schedule is off.
+- `dbs backup` and `dbs schedule` given a folder they cannot write ended in a traceback; they
+  now name the path and the reason. `dbs upgrade` checks that `DBS_BACKUP_DIR` can be
+  written, and Health no longer reports a nested folder that is not created yet as
+  unwritable.
 
 ### Security
 

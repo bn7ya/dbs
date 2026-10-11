@@ -52,7 +52,13 @@ class Command(BaseCommand):
         if interval < MINIMUM_SENSIBLE_INTERVAL and not options["once"]:
             logger.warning("scheduling backups every %d seconds is very frequent", interval)
 
-        os.makedirs(plan["output_dir"], exist_ok=True)
+        try:
+            os.makedirs(plan["output_dir"], exist_ok=True)
+        except OSError as exc:
+            raise CommandError(
+                f"Cannot keep backups in {plan['output_dir']}: {exc.strerror or exc}. "
+                "Set --output-dir or DBS_BACKUP_DIR to a folder this user can write."
+            ) from exc
         stop = threading.Event()
         if not options["once"]:
             install_stop_handlers(stop)
@@ -132,4 +138,6 @@ def _follows_database(options) -> bool:
     if any(options[name] is not None for name in PLAN_OPTIONS):
         return False
     schedule = schedule_runner.database_schedule()
-    return schedule is not None and schedule.enabled
+    if schedule is None:
+        return False
+    return schedule.enabled or setting("DBS_SCHEDULE_INTERVAL", None) is None

@@ -16,7 +16,7 @@ from paramiko import SFTPAttributes
 from dbs import create_backup
 from dbs.crypto.kdf import KDFParams
 from dbs.manager.servers.exceptions import RemoteCommandFailed
-from dbs.manager.servers.gateways import EntryKind, RemoteEntry
+from dbs.manager.servers.gateways import EntryKind, RemoteEntry, RemoteHost
 from dbs.manager.servers.services.server_service import DBS_VERSION
 
 PASSWORD = "correct-horse-battery-staple"
@@ -104,6 +104,12 @@ class FakeRemote:
         if isinstance(answer, Exception):
             raise answer
         return answer
+
+    run_python = RemoteHost.run_python
+    run_manage = RemoteHost.run_manage
+    run_compose = RemoteHost.run_compose
+    run_in_container = RemoteHost.run_in_container
+    compose_version = RemoteHost.compose_version
 
     def exists(self, path: str) -> bool:
         if path in self.unreadable:

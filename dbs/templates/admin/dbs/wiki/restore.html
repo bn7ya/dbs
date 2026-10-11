@@ -12,4 +12,10 @@ so a failure leaves the database untouched.</p>
 <h2>Migration drift</h2>
 <p>Backups record the applied migration per app. If the target has drifted, the restore warns
 and names the apps. Rows for models and fields the target does not know are discarded.</p>
+<h2>Permissions and content types</h2>
+<p>Every server recreates its permissions and content types when it migrates, numbered in
+the order it migrated, so a backup refers to them by name rather than by number: a group's
+permissions, a user's permissions and a generic relation all land on the right rows of a
+server migrated in another order. A permission the server no longer has is left out with a
+warning; a foreign key it cannot find stops the restore and names the row.</p>
 {% endblock %}

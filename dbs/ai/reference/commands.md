@@ -27,9 +27,11 @@ Without it, only structure and block integrity are checked.
 `--database`, `--once`, plus the `dbs backup` cost flags.
 
 With none of the plan flags (`--interval`, `--output-dir`, `--prefix`, `--keep`, `--push`,
-`--keep-remote`) and the panel's schedule turned on, it follows the panel: it ticks every
+`--keep-remote`) it follows the panel, whether its schedule is on yet or not: it ticks every
 minute and takes the same database lease as the in-process scheduler, so both can run
-safely. With plan flags it runs that plan, as before.
+safely, and it backs up only while the panel's schedule is on. With plan flags it runs that
+plan, as before; so does a project that still sets `DBS_SCHEDULE_INTERVAL` while the
+panel's schedule is off.
 
 `SIGTERM` stops the loop immediately. Run one fixed-plan scheduler per output directory.
 Retention only touches files matching `prefix-YYYYMMDD-HHMMSSZ.dbs`.
@@ -92,6 +94,13 @@ API's output) and `--password-stdin` (for actions that need the account password
 are prompted for or read from stdin, never passed as arguments; confirmations need `--yes`
 from a script. `server add` confirms the host key, finds the project and its Python, and
 checks the server.
+
+For a project whose Django runs in a Docker Compose service, `server add|edit` take
+`--runtime compose --compose-service SERVICE [--compose-file FILE]…` with `--project-dir` set
+to the folder holding the Compose files; `--python` and `--manage` are then paths inside the
+container. The manager runs `docker compose exec -T SERVICE python manage.py …` from that
+folder and moves backups with `docker compose cp`. Discovery finds such a project by itself
+when the service is running and its image has django-dbs.
 
 `django_dbs mcp [--as NAME]` is an MCP server over stdio for Claude
 (`claude mcp add dbs -- django_dbs mcp`). Its tools read everything, add and check servers,

@@ -52,6 +52,9 @@ ACTIVITY_LIMIT_MAX = 200
 DEFAULT_PORT = 22
 AUTH_METHODS = ("password", "key_file", "generate_key")
 SETTING_FIELDS = (
+    "runtime",
+    "compose_service",
+    "compose_files",
     "project_dir",
     "python_path",
     "manage_path",
@@ -78,12 +81,35 @@ VERSION = {
 REMOTE_PATH = {"type": "string", "description": "An absolute path on the server."}
 PORT = {"type": "integer", "minimum": 1, "maximum": 65535}
 SETTINGS = {
+    "runtime": {
+        "type": "string",
+        "enum": ["host", "compose"],
+        "description": (
+            "Where the project runs: host when manage.py runs on the server itself, "
+            "compose when it runs in a Docker Compose service."
+        ),
+    },
+    "compose_service": {
+        "type": "string",
+        "description": "For compose: the service that runs the project, such as backend.",
+    },
+    "compose_files": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "For compose: the files to pass to docker compose -f, in order.",
+    },
     "project_dir": {
         "type": "string",
-        "description": "The folder that holds manage.py.",
+        "description": "The folder that holds manage.py; for compose, the compose file.",
     },
-    "python_path": {"type": "string", "description": "The Python that has django-dbs."},
-    "manage_path": {"type": "string", "description": "The manage.py to run."},
+    "python_path": {
+        "type": "string",
+        "description": "The Python that has django-dbs; for compose, inside the service.",
+    },
+    "manage_path": {
+        "type": "string",
+        "description": "The manage.py to run; for compose, inside the service.",
+    },
     "settings_module": {"type": "string", "description": "DJANGO_SETTINGS_MODULE."},
     "remote_backup_dir": {
         "type": "string",

@@ -14,6 +14,15 @@ PYTHON_MODULE = RegexValidator(
     r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$",
     message="Enter a dotted Python module path, such as config.settings.",
 )
+COMPOSE_SERVICE = RegexValidator(
+    r"^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+    message="Enter the service name the compose file gives the project, such as backend.",
+)
+COMPOSE_FILE = RegexValidator(
+    r"^(?!-)(?!(.*/)?\.\.(/|$))[^\x00\r\n]+$",
+    message="Enter a compose file path without '..' in it, such as compose.prod.yaml.",
+)
+COMPOSE_FILES_MAX = 10
 PRIVATE_KEY_MAX_LENGTH = 16000
 SECRET_MAX_LENGTH = 1024
 ACCOUNT_PASSWORD_MAX_LENGTH = 128
@@ -69,6 +78,9 @@ class ServerSerializer(serializers.ModelSerializer):
             "host_key",
             "host_key_type",
             "host_key_fingerprint",
+            "runtime",
+            "compose_service",
+            "compose_files",
             "project_dir",
             "python_path",
             "manage_path",
@@ -102,6 +114,18 @@ class ServerSettingsSerializer(serializers.Serializer):
     )
     key_passphrase = secret_field()
     password = secret_field()
+    runtime = serializers.ChoiceField(choices=Server.Runtime.choices, required=False)
+    compose_service = serializers.CharField(
+        max_length=100,
+        allow_blank=True,
+        required=False,
+        validators=[COMPOSE_SERVICE],
+    )
+    compose_files = serializers.ListField(
+        child=serializers.CharField(max_length=512, validators=[COMPOSE_FILE]),
+        max_length=COMPOSE_FILES_MAX,
+        required=False,
+    )
     project_dir = serializers.CharField(
         max_length=512,
         allow_blank=True,

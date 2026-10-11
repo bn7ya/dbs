@@ -65,8 +65,13 @@
         "backupCommand": "أمر النسخ الاحتياطي",
         "envFile": "ملف متغيرات البيئة",
         "remoteBackupDir": "مجلد النسخ الاحتياطية على الخادم",
-        "roots": "المجلدات المسموح بها"
-      }
+        "roots": "المجلدات المسموح بها",
+        "docker": "Docker Compose",
+        "service": "خدمة Compose"
+      },
+      "running": "تعمل",
+      "stopped": "لا تعمل",
+      "dockerSaid": "رد Docker:"
     },
     "settings": {
       "title": "الإعدادات",
@@ -84,7 +89,11 @@
       "saved": "تم الحفظ",
       "notSaved": "لم يتم الحفظ",
       "notSet": "غير محدد",
-      "updated": "تم حفظ التغييرات."
+      "updated": "تم حفظ التغييرات.",
+      "runtime": "مكان التشغيل",
+      "composeService": "خدمة Compose",
+      "composeFiles": "ملفات Compose",
+      "composeDefault": "ملف المجلد نفسه"
     },
     "hostKey": {
       "title": "مفتاح المضيف",
@@ -173,15 +182,18 @@
       "projectDir": {
         "label": "مجلد المشروع",
         "hint": "المجلد الذي يحتوي على manage.py.",
-        "placeholder": "/srv/app"
+        "placeholder": "/srv/app",
+        "composeHint": "المجلد على الخادم الذي يحتوي على ملف Compose."
       },
       "pythonPath": {
         "label": "أمر Python",
-        "hint": "python3، أو Python في البيئة الافتراضية للمشروع."
+        "hint": "python3، أو Python في البيئة الافتراضية للمشروع.",
+        "composeHint": "Python داخل الخدمة، مثل python."
       },
       "managePath": {
         "label": "مسار manage.py",
-        "hint": "مسار نسبي من مجلد المشروع."
+        "hint": "مسار نسبي من مجلد المشروع.",
+        "composeHint": "داخل الخدمة، مسار نسبي من المجلد الذي تعمل فيه."
       },
       "settingsModule": {
         "label": "وحدة الإعدادات",
@@ -205,6 +217,16 @@
       },
       "accountPassword": {
         "hint": "تغيير أي شيء غير الاسم يتطلب كلمة المرور."
+      },
+      "composeService": {
+        "label": "خدمة Compose",
+        "hint": "الخدمة في ملف Compose التي تشغل Django، مثل backend."
+      },
+      "composeFiles": {
+        "label": "ملفات Compose",
+        "hint": "اتركه فارغا لاستخدام ملف Compose الموجود في المجلد. أضف الملفات بالترتيب الذي يأخذه docker compose -f، واضغط Enter بعد كل ملف.",
+        "placeholder": "compose.prod.yaml",
+        "remove": "إزالة {path}"
       }
     },
     "wizard": {
@@ -254,7 +276,8 @@
         "ready": "جاهز: تم العثور على django-dbs {version} لهذا المشروع.",
         "noDbs": "تم العثور على المشروع، لكن لم يتمكن أي Python على الخادم من استيراد django-dbs. ثبت django-dbs في بيئة المشروع، ثم ابحث مرة أخرى.",
         "showDetails": "عرض إعدادات أخرى",
-        "hideDetails": "إخفاء الإعدادات الأخرى"
+        "hideDetails": "إخفاء الإعدادات الأخرى",
+        "readyInService": "جاهز: تم العثور على django-dbs {version} في خدمة {service}."
       },
       "check": {
         "local": "إصدار django-dbs هنا",
@@ -322,6 +345,11 @@
       "chooseHere": "اختيار هذا المجلد",
       "browseLabel": "تصفح الخادم لاختيار: {field}",
       "truncated": "يحتوي هذا المجلد على أكثر من 5000 عنصر. تظهر أول 5000 فقط."
+    },
+    "runtime": {
+      "label": "مكان تشغيل المشروع",
+      "host": "على الخادم مباشرة",
+      "compose": "في خدمة Docker Compose"
     }
   },
   "errors": {
@@ -330,6 +358,8 @@
     "host_key_unconfirmed": "قارن البصمتين أولا.",
     "snippet_invalid": "هذا النص ليس JSON صالحا. الصق بيانات الاتصال كاملة.",
     "snippet_not_dbs": "هذه ليست بيانات اتصال من DBS.",
-    "no_private_key": "يتم الدخول إلى هذا الخادم بكلمة مرور، لذلك لا يوجد له مفتاح."
+    "no_private_key": "يتم الدخول إلى هذا الخادم بكلمة مرور، لذلك لا يوجد له مفتاح.",
+    "compose_service_required": "اكتب اسم خدمة Compose التي تشغل المشروع.",
+    "compose_folder_required": "أدخل المجلد الذي يحتوي على ملف Compose."
   }
 }

@@ -68,6 +68,17 @@ def test_an_output_directory_is_required(passphrase_env, settings):
 
 
 @pytest.mark.django_db
+def test_an_output_directory_that_cannot_be_created_is_reported(tmp_path, passphrase_env):
+    blocker = tmp_path / "a-file"
+    blocker.write_text("not a folder")
+
+    with pytest.raises(CommandError) as excinfo:
+        call_command("dbs_schedule", "--once", output_dir=str(blocker / "backups"), **FAST)
+
+    assert str(blocker / "backups") in str(excinfo.value)
+
+
+@pytest.mark.django_db
 def test_output_directory_is_created_and_read_from_settings(
     tmp_path, passphrase_env, settings
 ):

@@ -258,6 +258,9 @@ def test_discovery_finds_the_project_over_sftp(api, admin, project, monkeypatch)
     assert response.status_code == 200
     app = str(project["app"])
     assert response.json() == {
+        "runtime": "host",
+        "compose_service": "",
+        "compose_files": [],
         "project_dir": app,
         "python_path": f"{app}/.venv/bin/python",
         "manage_path": "manage.py",
@@ -270,6 +273,7 @@ def test_discovery_finds_the_project_over_sftp(api, admin, project, monkeypatch)
         "candidates": {
             "project_dirs": [app, str(project["blog"])],
             "python_paths": [f"{app}/.venv/bin/python", "python3", "python"],
+            "compose_services": [],
         },
     }
     assert hosts.runs("10.0.0.5")[-1]["argv"] == [
@@ -334,6 +338,7 @@ def test_discovery_with_no_project_suggests_defaults(api, admin, tmp_path, monke
     assert body["candidates"] == {
         "project_dirs": [],
         "python_paths": ["python3", "python"],
+        "compose_services": [],
     }
 
 

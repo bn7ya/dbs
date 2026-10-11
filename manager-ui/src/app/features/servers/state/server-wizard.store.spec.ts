@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { JobWatcher } from '@core/jobs/job-watcher';
 import type { Job } from '@core/jobs/job.types';
+import type { ProjectSettings } from '../data/servers.types';
 import { CREATE, SERVER } from '../testing/servers.fixtures';
 import { ServerWizardStore } from './server-wizard.store';
 
@@ -75,7 +76,10 @@ describe('ServerWizardStore', () => {
     http.expectOne(`/api/servers/${SERVER.id}/discover/`).flush({ project_dir: '/srv/app' });
     expect((await discovering)?.project_dir).toBe('/srv/app');
 
-    const settings = {
+    const settings: ProjectSettings = {
+      runtime: 'host',
+      compose_service: '',
+      compose_files: [],
       project_dir: '/srv/app',
       python_path: 'python3',
       manage_path: 'manage.py',

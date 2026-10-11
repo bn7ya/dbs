@@ -39,6 +39,13 @@ anything.</p>
   <li>Add the key the manager shows to <code>~/.ssh/authorized_keys</code> for the user
       that owns this project.</li>
 </ol>
+<p>If this project runs in a Docker Compose service, choose <em>In a Docker Compose
+service</em> under <em>Where the project runs</em> and name the service, or pass
+<code>--runtime compose --compose-service backend</code> to <code>server add</code>. The
+manager then runs every <code>manage.py</code> command inside that service with
+<code>docker compose exec</code>, from the project folder, and copies backups in and out with
+<code>docker compose cp</code>. The SSH user must be able to run <code>docker compose</code>
+and the service must be running, with django-dbs installed in its image.</p>
 <p>This project never contacts the manager and keeps nothing about it. A backup the manager
 asks for is written to <code>DBS_BACKUP_DIR</code> and recorded in the
 <a href="{% url 'admin:dbs_auditevent_changelist' %}">audit trail</a> like any other

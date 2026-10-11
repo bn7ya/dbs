@@ -7,6 +7,8 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from .io import can_write_into, nearest_existing
+
 OK = "ok"
 INFO = "info"
 WARN = "warn"
@@ -156,11 +158,10 @@ def _backup_directory(last_backup):
                 "stored backup are unavailable.",
             )
         ]
-    probe = directory if os.path.isdir(directory) else os.path.dirname(directory) or "."
-    if not os.path.isdir(probe) or not os.access(probe, os.W_OK):
+    if not can_write_into(directory):
         return [Check("backup directory", ERROR, f"{directory} is not writable.")]
     checks = [Check("backup directory", OK, f"{directory} is writable.")]
-    usage = shutil.disk_usage(probe)
+    usage = shutil.disk_usage(nearest_existing(directory))
     needed = (last_backup.data.get("size", 0) if last_backup else 0) * FREE_SPACE_FACTOR
     free = f"{usage.free / 1024 ** 3:.1f} GiB free"
     if usage.free < needed or usage.free < usage.total * FREE_SPACE_SHARE:

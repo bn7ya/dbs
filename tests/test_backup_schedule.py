@@ -169,3 +169,46 @@ def test_the_admin_redirects_to_the_one_schedule(client, django_user_model, back
 
     assert response.status_code == 302
     assert response["Location"].endswith(f"/admin/dbs/backupschedule/{BackupSchedule.load().pk}/change/")
+
+
+@pytest.mark.django_db
+def test_without_plan_flags_the_command_follows_the_panel_while_it_is_off(
+    backup_dir, monkeypatch
+):
+    from dbs.management.commands import dbs_schedule
+
+    BackupSchedule.objects.create(enabled=False, interval="6h")
+    stops, ticks = [], []
+
+    def tick():
+        ticks.append(BackupSchedule.load().enabled)
+        stops[0].set()
+
+    monkeypatch.setattr(dbs_schedule, "install_stop_handlers", stops.append)
+    monkeypatch.setattr(dbs_schedule, "run_schedule", lambda *args, **kwargs: pytest.fail())
+    monkeypatch.setattr(schedule_runner, "tick", tick)
+    monkeypatch.setattr(schedule_runner, "TICK_SECONDS", 0)
+
+    call_command("dbs_schedule", stdout=StringIO())
+
+    assert ticks == [False]
+    assert not backup_dir.exists()
+
+
+@pytest.mark.django_db
+def test_a_project_still_setting_dbs_schedule_interval_keeps_its_loop(
+    backup_dir, monkeypatch, settings
+):
+    from dbs.management.commands import dbs_schedule
+
+    settings.DBS_SCHEDULE_INTERVAL = "12h"
+    BackupSchedule.objects.create(enabled=False, interval="6h")
+    loops = []
+    monkeypatch.setattr(dbs_schedule, "install_stop_handlers", lambda stop: None)
+    monkeypatch.setattr(
+        dbs_schedule, "run_schedule", lambda cycle, interval, **kwargs: loops.append(interval) or 0
+    )
+
+    call_command("dbs_schedule", stdout=StringIO())
+
+    assert loops == [12 * 3600]

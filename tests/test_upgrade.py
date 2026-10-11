@@ -130,6 +130,30 @@ def test_an_enabled_schedule_is_reported_as_current(settings):
     assert upgrade.ScheduleInDatabase().check().level == OK
 
 
+@pytest.mark.django_db
+def test_the_schedule_command_with_the_panel_off_is_reported(settings):
+    from dbs.models import BackupSchedule
+
+    settings.DBS_SCHEDULER = "command"
+    BackupSchedule.objects.create(enabled=False, interval="6h")
+
+    finding = upgrade.ScheduleInDatabase().check()
+
+    assert finding.level == WARN
+    assert "/admin/dbs/backupschedule/" in finding.remedy
+    assert "--interval" in finding.remedy
+
+
+@pytest.mark.django_db
+def test_the_panel_off_in_thread_mode_is_fine(settings):
+    from dbs.models import BackupSchedule
+
+    settings.DBS_SCHEDULER = "thread"
+    BackupSchedule.objects.create(enabled=False, interval="6h")
+
+    assert upgrade.ScheduleInDatabase().check().level == OK
+
+
 def test_a_missing_backup_directory_is_reported(settings):
     settings.DBS_BACKUP_DIR = None
 
@@ -141,6 +165,23 @@ def test_a_missing_backup_directory_is_reported(settings):
 
 def test_a_backup_directory_is_fine(settings, tmp_path):
     settings.DBS_BACKUP_DIR = str(tmp_path)
+
+    assert upgrade.BackupDirectory().check().level == OK
+
+
+def test_a_backup_directory_this_user_cannot_create_is_reported(settings, tmp_path):
+    blocker = tmp_path / "a-file"
+    blocker.write_text("not a folder")
+    settings.DBS_BACKUP_DIR = str(blocker / "backups")
+
+    finding = upgrade.BackupDirectory().check()
+
+    assert finding.level == WARN
+    assert "not writable" in finding.message
+
+
+def test_a_backup_directory_that_does_not_exist_yet_is_fine(settings, tmp_path):
+    settings.DBS_BACKUP_DIR = str(tmp_path / "nested" / "backups")
 
     assert upgrade.BackupDirectory().check().level == OK
 

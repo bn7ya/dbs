@@ -24,6 +24,9 @@ import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { StatusTag } from '@shared/status-tag/status-tag';
+import { composeProblems } from '../../components/runtime-fields/compose-problems';
+import { RuntimeFields } from '../../components/runtime-fields/runtime-fields';
+import type { RuntimeSettings } from '../../components/runtime-fields/runtime-fields.types';
 import { browseServer } from '../../components/server-browser/browse-server';
 import type { BrowsedField } from '../../components/server-browser/server-browser.types';
 import { parseSnippet, versionBelow } from '../../data/connection-snippet';
@@ -52,6 +55,9 @@ const NEW_DRAFT: WizardDraft = {
   private_key: '',
   key_passphrase: '',
   password: '',
+  runtime: 'host',
+  compose_service: '',
+  compose_files: [],
   project_dir: '',
   python_path: DEFAULT_PYTHON,
   manage_path: 'manage.py',
@@ -70,6 +76,8 @@ const FIELD_STEPS: Readonly<Partial<Record<WizardField, WizardStep>>> = {
   host_key: 'connection',
   private_key: 'signIn',
   password: 'signIn',
+  compose_service: 'project',
+  compose_files: 'project',
   project_dir: 'project',
   remote_backup_dir: 'project',
   env_path: 'project',
@@ -109,6 +117,7 @@ const FIELD_STEPS: Readonly<Partial<Record<WizardField, WizardStep>>> = {
     Notice,
     PasswordInput,
     StatusTag,
+    RuntimeFields,
     ErrorTextPipe,
     TranslatePipe,
   ],
@@ -228,6 +237,10 @@ export class ServerWizardPage {
       this.hostKey.set(null);
       this.hostKeyConfirmed.set(false);
     }
+  }
+
+  updateRuntime(change: Partial<RuntimeSettings>): void {
+    this.draft.update((draft) => ({ ...draft, ...change }));
   }
 
   setSignIn(choice: SignInChoice | null): void {
@@ -489,6 +502,9 @@ function problemsIn(
   if (draft.file_roots.some((root) => !ABSOLUTE_PATH.test(root.trim()))) {
     problems.set('file_roots', 'absolute_path_required');
   }
+  for (const [field, code] of composeProblems(draft)) {
+    problems.set(field, code);
+  }
   return problems;
 }
 
@@ -505,6 +521,8 @@ function mergeDiscovery(draft: WizardDraft, found: Discovery, chosen: boolean): 
   const keepPython = !verified && !chosen && draft.python_path.trim() !== DEFAULT_PYTHON;
   return {
     ...draft,
+    runtime: verified ? found.runtime : draft.runtime,
+    compose_service: verified ? found.compose_service : draft.compose_service,
     project_dir: found.project_dir || draft.project_dir,
     python_path: keepPython ? draft.python_path : found.python_path || draft.python_path,
     manage_path: found.manage_path || draft.manage_path,
@@ -522,6 +540,9 @@ function isolated(text: string): string {
 
 function projectOf(draft: WizardDraft): ProjectSettings {
   return {
+    runtime: draft.runtime,
+    compose_service: draft.compose_service.trim(),
+    compose_files: draft.compose_files.map((file) => file.trim()),
     project_dir: draft.project_dir.trim(),
     python_path: draft.python_path.trim(),
     manage_path: draft.manage_path.trim(),
