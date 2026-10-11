@@ -6,6 +6,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-11
+
+Everything the DBS manager does in its interface can now be done from a terminal with
+`django_dbs` commands, or by Claude through `django_dbs mcp`, all on the same services. The
+manager backs up and restores projects that run in Docker Compose, browses the server to pick
+folders, and finds the server's django-dbs in whichever Python has it. Restores put
+permissions and content types back on their own rows, a PostgreSQL backup reads every model
+from one snapshot, and a block damaged in both copies is rebuilt from what each copy still
+holds.
+
 ### Added
 
 - **Projects in Docker Compose.** A manager server can say its Django runs in a Docker Compose
@@ -49,9 +59,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   plans, activity, `.env` versions by key name, server files and a rehearsed redeploy. It never
   takes the account password, never returns a secret, and has no tool that restores or
   redeploys for real, removes, deletes, pushes a `.env` or re-pins a host key.
+- `THIRD_PARTY_LICENSES.md` names the license of every package `pip install django-dbs`
+  brings in, of what the manager's interface bundles, and of the development tools. It ships
+  in the wheel and the sdist beside `LICENSE`.
 
 ### Changed
 
+- The package declares its license as the SPDX expression `MIT` instead of a license
+  classifier, so building from source needs setuptools 77 or later.
 - The manager's cache lives in its database (table `dbs_manager_cache`, created by its migrations), so
   the per-server backup lock and the sign-in throttle hold across processes: a backup taken
   from a terminal and one `django_dbs run` schedules never run on one server together.
