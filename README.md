@@ -927,9 +927,11 @@ overwrites a backup.
 `dbs schedule --interval …` as before. Projects behind uWSGI without threads should set
 `DBS_SCHEDULER = "command"`.
 
-**From 0.5.0:** `dbs schedule` with no flags now always follows the panel. If its schedule is
+**From 0.5.x:** `dbs schedule` with no flags now always follows the panel. If its schedule is
 off, the command waits for it instead of backing up every 24 hours; turn the schedule on, or
-pass `--interval`. `dbs upgrade` says so when it applies.
+pass `--interval`. `dbs upgrade` says so when it applies. The manager applies its own new
+migrations the next time any `django_dbs` command starts. `dbs-client` is deprecated: move its
+servers into the manager with `django_dbs server import-profiles`.
 
 ## Development
 
@@ -947,3 +949,5 @@ reload, run `django_dbs run --no-browser --port 8765` and `npm start` in `manage
 
 MIT. The manager's interface bundles Font Awesome Free (icons under CC BY 4.0, fonts under
 the SIL OFL 1.1) and the Tajawal typeface (SIL OFL 1.1).
+[THIRD_PARTY_LICENSES.md](https://github.com/bn7ya/dbs/blob/main/THIRD_PARTY_LICENSES.md)
+lists the license of every dependency.

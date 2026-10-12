@@ -86,6 +86,9 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 - `tests/` — pytest suite (pytest-django); `tests/fake_ssh.py` is the paramiko
   stand-in used by the transport and client tests. `tests/manager/` is the manager's
   suite, run as a second session with its own settings.
+- `RELEASE_NOTES.md` — the developer-facing notes for the current release, used as the GitHub
+  Release body. `THIRD_PARTY_LICENSES.md` — the license of every dependency; update it in
+  the same commit that adds, removes or bundles one.
 
 ## Security invariants
 
