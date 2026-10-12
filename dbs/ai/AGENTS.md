@@ -12,7 +12,8 @@ This project uses django-dbs for backups.
   never pass one as a shell argument. Warn before any `SECRET_KEY` change: backups encrypted
   under a lost key, absent from `SECRET_KEY_FALLBACKS`, cannot be opened.
 - Restores merge by default; `--flush` replaces; `--dry-run` rehearses in a rolled-back
-  transaction. Suggest a dry run first.
+  transaction. Suggest a dry run first. A backup holding models the project lacks is
+  refused unless `--allow-missing-models` is passed.
 - The admin panel is at `/admin/dbs/`, superusers only, and every request through it is
   scored by an anomaly detector that can end the session. Recover with
   `manage.py dbs security unlock USER`.

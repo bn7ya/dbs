@@ -395,6 +395,27 @@ def test_a_copy_that_could_not_be_removed_is_named(
 
 
 @pytest.mark.django_db
+def test_the_warnings_of_a_restore_are_kept_on_the_job(
+    api, monkeypatch, run_jobs, taken, entry
+):
+    backup = taken()
+    warned = {"code": "fields_left_out", "message": "shop.order: fax is in the backup."}
+    report = RestoreReport(records=1, files=0, flushed=None, healed=False, warnings=(warned,))
+    monkeypatch.setattr(CONNECT, connecting_to(BackupHost(restored=report)))
+
+    with run_jobs():
+        job = entry(
+            api.post(
+                url(backup), {"mode": "merge", "rehearse": True}, format="json"
+            ).json()["activity"]
+        )
+
+    job = entry(job.pk)
+    assert job.status == audit.SUCCEEDED
+    assert job.data["warnings"] == [warned]
+
+
+@pytest.mark.django_db
 def test_a_file_that_left_the_disk_fails_the_job(api, host, run_jobs, taken, entry):
     backup = taken()
     BackupStorage().remove(backup.storage_path)

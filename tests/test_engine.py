@@ -14,6 +14,7 @@ from dbs.engine import restore as restore_engine
 from dbs.engine import create_backup, restore_backup, validate_backup
 from dbs.exceptions import CorruptionError, InvalidPassphrase
 from dbs.introspect import DEFAULT_EXCLUDES, _excluded_labels, discover_models
+from dbs.notices import DJANGO_VERSION, MERGED, MIGRATIONS_DIFFER
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF
 from tests.testapp.models import Author, Book, Tag
@@ -257,75 +258,116 @@ def test_default_merge_keeps_post_backup_rows_and_warns(tmp_path, settings, capl
     assert Author.objects.filter(pk=extra.pk, name="Post Backup").exists()
     assert Author.objects.filter(name="Ada").exists()
     assert "testapp.author" in out.preexisting_models
-    warning = next(
-        record.getMessage()
-        for record in caplog.records
-        if "already holds rows" in record.getMessage()
-    )
-    assert "testapp.author" in warning
+    merged = _warning(out, MERGED)
+    assert "testapp.author" in merged
+    assert merged in caplog.text
+
+
+def _warning(out, code):
+    return next(warning.message for warning in out.warnings if warning.code == code)
+
+
+def _codes(out):
+    return {warning.code for warning in out.warnings}
 
 
 @pytest.mark.django_db
-def test_matching_migration_state_restores_without_drift_warning(tmp_path, settings, caplog):
+def test_matching_migration_state_restores_without_drift_warning(tmp_path, settings):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     container = create_backup(PASS, kdf_params=FAST_KDF)
     _wipe(book, sidecar)
 
-    with caplog.at_level(logging.WARNING, logger="dbs"):
-        out = restore_backup(container, PASS)
+    out = restore_backup(container, PASS)
 
     assert out.records_loaded >= 4
-    messages = [record.getMessage() for record in caplog.records]
-    assert not [message for message in messages if "drift" in message]
-    assert not [message for message in messages if "Django" in message]
+    assert not _codes(out) & {MIGRATIONS_DIFFER, DJANGO_VERSION}
 
 
 @pytest.mark.django_db
-def test_backup_ahead_migration_state_warns(tmp_path, monkeypatch, caplog):
+def test_a_migration_the_target_has_not_applied_is_named(tmp_path, settings, monkeypatch):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     _make_sample(tmp_path)
-    real_state = backup_engine.migration_state(connections["default"])
+    real = backup_engine.applied_migrations(connections["default"])
     monkeypatch.setattr(
         backup_engine,
-        "migration_state",
-        lambda connection: {**real_state, "futureapp": "0001_initial"},
+        "applied_migrations",
+        lambda connection: {**real, "futureapp": ["0001_initial"]},
     )
     container = create_backup(PASS, kdf_params=FAST_KDF)
 
-    with caplog.at_level(logging.WARNING, logger="dbs"):
-        restore_backup(container, PASS, dry_run=True)
+    out = restore_backup(container, PASS, dry_run=True)
 
-    messages = [record.getMessage() for record in caplog.records]
-    assert any(
-        "drift" in message and "futureapp" in message and "newer schema" in message
-        for message in messages
-    )
-    assert not any("schema is newer than" in message for message in messages)
+    drift = _warning(out, MIGRATIONS_DIFFER)
+    assert "Not applied here: futureapp.0001_initial." in drift
+    assert "Applied here only" not in drift
 
 
 @pytest.mark.django_db
-def test_target_ahead_migration_state_warns(tmp_path, monkeypatch, caplog):
+def test_a_migration_only_the_target_applied_is_named(tmp_path, settings, monkeypatch):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     _make_sample(tmp_path)
-    real_state = backup_engine.migration_state(connections["default"])
-    assert real_state
-    stale_app = sorted(real_state)[0]
-    stale = {app: name for app, name in real_state.items() if app != stale_app}
-    monkeypatch.setattr(backup_engine, "migration_state", lambda connection: stale)
-    container = create_backup(PASS, kdf_params=FAST_KDF)
-    monkeypatch.undo()
-
-    with caplog.at_level(logging.WARNING, logger="dbs"):
-        restore_backup(container, PASS, dry_run=True)
-
-    messages = [record.getMessage() for record in caplog.records]
-    assert any(
-        "drift" in message and stale_app in message and "schema is newer" in message
-        for message in messages
+    real = backup_engine.applied_migrations(connections["default"])
+    dropped = real["auth"][-1]
+    monkeypatch.setattr(
+        backup_engine,
+        "applied_migrations",
+        lambda connection: {**real, "auth": real["auth"][:-1]},
     )
+    container = create_backup(PASS, kdf_params=FAST_KDF)
+
+    out = restore_backup(container, PASS, dry_run=True)
+
+    assert f"Applied here only: auth.{dropped}." in _warning(out, MIGRATIONS_DIFFER)
 
 
 @pytest.mark.django_db
-def test_backup_without_migration_state_restores_without_warning(tmp_path, settings, monkeypatch, caplog):
+def test_an_earlier_missing_migration_is_found_behind_a_matching_latest(
+    tmp_path, settings, monkeypatch
+):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
+    _make_sample(tmp_path)
+    real = backup_engine.applied_migrations(connections["default"])
+    monkeypatch.setattr(
+        backup_engine,
+        "applied_migrations",
+        lambda connection: {**real, "auth": ["0000_branch"] + real["auth"]},
+    )
+    container = create_backup(PASS, kdf_params=FAST_KDF)
+    assert restore_engine.read_payload(container, PASS).document["migrations"]["auth"] == (
+        real["auth"][-1]
+    )
+
+    out = restore_backup(container, PASS, dry_run=True)
+
+    assert "Not applied here: auth.0000_branch." in _warning(out, MIGRATIONS_DIFFER)
+
+
+@pytest.mark.django_db
+def test_an_older_backup_compares_the_latest_migration_per_app(
+    tmp_path, settings, monkeypatch
+):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
+    _make_sample(tmp_path)
+    container = create_backup(PASS, kdf_params=FAST_KDF)
+    real_read = restore_engine.read_payload
+
+    def read_older_metadata(data, passphrase):
+        result = real_read(data, passphrase)
+        result.document.pop("applied_migrations")
+        result.document["migrations"]["auth"] = "0099_future"
+        return result
+
+    monkeypatch.setattr(restore_engine, "read_payload", read_older_metadata)
+
+    out = restore_backup(container, PASS, dry_run=True)
+
+    drift = _warning(out, MIGRATIONS_DIFFER)
+    assert "auth (backup at 0099_future, here at " in drift
+
+
+@pytest.mark.django_db
+def test_backup_without_migration_state_restores_without_warning(tmp_path, settings, monkeypatch):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     container = create_backup(PASS, kdf_params=FAST_KDF)
@@ -336,23 +378,32 @@ def test_backup_without_migration_state_restores_without_warning(tmp_path, setti
     def read_pre_migration_metadata(data, passphrase):
         result = real_read(data, passphrase)
         result.document.pop("migrations", None)
+        result.document.pop("applied_migrations", None)
         return result
 
     monkeypatch.setattr(restore_engine, "read_payload", read_pre_migration_metadata)
 
-    with caplog.at_level(logging.WARNING, logger="dbs"):
-        out = restore_backup(container, PASS)
+    out = restore_backup(container, PASS)
 
     assert out.records_loaded >= 4
     assert Book.objects.filter(title="Resilient Data").exists()
-    assert not [
-        record for record in caplog.records if "drift" in record.getMessage()
-    ]
+    assert MIGRATIONS_DIFFER not in _codes(out)
 
 
-def test_django_version_difference_is_reported(caplog):
-    with caplog.at_level(logging.WARNING, logger="dbs"):
-        restore_engine._warn_on_environment_drift({"django_version": "1.0"}, None)
-    assert any(
-        "Django 1.0" in record.getMessage() for record in caplog.records
-    )
+@pytest.mark.django_db
+def test_django_version_difference_is_reported(tmp_path, settings, monkeypatch):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
+    _make_sample(tmp_path)
+    container = create_backup(PASS, kdf_params=FAST_KDF)
+    real_read = restore_engine.read_payload
+
+    def read_older_django(data, passphrase):
+        result = real_read(data, passphrase)
+        result.document["django_version"] = "1.0"
+        return result
+
+    monkeypatch.setattr(restore_engine, "read_payload", read_older_django)
+
+    out = restore_backup(container, PASS, dry_run=True)
+
+    assert "Django 1.0" in _warning(out, DJANGO_VERSION)

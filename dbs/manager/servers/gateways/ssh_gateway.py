@@ -71,6 +71,7 @@ WOULD_RESTORE = re.compile(r"(\d+) records and (\d+) files would be restored")
 FLUSHED = re.compile(r"Flushed (\d+) existing rows")
 WOULD_FLUSH = re.compile(r"Flush would first delete (\d+) existing rows")
 HEALED = "Corruption detected and repaired"
+RESTORE_WARNING = re.compile(r"^Warning \[([a-z_]+)\]: (.+)$", re.MULTILINE)
 UNKNOWN_OPTION = "unrecognized arguments"
 RESTORE_FILE_PREFIX = ".dbs-restore-"
 RESTORE_FILE_MODE = 0o600
@@ -148,6 +149,7 @@ class RestoreReport:
     flushed: int | None
     healed: bool
     copy_left: str = ""
+    warnings: tuple[dict[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -856,6 +858,10 @@ def _restore_report(
         flushed=int(flushed.group(1)) if flushed else nothing_flushed,
         healed=HEALED in stdout,
         copy_left=copy_left,
+        warnings=tuple(
+            {"code": code, "message": message.strip()}
+            for code, message in RESTORE_WARNING.findall(stdout)
+        ),
     )
 
 

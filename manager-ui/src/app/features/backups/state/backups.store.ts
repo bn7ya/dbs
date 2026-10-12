@@ -33,6 +33,7 @@ import type {
   PlanSettings,
   RestoreRequest,
   RestoreResult,
+  RestoreWarningCode,
   TargetServer,
   UnfinishedJob,
   UploadEvent,
@@ -482,8 +483,11 @@ export class BackupsStore {
     if (result.copy_left) {
       lines.push(this.locale.translate('backups.restore.copyLeft', { path: isolated(result.copy_left) }));
     }
+    for (const code of result.warnings) {
+      lines.push(this.locale.translate(`backups.restore.warning.${code}`));
+    }
     this.notify(
-      result.copy_left ? 'warning' : 'success',
+      result.copy_left || result.warnings.length > 0 ? 'warning' : 'success',
       this.locale.translate(result.rehearse ? 'backups.restore.rehearsed' : 'backups.restore.done'),
       lines.length === 0 ? undefined : lines.join(' '),
     );
@@ -592,8 +596,20 @@ function outcomeOf(job: Job): VerifyOutcome | null {
   return validation === 'verified' || validation === 'failed' ? validation : null;
 }
 
+const RESTORE_WARNINGS: readonly RestoreWarningCode[] = [
+  'models_left_out',
+  'fields_left_out',
+  'fields_not_in_backup',
+  'files_left_out',
+  'merged',
+  'migrations_differ',
+  'django_version',
+  'references_left_out',
+  'references_by_id',
+];
+
 function restoreResultOf(job: Job): RestoreResult | null {
-  const { rehearse, records, files, flushed, healed, copy_left } = job.detail;
+  const { rehearse, records, files, flushed, healed, copy_left, warnings } = job.detail;
   if (typeof rehearse !== 'boolean') {
     return null;
   }
@@ -604,7 +620,20 @@ function restoreResultOf(job: Job): RestoreResult | null {
     flushed: countOf(flushed),
     healed: healed === true,
     ...(typeof copy_left === 'string' && copy_left !== '' ? { copy_left } : {}),
+    warnings: restoreWarningsOf(warnings),
   };
+}
+
+function restoreWarningsOf(value: unknown): readonly RestoreWarningCode[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.map((warning: unknown) => restoreWarningOf(warning)))];
+}
+
+function restoreWarningOf(warning: unknown): RestoreWarningCode {
+  const code = typeof warning === 'object' && warning !== null && 'code' in warning ? warning.code : null;
+  return RESTORE_WARNINGS.find((known) => known === code) ?? 'other';
 }
 
 function countOf(value: unknown): number | null {

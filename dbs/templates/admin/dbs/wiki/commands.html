@@ -3,7 +3,7 @@
 {% block wiki %}
 <h1>Command reference</h1>
 <pre><code>python manage.py dbs backup OUTPUT
-python manage.py dbs restore INPUT [--dry-run] [--flush]
+python manage.py dbs restore INPUT [--dry-run] [--flush] [--allow-missing-models]
 python manage.py dbs validate INPUT [--passphrase]
 python manage.py dbs schedule [--interval 6h] [--once]
 python manage.py dbs key --show

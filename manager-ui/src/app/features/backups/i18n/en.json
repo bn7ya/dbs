@@ -178,7 +178,19 @@
       "toClear": "Records to clear first: {count}.",
       "cleared": "Records cleared first: {count}.",
       "healed": "A damaged copy in the backup was repaired.",
-      "copyLeft": "The copy sent to the server is still at {path}."
+      "copyLeft": "The copy sent to the server is still at {path}.",
+      "warning": {
+        "models_left_out": "Rows of models the server does not have are left out.",
+        "fields_left_out": "Values of fields the server's models do not have are left out.",
+        "fields_not_in_backup": "Fields the backup does not have get their defaults on new rows and keep their values on rows already there.",
+        "files_left_out": "Files with no file field to go to on the server are left out.",
+        "merged": "The server already holds some of these rows, so the restore merges into them.",
+        "migrations_differ": "The server's migrations differ from those of the database the backup was taken from.",
+        "django_version": "The server runs another Django version than the one the backup was taken with.",
+        "references_left_out": "References to rows the server does not have are left out.",
+        "references_by_id": "This backup refers to some rows by id. Check those references after the restore.",
+        "other": "The restore reported a warning this manager does not know."
+      }
     },
     "delete": {
       "label": "Delete {name}",

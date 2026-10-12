@@ -233,6 +233,7 @@ def restore_view(request):
                     secret,
                     dry_run=form.cleaned_data["dry_run"],
                     flush=form.cleaned_data["flush"],
+                    allow_missing_models=form.cleaned_data["allow_missing_models"],
                 ),
                 form.cleaned_data["passphrase"] or None,
             )
@@ -243,13 +244,19 @@ def restore_view(request):
 
         summary = _restore_summary(result, form.cleaned_data["dry_run"])
         _audit(request, "backup.restore", target=upload.name or "upload", detail=summary)
-        messages.success(request, summary)
+        _report_restore(request, result, summary)
         return redirect("admin:dbs_backup_restore")
     return _page(
         request,
         "admin/dbs/restore.html",
         {"title": "Restore from an uploaded backup", "form": form},
     )
+
+
+def _report_restore(request, result, summary):
+    messages.success(request, summary)
+    for warning in result.warnings:
+        messages.warning(request, warning.message)
 
 
 def _restore_summary(result, dry_run):
@@ -284,11 +291,16 @@ def restore_record(request, pk):
             "sha256": hashlib.sha256(data).hexdigest(),
             "dry_run": dry_run,
             "flushed": form.cleaned_data["flush"],
+            "allow_missing_models": form.cleaned_data["allow_missing_models"],
         }
         try:
             result = with_passphrase(
                 lambda secret: restore_backup(
-                    data, secret, dry_run=dry_run, flush=form.cleaned_data["flush"]
+                    data,
+                    secret,
+                    dry_run=dry_run,
+                    flush=form.cleaned_data["flush"],
+                    allow_missing_models=form.cleaned_data["allow_missing_models"],
                 ),
                 form.cleaned_data["passphrase"] or None,
             )
@@ -305,7 +317,7 @@ def restore_record(request, pk):
             return redirect("admin:dbs_backup_restore_record", pk=record.pk)
         summary = _restore_summary(result, dry_run)
         _audit(request, "backup.restore", target=record.filename, detail=summary, data=details)
-        messages.success(request, summary)
+        _report_restore(request, result, summary)
         return redirect("admin:dbs_backup_restore_record", pk=record.pk)
     return _page(
         request,

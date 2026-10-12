@@ -50,6 +50,18 @@ export interface TargetServer {
   readonly name: string;
 }
 
+export type RestoreWarningCode =
+  | 'models_left_out'
+  | 'fields_left_out'
+  | 'fields_not_in_backup'
+  | 'files_left_out'
+  | 'merged'
+  | 'migrations_differ'
+  | 'django_version'
+  | 'references_left_out'
+  | 'references_by_id'
+  | 'other';
+
 export interface RestoreResult {
   readonly rehearse: boolean;
   readonly records: number | null;
@@ -57,6 +69,7 @@ export interface RestoreResult {
   readonly flushed: number | null;
   readonly healed: boolean;
   readonly copy_left?: string;
+  readonly warnings: readonly RestoreWarningCode[];
 }
 
 export type BackupWarning = 'files_changed';

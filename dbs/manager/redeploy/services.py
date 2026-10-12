@@ -258,6 +258,8 @@ class RedeployService:
         }
         if report.copy_left:
             outcome["copy_left"] = report.copy_left
+        if report.warnings:
+            outcome["warnings"] = list(report.warnings)
         return outcome
 
     def _extract(

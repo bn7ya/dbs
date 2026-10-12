@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
+from contextlib import contextmanager
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -24,6 +26,7 @@ class Command(BaseCommand):
         parser.add_argument("--no-files", action="store_true", help="Do not write files back.")
         parser.add_argument("--dry-run", action="store_true", help="Read, decrypt and rehearse the restore in a rolled-back transaction, then change nothing.")
         parser.add_argument("--flush", action="store_true", help="Delete existing rows of the backed-up models before loading, so the restore replaces instead of merges.")
+        parser.add_argument("--allow-missing-models", action="store_true", help="Restore the rest when the backup holds models this project does not have, leaving their rows and files out.")
 
     def handle(self, *args, **options):
         passphrase = resolve_read_passphrase(
@@ -38,6 +41,7 @@ class Command(BaseCommand):
                 "database": options["database"],
                 "dry_run": options["dry_run"],
                 "flushed": options["flush"],
+                "allow_missing_models": options["allow_missing_models"],
             },
         ) as entry:
             try:
@@ -47,18 +51,20 @@ class Command(BaseCommand):
                 raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
             entry.data.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
             try:
-                result = with_passphrase(
-                    lambda secret: restore_backup(
-                        data,
-                        secret,
-                        using=options["database"],
-                        load_data=not options["no_data"],
-                        write_files=not options["no_files"],
-                        dry_run=options["dry_run"],
-                        flush=options["flush"],
-                    ),
-                    passphrase,
-                )
+                with printed_here():
+                    result = with_passphrase(
+                        lambda secret: restore_backup(
+                            data,
+                            secret,
+                            using=options["database"],
+                            load_data=not options["no_data"],
+                            write_files=not options["no_files"],
+                            dry_run=options["dry_run"],
+                            flush=options["flush"],
+                            allow_missing_models=options["allow_missing_models"],
+                        ),
+                        passphrase,
+                    )
             except DBSError as exc:
                 raise CommandError(f"Restore failed: {exc}") from exc
             entry.data.update(restore_summary(result, options["dry_run"]))
@@ -67,6 +73,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING("Corruption detected and repaired: " + result.repair_report.summary())
             )
+        for warning in result.warnings:
+            self.stdout.write(self.style.WARNING(f"Warning [{warning.code}]: {warning.message}"))
         if options["dry_run"]:
             if result.records_flushed:
                 self.stdout.write(
@@ -84,14 +92,6 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"Flushed {result.records_flushed} existing rows from the backed-up models before loading."
             )
-        elif result.preexisting_models and not options["no_data"]:
-            self.stdout.write(
-                self.style.WARNING(
-                    "Merged into existing rows for "
-                    + ", ".join(result.preexisting_models)
-                    + " (use --flush to replace instead)."
-                )
-            )
         self.stdout.write(
             self.style.SUCCESS(
                 f"Restored {result.records_loaded} records and {result.files_written} files."
@@ -99,15 +99,26 @@ class Command(BaseCommand):
         )
 
 
+@contextmanager
+def printed_here():
+    logger = logging.getLogger("dbs")
+    if logger.hasHandlers():
+        yield
+        return
+    silent = logging.NullHandler()
+    logger.addHandler(silent)
+    try:
+        yield
+    finally:
+        logger.removeHandler(silent)
+
+
 def restore_summary(result, dry_run):
-    if dry_run:
-        return {
-            "records": result.records_would_load,
-            "files": result.files_would_write,
-            "healed": bool(result.healed),
-        }
-    return {
-        "records": result.records_loaded,
-        "files": result.files_written,
+    summary = {
+        "records": result.records_would_load if dry_run else result.records_loaded,
+        "files": result.files_would_write if dry_run else result.files_written,
         "healed": bool(result.healed),
     }
+    if result.skipped_models:
+        summary["skipped_models"] = result.skipped_models
+    return summary

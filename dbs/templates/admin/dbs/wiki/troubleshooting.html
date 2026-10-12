@@ -10,6 +10,14 @@
 trusted list in setup.</p>
 <h2>A restore merged when I wanted it to replace</h2>
 <p>Tick <em>Replace instead of merge</em>, or pass <code>--flush</code> on the command line.</p>
+<h2>"The backup holds data for models this project does not have"</h2>
+<p>The backup comes from code with apps or models this project lacks. Install them, or deploy
+the code the backup was taken from. To restore the rest without them, tick <em>Allow missing
+models</em>, or pass <code>--allow-missing-models</code>.</p>
+<h2>A restore failed with "Nothing was changed"</h2>
+<p>The database refused a row; the message names it. When it says the restore was merging,
+the rows already here hold the same data under other ids: <em>Replace instead of merge</em>
+loads the backup over them.</p>
 <h2>The scheduler will not start</h2>
 <p>It needs an output directory: pass <code>--output-dir</code> or set
 <code>DBS_BACKUP_DIR</code>.</p>

@@ -152,6 +152,12 @@ class RestoreUploadForm(forms.Form):
         label="Replace instead of merge",
         help_text="Delete existing rows of the backed-up models first.",
     )
+    allow_missing_models = forms.BooleanField(
+        required=False,
+        label="Allow missing models",
+        help_text="Restore the rest when the backup holds models this project does not "
+        "have, leaving their rows and files out.",
+    )
 
 
 class RestoreRecordForm(forms.Form):
@@ -170,6 +176,12 @@ class RestoreRecordForm(forms.Form):
         required=False,
         label="Replace instead of merge",
         help_text="Delete existing rows of the backed-up models first.",
+    )
+    allow_missing_models = forms.BooleanField(
+        required=False,
+        label="Allow missing models",
+        help_text="Restore the rest when the backup holds models this project does not "
+        "have, leaving their rows and files out.",
     )
     confirm = forms.CharField(
         required=False,

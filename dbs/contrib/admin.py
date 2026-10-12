@@ -105,11 +105,12 @@ def restore_upload(request):
         )
 
     note = " (corruption was detected and healed)" if result.healed else ""
+    warnings = "".join(f" {warning.message}" for warning in result.warnings)
     return _render(
         request, "Restore", fields, multipart=True,
         message=(
             f"Restored {result.records_loaded} records and "
-            f"{result.files_written} files{note}."
+            f"{result.files_written} files{note}.{warnings}"
         ),
         message_kind="ok",
     )

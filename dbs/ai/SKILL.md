@@ -97,8 +97,12 @@ they lose, and did not keep in `SECRET_KEY_FALLBACKS`, cannot be opened. Ever.
   first (children before parents, same transaction) so it replaces instead.
 - `--dry-run` runs the real load in a transaction it rolls back and writes no files. Suggest
   it before any restore against a database that matters.
-- Backups record the applied migration per app. A restore onto a drifted target warns and
-  names the apps; rows for unknown models and fields are discarded.
+- A restore checks the backup against the project before it writes. It refuses a backup
+  holding models the project lacks (`--allow-missing-models` leaves their rows out) and a
+  backed-up model with no table (run `migrate`). It warns about fields on one side only,
+  files with no field to land in, and migrations applied on one side only. A merge keeps
+  the values of fields the backup lacks on rows already there.
+- A row the database refuses stops the restore with the model and the row; nothing changes.
 - Restoring writes into file storage too. `DBS_RESTORE_ROOTS` bounds where.
 
 ## Choosing what to back up

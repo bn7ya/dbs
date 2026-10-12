@@ -501,6 +501,41 @@ def test_a_custom_get_queryset_is_left_alone(monkeypatch):
     assert finding.message == "no backed-up model has a default manager that hides rows"
 
 
+def _restore_checks():
+    return next(
+        f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == "restore checks"
+    )
+
+
+@pytest.mark.django_db
+def test_the_restore_checks_step_says_missing_models_are_refused():
+    finding = _restore_checks()
+
+    assert finding.level == OK
+    assert "--allow-missing-models" in finding.message
+
+
+@pytest.mark.django_db
+def test_the_restore_checks_step_names_a_backed_up_model_without_a_table(monkeypatch):
+    from django.db import connections
+
+    introspection = connections["default"].introspection
+    real_names = introspection.table_names
+    monkeypatch.setattr(
+        introspection,
+        "table_names",
+        lambda *args, **kwargs: [
+            name for name in real_names(*args, **kwargs) if name != "testapp_author"
+        ],
+    )
+
+    finding = _restore_checks()
+
+    assert finding.level == WARN
+    assert "testapp.author" in finding.message
+    assert finding.remedy == "python manage.py migrate"
+
+
 def test_the_dependencies_step_checks_what_the_manager_needs():
     finding = upgrade.Dependencies().check()
 

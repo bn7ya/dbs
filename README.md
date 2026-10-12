@@ -611,9 +611,19 @@ python manage.py dbs restore backup.dbs --flush     # replace instead of merge
 
 * **It merges by default.** Rows created after the backup was taken are kept. `--flush`
   clears the backed-up models first, children before parents, in the same transaction.
-* **The load is one transaction.** If anything fails midway the database is untouched.
-* **File writes are confined** to `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS` if unset).
-* **Migration drift is reported**, naming the apps that moved on since the backup.
+* **It checks the backup against your project first.** A backup holding models your project
+  does not have is refused, naming them with their rows and files; `--allow-missing-models`
+  restores the rest and leaves them out. A backed-up model with no table stops the restore
+  until `migrate` runs. A dry run reports the same.
+* **Every other difference is a warning**, printed as `Warning [code]: ...` and returned in
+  `RestoreResult.warnings`: a field the backup has and your model lacks (its values are left
+  out), a field your model has and the backup lacks (new rows get its default, rows already
+  there keep their value), a file whose field is gone, and the migrations applied on one side
+  only, each by name.
+* **The load is one transaction.** A row the database refuses stops the restore with the
+  model, the row and the reason, and nothing is changed.
+* **File writes are confined** to `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS` if unset), and
+  checked before the first row is written.
 * **Sequences are reset**, so the next row your project creates does not collide.
 * **Rows the backup leaves out are found again by name.** `migrate` recreates content types
   and permissions on every server, numbered in the order that server migrated, so a backup
@@ -803,6 +813,9 @@ from dbs import create_backup, restore_backup, validate_backup
 blob = create_backup("passphrase", output="backup.dbs")
 report = validate_backup(blob, "passphrase")   # report.ok, report.summary()
 result = restore_backup(blob, "passphrase")    # result.healed if it repaired corruption
+for warning in result.warnings:                # what differs between the backup and the project
+    print(warning.code, warning.message)
+restore_backup(blob, "passphrase", allow_missing_models=True)  # leave out models the project lacks
 ```
 
 ```python

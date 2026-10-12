@@ -98,6 +98,7 @@ def create_backup(
         "created": created,
         "django_version": django.get_version(),
         "migrations": migration_state(connection),
+        "applied_migrations": applied_migrations(connection),
         "stats": {
             "models": stats_models,
             "records": len(records_all),
@@ -149,14 +150,18 @@ def read_from_one_snapshot(connection) -> None:
         cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
 
 
-def migration_state(connection) -> dict[str, str]:
+def applied_migrations(connection) -> dict[str, list[str]]:
     recorder = MigrationRecorder(connection)
     if not recorder.has_table():
         return {}
-    state: dict[str, str] = {}
+    applied: dict[str, list[str]] = {}
     for app, name in sorted(recorder.applied_migrations()):
-        state[app] = name
-    return state
+        applied.setdefault(app, []).append(name)
+    return applied
+
+
+def migration_state(connection) -> dict[str, str]:
+    return {app: names[-1] for app, names in applied_migrations(connection).items()}
 
 
 def _kdf_params_from_settings() -> KDFParams:

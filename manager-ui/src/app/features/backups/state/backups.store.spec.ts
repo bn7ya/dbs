@@ -855,6 +855,35 @@ describe('BackupsStore', () => {
       });
     });
 
+    it('warns with one line for each kind of difference the server reported', async () => {
+      await openWith({ files: [FILE] });
+      const starting = store.restore(FILE, REHEARSAL);
+      http.expectOne(`/api/backups/${FILE.id}/restore/`).flush({ activity: JOB_ID });
+      await starting;
+
+      jobs.report(
+        restored({
+          records: 2,
+          files: 0,
+          warnings: [
+            { code: 'fields_left_out', message: 'shop.order: fax is in the backup.' },
+            { code: 'fields_left_out', message: 'shop.item: sku is in the backup.' },
+            { code: 'merged', message: 'This database already holds rows.' },
+            { code: 'from_a_newer_server', message: 'Something new.' },
+          ],
+        }),
+      );
+
+      expect(lastToast()).toEqual({
+        severity: 'warning',
+        summary: 'Rehearsal finished. Nothing changed.',
+        detail:
+          "Records: 2. Files: 0. Values of fields the server's models do not have are left out. " +
+          'The server already holds some of these rows, so the restore merges into them. ' +
+          'The restore reported a warning this manager does not know.',
+      });
+    });
+
     it('says why the restore failed, and on which file', async () => {
       await openWith({ files: [FILE] });
       const starting = store.restore(FILE, REHEARSAL);

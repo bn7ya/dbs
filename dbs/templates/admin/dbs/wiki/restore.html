@@ -9,9 +9,24 @@ files. It reports what would be restored and changes nothing.</p>
 <p>By default a restore merges into existing rows. <em>Replace instead of merge</em> clears
 the backed-up models first — children before parents, in the same transaction as the load —
 so a failure leaves the database untouched.</p>
-<h2>Migration drift</h2>
-<p>Backups record the applied migration per app. If the target has drifted, the restore warns
-and names the apps. Rows for models and fields the target does not know are discarded.</p>
+<h2>When this project differs from the backup</h2>
+<p>A restore compares the backup with this project before it writes anything, and a dry run
+reports the same. It refuses a backup holding models this project does not have, naming them
+with their rows and files; <em>Allow missing models</em> restores everything else and leaves
+those out. A backed-up model with no table stops the restore until <code>migrate</code> runs.
+Every other difference is restored and listed as a warning:</p>
+<ul>
+  <li>a field in the backup that this project's model lacks: its values are left out;</li>
+  <li>a field this project has that the backup lacks: new rows get its default, rows already
+  here keep their value;</li>
+  <li>a file whose field this project lacks: it is left out;</li>
+  <li>migrations applied on one side only, each named, and another Django version.</li>
+</ul>
+<h2>When the database refuses a row</h2>
+<p>The load is one transaction. A row the database refuses, a value that does not fit its
+field, or a foreign key that does not hold stops the restore with the model, the row and the
+reason, and nothing is changed. Where every file goes is checked before the first row is
+written; if writing a file still fails, the message says how many were written.</p>
 <h2>Permissions and content types</h2>
 <p>Every server recreates its permissions and content types when it migrates, numbered in
 the order it migrated, so a backup refers to them by name rather than by number: a group's

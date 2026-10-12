@@ -365,6 +365,8 @@ class BackupRunService:
         }
         if report.copy_left:
             outcome["copy_left"] = report.copy_left
+        if report.warnings:
+            outcome["warnings"] = list(report.warnings)
         return {**job.data, **outcome}
 
     def _remember(self, plan_id: UUID, activity_id: UUID) -> None:

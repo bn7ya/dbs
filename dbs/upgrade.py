@@ -388,6 +388,45 @@ class HiddenRows(Step):
         )
 
 
+class RestoreChecks(Step):
+    name = "restore checks"
+    since = "0.6.0"
+
+    def _unmigrated(self):
+        from django.db import DEFAULT_DB_ALIAS, connections
+
+        from .introspect import discover_models
+        from .registry import backup_registry
+
+        connection = connections[DEFAULT_DB_ALIAS]
+        tables = {
+            name.casefold()
+            for name in connection.introspection.table_names(include_views=True)
+        }
+        return [
+            model._meta.label_lower
+            for model in discover_models(backup_registry)
+            if model._meta.db_table.casefold() not in tables
+        ]
+
+    def check(self):
+        try:
+            unmigrated = self._unmigrated()
+        except Exception as exc:
+            return self.warn(f"could not read the database tables: {exc}")
+        if unmigrated:
+            return self.warn(
+                "since 0.6.0 a restore stops when a backed-up model has no table, and "
+                + ", ".join(unmigrated)
+                + " have none",
+                "python manage.py migrate",
+            )
+        return self.ok(
+            "since 0.6.0 a restore refuses a backup holding models this project does not "
+            "have; --allow-missing-models leaves their rows out"
+        )
+
+
 class AiInstructions(Step):
     name = "ai instructions"
     since = "0.3.1"
@@ -440,6 +479,7 @@ STEPS = (
     Passphrase,
     RestoreRoots,
     HiddenRows,
+    RestoreChecks,
     AiInstructions,
 )
 

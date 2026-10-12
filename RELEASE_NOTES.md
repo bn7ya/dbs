@@ -11,7 +11,8 @@ Everything the DBS manager does in its interface can now be done from a terminal
 Claude, on the same services and the same data. The manager backs up projects that run in
 Docker Compose and finds the server's django-dbs wherever it is installed. Restores are more
 faithful: permissions and content types land on their own rows, a PostgreSQL backup reads from
-one snapshot, and a block damaged in both copies is rebuilt from what each copy still holds.
+one snapshot, and a block damaged in both copies is rebuilt from what each copy still holds. A
+restore now checks the backup against your project before it writes, and says what differs.
 
 The full list of changes is in the
 [changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#060---2026-10-11).
@@ -92,6 +93,30 @@ has django-dbs. The check reports Docker's version and whether the service is ru
 - **Damage in both copies of one block.** Such a block is now rebuilt codeword by codeword from
   both copies, with the bytes where they differ treated as erasures. The repair summary
   `dbs validate` prints counts the blocks rebuilt this way.
+- **A project that differs from the backup.** A restore compares the backup with your project
+  first. A backup holding models your project does not have is refused, naming them; pass
+  `--allow-missing-models` (or tick *Allow missing models* in the panel) to restore the rest
+  without them. A backed-up model with no table asks you to run `migrate`. Every other
+  difference is restored and reported, in the terminal as `Warning [code]: ...`, in the panel
+  as messages, and in the manager on the restore job:
+
+  ```text
+  Warning [fields_left_out]: shop.customer: phone is in the backup but not in this project's model, so its values are left out.
+  Warning [fields_not_in_backup]: shop.customer: loyalty is not in the backup. Rows new to this database get its default; rows already here keep their values.
+  Warning [migrations_differ]: Migrations differ from the database the backup was taken from. Not applied here: shop.0003_customer_phone.
+  ```
+
+- **Merging keeps what the backup does not carry.** A row already in the database used to have
+  every column the backup lacked, including fields left out with `FieldType.EXCLUDE`, reset to
+  its default. A merge now writes only the fields the backup carries.
+- **A refused row is a message, not a traceback.** A unique value already taken, a value that
+  does not fit its field, or a foreign key that does not hold stops the restore with the model,
+  the row and the reason, and nothing is changed. The panel shows it and records a failed
+  restore instead of answering with a server error.
+- **Files are checked before rows.** A file outside `DBS_RESTORE_ROOTS` used to fail after the
+  rows were committed. Where every file goes is now checked first, in a dry run too.
+- **Every applied migration is compared.** Backups record each applied migration, and a restore
+  names the ones applied on one side only.
 
 ## Upgrading from 0.5.x
 
@@ -106,6 +131,11 @@ Coming from 0.4.x or earlier, read the README's
   panel, unless `DBS_SCHEDULE_INTERVAL` is still set, and while the panel's schedule is off it
   waits and takes no backups. `dbs upgrade` warns about this when `DBS_SCHEDULER = "command"`.
   Turn the schedule on at `/admin/dbs/backupschedule/`, or pass `--interval`.
+- **A restore refuses models your project lacks.** It used to drop their rows and report
+  success. If you restore backups from code with apps this project no longer has, pass
+  `--allow-missing-models`. Scripts that read `dbs restore` output: the "Merged into existing
+  rows" line is now `Warning [merged]: ...`. `dbs upgrade` names any backed-up model that has
+  no table, since a restore into it now stops until `migrate` runs.
 - **`DBS_BACKUP_DIR` must be writable.** `dbs upgrade` now checks it, and `dbs backup` and
   `dbs schedule` name the path and the reason instead of ending in a traceback.
 - **The manager migrates itself.** Its new migrations (`0002_cache_table`,

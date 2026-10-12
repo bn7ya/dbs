@@ -29,7 +29,8 @@ The manager runs outside any project: `django_dbs run` (local app, opens the bro
 
 ## Commands
 - `manage.py dbs backup OUTPUT` - write an encrypted backup
-- `manage.py dbs restore INPUT [--dry-run] [--flush]` - restore; merges unless flushed
+- `manage.py dbs restore INPUT [--dry-run] [--flush] [--allow-missing-models]` - restore;
+  merges unless flushed, refuses models the project lacks unless allowed
 - `manage.py dbs validate INPUT [--passphrase]` - check structure, blocks and decryption
 - `manage.py dbs schedule [--once]` - follow the schedule set in the panel
 - `manage.py dbs schedule --interval 6h --output-dir DIR` - a fixed plan with retention

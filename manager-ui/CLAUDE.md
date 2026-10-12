@@ -278,7 +278,8 @@ the backend permission is the boundary.
   collected from one folder) with a schedule and how many to keep here and on the server; files,
   newest first: take, upload with progress, download, verify, restore (rehearsal by default, the
   server name typed for a real one; optionally onto another server, whose name is then the one
-  typed), delete with undo.
+  typed; the result adds one translated line for each kind of warning code the restore
+  reported), delete with undo.
 - **files** (`/servers/:serverId/files?path=`) — the server's allowed folders: a breadcrumb, open,
   download, upload, new folder, delete an empty folder or a file.
 - **envfiles** (`/servers/:serverId/environment`) — versions of the server's `.env`: pull, show

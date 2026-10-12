@@ -206,6 +206,28 @@ def test_a_repaired_backup_is_reported(server):
     assert restore(server, flush=False, dry_run=False).healed is True
 
 
+def test_the_warnings_the_restore_printed_are_kept_with_their_codes(server):
+    server.answers(
+        "Warning [fields_left_out]: shop.order: fax is in the backup but not in this "
+        "project's model, so its values are left out.\n"
+        "Warning [merged]: This database already holds rows for shop.order, so the restore "
+        "merges into them by id; flush replaces them instead.\n"
+        "Restored 3 records and 0 files.\n"
+    )
+
+    report = restore(server, flush=False, dry_run=False)
+
+    assert [warning["code"] for warning in report.warnings] == ["fields_left_out", "merged"]
+    assert report.warnings[0]["message"].startswith("shop.order: fax is in the backup")
+    assert report.records == 3
+
+
+def test_an_older_restore_without_warnings_reports_none(server):
+    server.answers("Restored 3 records and 0 files.\n")
+
+    assert restore(server, flush=False, dry_run=False).warnings == ()
+
+
 def test_output_it_cannot_read_leaves_the_counts_unknown(server):
     server.answers("Something else entirely.\n")
 

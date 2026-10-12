@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import json
-import logging
 
 from django.apps import apps
 from django.core import serializers
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.core.management.color import no_style
+from django.core.serializers.base import DeserializationError
 from django.core.serializers.json import Serializer as JSONSerializer
-from django.db import connections, transaction
+from django.db import DatabaseError, IntegrityError, connections, transaction
 
 from .exceptions import RestoreError
-
-logger = logging.getLogger("dbs")
+from .notices import REFERENCES_BY_ID, REFERENCES_LEFT_OUT, RestoreWarning
 
 
 def has_natural_key(model) -> bool:
@@ -167,50 +166,141 @@ class NaturalKeyResolver:
                 self.note_id_reference(field.related_model)
         return {**record, "fields": fields}
 
-    def report(self) -> None:
-        for label, keys in sorted(self.dropped.items()):
-            logger.warning(
-                "restore left out %d reference(s) to %s that this database does not have: %s",
-                len(keys),
-                label,
-                ", ".join(sorted(set(keys))),
+    def warnings(self) -> list[RestoreWarning]:
+        found = [
+            RestoreWarning(
+                REFERENCES_LEFT_OUT,
+                f"Left out {len(keys)} reference(s) to {label} that this database does "
+                f"not have: {', '.join(sorted(set(keys)))}.",
             )
+            for label, keys in sorted(self.dropped.items())
+        ]
         if self.by_id:
-            logger.warning(
-                "this backup refers to %s by id, and those rows are not in the backup; "
-                "if this database numbered them differently, check those references "
-                "after the restore (a backup taken with this version of DBS refers to "
-                "them by natural key instead)",
-                ", ".join(sorted(self.by_id)),
+            found.append(
+                RestoreWarning(
+                    REFERENCES_BY_ID,
+                    "This backup refers to "
+                    + ", ".join(sorted(self.by_id))
+                    + " by id, and those rows are not in the backup; if this database "
+                    "numbered them differently, check those references after the restore "
+                    "(a backup taken with this version of DBS refers to them by natural key "
+                    "instead).",
+                )
             )
+        return found
 
 
 def _describe(key) -> str:
     return ".".join(str(part) for part in key)
 
 
-def resolve_natural_keys(records: list[dict], using: str) -> list[dict]:
+def resolve_natural_keys(
+    records: list[dict], using: str
+) -> tuple[list[dict], list[RestoreWarning]]:
     resolver = NaturalKeyResolver(records, using)
     resolved = [resolver.record(record) for record in records]
-    resolver.report()
-    return resolved
+    return resolved, resolver.warnings()
 
 
-def load_records(records: list[dict], *, using: str = "default") -> int:
+def carried_fields(records: list[dict]) -> dict[str, set[str]]:
+    carried: dict[str, set[str]] = {}
+    for record in records:
+        carried.setdefault(record.get("model"), set()).update(record.get("fields", {}))
+    return carried
+
+
+def serialized_fields(model) -> list:
+    concrete = [field for field in model._meta.local_fields if field.serialize]
+    related = [
+        field
+        for field in model._meta.local_many_to_many
+        if field.serialize and field.remote_field.through._meta.auto_created
+    ]
+    return concrete + related
+
+
+class KeptColumns:
+    def __init__(self, records: list[dict], using: str):
+        self.using = using
+        self.carried: dict = {}
+        for label, names in carried_fields(records).items():
+            try:
+                model = apps.get_model(label)
+            except (LookupError, TypeError, ValueError):
+                continue
+            writable = [
+                field
+                for field in model._meta.local_concrete_fields
+                if not field.primary_key and not getattr(field, "generated", False)
+            ]
+            carried = [field.name for field in writable if field.name in names]
+            if len(carried) == len(writable):
+                continue
+            if model._base_manager.using(using).exists():
+                self.carried[model] = carried or [model._meta.pk.attname]
+
+    def update_fields(self, instance):
+        carried = self.carried.get(type(instance))
+        if carried is None:
+            return None
+        manager = type(instance)._base_manager.using(self.using)
+        return carried if manager.filter(pk=instance.pk).exists() else None
+
+
+def load_records(
+    records: list[dict], *, using: str = "default", warnings: list | None = None
+) -> int:
     if not records:
         return 0
     connection = connections[using]
     saved = 0
     restored_models = set()
     with transaction.atomic(using=using):
-        records = resolve_natural_keys(records, using)
+        records, found = resolve_natural_keys(records, using)
+        if warnings is not None:
+            warnings.extend(found)
+        kept = KeptColumns(records, using)
         with connection.constraint_checks_disabled():
-            for obj in serializers.deserialize(
-                "json", json.dumps(records), using=using, ignorenonexistent=True
-            ):
-                obj.save(using=using)
+            for obj in _deserialized(records, using):
+                _save(obj, using, kept.update_fields(obj.object))
                 restored_models.add(type(obj.object))
                 saved += 1
-        connection.check_constraints()
+        _check_constraints(connection)
         reset_sequences(connection, restored_models)
     return saved
+
+
+def _deserialized(records: list[dict], using: str):
+    try:
+        yield from serializers.deserialize(
+            "json", json.dumps(records), using=using, ignorenonexistent=True
+        )
+    except DeserializationError as exc:
+        raise RestoreError(
+            "A row in the backup does not fit this project's model: " + sentence(exc)
+        ) from exc
+
+
+def _save(obj, using: str, update_fields) -> None:
+    try:
+        obj.save(using=using, update_fields=update_fields)
+    except DatabaseError as exc:
+        instance = obj.object
+        raise RestoreError(
+            f"{instance._meta.label_lower} {instance.pk!r} could not be written: "
+            + sentence(exc)
+        ) from exc
+
+
+def _check_constraints(connection) -> None:
+    try:
+        connection.check_constraints()
+    except IntegrityError as exc:
+        raise RestoreError(
+            "A foreign key does not hold after the load: " + sentence(exc)
+        ) from exc
+
+
+def sentence(error) -> str:
+    text = " ".join(str(error).split())
+    return text if text.endswith(".") else text + "."

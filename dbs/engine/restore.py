@@ -5,9 +5,7 @@ import logging
 import zlib
 from dataclasses import dataclass, field
 
-import django
-from django.apps import apps
-from django.db import connections, transaction
+from django.db import DatabaseError, IntegrityError, connections, transaction
 
 from ..conf import setting
 from ..container import repair_copies
@@ -15,12 +13,19 @@ from ..container.blocks import BlockPlan, RepairReport
 from ..container.format import read_container
 from ..crypto import decrypt_payload
 from ..crypto.envelope import EnvelopeMaterial
-from ..exceptions import ContainerError, CorruptionError
-from ..files import restore_file
+from ..exceptions import ContainerError, CorruptionError, RestoreError
+from ..files import check_file, restore_file
 from ..introspect import topological_order
-from ..serialize import load_records
-from .backup import migration_state
+from ..notices import MERGED, RestoreWarning
+from ..serialize import load_records, sentence
 from .payload import unpack_payload
+from .schema import (
+    compare_schema,
+    installed_model,
+    migration_warnings,
+    refuse_gaps,
+    schema_warnings,
+)
 
 logger = logging.getLogger("dbs")
 
@@ -29,8 +34,16 @@ SUPPORTED_MANIFEST_VERSION = 1
 DEFAULT_MAX_PAYLOAD_BYTES = 4 * 1024 ** 3
 
 
+MERGE_HINT = (
+    "The restore was merging into rows this database already held; if they are the same "
+    "data under other ids, flush replaces them instead."
+)
+
+
 class _DryRunRollback(Exception):
-    pass
+    def __init__(self, loaded: int):
+        super().__init__(loaded)
+        self.loaded = loaded
 
 
 @dataclass
@@ -52,6 +65,8 @@ class RestoreResult:
     files_would_write: int = 0
     records_flushed: int = 0
     preexisting_models: list = field(default_factory=list)
+    skipped_models: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
 
     @property
     def healed(self) -> bool:
@@ -115,42 +130,62 @@ def restore_backup(
     write_files: bool = True,
     dry_run: bool = False,
     flush: bool = False,
+    allow_missing_models: bool = False,
 ) -> RestoreResult:
     """Restore database rows and files from container ``data``.
 
     Rows merge by primary key by default. ``flush`` clears the backed-up models
     first so the restore replaces rather than merges, and ``dry_run`` rehearses
     the whole load inside a transaction it rolls back, changing nothing.
+    A backup holding models this project lacks is refused unless
+    ``allow_missing_models`` leaves their rows and files out. Every other
+    difference between the backup and this project is listed in ``warnings``.
     """
     result = read_payload(data, passphrase)
     out = RestoreResult(repair_report=result.repair_report)
     out.models = result.document.get("stats", {}).get("models", [])
-    _warn_on_environment_drift(result.document, connections[using])
+    connection = connections[using]
+    records = result.records if load_data else []
+    files = result.files if write_files else []
 
-    backup_models = _backup_models(result.document, result.records)
-    out.preexisting_models = [
-        model._meta.label_lower
-        for model in backup_models
-        if model._base_manager.db_manager(using).exists()
-    ]
+    labels = _backup_labels(result.document, records) if load_data else set()
+    gaps = compare_schema(records, files, labels, connection)
+    refuse_gaps(gaps, allow_missing_models=allow_missing_models)
+    out.skipped_models = gaps.missing_models
+    records = [record for record in records if record.get("model") not in gaps.missing_rows]
+    files = [(entry, content) for entry, content in files if not gaps.leaves_out(entry)]
+    for entry, content in files:
+        check_file(entry, content)
 
-    logger.info(
-        "restore started: %d records, %d files",
-        len(result.records),
-        len(result.files),
-    )
+    backup_models = _backup_models(labels)
+    if load_data:
+        out.preexisting_models = [
+            model._meta.label_lower
+            for model in backup_models
+            if model._base_manager.db_manager(using).exists()
+        ]
+    merging_into = set() if flush else set(out.preexisting_models)
+    out.warnings.extend(migration_warnings(result.document, connection))
+    out.warnings.extend(schema_warnings(gaps, merging_into))
+    if merging_into:
+        out.warnings.append(
+            RestoreWarning(
+                MERGED,
+                "This database already holds rows for "
+                + ", ".join(sorted(merging_into))
+                + ", so the restore merges into them by id; flush replaces them instead.",
+            )
+        )
+
+    logger.info("restore started: %d records, %d files", len(records), len(files))
 
     if dry_run:
-        _rehearse_load(
-            result.records,
-            out,
-            backup_models,
-            using=using,
-            load_data=load_data,
-            flush=flush,
-        )
-        if write_files:
-            out.files_would_write = len(result.files)
+        if load_data:
+            out.records_would_load = _load(
+                records, backup_models, out, using=using, flush=flush, rehearse=True
+            )
+        out.files_would_write = len(files)
+        _log_warnings(out)
         logger.info(
             "dry run complete: %d records would load, %d files would be written; nothing was changed",
             out.records_would_load,
@@ -159,26 +194,13 @@ def restore_backup(
         return out
 
     if load_data:
+        out.records_loaded = _load(
+            records, backup_models, out, using=using, flush=flush, rehearse=False
+        )
         if flush:
-            with transaction.atomic(using=using):
-                out.records_flushed = _flush_existing_rows(backup_models, using)
-                out.records_loaded = load_records(result.records, using=using)
-            logger.info(
-                "flush removed %d existing rows before the load",
-                out.records_flushed,
-            )
-        else:
-            if out.preexisting_models:
-                logger.warning(
-                    "target database already holds rows for %s; the restore will "
-                    "merge by primary key (use flush to replace instead)",
-                    ", ".join(out.preexisting_models),
-                )
-            out.records_loaded = load_records(result.records, using=using)
-    if write_files:
-        for entry, file_bytes in result.files:
-            restore_file(entry, file_bytes)
-            out.files_written += 1
+            logger.info("flush removed %d existing rows before the load", out.records_flushed)
+    _log_warnings(out)
+    _write_files(files, out)
     logger.info(
         "restore complete: %d records loaded, %d files written",
         out.records_loaded,
@@ -187,41 +209,71 @@ def restore_backup(
     return out
 
 
-def _rehearse_load(
+def _load(
     records: list,
-    out: RestoreResult,
     backup_models: list,
+    out: RestoreResult,
     *,
     using: str,
-    load_data: bool,
     flush: bool,
-) -> None:
-    if not load_data:
-        return
+    rehearse: bool,
+) -> int:
+    merging = bool(out.preexisting_models) and not flush
     try:
         with transaction.atomic(using=using):
             if flush:
                 out.records_flushed = _flush_existing_rows(backup_models, using)
-            out.records_would_load = load_records(records, using=using)
-            raise _DryRunRollback
-    except _DryRunRollback:
-        pass
+            loaded = load_records(records, using=using, warnings=out.warnings)
+            if rehearse:
+                raise _DryRunRollback(loaded)
+    except _DryRunRollback as rollback:
+        return rollback.loaded
+    except (RestoreError, DatabaseError) as exc:
+        raise RestoreError(_refusal(exc, merging)) from exc
+    return loaded
 
 
-def _backup_models(document: dict, records: list) -> list:
+def _refusal(exc: Exception, merging: bool) -> str:
+    if isinstance(exc, RestoreError):
+        message, cause = str(exc), exc.__cause__
+    else:
+        message, cause = "The database refused the restore: " + sentence(exc), exc
+    if merging and isinstance(cause, IntegrityError):
+        message += " " + MERGE_HINT
+    return message + " Nothing was changed."
+
+
+def _write_files(files: list, out: RestoreResult) -> None:
+    for entry, content in files:
+        try:
+            restore_file(entry, content)
+        except Exception as exc:
+            restored = "The rows were restored, but " if out.records_loaded else ""
+            raise RestoreError(
+                f"{restored}{entry.name} could not be written: {sentence(exc)} "
+                f"{out.files_written} of {len(files)} files were written."
+            ) from exc
+        out.files_written += 1
+
+
+def _log_warnings(out: RestoreResult) -> None:
+    for warning in out.warnings:
+        logger.warning("%s", warning.message)
+
+
+def _backup_labels(document: dict, records: list) -> set:
     labels = {record["model"] for record in records if record.get("model")}
     labels.update(
         entry["model"]
         for entry in document.get("stats", {}).get("models", [])
         if entry.get("model")
     )
-    resolved = []
-    for label in sorted(labels):
-        try:
-            resolved.append(apps.get_model(label))
-        except LookupError:
-            continue
-    return resolved
+    return labels
+
+
+def _backup_models(labels) -> list:
+    installed = (installed_model(label) for label in sorted(labels))
+    return [model for model in installed if model is not None]
 
 
 def _flush_targets(models: list) -> list:
@@ -247,35 +299,3 @@ def _flush_existing_rows(models: list, using: str) -> int:
                 cursor.execute(f"DELETE FROM {table}")
                 deleted += count
     return deleted
-
-
-def _warn_on_environment_drift(document: dict, connection) -> None:
-    backup_django = document.get("django_version")
-    if backup_django and backup_django != django.get_version():
-        logger.warning(
-            "backup was created with Django %s but Django %s is running",
-            backup_django,
-            django.get_version(),
-        )
-    recorded = document.get("migrations")
-    if recorded is None:
-        return
-    target = migration_state(connection)
-    backup_ahead = sorted(
-        app for app, latest in recorded.items() if latest > target.get(app, "")
-    )
-    target_ahead = sorted(
-        app for app, latest in target.items() if latest > recorded.get(app, "")
-    )
-    if backup_ahead:
-        logger.warning(
-            "migration drift for %s: the backup was taken on a newer schema than "
-            "the target database; fields the target does not know are discarded on load",
-            ", ".join(backup_ahead),
-        )
-    if target_ahead:
-        logger.warning(
-            "migration drift for %s: the target database schema is newer than "
-            "the backup; fields added since the backup keep their defaults",
-            ", ".join(target_ahead),
-        )

@@ -114,24 +114,31 @@ def collect_root_files(root: str, skipped: list[str]):
             )
 
 
-def restore_file(entry: FileEntry, data: bytes) -> None:
+def check_file(entry: FileEntry, data: bytes) -> None:
     if _sha256(data) != entry.sha256:
         from .exceptions import CorruptionError
 
         raise CorruptionError(
             f"File {entry.name!r} failed its integrity hash after extraction."
         )
+    if entry.kind == "path":
+        _confined_path(entry.name)
+    elif entry.kind == "root":
+        _confined_path(os.path.join(entry.root, entry.name))
+    elif entry.kind != "storage":
+        from .exceptions import RestoreError
 
+        raise RestoreError(f"Unknown file entry kind: {entry.kind!r}")
+
+
+def restore_file(entry: FileEntry, data: bytes) -> None:
+    check_file(entry, data)
     if entry.kind == "storage":
         _restore_storage_file(entry, data)
     elif entry.kind == "path":
         _write_path(entry.name, data)
-    elif entry.kind == "root":
-        _write_path(os.path.join(entry.root, entry.name), data)
     else:
-        from .exceptions import RestoreError
-
-        raise RestoreError(f"Unknown file entry kind: {entry.kind!r}")
+        _write_path(os.path.join(entry.root, entry.name), data)
 
 
 def _restore_storage_file(entry: FileEntry, data: bytes) -> None:

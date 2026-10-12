@@ -12,11 +12,18 @@ Reports which source the passphrase came from, so a surprising key is visible.
 
 ## `dbs restore INPUT`
 `--passphrase`, `--passphrase-stdin`, `--database`, `--no-data`, `--no-files`,
-`--dry-run`, `--flush`.
+`--dry-run`, `--flush`, `--allow-missing-models`.
 
 Merging is the default. `--flush` clears the backed-up models first so the restore
 replaces. `--dry-run` performs the real load inside a transaction it rolls back and writes
 no files. Always suggest a dry run before a restore onto anything that matters.
+
+A backup holding models the project lacks is refused; `--allow-missing-models` restores the
+rest and leaves them out. Every other difference prints as `Warning [code]: ...`, with the
+codes `models_left_out`, `fields_left_out`, `fields_not_in_backup`, `files_left_out`,
+`merged`, `migrations_differ`, `django_version`, `references_left_out` and
+`references_by_id`. A row the database refuses ends the command with the model, the row and
+the reason, and nothing changed.
 
 ## `dbs validate INPUT`
 `--passphrase` takes an optional value; given bare it uses the derived passphrase.

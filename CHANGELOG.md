@@ -65,6 +65,24 @@ holds.
 
 ### Changed
 
+- **A restore checks the backup against the project before it writes.** A backup holding
+  models the project does not have used to lose their rows without a word: a backup of
+  another project restored as "0 records" and succeeded. It is now refused, naming the models
+  with their rows and files. `--allow-missing-models` (*Allow missing models* in the panel,
+  `allow_missing_models=True` for `restore_backup`) restores the rest and leaves them out. A
+  backed-up model with no table stops the restore with "Run migrate". A dry run refuses the
+  same backups, and `dbs upgrade` names a backed-up model that has no table.
+- **Every difference a restore finds is reported.** `RestoreResult.warnings` lists each one
+  with a code and a message: fields the backup has that the model lacks, fields the model has
+  that the backup lacks, files with no field to land in, models left out, merged rows,
+  migrations applied on one side only, another Django version, and references left out or
+  made by id. `dbs restore` prints them as `Warning [code]: ...`, replacing its "Merged into
+  existing rows" line; the panel shows each one; the manager keeps them on the restore job and
+  shows one line for each kind.
+- **Migration drift names the migrations.** Backups now record every applied migration, not
+  only the latest per app, and a restore names those applied on one side only, so a branch
+  that applied an earlier migration the other side lacks is no longer missed. Backups taken
+  before 0.6.0 compare the latest migration per app and say where each side stands.
 - The package declares its license as the SPDX expression `MIT` instead of a license
   classifier, so building from source needs setuptools 77 or later.
 - The manager's cache lives in its database (table `dbs_manager_cache`, created by its migrations), so
@@ -103,6 +121,20 @@ holds.
   now written by natural key and found again by name on restore. A permission the target
   lacks is left out with a warning; a foreign key it cannot find stops the restore and names
   the row. Older backups still restore, with a warning naming the models they refer to by id.
+- **A merge reset fields the backup does not have.** On a row already in the database, every
+  column the backup lacked — a field added since the backup, or one left out with
+  `FieldType.EXCLUDE` — was set back to its default. A merge now writes only the fields the
+  backup carries; rows new to the database still get the defaults.
+- **A restore the database refused ended in a traceback**, and in the panel in a server error
+  with no audit row. A unique value already taken, a value that does not fit its field, or a
+  foreign key that does not hold now stops the restore with the model, the row and the
+  reason, says nothing was changed, and is recorded as a failed restore. When the restore was
+  merging into rows already there, the message suggests flush.
+- **A restore could write its rows and then stop on a file.** A file outside the restore
+  roots, or one whose field no longer exists, failed after the rows were committed, and a dry
+  run did not notice. Where every file goes is now checked before the first row, in a dry run
+  too; a file whose field is gone is left out with a warning. If writing a file still fails,
+  the message says the rows were restored and how many files were written.
 - **A PostgreSQL backup taken while the project was in use could fail its own restore.** Each
   model was read in a snapshot of its own, so a row committed mid-backup could arrive without
   the row it points at. A backup now reads every model from one `REPEATABLE READ` snapshot.
