@@ -15,6 +15,7 @@ from dbs.manager.servers.services import ServerService
 from dbs.manager.adapters import backups, jobs, references
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.adapters.forms import validated
+from dbs.manager.terminal.progress import reported
 from dbs.manager.terminal.session import TerminalSession
 
 LIST_COLUMNS = (
@@ -51,9 +52,10 @@ def list_backups(session: TerminalSession) -> int:
 
 def take(session: TerminalSession) -> int:
     chosen = references.servers(session.user, session.args.servers, session.args.all)
-    taken = backups.take(
-        session.user, chosen, starting=lambda server: _starting(session, server)
-    )
+    with reported(session):
+        taken = backups.take(
+            session.user, chosen, starting=lambda server: _starting(session, server)
+        )
     rows = [
         {
             "server": item.server,
@@ -92,7 +94,8 @@ def restore(session: TerminalSession) -> int:
     if args.real:
         body["server_name"] = args.confirm_name or _typed_name(session, target.name)
         body["account_password"] = session.password()
-    job = service.restore(file_id, **validated(RestoreSerializer, body))
+    with reported(session):
+        job = service.restore(file_id, **validated(RestoreSerializer, body))
     entry = jobs.finished(session.user, job)
     done = "Restored" if args.real else "Rehearsed restoring"
     return session.outcome(entry, f"{done} {file.name} onto {target.name}.")

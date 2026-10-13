@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from rest_framework import status
 from rest_framework.exceptions import APIException
 
@@ -30,10 +32,27 @@ class RemoteCommandFailed(APIException):
     default_detail = "A command on the server failed."
 
     def __init__(
-        self, detail: str | None = None, code: str | None = None, *, output: str = ""
+        self,
+        detail: str | None = None,
+        code: str | None = None,
+        *,
+        output: str = "",
+        settles_at: datetime | None = None,
     ) -> None:
         super().__init__(detail, code)
         self.output: str = output
+        self.settles_at: datetime | None = settles_at
+
+
+class RemoteCommandTimedOut(RemoteCommandFailed):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    default_code = "remote_command_timed_out"
+    default_detail = "A command on the server ran out of time and was stopped."
+
+
+class ServerConnectionLost(RemoteCommandFailed):
+    default_code = "connection_lost"
+    default_detail = "The connection to the server was lost while it worked."
 
 
 class BackupInvalid(RemoteCommandFailed):

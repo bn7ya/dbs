@@ -45,6 +45,8 @@ class DashboardService:
                     "host": server.host,
                     "check_status": server.last_check_status,
                     "checked_at": server.last_checked_at,
+                    "connection_state": server.connection_state,
+                    "last_seen_at": server.last_seen_at,
                     "last_backup": self._last_backup(server),
                     "next_plan_run": following.get(server.pk),
                     "failures_7d": failures.get(str(server.pk), 0),

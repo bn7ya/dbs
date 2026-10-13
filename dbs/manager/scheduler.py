@@ -32,7 +32,11 @@ TASKS = {
     ),
     "sweep_stale_jobs": (
         timedelta(minutes=15),
-        "dbs.manager.activity.services.sweep_stale_jobs",
+        "dbs.manager.recovery.sweep",
+    ),
+    "probe_servers": (
+        timedelta(minutes=5),
+        "dbs.manager.servers.services.connection_service.probe_servers",
     ),
 }
 

@@ -56,16 +56,28 @@ SHOWN_FIELDS = (
     "last_check_status",
     "last_check_error",
     "last_checked_at",
+    "connection_state",
+    "last_seen_at",
+    "last_connection_error",
+    "timeout_on_host",
+    "timeout_in_container",
 )
 LIST_COLUMNS = (
     ("NAME", "name"),
     ("HOST", lambda row: f"{row['username']}@{row['host']}:{row['port']}"),
+    (
+        "CONNECTION",
+        lambda row: servers.connection_label(
+            row["connection_state"], row["last_connection_error"]
+        ),
+    ),
     ("STATUS", "last_check_status"),
     ("CHECKED", "last_checked_at"),
     ("ID", "id"),
 )
 CHECK_COLUMNS = (
     ("SERVER", "name"),
+    ("CONNECTION", "connection"),
     ("STATUS", "status"),
     ("DJANGO-DBS", "remote_version"),
     ("PROBLEM", "problem"),
@@ -423,6 +435,7 @@ def _checked(
     rows = [
         {
             "name": item.name,
+            "connection": item.connection,
             "status": item.status,
             "remote_version": item.remote_version,
             "problem": item.problem,

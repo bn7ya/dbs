@@ -263,13 +263,13 @@ def test_an_sftp_channel_that_will_not_open_is_remote_command_failed(failure):
         RemoteHost(FakeSession(failure=failure)).exists("/srv")
 
 
-def test_sftp_reads_are_bounded_by_the_command_timeout(settings):
+def test_sftp_reads_are_bounded_by_the_io_timeout(settings):
     sftp = FakeSftp({"/srv"})
 
     opened = RemoteHost(FakeSession(sftp=sftp)).sftp
 
     assert opened is sftp
-    assert sftp.channel.timeout == settings.SSH_COMMAND_TIMEOUT
+    assert sftp.channel.timeout == settings.SSH_IO_TIMEOUT
 
 
 def test_a_path_exists_or_does_not():
@@ -310,7 +310,7 @@ def credentials() -> Credentials:
 )
 def test_a_connection_that_fails_is_translated(monkeypatch, failure, translated):
     class Refusing:
-        def __init__(self, target) -> None:
+        def __init__(self, target, on_activity=None) -> None:
             pass
 
         def __enter__(self):
@@ -328,7 +328,7 @@ def test_a_connection_trusts_only_the_pinned_key_and_is_closed_after(
     opened = []
 
     class Recording(FakeSession):
-        def __init__(self, target) -> None:
+        def __init__(self, target, on_activity=None) -> None:
             super().__init__()
             self.target = target
             opened.append(self)
@@ -351,6 +351,8 @@ def test_a_connection_trusts_only_the_pinned_key_and_is_closed_after(
     assert (target.use_agent, target.auto_add_host_key) == (False, False)
     assert target.known_hosts is None
     assert target.connect_timeout == settings.SSH_CONNECT_TIMEOUT
+    assert target.keepalive_interval == settings.SSH_KEEPALIVE_INTERVAL
+    assert target.io_timeout == settings.SSH_IO_TIMEOUT
     assert target.remote_dir == given.remote_dir
 
 
@@ -463,7 +465,7 @@ def test_a_dbs_backup_is_taken_over_the_open_connection_and_checked(
         None,
         None,
     )
-    assert session.sftp.channel.timeout == settings.SSH_COMMAND_TIMEOUT
+    assert session.sftp.channel.timeout == settings.SSH_IO_TIMEOUT
 
 
 @pytest.mark.django_db

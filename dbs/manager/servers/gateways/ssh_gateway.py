@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import base64
+import math
 import os
 import posixpath
 import re
 import secrets
 import shlex
 import stat
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, cast
 
 from django.conf import settings
+from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from paramiko import Channel, PKey, SFTPAttributes, SFTPClient, SFTPFile, SSHException
 from paramiko.pkey import UnknownKeyType
@@ -24,7 +26,7 @@ from paramiko.pkey import UnknownKeyType
 from dbs import validate_backup
 from dbs.client import BackupOptions, ServerProfile, backup_and_fetch
 from dbs.client.remote import available_local_name
-from dbs.exceptions import ConfigurationError, DBSError
+from dbs.exceptions import ConfigurationError, ConnectionLost, DBSError, RemoteTimeout
 from dbs.manager.servers.exceptions import (
     ArchiveFailed,
     BackupInvalid,
@@ -34,9 +36,11 @@ from dbs.manager.servers.exceptions import (
     FolderNotEmpty,
     HostKeyChanged,
     RemoteCommandFailed,
+    RemoteCommandTimedOut,
     RemoteNotFound,
     RemotePermissionDenied,
     RestoreFailed,
+    ServerConnectionLost,
     SSHAuthFailed,
     SSHUnreachable,
 )
@@ -86,6 +90,10 @@ CONTAINER_TMP = "/tmp"
 CONTAINER_BACKUP_PREFIX = ".dbs-backup-"
 CONTAINER_ROOT = "0"
 LOCAL_FILE_MODE = 0o600
+TIMEOUT = "timeout"
+TIMEOUT_PROBE = (TIMEOUT, "-k", "1", "5", "true")
+TIMED_OUT_STATUSES = frozenset({124, 128 + 9})
+DEADLINE_MARGIN = 5
 
 
 @dataclass(frozen=True)
@@ -98,6 +106,11 @@ class Credentials:
     key_passphrase: str | None = field(default=None, repr=False)
     password: str | None = field(default=None, repr=False)
     remote_dir: str = "."
+    timeout_on_host: bool = False
+    timeout_in_container: bool = False
+    on_activity: Callable[[int], None] | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass(frozen=True)
@@ -197,14 +210,22 @@ class RemoteReader:
 
 
 class RemoteHost:
-    def __init__(self, session: SSHSession) -> None:
+    def __init__(
+        self,
+        session: SSHSession,
+        *,
+        timeout_on_host: bool = False,
+        timeout_in_container: bool = False,
+    ) -> None:
         self.session = session
+        self.timeout_on_host = timeout_on_host
+        self.timeout_in_container = timeout_in_container
 
     @property
     def sftp(self) -> SFTPClient:
         try:
             sftp: SFTPClient = self.session.sftp
-            cast(Channel, sftp.get_channel()).settimeout(settings.SSH_COMMAND_TIMEOUT)
+            cast(Channel, sftp.get_channel()).settimeout(settings.SSH_IO_TIMEOUT)
         except TRANSPORT_ERRORS as exc:
             raise RemoteCommandFailed() from exc
         return sftp
@@ -227,16 +248,36 @@ class RemoteHost:
         env: Mapping[str, str] | None = None,
         stdin_line: str | None = None,
         timeout: float | None = None,
+        limited: bool = False,
     ) -> RemoteResult:
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        if self.timeout_on_host and not limited:
+            argv, limited = bounded(argv, seconds), True
         script = build_script(argv, cwd=cwd, env=env)
+        settles_at = timezone.now() + timedelta(
+            seconds=seconds + settings.REMOTE_KILL_AFTER
+        )
         try:
-            return self.session.run(
-                script,
-                stdin_line=stdin_line,
-                timeout=timeout or settings.SSH_COMMAND_TIMEOUT,
+            result = self.session.run(
+                script, stdin_line=stdin_line, timeout=_waited(seconds, limited)
             )
         except TRANSPORT_ERRORS as exc:
-            raise RemoteCommandFailed() from exc
+            raise _interrupted(exc, settles_at) from exc
+        if limited and result.exit_status in TIMED_OUT_STATUSES:
+            raise RemoteCommandTimedOut(output=_tail(result.stderr or result.stdout))
+        return result
+
+    def has_timeout(self, profile: DbsProfile | None = None) -> bool:
+        if profile is None or profile.compose is None:
+            probe = list(TIMEOUT_PROBE)
+            cwd = None
+        else:
+            probe = profile.compose.exec_argv(TIMEOUT_PROBE)
+            cwd = profile.project_dir
+        try:
+            return bool(self.run(probe, cwd=cwd, limited=True).ok)
+        except RemoteCommandFailed:
+            return False
 
     def run_python(
         self,
@@ -260,11 +301,17 @@ class RemoteHost:
                 stdin_line=stdin_line,
                 timeout=timeout,
             )
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        inside = self.timeout_in_container
         return self.run(
-            profile.compose.exec_argv(command, settings_module=settings_module),
+            profile.compose.exec_argv(
+                bounded(command, seconds) if inside else command,
+                settings_module=settings_module,
+            ),
             cwd=profile.project_dir,
             stdin_line=stdin_line,
-            timeout=timeout,
+            timeout=seconds,
+            limited=inside,
         )
 
     def run_manage(
@@ -308,10 +355,15 @@ class RemoteHost:
     ) -> RemoteResult:
         if profile.compose is None:
             raise ValueError("This project does not run in Docker Compose.")
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        inside = self.timeout_in_container
         return self.run(
-            profile.compose.exec_argv(command, user=user),
+            profile.compose.exec_argv(
+                bounded(command, seconds) if inside else command, user=user
+            ),
             cwd=profile.project_dir,
-            timeout=timeout,
+            timeout=seconds,
+            limited=inside,
         )
 
     def take_dbs_backup(
@@ -1023,8 +1075,10 @@ def connect(credentials: Credentials) -> Iterator[RemoteHost]:
             use_agent=False,
             auto_add_host_key=False,
             connect_timeout=settings.SSH_CONNECT_TIMEOUT,
+            keepalive_interval=settings.SSH_KEEPALIVE_INTERVAL,
+            io_timeout=settings.SSH_IO_TIMEOUT,
         )
-        session = SSHSession(target).__enter__()
+        session = SSHSession(target, on_activity=credentials.on_activity).__enter__()
     except HostKeyError as exc:
         raise HostKeyChanged() from exc
     except ConfigurationError as exc:
@@ -1032,9 +1086,43 @@ def connect(credentials: Credentials) -> Iterator[RemoteHost]:
     except DBSError as exc:
         raise SSHUnreachable() from exc
     try:
-        yield RemoteHost(session)
+        yield RemoteHost(
+            session,
+            timeout_on_host=credentials.timeout_on_host,
+            timeout_in_container=credentials.timeout_in_container,
+        )
+    except RemoteCommandFailed as exc:
+        if type(exc) is not RemoteCommandFailed or session.is_alive():
+            raise
+        raise ServerConnectionLost(
+            output=exc.output, settles_at=exc.settles_at
+        ) from exc
     finally:
         session.close()
+
+
+def bounded(argv: Sequence[str], seconds: float) -> list[str]:
+    return [
+        TIMEOUT,
+        "-k",
+        str(settings.REMOTE_KILL_AFTER),
+        str(math.ceil(seconds)),
+        *argv,
+    ]
+
+
+def _waited(seconds: float, limited: bool) -> float:
+    if not limited:
+        return seconds
+    return seconds + settings.REMOTE_KILL_AFTER + DEADLINE_MARGIN
+
+
+def _interrupted(exc: BaseException, settles_at: datetime) -> RemoteCommandFailed:
+    if isinstance(exc, ConnectionLost):
+        return ServerConnectionLost(settles_at=settles_at)
+    if isinstance(exc, RemoteTimeout):
+        return RemoteCommandTimedOut(settles_at=settles_at)
+    return RemoteCommandFailed(settles_at=settles_at)
 
 
 def _sed_literal(text: str) -> str:

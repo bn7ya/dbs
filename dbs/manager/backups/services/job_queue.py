@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 from dbs.manager.activity.services import ActivityService
-from dbs.manager.backups.exceptions import BackupRunning
 from dbs.manager.backups.locks import TakeLock
 from dbs.models import AuditEvent
 
@@ -45,7 +44,7 @@ class JobQueue:
                 action, server=server, target=target, detail=detail
             )
             if not self.locks.acquire(server.pk, job.pk):
-                raise BackupRunning()
+                raise self.locks.refusal(server.pk)
             transaction.on_commit(
                 lambda: self.send(
                     job, send, on_failure=lambda: self.locks.release(server.pk, job.pk)

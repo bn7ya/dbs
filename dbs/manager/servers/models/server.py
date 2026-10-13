@@ -24,6 +24,11 @@ class Server(BaseModel):
         PROBLEM = "problem", "Needs attention"
         FAILED = "failed", "Could not connect"
 
+    class ConnectionState(models.TextChoices):
+        UNKNOWN = "unknown", "Not seen yet"
+        ONLINE = "online", "Online"
+        OFFLINE = "offline", "Offline"
+
     name = models.CharField(max_length=100)
     host = models.CharField(max_length=255)
     port = models.PositiveIntegerField(
@@ -65,6 +70,16 @@ class Server(BaseModel):
     last_checked_at = models.DateTimeField(null=True, blank=True)
     last_check_report = models.JSONField(default=dict, blank=True)
     last_health = models.JSONField(null=True, blank=True)
+    timeout_on_host = models.BooleanField(null=True, blank=True)
+    timeout_in_container = models.BooleanField(null=True, blank=True)
+
+    connection_state = models.CharField(
+        max_length=16,
+        choices=ConnectionState.choices,
+        default=ConnectionState.UNKNOWN,
+    )
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    last_connection_error = models.CharField(max_length=64, blank=True)
 
     class Meta(BaseModel.Meta):
         constraints = [
