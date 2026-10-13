@@ -1,168 +1,244 @@
-# DBS 0.6.0 — release notes
+# DBS 0.7.0 — release notes
 
-Released 2026-10-11.
+Released 2026-10-13.
 
 ```bash
-pip install --upgrade django-dbs
+pip install --upgrade "django-dbs[guard]"   # name the extras you use: guard, manager, ssh or all
 python manage.py dbs upgrade
 ```
 
-Everything the DBS manager does in its interface can now be done from a terminal, or by
-Claude, on the same services and the same data. The manager backs up projects that run in
-Docker Compose and finds the server's django-dbs wherever it is installed. Restores are more
-faithful: permissions and content types land on their own rows, a PostgreSQL backup reads from
-one snapshot, and a block damaged in both copies is rebuilt from what each copy still holds.
+Backups now stream: a multi-threaded engine writes container format 2 with flat memory however
+large the project, and restores read it the same way. The server keeps its backups and the DBS
+manager pulls them, so the panel's SFTP targets and console are gone, and so is `dbs-client`.
+`pip install django-dbs` is the backup library alone; the session guard's detector, the manager
+and the SSH API are extras. The manager gains roles, a master account, two-factor sign-in and a
+sealing key in the system keychain, can revert a move to a new server, and asks for a person
+before Claude pins a host key. A long list of backup, restore and retention fixes closes ways a
+backup or a restore could lose data.
 
 The full list of changes is in the
-[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#060---2026-10-11).
+[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#070---2026-10-13).
 
 ## Highlights
 
-### The manager from a terminal
+### Backups stream
 
-Every action in the manager's interface is also a `django_dbs` command. Both call the same
-services and validate with the same serializers, so a server added in one shows in the other,
-and **Activity** records both under the account that acted.
+Rows are read in batches from one database snapshot and files in chunks, while a compression
+pool, an encoding thread and a writer thread work behind bounded queues, so memory stays flat
+however large the project grows. A failure in any stage stops them all and never leaves a
+partial file.
 
-```bash
-django_dbs server add shop --host shop.example.com --user deploy --ssh-password
-django_dbs backup take --all
-django_dbs backup list --server shop
-django_dbs plan add shop nightly --kind dbs --every 1440 --keep 14
+```python
+from dbs import write_backup
+
+summary = write_backup("backup.dbs", "passphrase")   # a path that does not exist yet, or a binary file
+print(summary.bytes_written, summary.sha256, summary.records, summary.skipped_files)
 ```
 
-`--json` prints exactly what the web API returns. Actions the interface guards with the account
-password ask for it here too, or read it with `--password-stdin`; secrets are prompted for or
-read from stdin, never taken as arguments. `django_dbs server import-profiles` brings the
-servers of a `dbs-client` config into the manager.
+`write_backup` and `BackupSummary` are new in `dbs`. `workers` spreads parity and encryption
+over more threads. `restore_backup` and `validate_backup` take bytes, a path or a seekable file
+and read format 2 as a stream. Reed-Solomon parity is computed with numpy and an intact block is
+read without decoding: format 1 encoding goes from about 0.4 to 53 MB/s and a clean validation
+from 0.3 to 112 MB/s.
 
-### Claude drives the manager
+### Container format 2
 
-`django_dbs mcp` is an MCP server over stdio, built in with no new dependency:
+New backups write both copies of every block, the second 64 blocks after the first, so a burst
+of damage never reaches both. Each block is one AES-256-GCM chunk authenticated together with
+the header, with Reed-Solomon parity and a keyed BLAKE2b tag; the header and the trailer are each
+written twice with a checksum, and no plain hash of the data is stored. A reordered, swapped or
+truncated block is detected through its authenticated position.
 
-```bash
-claude mcp add dbs -- django_dbs mcp
-```
+Format 1 backups still validate and restore. `python manage.py dbs upgrade --backups DIR`
+converts them into `<name>.v2.dbs` beside the original, validated before it takes the name, and
+leaves the original alone.
 
-Its 27 tools cover the overview, servers, backups, plans, activity, `.env` versions by key name,
-server files and a rehearsed redeploy. Claude shows you a new server's host key fingerprint
-and waits for your yes before adding it. The MCP server never takes the account password,
-never returns a secret, and has no tool that restores or redeploys for real, removes, deletes,
-pushes a `.env` or re-pins a host key.
-
-### Projects that run in Docker Compose
-
-A server can say its Django runs in a Compose service. The manager then runs every
-`manage.py` command inside that service with `docker compose exec -T`, and moves backups in and
-out of the container with `docker compose cp`, removing the copies it made.
+### A backup on standard output
 
 ```bash
-django_dbs server add shop --host shop.example.com --user deploy --ssh-password \
-  --runtime compose --compose-service backend --compose-file compose.yaml --project-dir /srv/shop
+python manage.py dbs backup --stream > /mnt/elsewhere/backup.dbs
 ```
 
-Discovery asks Docker which services run beside a Compose file and picks the one whose Python
-has django-dbs. The check reports Docker's version and whether the service is running.
+`--stream` writes the backup to standard output and keeps the same bytes in `DBS_BACKUP_DIR`
+(or `--output-dir`) under the usual name for `--prefix`. Messages go to standard error, whose
+last line is a JSON summary `{"name", "size", "sha256"}`. When standard output breaks mid-way,
+the backup still finishes on the server, the command exits 0 and the summary adds
+`"kept_on_server": true`. This is how the DBS manager takes a backup.
 
-### Finding the project on the server
+### The server keeps its backups; the manager pulls them
 
-- **Browse the server.** The wizard and the server's settings open the server's folders in a
-  dialog, so the project, the backup folder, the allowed folders and the `.env` file are picked
-  rather than typed.
-- The wizard searches for the project as soon as the server is added and lists every project
-  it finds.
-- Discovery tries every Python it can find — any virtualenv in or next to the project,
-  `~/.virtualenvs`, `python3`, `python` — and keeps the one that imports django-dbs. When the
-  saved Python cannot, the check names the error and offers the one that can.
-- `python -m dbs.manager` runs the manager when pip installs `django_dbs` into a folder that is
-  not on `PATH`.
+The panel no longer pushes anything. It keeps at most five backups in `DBS_BACKUP_DIR`, never
+prunes the newest verified one, and holds no server credential. Every DBS backup run in the
+manager:
 
-## Restore fixes
+1. **collects** the backups waiting on the server under its server's or plan's name;
+2. **streams** a fresh one with `dbs backup --stream`;
+3. **verifies** each: the size and SHA-256 the server reported, then a full decryption;
+4. **removes** the server's copies it recorded and verified, keeping `keep_remote` (0 to 5).
 
-- **Permissions and content types.** They are left out of a backup because `migrate`
-  recreates them, but other rows referred to them by id, and a database migrated in another
-  order numbers them differently. A relation to a model the backup does not carry is now
-  written by natural key and found again by name on restore. A permission the target lacks is
-  left out with a warning; a foreign key it cannot find stops the restore and names the row.
-  Backups taken before 0.6.0 still restore, with a warning naming the models they refer to
-  by id.
-- **PostgreSQL backups taken while the project is in use.** Every model is now read from one
-  `REPEATABLE READ` snapshot, so a row committed mid-backup can no longer arrive without the row
-  it points at.
-- **Damage in both copies of one block.** Such a block is now rebuilt codeword by codeword from
-  both copies, with the bytes where they differ treated as erasures. The repair summary
-  `dbs validate` prints counts the blocks rebuilt this way.
+A broken stream ends as *kept on the server*, not failed, and the next run collects it. A file
+that fails verification is quarantined as `NAME.quarantined` with the reason, never restored and
+never counted. The manager keeps at most five good backups per server and plan and never deletes
+the newest one that passed verification.
 
-## Upgrading from 0.5.x
+### One install for each machine
 
-`python manage.py dbs upgrade` checks the project and says what, if anything, needs doing.
-Coming from 0.4.x or earlier, read the README's
-[Upgrading](https://github.com/bn7ya/dbs#upgrading) section too.
+| Install | Adds |
+|---|---|
+| `pip install django-dbs` | The backup library: Django, cryptography, argon2-cffi, reedsolo and numpy |
+| `"django-dbs[guard]"` | scikit-learn, for the session guard's anomaly detector |
+| `"django-dbs[manager]"` | djangorestframework, waitress, paramiko and keyring, for `django_dbs` |
+| `"django-dbs[ssh]"` | paramiko, for `dbs.transports` |
+| `"django-dbs[all]"` | All three |
 
-- **Nothing to change in your project.** No new migration for the `dbs` app, no new or renamed
-  setting, no new dependency, and the container format is unchanged.
-- **`dbs schedule` always follows the panel.** Run with no plan flags, it used to follow the
-  panel only when the panel's schedule was already on at start. It now always follows the
-  panel, unless `DBS_SCHEDULE_INTERVAL` is still set, and while the panel's schedule is off it
-  waits and takes no backups. `dbs upgrade` warns about this when `DBS_SCHEDULER = "command"`.
-  Turn the schedule on at `/admin/dbs/backupschedule/`, or pass `--interval`.
-- **`DBS_BACKUP_DIR` must be writable.** `dbs upgrade` now checks it, and `dbs backup` and
-  `dbs schedule` name the path and the reason instead of ending in a traceback.
-- **The manager migrates itself.** Its new migrations (`0002_cache_table`,
-  `0003_server_runtime`) apply the next time any `django_dbs` command starts. Servers already in
-  the manager keep running on the host.
+Every dependency is capped below its next major version. A missing extra is reported with the
+`pip install` line that fixes it: `django_dbs` without the manager extra prints it and exits 1,
+and `manage.py dbs upgrade` reports a session guard that is on without scikit-learn.
 
-## Deprecated
+### A guarded manager
 
-`dbs-client` prints a deprecation notice on every run and will be removed in a later release.
-Move its servers with `django_dbs server import-profiles`, and use `django_dbs backup take` in
-place of `dbs-client backup`. The `dbs.client` Python API is unchanged.
+- **Roles.** Every account is a master, an admin, an operator or a viewer, checked in every
+  service, so the interface, the REST API, the terminal and the MCP server share one rule.
+  Rehearsals need an operator; real restores and moves need an admin.
+- **The master account** is the one made at setup (on upgrade, the oldest account; every other
+  becomes an admin). Only it manages accounts, on the **Accounts** page or with
+  `django_dbs createuser NAME --role ROLE` and `django_dbs account list|role|disable|enable|reset-2fa`.
+- **Two-factor sign-in.** Every web sign-in takes the password and then a code from an
+  authenticator app, or one of ten single-use recovery codes. An account enrolls at its next
+  sign-in with a QR code.
+- **Passwords last 30 days** for web sign-in. New accounts choose their own at their first
+  sign-in.
+- **The sealing key in the system keychain**, through keyring, wherever one works;
+  `DBS_MANAGER_KEY_STORE=file|keychain` chooses. The manager warns when the key sits in a file
+  next to the data and refuses to start when the keychain and a key file disagree.
+- **Behind a TLS proxy.** `django_dbs run --trusted-proxy CIDR` believes the forwarded scheme
+  and client only from the proxy's range, with `Secure` cookies and HSTS. A non-loopback
+  `--host` is refused without it unless `--allow-insecure-http` accepts the risk.
+- **Connection liveness.** Each server shows whether it is online and when it was last seen.
+  Sessions send a keepalive every 15 seconds, and where a server has `timeout`, every remote
+  command runs under a deadline.
+
+### Moving to a new server, and back
+
+A move backs up the old server now when it answers, records the new server's `.env`, takes a
+safety backup of the new server's data, then pushes the `.env`, migrates, restores and checks.
+A move that stops after changing the new server names the step and can be reverted: the
+recorded `.env` goes back and the safety backup is restored.
+
+```bash
+django_dbs redeploy start --from old --to new --real
+django_dbs redeploy revert 412 --real      # 412: the move's activity number
+```
+
+### Host keys a person confirms
+
+The MCP `fingerprint_host` tool holds the key it read for ten minutes and returns a
+confirmation id. `add_server` pins it only after a person confirms it on the Servers page or
+with `django_dbs server confirm-host-key ID` at a real terminal.
+
+## Backup and restore fixes
+
+- **A dry run could change sequences.** It now never touches one, and a real restore only
+  raises a PostgreSQL sequence, never below its current value.
+- **A merge restore overwrote fields the backup did not carry**, so `FieldType.EXCLUDE` fields
+  lost their values. A merge now updates only the fields a backup carries.
+- **`--flush` deleted every row of a model**, even when `ModelBackup.get_queryset` backed up
+  only some of them. It now deletes only the rows the backup covers.
+- **On MySQL, `--flush` stopped with a foreign key error** whenever a row the backup does not
+  cover pointed at one it replaces. It now works as on PostgreSQL and SQLite, and refuses a
+  restore that would leave a link to a row it removed.
+- **`--database` was not honoured**: a backup read rows, files and lookups from the default
+  database.
+- **A backup could replace an existing file.** `dbs backup PATH` and
+  `create_backup(output=PATH)` now refuse a path that exists, write beside it, verify and only
+  then link the file into place.
+- **A missing source file was skipped without a word**, and a FIFO in a file tree could hang a
+  backup. A missing or unreadable file now stops the backup and names it;
+  `--allow-missing-files` backs up without it and lists it. Only regular files are read.
+- **Files were written before the rows committed**, and stayed when the load failed. Every file
+  target is checked before any row loads, and files move into place when the rows commit.
+- Restores load models in the order the backup recorded, parents first, and a multi-table child
+  brings its parent rows.
+- **One damaged byte in a header could hide a backup.** Only a header copy that verifies is
+  used.
+- **Retention could prune the newest good backup**, ordered backups by name alone, and let two
+  backups in one second overwrite each other.
+- Panel backups and restores ran inside the web request; they now run as background jobs, one
+  at a time, on a page that follows them.
+- A scheduled backup took a six-hour lease, so a killed run blocked the schedule for hours. It
+  now holds a two-minute lease renewed every 30 seconds and retries a killed run once.
+
+## Upgrading from 0.6.x
+
+Install the extras you use, then run `python manage.py dbs upgrade`. It applies the migration
+that seals the audit trail and drops the SFTP targets, and reports each of these. The README's
+[Upgrading](https://github.com/bn7ya/dbs#upgrading) section has the full table.
+
+- **Off-site copies.** `DBS_SSH_TARGETS`, `DBS_SCHEDULE_PUSH_TARGET`,
+  `DBS_SCHEDULE_KEEP_REMOTE` and `DBS_ADMIN_CONSOLE_SHELL` do nothing; delete them and add the
+  server to a DBS manager, which pulls its backups. The audit trail names every SFTP target the
+  panel held, without credentials.
+- **`dbs-client` is gone.** Install the manager on your own machine and add each server from
+  the old config with `django_dbs server add`.
+- **Retention.** A schedule keeping more than five backups is lowered to 5. `dbs schedule`
+  refuses a `DBS_SCHEDULE_KEEP` above 5, and the panel reads one as 5.
+- **`DBS_TRUSTED_PROXIES`** lists proxy networks now, not a count:
+  `DBS_TRUSTED_PROXIES = ["10.0.0.0/24"]`.
+- **Key derivation limits.** A `DBS_KDF_TIME_COST` above 10 or `DBS_KDF_MEMORY_COST` above
+  262144 KiB makes every backup fail; lower them.
+- **Unmanaged models** (`managed = False`) are left out of backups unless registered or listed
+  as `-app.model` in `DBS_EXCLUDE_MODELS`.
+- **Backup paths.** A script that reuses one `dbs backup PATH` must choose a new path each run.
+- **The manager migrates itself** the next time any `django_dbs` command starts: its oldest
+  account becomes the master and every other one an admin, each account sets up two-factor
+  sign-in at its next web sign-in, and plans keep 1 to 5 backups here and 0 to 5 on the server.
+- **Every server the manager backs up needs django-dbs 0.7 or later.** An older one answers
+  `dbs_too_old` and names the version it needs.
+- `django_dbs redeploy start` no longer takes `--archive` or `--migrate`.
+
+## Removed
+
+- `dbs-client`, `python -m dbs.client`, the `dbs.client` API, the `client` extra and
+  `django_dbs server import-profiles`.
+- The panel's SFTP targets, its push option, its console with fixed actions and a free-form
+  shell, and `dbs schedule --push` / `--keep-remote`.
+- The panel's *download to my browser* option, which built a backup inside the request.
+- The move's folder-archive step.
 
 ## Security
 
-- The manager runs a Python or a `manage.py` it found by itself only when its folder, and the
-  folder holding it, are owned by the SSH user or root and nobody else can write to them
-  (group write is accepted for the SSH user's own group). A virtualenv planted next to the
-  project by another account on a shared server is never run; a project folder you choose
-  yourself is always used.
-- The version probe no longer imports from the folder it runs in, so a `dbs.py` or `dbs/` in
-  the project folder can neither run nor fake the reported version.
-- Once a server's setup is over, discovery asks for the account password, as changing the
-  server's settings already does.
-- Browsing keeps at most 5000 entries of a folder, and one search tries at most 8 Pythons.
+- `X-Forwarded-For` is read only from a request whose peer is in `DBS_TRUSTED_PROXIES`, and an
+  address the guard cannot read counts as a new network.
+- A flagged session is refused every change anywhere in the admin, and every download or
+  export, the contrib views included.
+- Learning mode mutes only the anomaly model; the rules and both thresholds apply from the
+  first request.
+- The audit trail is sealed in a hash chain; `python manage.py dbs audit verify` prints the
+  first broken link, or the head of the chain to keep elsewhere.
+- Telemetry stores the network and a keyed hash of the address instead of the address, and is
+  purged after `DBS_SECURITY_RETENTION_DAYS`.
+- Every local backup file and every temporary file it is written through is readable by its
+  owner alone from the first byte; an SFTP upload is too, before its bytes arrive.
+- The console, which could run free-form commands on remote servers from a browser, is gone.
+- Claude can no longer pin a host key no person confirmed, make a plan keep fewer backups, or
+  save a file the manager keeps encrypted.
 
-## Other changes
-
-- The manager's cache lives in its database, so the per-server backup lock and the sign-in
-  throttle hold across processes: a backup from a terminal and one that `django_dbs run`
-  schedules never run on one server together.
-- A running job holds a database lease while it works, and `django_dbs run` starting up marks
-  as interrupted only the jobs whose process is gone, not one a terminal is still running.
-- The wizard keeps the setup window open until a check passes, waits for a project search to
-  finish before *Next*, and shows only what was found for the folder in the field.
-- A check that finds django-dbs missing now says it was not found.
+[SECURITY.md](https://github.com/bn7ya/dbs/blob/main/SECURITY.md) names the supported versions,
+how to report a vulnerability, the timelines, the scope and the threat model.
 
 ## Licenses
 
-DBS is MIT. The new
+DBS is MIT.
 [THIRD_PARTY_LICENSES.md](https://github.com/bn7ya/dbs/blob/main/THIRD_PARTY_LICENSES.md) names
-the license of every package `pip install django-dbs` brings in, of what the manager's interface
-bundles, and of the development tools.
+the license of every dependency, of what the manager's interface bundles, and of the development
+tools. What changed in this release:
 
-| Installed with django-dbs | License |
-|---|---|
-| Django, djangorestframework, scikit-learn | BSD-3-Clause |
-| cryptography | Apache-2.0 OR BSD-3-Clause |
-| argon2-cffi, tomli (Python < 3.11) | MIT |
-| reedsolo | Unlicense OR MIT-0 |
-| paramiko | LGPL-2.1-or-later |
-| waitress | ZPL-2.1 |
-
-The manager's interface bundles Angular and Angular Material (MIT), RxJS (Apache-2.0), tslib
-(0BSD), Font Awesome Free (icons under CC BY 4.0, fonts under the SIL OFL 1.1, code under MIT)
-and the Tajawal typeface (SIL OFL 1.1). Their full license texts ship inside the wheel in
-`dbs/manager/static/dbs_manager/3rdpartylicenses.txt`.
-
-The wheel and the sdist carry `THIRD_PARTY_LICENSES.md` beside `LICENSE`, and the package
-metadata declares its license as the SPDX expression `MIT`. Building django-dbs from source
-now needs setuptools 77 or later; pip fetches it on its own.
+| Package | Now | License |
+|---|---|---|
+| numpy | required | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| scikit-learn | `guard` extra | BSD-3-Clause |
+| paramiko | `ssh` and `manager` extras | LGPL-2.1-or-later |
+| djangorestframework, waitress | `manager` extra | BSD-3-Clause, ZPL-2.1 |
+| keyring | new, `manager` extra | MIT |
+| qrcode-generator | new, bundled in the manager's interface | MIT |
+| tomli | no longer installed | MIT |

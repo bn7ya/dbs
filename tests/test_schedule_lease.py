@@ -166,7 +166,7 @@ def test_one_runner_at_a_time():
     jobs.Runner().take().release()
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 def test_each_tick_clears_leftovers_older_than_an_hour(backup_dir):
     backup_dir.mkdir()
     leftover = backup_dir / ".backup-20260101-000000Z.dbs.ab12cd34"

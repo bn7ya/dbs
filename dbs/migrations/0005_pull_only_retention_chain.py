@@ -31,6 +31,7 @@ def record_removed_targets(apps, schema_editor):
             started_at=now,
             finished_at=now,
         )
+    schema_editor.connection.check_constraints(table_names=[AuditEvent._meta.db_table])
 
 
 def keep_at_most_five(apps, schema_editor):

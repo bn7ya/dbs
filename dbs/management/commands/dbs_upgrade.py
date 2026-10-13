@@ -41,7 +41,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--check",
             action="store_true",
-            help="Report without changing anything; exit non-zero if anything is outstanding.",
+            help="Report without changing anything; exit non-zero if an item needs action.",
         )
         parser.add_argument(
             "--self",

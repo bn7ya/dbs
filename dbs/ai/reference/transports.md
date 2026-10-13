@@ -4,7 +4,7 @@ Requires `pip install "django-dbs[ssh]"`.
 
 ```python
 from dbs.transports import (
-    SSHTarget, SSHSession, open_session,
+    SSHTarget, SSHSession, RemoteBackup, RemoteResult, open_session,
     push_backup, pull_backup, pull_backup_to,
     list_backups, list_backup_details, delete_backup, check_connection,
     fetch_host_key, HostKey, HostKeyError,

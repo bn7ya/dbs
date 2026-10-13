@@ -477,15 +477,15 @@ def test_batched_many_to_many_members_match_the_one_row_path(library):
 
 
 def test_a_row_too_large_for_a_frame_is_refused_and_batches_split(db):
-    Author.objects.create(name="a" * 300)
-    Author.objects.create(name="b" * 300)
+    Author.objects.create(name="a" * 150)
+    Author.objects.create(name="b" * 150)
 
-    split = list(serialize_batches(Author, ModelBackup(), set(), frozenset(), "default", limit=500))
+    split = list(serialize_batches(Author, ModelBackup(), set(), frozenset(), "default", limit=240))
     assert [count for _body, count in split] == [1, 1]
 
-    Author.objects.create(name="c" * 1000)
-    with pytest.raises(BackupError, match="above the 500 byte limit"):
-        list(serialize_batches(Author, ModelBackup(), set(), frozenset(), "default", limit=500))
+    Author.objects.create(name="c" * 200)
+    with pytest.raises(BackupError, match="above the 240 byte limit"):
+        list(serialize_batches(Author, ModelBackup(), set(), frozenset(), "default", limit=240))
 
 
 def _payload(*parts, magic=frames.PAYLOAD_MAGIC):
@@ -626,9 +626,10 @@ def test_backup_and_restore_memory_stays_bounded(db, tmp_path, settings, committ
     registry = BackupRegistry()
     registry.register(Author)(Assets)
     registry.register(Book)
-    authors = Author.objects.bulk_create(Author(name=f"author {index}") for index in range(rows))
+    Author.objects.bulk_create(Author(name=f"author {index}") for index in range(rows))
+    author_ids = Author.objects.order_by("pk").values_list("pk", flat=True)
     Book.objects.bulk_create(
-        Book(title=f"book {index}", author_id=authors[index].pk) for index in range(rows)
+        Book(title=f"book {index}", author_id=author_id) for index, author_id in enumerate(author_ids)
     )
     settings.DBS_RESTORE_ROOTS = [str(assets)]
     output = tmp_path / "large.dbs"

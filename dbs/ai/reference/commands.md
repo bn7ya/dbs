@@ -45,8 +45,9 @@ Without it, only structure and block integrity are checked.
 With none of the plan flags (`--interval`, `--output-dir`, `--prefix`, `--keep`) it follows
 the panel, whether its schedule is on yet or not: it ticks every minute and takes the same
 database lease as the in-process scheduler, so both can run safely, and it backs up only
-while the panel's schedule is on. With plan flags it runs that plan; so does a project that
-still sets `DBS_SCHEDULE_INTERVAL` while the panel's schedule is off.
+while the panel's schedule is on; `--once` takes one backup now either way. With plan flags
+it runs that plan; so does a project that still sets `DBS_SCHEDULE_INTERVAL` while the
+panel's schedule is off.
 
 `SIGTERM` stops the loop immediately. Run one fixed-plan scheduler per output directory.
 Retention keeps at most five, only touches files matching `prefix-YYYYMMDD-HHMMSSZ.dbs`, and
@@ -89,10 +90,10 @@ when the installed copy has drifted, which is what you want in CI.
 
 Checks the project against the installed version, applies pending DBS migrations and
 refreshes installed AI instructions, and prints the exact settings lines for anything it
-will not edit itself. `--check` changes nothing and exits non-zero when something is
-outstanding, which is what CI wants. `--self` installs one exact release (the newest, or
-`--to`) with the extras installed here, after showing the pinned `pip install` command and
-asking; `--yes` answers for a script.
+will not edit itself. `--check` changes nothing and exits non-zero when an item needs
+action, which is what CI wants; warnings are printed and leave it passing. `--self`
+installs one exact release (the newest, or `--to`) with the extras installed here, after
+showing the pinned `pip install` command and asking; `--yes` answers for a script.
 
 `--backups DIR` reads each container's format version and converts anything older, writing
 a new `NAME.v2.dbs` file beside it and leaving the original in place. It never deletes,

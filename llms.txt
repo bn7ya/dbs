@@ -30,7 +30,9 @@ python manage.py dbs backup backup.dbs
 Upgrading requires `manage.py dbs upgrade`, which applies DBS migrations.
 
 The manager runs outside any project: `django_dbs run` (local app, opens the browser),
-`django_dbs export` / `import` to move it, `django_dbs mcp` for Claude.
+`django_dbs export` / `import` to move it, `django_dbs mcp` for Claude. Everything its
+interface does is also `django_dbs server|backup|plan|activity|env|files|redeploy VERB`;
+`createuser`, `account` and `password` manage its accounts.
 
 ## Commands
 - `manage.py dbs backup OUTPUT` - write an encrypted backup; refuses a path that exists

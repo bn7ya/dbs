@@ -402,9 +402,9 @@ class RowLoader:
         return saved
 
     def finish(self, *, adjust_sequences: bool = True) -> int:
+        self.connection.check_constraints()
         if not self.seen:
             return 0
-        self.connection.check_constraints()
         if adjust_sequences:
             raise_sequences(self.connection, self.models)
         return self.saved

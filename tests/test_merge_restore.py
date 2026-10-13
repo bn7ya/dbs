@@ -1,9 +1,11 @@
 import pytest
+from django.db import IntegrityError
 
 from dbs import FieldType, ModelBackup
 from dbs.engine import create_backup, restore_backup
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF
+from tests.format1 import as_format1
 from tests.restoreapp.models import Account, Bar, Member, Place, Restaurant
 
 PASS = "merge-restore-pass-phrase"
@@ -146,3 +148,21 @@ def test_flush_keeps_the_links_of_an_excluded_many_to_many():
     restore_backup(container, PASS, flush=True, registry=registry)
 
     assert list(Account.objects.get(pk=account.pk).members.all()) == [member]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("form", [1, 2])
+def test_a_flush_that_leaves_a_link_to_a_row_it_removed_is_refused(form):
+    registry = BackupRegistry()
+    registry.register(Member)
+    container = create_backup(PASS, registry=registry, kdf_params=FAST_KDF)
+    if form == 1:
+        container = as_format1(container, PASS)
+    member = Member.objects.create(name="Ada")
+    account = Account.objects.create(name="ops", tenant="a", api_token=1)
+    account.members.set([member])
+
+    with pytest.raises(IntegrityError):
+        restore_backup(container, PASS, flush=True, registry=registry)
+
+    assert list(account.members.all()) == [member]

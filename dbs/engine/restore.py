@@ -479,7 +479,7 @@ def _load(records, out, backup_models, staged, *, using, flush, registry) -> Non
     with transaction.atomic(using=using):
         if flush:
             out.records_flushed = _flush_existing_rows(backup_models, using, registry)
-        out.records_loaded = save_records(prepared, using=using) if prepared else 0
+        out.records_loaded = save_records(prepared, using=using)
         transaction.on_commit(lambda: _publish(staged, out), using=using)
     if flush:
         logger.info("flush removed %d existing rows before the load", out.records_flushed)
@@ -509,10 +509,7 @@ def _rehearse_load(
         with transaction.atomic(using=using):
             if flush:
                 out.records_flushed = _flush_existing_rows(backup_models, using, registry)
-            if prepared:
-                out.records_would_load = save_records(
-                    prepared, using=using, adjust_sequences=False
-                )
+            out.records_would_load = save_records(prepared, using=using, adjust_sequences=False)
             raise _DryRunRollback
     except _DryRunRollback:
         pass
@@ -603,12 +600,13 @@ def _flush_existing_rows(models: list, using: str, registry=None) -> int:
     scopes = _flush_scopes(models, using, registry or backup_registry)
     connection = connections[using]
     deleted = 0
-    for model in reversed(topological_order(list(scopes))):
-        scope = scopes[model]
-        if scope is None:
-            deleted += _delete_table(connection, model)
-        else:
-            deleted += _delete_selected(model, *scope, using=using)
+    with connection.constraint_checks_disabled():
+        for model in reversed(topological_order(list(scopes))):
+            scope = scopes[model]
+            if scope is None:
+                deleted += _delete_table(connection, model)
+            else:
+                deleted += _delete_selected(model, *scope, using=using)
     return deleted
 
 
