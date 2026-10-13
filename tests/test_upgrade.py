@@ -303,6 +303,244 @@ def test_self_update_refuses_on_a_source_checkout():
     assert upgrade.is_editable_install() is True
 
 
+class Distribution:
+    def __init__(self, site, direct_url=None):
+        self.site = site
+        self.direct_url = direct_url
+
+    def read_text(self, name):
+        return self.direct_url if name == "direct_url.json" else None
+
+    def locate_file(self, path):
+        return self.site / path
+
+
+def installed_package(root):
+    package = root / "dbs"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    return package
+
+
+def test_a_debian_dist_packages_install_is_an_installed_package(tmp_path):
+    site = tmp_path / "usr" / "lib" / "python3" / "dist-packages"
+    package = installed_package(site)
+
+    assert upgrade.is_source_checkout(package, Distribution(site)) is False
+
+
+def test_a_site_packages_install_is_an_installed_package(tmp_path):
+    site = tmp_path / "venv" / "lib" / "python3.12" / "site-packages"
+    package = installed_package(site)
+    pinned = '{"url": "https://files.pythonhosted.org/django_dbs.whl", "archive_info": {}}'
+
+    assert upgrade.is_source_checkout(package, Distribution(site, pinned)) is False
+
+
+def test_an_editable_install_is_a_source_checkout(tmp_path):
+    site = tmp_path / "site-packages"
+    package = installed_package(site)
+    editable = '{"url": "file:///src/dbs", "dir_info": {"editable": true}}'
+
+    assert upgrade.is_source_checkout(package, Distribution(site, editable)) is True
+
+
+def test_a_package_beside_a_project_file_is_a_source_checkout(tmp_path):
+    package = installed_package(tmp_path / "dbs-checkout")
+    (tmp_path / "dbs-checkout" / "pyproject.toml").write_text("[project]\n")
+
+    assert upgrade.is_source_checkout(package, Distribution(tmp_path / "dbs-checkout")) is True
+
+
+def test_a_copy_that_shadows_the_installed_one_is_a_source_checkout(tmp_path):
+    package = installed_package(tmp_path / "elsewhere")
+    site = tmp_path / "site-packages"
+    installed_package(site)
+
+    assert upgrade.is_source_checkout(package, Distribution(site)) is True
+
+
+def test_no_installed_distribution_is_a_source_checkout(tmp_path):
+    assert upgrade.is_source_checkout(installed_package(tmp_path), None) is True
+
+
+def test_an_interpreter_outside_a_virtual_environment_is_the_system_one(tmp_path):
+    base = tmp_path / "usr"
+    venv = tmp_path / "venv"
+    conda = tmp_path / "conda"
+    for directory in (base, venv, conda / "conda-meta"):
+        directory.mkdir(parents=True)
+
+    assert upgrade.is_system_interpreter(str(base), str(base)) is True
+    assert upgrade.is_system_interpreter(str(venv), str(base)) is False
+    assert upgrade.is_system_interpreter(str(conda), str(conda)) is False
+
+
+def test_the_install_command_pins_one_version_with_the_installed_extras():
+    import sys
+
+    command = upgrade.pinned_install_command("0.7.0", ["manager", "guard"])
+
+    assert command == [
+        sys.executable, "-m", "pip", "install", "django-dbs[guard,manager]==0.7.0"
+    ]
+    assert upgrade.pinned_install_command("0.7.0")[-1] == "django-dbs==0.7.0"
+    assert "--upgrade" not in command and "-U" not in command
+
+
+@pytest.mark.parametrize("text", ["0.7.0", "1.0", "1.2.3rc1", "0.7.0.post1", "2.0.0.dev3"])
+def test_version_numbers_are_accepted(text):
+    assert upgrade.is_version(text)
+
+
+@pytest.mark.parametrize("text", ["", "latest", "0.7.0; rm -rf /", ">=0.7", "0.7.0 --pre"])
+def test_anything_else_is_not_a_version(text):
+    assert not upgrade.is_version(text)
+
+
+def test_requirement_files_that_name_django_dbs_are_found(tmp_path):
+    (tmp_path / "requirements.txt").write_text("Django>=5.2\ndjango-dbs==0.6.0\n")
+    (tmp_path / "requirements-dev.txt").write_text("pytest\n")
+    (tmp_path / "uv.lock").write_text('name = "django-dbs"\n')
+
+    found = [path.name for path in upgrade.requirement_files(tmp_path)]
+
+    assert found == ["requirements.txt", "uv.lock"]
+
+
+class Pip:
+    def __init__(self, returncode=0):
+        self.calls = []
+        self.returncode = returncode
+
+    def __call__(self, command, **kwargs):
+        import subprocess
+
+        self.calls.append(command)
+        return subprocess.CompletedProcess(command, self.returncode, "", "pip said no")
+
+
+@pytest.fixture
+def pip(monkeypatch):
+    from dbs.management.commands import dbs_upgrade
+
+    recorder = Pip()
+    monkeypatch.setattr(dbs_upgrade.subprocess, "run", recorder)
+    monkeypatch.setattr(dbs_upgrade, "is_editable_install", lambda: False)
+    monkeypatch.setattr(dbs_upgrade, "is_system_interpreter", lambda: False)
+    return recorder
+
+
+@pytest.mark.django_db
+def test_self_installs_the_exact_version_it_shows(pip, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "requirements.txt").write_text("django-dbs==0.6.0\n")
+
+    printed = run(self_update=True, target_version="9.9.9", yes=True)
+
+    assert len(pip.calls) == 1
+    assert pip.calls[0][1:4] == ["-m", "pip", "install"]
+    assert pip.calls[0][-1].startswith("django-dbs[") and pip.calls[0][-1].endswith("]==9.9.9")
+    assert "--upgrade" not in pip.calls[0]
+    assert pip.calls[0][-1] in printed
+    assert "Pin django-dbs==9.9.9 in requirements.txt" in printed
+
+
+@pytest.mark.django_db
+def test_self_resolves_the_newest_release_before_installing(pip, monkeypatch):
+    from dbs.management.commands import dbs_upgrade
+
+    monkeypatch.setattr(dbs_upgrade, "latest_release", lambda: "9.9.9")
+
+    run(self_update=True, yes=True, offline=False)
+
+    assert pip.calls[0][-1].endswith("==9.9.9")
+
+
+@pytest.mark.django_db
+def test_self_asks_before_installing(pip):
+    with pytest.raises(CommandError, match="Nothing was installed"):
+        run(self_update=True, target_version="9.9.9")
+
+    assert pip.calls == []
+
+
+@pytest.mark.django_db
+def test_self_leaves_a_system_interpreter_alone(pip, monkeypatch):
+    from dbs.management.commands import dbs_upgrade
+
+    monkeypatch.setattr(dbs_upgrade, "is_system_interpreter", lambda: True)
+
+    with pytest.raises(CommandError, match="--system-python"):
+        run(self_update=True, target_version="9.9.9", yes=True)
+    assert pip.calls == []
+
+    run(self_update=True, target_version="9.9.9", yes=True, system_python=True)
+    assert len(pip.calls) == 1
+
+
+@pytest.mark.django_db
+def test_self_refuses_on_a_source_checkout(pip, monkeypatch):
+    from dbs.management.commands import dbs_upgrade
+
+    monkeypatch.setattr(dbs_upgrade, "is_editable_install", lambda: True)
+
+    printed = run(self_update=True, target_version="9.9.9", yes=True)
+
+    assert "refusing --self on a source checkout" in printed
+    assert pip.calls == []
+
+
+@pytest.mark.django_db
+def test_self_does_nothing_when_the_version_is_installed(pip):
+    printed = run(self_update=True, target_version=upgrade.installed_version(), yes=True)
+
+    assert "already installed" in printed
+    assert pip.calls == []
+
+
+@pytest.mark.django_db
+def test_self_offline_needs_a_version(pip):
+    with pytest.raises(CommandError, match="--to VERSION"):
+        run(self_update=True, yes=True)
+
+    assert pip.calls == []
+
+
+@pytest.mark.django_db
+def test_self_rejects_what_is_not_a_version(pip):
+    with pytest.raises(CommandError, match="not a django-dbs version"):
+        run(self_update=True, target_version="0.7; echo", yes=True)
+
+    assert pip.calls == []
+
+
+@pytest.mark.django_db
+def test_self_rejects_a_version_pypi_does_not_have(pip, monkeypatch):
+    from dbs.management.commands import dbs_upgrade
+
+    monkeypatch.setattr(dbs_upgrade, "release_exists", lambda version: False)
+
+    with pytest.raises(CommandError, match="not on PyPI"):
+        run(self_update=True, target_version="9.9.9", yes=True, offline=False)
+
+    assert pip.calls == []
+
+
+@pytest.mark.django_db
+def test_to_without_self_is_refused(pip):
+    with pytest.raises(CommandError, match="add --self"):
+        run(target_version="9.9.9")
+
+
+@pytest.mark.django_db
+def test_a_failing_pip_is_reported(pip):
+    pip.returncode = 1
+
+    with pytest.raises(CommandError, match="pip failed"):
+        run(self_update=True, target_version="9.9.9", yes=True)
+
+
 def test_version_comparison():
     assert upgrade.is_newer("1.0.0", "0.9.9")
     assert upgrade.is_newer("0.3.10", "0.3.9")

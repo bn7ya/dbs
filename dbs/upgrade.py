@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import itertools
+import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +22,20 @@ FIXED = "fixed"
 SKIP = "skip"
 
 MIDDLEWARE_PATH = "dbs.security.middleware.DBSSecurityMiddleware"
+
+PYPI = "https://pypi.org/pypi/django-dbs"
+VERSION_PATTERN = re.compile(r"^\d+(\.\d+){0,3}((a|b|rc)\d+)?(\.post\d+)?(\.dev\d+)?$")
+CHECKOUT_MARKERS = ("pyproject.toml", "setup.py", ".git")
+PROJECT_FILES = (
+    "requirements.in",
+    "pyproject.toml",
+    "setup.cfg",
+    "Pipfile",
+    "Pipfile.lock",
+    "poetry.lock",
+    "uv.lock",
+    "pdm.lock",
+)
 
 
 @dataclass
@@ -467,23 +483,112 @@ def installed_version() -> str:
     return __version__
 
 
-def is_editable_install() -> bool:
+def package_directory() -> Path:
     from . import __file__ as package_file
 
-    return "site-packages" not in str(Path(package_file).resolve())
+    return Path(package_file).resolve().parent
+
+
+def installed_distribution():
+    from importlib import metadata
+
+    try:
+        return metadata.distribution(extras.DISTRIBUTION)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def installed_as_editable(distribution) -> bool:
+    raw = distribution.read_text("direct_url.json")
+    if not raw:
+        return False
+    try:
+        return bool(json.loads(raw).get("dir_info", {}).get("editable"))
+    except (ValueError, AttributeError):
+        return False
+
+
+def is_source_checkout(package_dir: Path, distribution) -> bool:
+    if distribution is None:
+        return True
+    if any((package_dir.parent / marker).exists() for marker in CHECKOUT_MARKERS):
+        return True
+    if installed_as_editable(distribution):
+        return True
+    return Path(distribution.locate_file("dbs")).resolve() != package_dir
+
+
+def is_editable_install() -> bool:
+    return is_source_checkout(package_directory(), installed_distribution())
+
+
+def is_system_interpreter(prefix: str | None = None, base_prefix: str | None = None) -> bool:
+    prefix = Path(prefix or sys.prefix)
+    base_prefix = Path(base_prefix or getattr(sys, "base_prefix", sys.prefix))
+    if prefix.resolve() != base_prefix.resolve():
+        return False
+    return not (prefix / "conda-meta").is_dir()
+
+
+def is_version(text: str) -> bool:
+    return bool(VERSION_PATTERN.match(text or ""))
+
+
+def pinned_install_command(version: str, installed_extras=()) -> list:
+    return [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        extras.requirement(sorted(installed_extras), version),
+    ]
+
+
+def requirement_files(root: Path) -> list:
+    candidates = sorted(root.glob("requirements*.txt")) + sorted(root.glob("requirements/*.txt"))
+    candidates += [root / name for name in PROJECT_FILES]
+    found = []
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace").lower()
+        except OSError:
+            continue
+        if any(name in text for name in ("django-dbs", "django_dbs")):
+            found.append(path)
+    return found
+
+
+def confirm_install(stream=None) -> bool:
+    stream = stream or sys.stdin
+    if not hasattr(stream, "isatty") or not stream.isatty():
+        return False
+    return input("Install it now? [y/N] ").strip().lower() in ("y", "yes")
+
+
+def _pypi_json(path: str, timeout: float):
+    import urllib.request
+
+    with urllib.request.urlopen(f"{PYPI}/{path}", timeout=timeout) as response:
+        return json.load(response)
 
 
 def latest_release(timeout: float = 10.0) -> str | None:
-    import json
-    import urllib.request
-
     try:
-        with urllib.request.urlopen(
-            "https://pypi.org/pypi/django-dbs/json", timeout=timeout
-        ) as response:
-            return json.load(response)["info"]["version"]
+        return _pypi_json("json", timeout)["info"]["version"]
     except Exception:
         return None
+
+
+def release_exists(version: str, timeout: float = 10.0) -> bool | None:
+    import urllib.error
+
+    try:
+        _pypi_json(f"{version}/json", timeout)
+    except urllib.error.HTTPError as exc:
+        return False if exc.code == 404 else None
+    except Exception:
+        return None
+    return True
 
 
 def _as_numbers(version: str):
