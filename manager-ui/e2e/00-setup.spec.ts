@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { ADMIN, DATA_DIR, SETUP_TOKEN } from './support/config';
 import { copyIn } from './support/copy';
+import { freshCode, saveSecret } from './support/totp';
 
 const t = copyIn('en');
 
@@ -30,6 +31,17 @@ test('the first visit creates the account from the setup link the server printed
 
   await page.getByLabel(t('confirmPassword'), { exact: true }).fill(ADMIN.password);
   await page.getByRole('button', { name: t('createAccount') }).click();
+
+  await expect(page).toHaveURL(/\/sign-in\/enroll$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('enrollTitle'));
+  await expect(page.getByRole('img')).toBeVisible();
+  saveSecret((await page.getByRole('main').locator('code').textContent()) ?? '');
+  await page.getByRole('textbox', { name: t('code') }).fill(await freshCode());
+  await page.getByRole('button', { name: t('turnOnTwoFactor') }).click();
+
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('recoveryTitle'));
+  await expect(page.getByRole('main').locator('ol code')).toHaveCount(10);
+  await page.getByRole('button', { name: t('savedThem') }).click();
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('banner')).toContainText(ADMIN.username);

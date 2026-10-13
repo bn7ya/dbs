@@ -34,4 +34,6 @@ export const DATA_DIR = env('E2E_DATA_DIR', '');
 
 export const SETUP_TOKEN = process.env['E2E_SETUP_TOKEN'] ?? null;
 
+export const TOTP_SECRET = process.env['E2E_ADMIN_TOTP_SECRET'] ?? null;
+
 export const SCREENSHOT_DIR = env('E2E_SCREENSHOT_DIR', 'test-results/journeys');

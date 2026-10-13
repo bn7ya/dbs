@@ -1,6 +1,7 @@
 import { expect, request, type APIRequestContext } from '@playwright/test';
 import type { ActivityRecord, BackupRecord, JobStarted, Page, PlanRecord, ServerRecord } from './api.types';
 import { ADMIN, ALLOWED_FOLDERS, SSH } from './config';
+import { freshCode } from './totp';
 
 
 export class Api {
@@ -19,6 +20,13 @@ export class Api {
     });
     if (!login.ok()) {
       throw new Error(`API sign-in failed: ${login.status()} ${await login.text()}`);
+    }
+    const second = await http.post('/api/auth/two-factor/', {
+      headers: { 'X-CSRFToken': csrf },
+      data: { code: await freshCode() },
+    });
+    if (!second.ok()) {
+      throw new Error(`API two-factor sign-in failed: ${second.status()} ${await second.text()}`);
     }
     return new Api(http, await csrfToken(http, baseURL));
   }
