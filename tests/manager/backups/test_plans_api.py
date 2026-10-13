@@ -260,7 +260,7 @@ def test_both_service_errors_are_reported_together(api, make_plan):
 
 @pytest.mark.django_db
 def test_a_plan_for_an_unknown_or_deleted_server_is_not_found(api, admin, server):
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     for server_id in (server.pk, uuid4()):
         response = api.post(

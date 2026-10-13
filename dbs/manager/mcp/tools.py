@@ -159,6 +159,12 @@ KEEPS_FEWER = (
     "django_dbs plan edit in a terminal; it asks for their password."
 )
 
+SEALED_DOWNLOAD = (
+    "The manager keeps this file encrypted and saving it here would decrypt it, so "
+    "Claude cannot do it. Ask the person to download it in the manager's interface or "
+    "with django_dbs backup download in a terminal; it asks for their password."
+)
+
 INSTRUCTIONS = (
     "These tools drive the DBS manager, which backs up the Django projects on the servers "
     "it knows over SSH. Start with manager_overview or list_servers. To add a server, call "
@@ -373,8 +379,11 @@ class Toolbox:
             Tool(
                 "download_backup",
                 "Save a backup here",
-                "Save a backup to this computer. path is an absolute file or folder; an "
-                "existing file is never overwritten.",
+                "Save a django-dbs backup to this computer, readable by its owner alone. "
+                "path is an absolute file or folder; an existing file is never "
+                "overwritten. Folder archives, collected and uploaded files are kept "
+                "encrypted by the manager and saving one decrypts it, so this tool "
+                "refuses them: the person downloads those in the manager.",
                 dict(backup=BACKUP, path={"type": "string"}),
                 self.download_backup,
                 required=("backup", "path"),
@@ -650,6 +659,8 @@ class Toolbox:
         target = Path(arguments["path"]).expanduser()
         if not target.is_absolute():
             raise AdapterError("path must be absolute.")
+        if BackupService(self.user).get(file_id).sealed:
+            raise AdapterError(SEALED_DOWNLOAD)
         target = backups.save(self.user, file_id, target)
         return {"path": str(target), "size": os.path.getsize(target)}
 

@@ -239,12 +239,12 @@ def test_a_body_without_a_mode_or_a_rehearse_is_refused(api, host, taken, body):
 def test_a_deleted_backup_or_server_is_not_found(api, admin, server, host, taken):
     backup = taken()
     other = taken()
-    BackupService(admin).delete(backup.pk)
+    BackupService(admin).delete(backup.pk, account_password=PASSWORD)
 
     deleted_backup = api.post(
         url(backup), {"mode": "merge", "rehearse": True}, format="json"
     )
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
     deleted_server = api.post(
         url(other), {"mode": "merge", "rehearse": True}, format="json"
     )
@@ -420,7 +420,7 @@ def test_a_backup_deleted_after_it_was_queued_is_still_restored(
 
     with run_jobs():
         job = api.post(url(backup), {"mode": "merge", "rehearse": True}, format="json")
-        BackupService(admin).delete(backup.pk)
+        BackupService(admin).delete(backup.pk, account_password=PASSWORD)
 
     assert entry(job.json()["activity"]).status == audit.SUCCEEDED
     assert BackupFileRepository().find(backup.pk) is None

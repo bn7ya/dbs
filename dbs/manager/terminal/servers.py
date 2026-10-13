@@ -173,7 +173,10 @@ def remove(session: TerminalSession) -> int:
     session.confirm(
         f"Type the server's name ({server.name}) to remove it:", expected=server.name
     )
-    ServerService(session.user).delete(server.pk)
+    service = ServerService(session.user)
+    session.guarded(
+        lambda password: service.delete(server.pk, account_password=password)
+    )
     session.out.say(f"Removed {server.name}.", {"removed": str(server.pk)})
     return 0
 

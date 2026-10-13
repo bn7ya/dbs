@@ -209,7 +209,9 @@ def test_a_name_in_use_is_refused(api, configured_server, host_key, private_key)
 def test_a_deleted_servers_name_is_free_again(
     api, configured_server, host_key, private_key
 ):
-    api.delete(detail(configured_server.pk))
+    api.delete(
+        detail(configured_server.pk), {"account_password": PASSWORD}, format="json"
+    )
 
     response = api.post(
         LIST, new_server(host_key, private_key, name=configured_server.name)
@@ -547,7 +549,9 @@ def test_a_wrong_field_is_reported_before_the_password_is_asked_for(
 
 @pytest.mark.django_db
 def test_deleting_hides_the_server_and_keeps_the_row(api, configured_server):
-    response = api.delete(detail(configured_server.pk))
+    response = api.delete(
+        detail(configured_server.pk), {"account_password": PASSWORD}, format="json"
+    )
 
     assert response.status_code == 204
     assert api.get(LIST).json()["count"] == 0

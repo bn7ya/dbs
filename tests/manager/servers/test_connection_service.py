@@ -37,7 +37,7 @@ def test_an_unknown_or_deleted_server_does_not_open(
     admin, monkeypatch, configured_server
 ):
     monkeypatch.setattr(CONNECT, connecting_to(healthy_remote()))
-    ServerService(admin).delete(configured_server.pk)
+    ServerService(admin).delete(configured_server.pk, account_password=PASSWORD)
     connections = ServerConnectionService(admin)
 
     for server_id in (configured_server.pk, uuid4()):

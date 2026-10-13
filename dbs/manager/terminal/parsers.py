@@ -194,7 +194,11 @@ def servers(commands, location: Location) -> None:
     _server_settings(edit)
 
     remove = _verb(
-        verbs, "remove", "Remove a server.", "terminal.servers:remove", location
+        verbs,
+        "remove",
+        "Remove a server. It asks for its name and your password.",
+        "terminal.servers:remove",
+        location,
     )
     remove.add_argument("server", help="The server's name or id.")
     _yes(remove)
@@ -347,7 +351,8 @@ def backups(commands, location: Location) -> None:
     download = _verb(
         verbs,
         "download",
-        "Save a backup to this computer.",
+        "Save a backup to this computer, readable by you alone. A backup the "
+        "manager keeps encrypted asks for your password.",
         "terminal.backups:download",
         location,
     )
@@ -365,7 +370,11 @@ def backups(commands, location: Location) -> None:
     upload.add_argument("file", help="The file to keep.")
 
     delete = _verb(
-        verbs, "delete", "Delete a backup.", "terminal.backups:delete", location
+        verbs,
+        "delete",
+        "Delete a backup. It asks for your password.",
+        "terminal.backups:delete",
+        location,
     )
     delete.add_argument("backup", help="The backup's id.")
 
@@ -525,7 +534,11 @@ def files(commands, location: Location) -> None:
     )
 
     download = _verb(
-        verbs, "download", "Save a file here.", "terminal.files:download", location
+        verbs,
+        "download",
+        "Save a file here, readable by you alone. A .env file asks for your password.",
+        "terminal.files:download",
+        location,
     )
     download.add_argument("server", help="The server's name or id.")
     download.add_argument("path", help="The file on the server.")

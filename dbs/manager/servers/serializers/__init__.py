@@ -11,6 +11,7 @@ from .host_key import (
 )
 from .passphrase import PassphraseSerializer, PasswordSerializer
 from .server import (
+    AccountPasswordSerializer,
     AddedServerSerializer,
     CheckedServerSerializer,
     ServerCreateSerializer,
@@ -20,6 +21,7 @@ from .server import (
 )
 
 __all__ = [
+    "AccountPasswordSerializer",
     "AddedServerSerializer",
     "CheckedServerSerializer",
     "BrowseListingSerializer",

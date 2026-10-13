@@ -1,16 +1,22 @@
 from __future__ import annotations
 
-import pytest
+import stat
 
-from dbs.manager.backups.models import BackupPlan
-from dbs.manager.backups.services import BackupPlanService
+import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+from dbs.manager.backups.models import BackupFile, BackupPlan
+from dbs.manager.backups.services import BackupPlanService, BackupService
 from dbs.manager.servers.exceptions import HostKeyNotConfirmed, HostKeyRejected
 from dbs.manager.servers.gateways import parse_host_key
 from dbs.manager.servers.services import HostKeyConfirmationService
-from tests.manager.servers.support import PASSWORD, host_key_line
+from tests.manager.backups.support import BackupHost
+from tests.manager.servers.support import PASSWORD, connecting_to, host_key_line
 from tests.manager.support import logged
 
 FETCH_HOST_KEY = "dbs.manager.servers.services.server_service.fetch_host_key"
+CONNECT = "dbs.manager.servers.services.connection_service.connect"
+UPLOADED = b"-- PostgreSQL database dump\n"
 
 
 @pytest.fixture
@@ -114,3 +120,98 @@ def test_an_unknown_confirmation_is_named(terminal, admin):
     ran = terminal("server", "confirm-host-key", "0badc0de")
 
     assert ran.code == 1 and "10 minutes" in ran.err
+
+
+def mode(path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+@pytest.fixture
+def uploaded(admin, make_server):
+    server = make_server(name="shop")
+    return BackupService(admin).upload(
+        server.pk, SimpleUploadedFile("db.sql", UPLOADED)
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_django_dbs_backup_is_saved_for_its_owner_alone(
+    terminal, admin, make_server, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(CONNECT, connecting_to(BackupHost(content=b"DBS")))
+    make_server(name="shop")
+    terminal("backup", "take", "shop")
+    backup = BackupFile.objects.get()
+    saved = tmp_path / "copy.dbs"
+
+    ran = terminal("backup", "download", backup.pk, "-o", saved)
+
+    assert ran.code == 0, ran.err
+    assert saved.read_bytes() == b"DBS" and mode(saved) == 0o600
+
+
+@pytest.mark.django_db
+def test_saving_a_file_the_manager_sealed_asks_for_the_password(
+    terminal, uploaded, tmp_path
+):
+    saved = tmp_path / "db.sql"
+
+    refused = terminal("backup", "download", uploaded.pk, "-o", saved)
+    left = saved.exists()
+    ran = terminal(
+        "backup",
+        "download",
+        uploaded.pk,
+        "-o",
+        saved,
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
+    )
+
+    assert refused.code == 1 and "--password-stdin" in refused.err
+    assert not left
+    assert ran.code == 0, ran.err
+    assert saved.read_bytes() == UPLOADED and mode(saved) == 0o600
+
+
+@pytest.mark.django_db
+def test_deleting_a_backup_asks_for_the_password(terminal, admin, uploaded):
+    refused = terminal("backup", "delete", uploaded.pk)
+    wrong = terminal(
+        "backup", "delete", uploaded.pk, "--password-stdin", stdin="wrong\n"
+    )
+
+    assert refused.code == wrong.code == 1
+    assert BackupFile.objects.filter(pk=uploaded.pk).exists()
+    deleted = terminal(
+        "backup", "delete", uploaded.pk, "--password-stdin", stdin=f"{PASSWORD}\n"
+    )
+    assert deleted.code == 0, deleted.err
+    assert not BackupFile.objects.filter(pk=uploaded.pk).exists()
+
+
+@pytest.mark.django_db
+def test_saving_a_dotenv_file_asks_for_the_password(
+    terminal, admin, make_server, local_host, tmp_path
+):
+    folder = tmp_path.resolve() / "srv"
+    folder.mkdir()
+    (folder / ".env").write_bytes(b"SECRET_KEY=x\n")
+    make_server(name="shop", file_roots=[str(folder)])
+    saved = tmp_path / "copy.env"
+
+    refused = terminal("files", "download", "shop", f"{folder}/.env", "-o", saved)
+    ran = terminal(
+        "files",
+        "download",
+        "shop",
+        f"{folder}/.env",
+        "-o",
+        saved,
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
+    )
+
+    assert refused.code == 1 and "--password-stdin" in refused.err
+    assert ran.code == 0, ran.err
+    assert saved.read_bytes() == b"SECRET_KEY=x\n" and mode(saved) == 0o600

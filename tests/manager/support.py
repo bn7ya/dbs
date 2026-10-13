@@ -45,3 +45,12 @@ class Logged:
 
 def logged_entries(action=None):
     return [Logged(event) for event in logged(action)]
+
+
+def downloaded(api, backup_id):
+    link = api.post(
+        f"/api/backups/{backup_id}/download/",
+        {"account_password": PASSWORD},
+        format="json",
+    )
+    return api.get(link.json()["url"])

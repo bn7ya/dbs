@@ -11,6 +11,7 @@ from tests.manager.servers.support import (
     body_line,
     connecting_to,
 )
+from tests.manager.support import downloaded
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 LIST = "/api/backups/"
@@ -29,7 +30,7 @@ def test_every_backup_action_is_logged_and_none_holds_a_secret(
     with run_jobs():
         api.post(f"{LIST}{backup.pk}/verify/")
     b"".join(api.get(f"{LIST}{backup.pk}/download/").streaming_content)
-    api.delete(f"{LIST}{backup.pk}/")
+    api.delete(f"{LIST}{backup.pk}/", {"account_password": PASSWORD}, format="json")
     api.post(f"{LIST}{backup.pk}/undo-delete/")
     monkeypatch.setattr(
         CONNECT, connecting_to(BackupHost(failure=RemoteCommandFailed(output="exit 1")))
@@ -113,7 +114,7 @@ def test_every_archive_action_is_logged_and_none_holds_a_secret(
     [backup] = api.get(LIST, {"server": server.pk}).json()["results"]
     with run_jobs():
         api.post(f"{LIST}{backup['id']}/verify/")
-    b"".join(api.get(f"{LIST}{backup['id']}/download/").streaming_content)
+    b"".join(downloaded(api, backup["id"]).streaming_content)
 
     response = api.get("/api/activity/", {"server": server.pk, "page_size": 200})
 

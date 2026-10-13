@@ -258,7 +258,7 @@ def test_a_server_whose_env_path_was_cleared_is_refused(
 @pytest.mark.django_db
 def test_a_version_of_a_deleted_server_is_not_pushed(admin, api, server, pull, logged):
     chosen = pull(server)["version"]
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     response = push(api, chosen["id"])
 

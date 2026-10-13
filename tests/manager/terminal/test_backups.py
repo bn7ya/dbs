@@ -156,7 +156,12 @@ def test_download_upload_delete_and_undo(terminal, admin, host, two_servers, tmp
     uploaded = terminal("backup", "upload", "blog", saved, "--json").json()
     assert uploaded["server_name"] == "blog" and uploaded["kind"] == "uploaded"
 
-    assert terminal("backup", "delete", backup.pk).code == 0
+    assert terminal("backup", "delete", backup.pk).code == 1
+    assert BackupService(admin).list(two_servers[0].pk).exists()
+    deleted = terminal(
+        "backup", "delete", backup.pk, "--password-stdin", stdin=f"{PASSWORD}\n"
+    )
+    assert deleted.code == 0, deleted.err
     assert not BackupService(admin).list(two_servers[0].pk).exists()
     assert terminal("backup", "undo-delete", backup.pk).code == 0
     assert BackupService(admin).list(two_servers[0].pk).exists()

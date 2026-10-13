@@ -86,6 +86,7 @@ COMPOSE_FOLDER_REQUIRED = "Enter the folder that holds the compose file."
 PRIVATE_KEY_REQUIRED = "Paste the private key this server accepts."
 PASSWORD_REQUIRED = "Enter the password this server accepts."
 ACCOUNT_PASSWORD_REQUIRED = "Enter your own password to change this."
+DELETE_PASSWORD_REQUIRED = "Enter your own password to delete a server."
 
 Errors = dict[str, list[ErrorDetail]]
 
@@ -293,11 +294,19 @@ class ServerService:
             and server.last_check_status != Server.CheckStatus.OK
         )
 
-    def delete(self, server_id: UUID) -> None:
+    def delete(self, server_id: UUID, account_password: str = "") -> None:
         server = self.get(server_id)
-        with transaction.atomic():
+        if not account_password:
+            raise ValidationError(
+                {
+                    "account_password": [
+                        ErrorDetail(DELETE_PASSWORD_REQUIRED, code="required"),
+                    ]
+                }
+            )
+        with self.activity.track(Action.DELETE, server=server, target=server.name):
+            AccountService(self.user).confirm_password(account_password)
             self.servers.soft_delete(server)
-            self.activity.record(Action.DELETE, server=server, target=server.name)
 
     def repin(self, server_id: UUID, host_key: str, password: str) -> Server:
         server = self.get(server_id)
