@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from ..conf import setting
 from ..models import SecurityPolicy
-from . import guard, sessions
+from . import guard, sessions, telemetry
 
 SESSION_STARTED = "dbs_session_started"
 
@@ -37,6 +37,8 @@ CONTRIB_ACTIONS = (
 
 FLAGGED = "DBS flagged this session, so it must sign in again before doing this."
 
+IDLE = "This session was idle for too long, so DBS ended it."
+
 
 class DBSSecurityMiddleware:
     def __init__(self, get_response):
@@ -54,11 +56,18 @@ class DBSSecurityMiddleware:
         if scope is None:
             return self.get_response(request)
 
+        policy = SecurityPolicy.load()
+        now = timezone.now().timestamp()
+        if sessions.idle_expired(request, policy.idle_timeout_minutes, now):
+            return self._stop(request, IDLE)
+
         request.session.setdefault(SESSION_STARTED, timezone.now().isoformat())
         guard_endpoint = self._is_guard_endpoint(request)
+        if not guard_endpoint:
+            sessions.mark_active(request, now)
 
         if scope == "admin":
-            redirect_response = self._setup_redirect(request)
+            redirect_response = self._setup_redirect(request, policy)
             if redirect_response is not None:
                 return redirect_response
 
@@ -70,7 +79,8 @@ class DBSSecurityMiddleware:
         if guard_endpoint:
             return self.get_response(request)
 
-        verdict = guard.evaluate(request, action=action)
+        telemetry.purge_if_due()
+        verdict = guard.evaluate(request, action=action, policy=policy)
         guard.apply(verdict, request)
         if verdict.level == guard.BLOCK:
             return self._stop(request, "; ".join(verdict.reasons))
@@ -136,7 +146,7 @@ class DBSSecurityMiddleware:
     def _restricted(self, request, action) -> bool:
         return request.method in UNSAFE_METHODS or action == "download"
 
-    def _setup_redirect(self, request):
+    def _setup_redirect(self, request, policy):
         if not setting("DBS_SETUP_WIZARD", True) or not request.user.is_staff:
             return None
         try:
@@ -145,7 +155,7 @@ class DBSSecurityMiddleware:
             return None
         if request.path in (wizard, reverse("admin:dbs_guard")):
             return None
-        if SecurityPolicy.load().configured:
+        if policy.configured:
             return None
         return redirect(wizard)
 

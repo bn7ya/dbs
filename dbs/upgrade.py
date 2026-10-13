@@ -286,6 +286,14 @@ class GuardMiddleware(Step):
     def check(self):
         from django.apps import apps
 
+        from .security.checks import AUTH_MIDDLEWARE, runs_before_authentication
+
+        if runs_before_authentication():
+            return self.warn(
+                "DBSSecurityMiddleware runs before AuthenticationMiddleware, so the session "
+                "guard never sees a signed-in user and scores nothing",
+                f'move "{MIDDLEWARE_PATH}" below "{AUTH_MIDDLEWARE}" in MIDDLEWARE',
+            )
         if MIDDLEWARE_PATH in (setting("MIDDLEWARE", ()) or ()):
             return self.ok("the session guard is active")
         if not apps.is_installed("django.contrib.admin"):

@@ -52,9 +52,9 @@ def is_locked_out(user) -> bool:
     return Lockout.objects.filter(user=user).exists()
 
 
-def evaluate(request, action="view", location=None) -> Verdict:
+def evaluate(request, action="view", location=None, policy=None) -> Verdict:
     user = request.user
-    policy = SecurityPolicy.load()
+    policy = policy or SecurityPolicy.load()
     location = geo.clean(location)
     observation, address, prefix, agent = features.observe_request(
         user, request, action, location
@@ -101,7 +101,7 @@ def _record(user, request, values, address, prefix, agent, location, score, leve
         user=user,
         session_key_hash=features.digest(request.session.session_key or ""),
         kind="request",
-        remote_addr=address,
+        remote_addr=networks.address_digest(address),
         ip_prefix=prefix,
         ua_hash=agent,
         latitude=location["latitude"] if location else None,
@@ -115,13 +115,14 @@ def _record(user, request, values, address, prefix, agent, location, score, leve
 
 def apply(verdict, request) -> None:
     user = request.user
+    network = networks.stored_prefix(features.client_address(request))
     if verdict.level == BLOCK:
         AnomalyEvent.objects.create(
             user=user,
             score=verdict.score,
             reasons=verdict.reasons,
             action_taken="logout",
-            remote_addr=features.client_address(request),
+            remote_addr=network,
         )
         Lockout.objects.get_or_create(
             user=user, defaults={"reason": "; ".join(verdict.reasons)}
@@ -134,7 +135,7 @@ def apply(verdict, request) -> None:
             score=verdict.score,
             reasons=verdict.reasons,
             action_taken="warn",
-            remote_addr=features.client_address(request),
+            remote_addr=network,
         )
         sessions.mark_for_reauthentication(request)
 

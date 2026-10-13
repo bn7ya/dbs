@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import ipaddress
 
+from django.utils.crypto import salted_hmac
+
 MINIMUM_PREFIX = {4: 8, 6: 16}
 
 STORED_PREFIX = {4: 24, 6: 48}
+
+ADDRESS_SALT = "dbs.security.address"
 
 
 def parse_address(text):
@@ -54,3 +58,10 @@ def stored_prefix(address) -> str:
         return ""
     length = STORED_PREFIX[parsed.version]
     return str(ipaddress.ip_network(f"{parsed}/{length}", strict=False))
+
+
+def address_digest(address) -> str:
+    parsed = parse_address(address)
+    if parsed is None:
+        return ""
+    return salted_hmac(ADDRESS_SALT, str(parsed), algorithm="sha256").hexdigest()

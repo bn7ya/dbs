@@ -1,15 +1,30 @@
 from __future__ import annotations
 
+import logging
+import threading
+import time
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from ..conf import setting
+from .networks import address_digest, stored_prefix
+
+logger = logging.getLogger("dbs")
 
 DEFAULT_RETENTION_DAYS = 90
 
+PURGE_INTERVAL_SECONDS = 24 * 60 * 60
+
 SESSION_COUNT = "session_count"
+
+SCRUB_BATCH = 500
+
+_purge_lock = threading.Lock()
+
+_last_purge = None
 
 
 def retention_days() -> int:
@@ -58,6 +73,7 @@ def purge(days=None):
         _carry_session_counts(cutoff)
         events, _ = recorded_requests().filter(created_at__lt=cutoff).delete()
         anomalies, _ = AnomalyEvent.objects.filter(created_at__lt=cutoff).delete()
+        scrub_addresses()
     return events, anomalies
 
 
@@ -88,3 +104,41 @@ def _add_sessions(user_id, count):
         return
     counter.features = {"sessions": _counted(counter.features) + count}
     counter.save(update_fields=["features"])
+
+
+def scrub_addresses():
+    from ..models import AnomalyEvent, SessionEvent
+
+    readable = Q(remote_addr__contains=".") | Q(remote_addr__contains=":")
+    _rewrite(SessionEvent, recorded_requests().filter(readable), address_digest)
+    _rewrite(
+        AnomalyEvent,
+        AnomalyEvent.objects.exclude(remote_addr="").exclude(remote_addr__contains="/"),
+        stored_prefix,
+    )
+
+
+def _rewrite(model, queryset, transform):
+    keys = list(queryset.order_by().values_list("pk", flat=True))
+    for start in range(0, len(keys), SCRUB_BATCH):
+        rows = list(
+            model.objects.filter(pk__in=keys[start : start + SCRUB_BATCH]).only("pk", "remote_addr")
+        )
+        for row in rows:
+            row.remote_addr = transform(row.remote_addr)
+        model.objects.bulk_update(rows, ["remote_addr"])
+
+
+def purge_if_due() -> bool:
+    global _last_purge
+
+    now = time.monotonic()
+    with _purge_lock:
+        if _last_purge is not None and now - _last_purge < PURGE_INTERVAL_SECONDS:
+            return False
+        _last_purge = now
+    try:
+        purge()
+    except Exception:
+        logger.warning("could not purge the DBS session guard telemetry", exc_info=True)
+    return True

@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from datetime import timedelta
-
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
 
 from dbs import audit
 from dbs.conf import setting
-from dbs.models import AnomalyEvent, AuditEvent, Lockout, SecurityPolicy, SessionEvent
+from dbs.models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
 from dbs.security import detector, telemetry
+from dbs.security.checks import GUARD_EXTRA
 
 ACTIONS = ("status", "unlock", "policy", "retrain", "reset-baseline", "events", "purge")
 
@@ -35,7 +33,9 @@ class Command(BaseCommand):
         self.stdout.write(f"warn at              {policy.warn_threshold}")
         self.stdout.write(f"log out at           {policy.logout_threshold}")
         self.stdout.write(f"learning period      {policy.learning_logins} sessions")
+        self.stdout.write(f"idle timeout         {policy.idle_timeout_minutes or 'off'} minutes")
         self.stdout.write(f"enforcement          {setting('DBS_ANOMALY_ENFORCE', True)}")
+        self.stdout.write(f"anomaly model        {self._model_state()}")
         self.stdout.write(f"browser location     {setting('DBS_GEOLOCATION', False)}")
         self.stdout.write(f"recorded events      {telemetry.recorded_requests().count()}")
         self.stdout.write(f"anomalies            {AnomalyEvent.objects.count()}")
@@ -68,11 +68,24 @@ class Command(BaseCommand):
         self.stdout.write(f"notify:            {policy.notify_emails or 'nobody'}")
         self.stdout.write(f"collect location:  {policy.collect_location}")
 
+    def _model_state(self):
+        if detector.model_available():
+            return "on"
+        return f"off, rules only ({GUARD_EXTRA})"
+
     def _retrain(self, options):
         from dbs.security import baseline
 
         detector.forget()
         baseline.reset()
+        if not detector.model_available():
+            self.stdout.write(
+                self.style.WARNING(
+                    f"scikit-learn is not installed, so the guard scores with its rules "
+                    f"alone. {GUARD_EXTRA} turns the anomaly model on."
+                )
+            )
+            return
         baseline.base_calibration()
         self.stdout.write(self.style.SUCCESS("Base and per-user models will refit."))
 
@@ -93,13 +106,16 @@ class Command(BaseCommand):
     def _purge(self, options):
         days = telemetry.retention_days()
         events, anomalies = telemetry.purge(days)
-        cutoff = timezone.now() - timedelta(days=days)
-        audit, _ = AuditEvent.objects.filter(created_at__lt=cutoff).delete()
         detector.forget()
+        audit.record(
+            "security.purge",
+            detail=f"removed {events} events and {anomalies} anomalies older than {days} days",
+            data={"events": events, "anomalies": anomalies, "retention_days": days},
+        )
         self.stdout.write(
             self.style.SUCCESS(
-                f"Removed {events} events, {anomalies} anomalies and {audit} audit "
-                f"rows older than {days} days."
+                f"Removed {events} events and {anomalies} anomalies older than {days} days. "
+                "The audit trail is kept."
             )
         )
 
