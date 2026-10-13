@@ -52,7 +52,7 @@ DATABASES = {
 }
 
 # Sequence handling is backend specific, so the suite can run against PostgreSQL
-# with DBS_TEST_DB=postgres (see tests/test_sequences.py).
+# with DBS_TEST_DB=postgres (see tests/test_sequences.py), or MySQL with DBS_TEST_DB=mysql.
 if os.environ.get("DBS_TEST_DB") == "postgres":
     DATABASES = {
         "default": {
@@ -62,6 +62,20 @@ if os.environ.get("DBS_TEST_DB") == "postgres":
             "PASSWORD": os.environ.get("DBS_TEST_PG_PASSWORD", ""),
             "HOST": os.environ.get("DBS_TEST_PG_HOST", "localhost"),
             "PORT": os.environ.get("DBS_TEST_PG_PORT", "5432"),
+        }
+    }
+
+if os.environ.get("DBS_TEST_DB") == "mysql":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": os.environ.get("DBS_TEST_MYSQL_NAME", "dbs_test"),
+            "USER": os.environ.get("DBS_TEST_MYSQL_USER", "root"),
+            "PASSWORD": os.environ.get("DBS_TEST_MYSQL_PASSWORD", ""),
+            "HOST": os.environ.get("DBS_TEST_MYSQL_HOST", "127.0.0.1"),
+            "PORT": os.environ.get("DBS_TEST_MYSQL_PORT", "3306"),
+            "OPTIONS": {"charset": "utf8mb4"},
+            "TEST": {"CHARSET": "utf8mb4", "COLLATION": "utf8mb4_unicode_ci"},
         }
     }
 

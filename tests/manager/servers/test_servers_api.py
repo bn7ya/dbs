@@ -14,6 +14,7 @@ from tests.manager.servers.support import (
     host_key_line,
     private_key_text,
 )
+from tests.manager.support import needs_partial_unique_constraints
 
 LIST = "/api/servers/"
 
@@ -406,6 +407,7 @@ def test_an_optional_path_can_be_cleared(api, configured_server):
 
 
 @pytest.mark.django_db
+@needs_partial_unique_constraints
 def test_a_name_taken_between_the_check_and_the_write_is_still_name_taken(
     api, monkeypatch, configured_server, host_key, private_key
 ):
