@@ -68,6 +68,11 @@ class BackupRecordAdmin(SuperuserOnlyAdmin):
                 name="dbs_backup_restore",
             ),
             path(
+                "jobs/<int:pk>/",
+                self.admin_site.admin_view(views.job),
+                name="dbs_job",
+            ),
+            path(
                 "<int:pk>/download/",
                 self.admin_site.admin_view(views.download),
                 name="dbs_backup_download",

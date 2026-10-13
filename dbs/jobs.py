@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
+import tempfile
 import threading
 from contextlib import contextmanager
 
@@ -8,7 +11,7 @@ from django.db import connections
 from django.utils import timezone
 
 from . import audit, leases
-from .exceptions import DBSError
+from .exceptions import ConfigurationError, DBSError
 
 logger = logging.getLogger("dbs")
 
@@ -17,6 +20,10 @@ JOB_LEASE_PREFIX = "dbs.job:"
 LEASE_SECONDS = 120
 HEARTBEAT_SECONDS = 30
 DETAIL_MAX = 4000
+BACKUP = "backup.create"
+RESTORE = "backup.restore"
+PANEL_ACTIONS = (BACKUP, RESTORE)
+UPLOAD_PREFIX = ".restore-upload.dbs."
 
 _runs_here = threading.Lock()
 
@@ -147,3 +154,198 @@ def launch(work, name="dbs-job"):
     thread = threading.Thread(target=run, name=name, daemon=True)
     thread.start()
     return thread
+
+
+def start_backup(*, database, passphrase="", note="", actor=None, remote_addr=""):
+    from .naming import backup_stem
+    from .schedule_runner import (
+        backup_directory,
+        backup_prefix_setting,
+        discard_reservation,
+        reserve,
+    )
+
+    directory = backup_directory()
+    if not directory:
+        raise ConfigurationError(
+            "Set DBS_BACKUP_DIR so the panel has a folder to write backups to."
+        )
+    runner = Runner().take()
+    output = None
+    try:
+        os.makedirs(directory, exist_ok=True)
+        stem = backup_stem(backup_prefix_setting(), database)
+        name = reserve(directory, stem)
+        output = os.path.join(directory, name)
+        job = Job.begin(
+            BACKUP,
+            target=name,
+            data={"file": name, "database": database},
+            owner=runner.owner,
+            hold=(RUNNER_LEASE,),
+            actor=actor,
+            remote_addr=remote_addr,
+        )
+    except BaseException:
+        if output is not None:
+            discard_reservation(output)
+        runner.release()
+        raise
+    _start(
+        job,
+        runner,
+        lambda: _take_backup(job, runner, output, stem, database, passphrase, note, actor),
+        cleanup=lambda: discard_reservation(output),
+    )
+    return job.event_id
+
+
+def start_restore(
+    *, path, name, passphrase="", dry_run=True, flush=False, owned=False, actor=None,
+    remote_addr="",
+):
+    try:
+        runner = Runner().take()
+    except BaseException:
+        if owned:
+            _remove(path)
+        raise
+    try:
+        job = Job.begin(
+            RESTORE,
+            target=name,
+            data={"file": name, "dry_run": dry_run, "flushed": flush},
+            owner=runner.owner,
+            hold=(RUNNER_LEASE,),
+            actor=actor,
+            remote_addr=remote_addr,
+        )
+    except BaseException:
+        runner.release()
+        if owned:
+            _remove(path)
+        raise
+    _start(
+        job,
+        runner,
+        lambda: _restore(job, runner, path, passphrase, dry_run, flush, owned),
+        cleanup=lambda: owned and _remove(path),
+    )
+    return job.event_id
+
+
+def _start(job, runner, work, cleanup):
+    try:
+        launch(work)
+    except BaseException as exc:
+        job.fail(exc)
+        job.close()
+        cleanup()
+        runner.release()
+        raise
+
+
+def _take_backup(job, runner, output, stem, database, passphrase, note, actor):
+    from .engine import create_backup
+    from .keys import default_passphrase
+    from .models import BackupSchedule
+    from .schedule_runner import discard_reservation, keep_newest
+
+    try:
+        with job.tracked():
+            container = create_backup(
+                passphrase or default_passphrase(), using=database, output=output
+            )
+            digest = hashlib.sha256(container).hexdigest()
+            job.data.update(size=len(container), sha256=digest, verified=True, compressed=True)
+            audit.record_backup(
+                output, container, digest, database, created_by=actor, note=note
+            )
+        keep = BackupSchedule.seed_keep(BackupSchedule.load().keep)
+        keep_newest(os.path.dirname(output), stem, keep)
+    except DBSError:
+        return
+    finally:
+        discard_reservation(output)
+        runner.release()
+
+
+def _restore(job, runner, path, passphrase, dry_run, flush, owned):
+    from .engine import restore_backup
+    from .keys import with_passphrase
+
+    try:
+        with job.tracked():
+            with open(path, "rb") as fh:
+                data = fh.read()
+            job.data.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
+            result = with_passphrase(
+                lambda secret: restore_backup(data, secret, dry_run=dry_run, flush=flush),
+                passphrase or None,
+            )
+            job.data.update(restore_outcome(result, dry_run))
+    except DBSError:
+        return
+    finally:
+        if owned:
+            _remove(path)
+        runner.release()
+
+
+def restore_outcome(result, dry_run):
+    if dry_run:
+        return {
+            "records": result.records_would_load,
+            "files": result.files_would_write,
+            "healed": bool(result.healed),
+        }
+    return {
+        "records": result.records_loaded,
+        "files": result.files_written,
+        "healed": bool(result.healed),
+    }
+
+
+def keep_upload(upload, directory=None):
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    descriptor, path = tempfile.mkstemp(prefix=UPLOAD_PREFIX, dir=directory or None)
+    try:
+        with os.fdopen(descriptor, "wb") as fh:
+            for chunk in upload.chunks():
+                fh.write(chunk)
+    except BaseException:
+        _remove(path)
+        raise
+    return path
+
+
+def _remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return True
+
+
+def describe(event):
+    data = event.data or {}
+    if event.status in audit.UNFINISHED:
+        verb = "Backing up to" if event.action == BACKUP else "Restoring"
+        return f"{verb} {event.target_name}…"
+    if event.status == audit.FAILED:
+        verb = "Backup" if event.action == BACKUP else "Restore"
+        if event.error_code == audit.INTERRUPTED:
+            return f"{verb} stopped before it finished: the process running it ended."
+        return f"{verb} failed: {event.detail or event.error_code}"
+    if event.action == BACKUP:
+        return f"Wrote {event.target_name} ({data.get('size', 0):,} bytes), verified."
+    if data.get("dry_run"):
+        return (
+            f"Dry run: {data.get('records', 0)} records and {data.get('files', 0)} files "
+            "would be restored; nothing changed."
+        )
+    healed = " Corruption was detected and repaired." if data.get("healed") else ""
+    return (
+        f"Restored {data.get('records', 0)} records and {data.get('files', 0)} files.{healed}"
+    )

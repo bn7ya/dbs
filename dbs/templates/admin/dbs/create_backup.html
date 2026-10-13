@@ -2,8 +2,16 @@
 
 {% block dbs_content %}
 <h1>Take a backup</h1>
+{% if directory %}
+<p class="dbs-lede">The backup is written to <code>{{ directory }}</code> in the background, and
+you can download it from there once it is verified. The oldest backups beyond the schedule's
+number, at most five, are removed.</p>
 <form method="post" class="dbs-form">{% csrf_token %}
   {{ form.as_p }}
   <p><button type="submit" class="default">Take the backup</button></p>
 </form>
+{% else %}
+<p class="dbs-lede dbs-warn">Set <code>DBS_BACKUP_DIR</code> in your settings so the panel has a
+folder to write backups to.</p>
+{% endif %}
 {% endblock %}

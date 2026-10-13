@@ -112,7 +112,7 @@ def track(action, *, target="", data=None, **fields):
     )
 
 
-def record_backup(output, container, digest, database):
+def record_backup(output, container, digest, database, *, created_by=None, note=""):
     from .models import BackupRecord
 
     try:
@@ -123,6 +123,8 @@ def record_backup(output, container, digest, database):
                 sha256=digest,
                 database=database,
                 location=os.path.abspath(output),
+                created_by=_known_actor(created_by),
+                note=note or "",
             )
     except DatabaseError as exc:
         logger.warning("Could not record the backup %s: %s", output, exc)
