@@ -30,8 +30,8 @@ Each extra adds what one part of DBS needs. `pip install "django-dbs[all]"` inst
 
 | Package | Required | Extra | License | What DBS uses it for |
 |---|---|---|---|---|
-| [scikit-learn](https://scikit-learn.org/) | `>=1.3,<2` | `guard` | BSD-3-Clause | The session guard's IsolationForest detector |
-| [paramiko](https://github.com/paramiko/paramiko) | `>=3,<6` | `ssh`, `manager` | LGPL-2.1-or-later | The `dbs.transports` SSH and SFTP API, and the manager's connections to servers |
+| [scikit-learn](https://scikit-learn.org/) | `>=1.4.2,<2` | `guard` | BSD-3-Clause | The session guard's IsolationForest detector |
+| [paramiko](https://github.com/paramiko/paramiko) | `>=3.2,<6` | `ssh`, `manager` | LGPL-2.1-or-later | The `dbs.transports` SSH and SFTP API, and the manager's connections to servers |
 | [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15,<4` | `manager` | BSD-3-Clause | The manager's REST API |
 | [waitress](https://github.com/Pylons/waitress) | `>=3,<4` | `manager` | ZPL-2.1 | The web server behind `django_dbs run` |
 | [tomli](https://github.com/hukkin/tomli) | `>=1.1.0,<3`, Python < 3.11 only | `manager` | MIT | Reading a `dbs-client.toml` for `django_dbs server import-profiles` |
