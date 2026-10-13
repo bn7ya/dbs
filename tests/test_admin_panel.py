@@ -126,6 +126,13 @@ def test_taking_a_backup_writes_it_to_the_backup_folder_and_offers_it(
     assert served["Content-Disposition"].startswith("attachment;")
     assert b"".join(served.streaming_content) == path.read_bytes()
     assert path.read_bytes()[:8] == b"DBSCON01"
+    downloaded = AuditEvent.objects.get(action="backup.download")
+    assert downloaded.data == {
+        "file": record.filename,
+        "size": record.size_bytes,
+        "sha256": record.sha256,
+        "actor_username": "root",
+    }
 
 
 @pytest.mark.django_db

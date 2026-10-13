@@ -312,7 +312,12 @@ def download(request, pk):
     guard.apply(verdict, request)
     if verdict.level == guard.BLOCK:
         raise Http404
-    _audit(request, "backup.download", target=record.filename)
+    _audit(
+        request,
+        "backup.download",
+        target=record.filename,
+        data={"file": record.filename, "size": record.size_bytes, "sha256": record.sha256},
+    )
     response = FileResponse(
         open(path, "rb"),
         as_attachment=True,
