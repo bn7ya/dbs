@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import os
 import shutil
 import tempfile
@@ -15,6 +16,19 @@ LINK_UNSUPPORTED = {
     errno.ENOTSUP,
     errno.EOPNOTSUPP,
 }
+
+
+DIGEST_CHUNK = 1024 * 1024
+
+
+def file_digest(path) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(DIGEST_CHUNK), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return size, digest.hexdigest()
 
 
 def refuse_existing(path: str) -> None:

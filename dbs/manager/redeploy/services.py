@@ -220,10 +220,9 @@ class RedeployService:
         passphrase = ServerConnectionService(actor).backup_passphrase(file.server)
         try:
             with BackupStorage().open_read(file.storage_path) as handle:
-                data = handle.read()
+                result = validate_backup(handle, passphrase)
         except FileNotFoundError as exc:
             raise BackupMissing() from exc
-        result = validate_backup(data, passphrase)
         if not (result.ok and result.decrypted_ok):
             raise RestoreFailed()
         return {"validated": True, "target_not_migrated": True}

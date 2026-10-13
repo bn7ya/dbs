@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 from pathlib import Path
 
@@ -39,7 +38,7 @@ def checked_passphrase(passphrase):
 
 
 def export_manager(output, passphrase, *, with_backups=False):
-    from dbs import create_backup
+    from dbs import write_backup
 
     output = str(output)
     if os.path.exists(output):
@@ -54,7 +53,7 @@ def export_manager(output, passphrase, *, with_backups=False):
     try:
         with transaction.atomic(), override_settings(DBS_FILE_ROOTS=roots):
             entry = audit.record(EXPORT, target=target, data=data)
-            container = create_backup(passphrase, output=output)
+            summary = write_backup(output, passphrase)
     except Exception as exc:
         audit.safe_record(
             EXPORT,
@@ -65,13 +64,13 @@ def export_manager(output, passphrase, *, with_backups=False):
             error_code=audit.error_code_for(exc),
         )
         raise
-    data.update(size=len(container), sha256=hashlib.sha256(container).hexdigest())
+    data.update(size=summary.bytes_written, sha256=summary.sha256)
     AuditEvent.objects.filter(pk=entry.pk).update(data=data)
-    return container
+    return summary
 
 
 def import_manager(source, passphrase, *, replace=False):
-    from dbs.engine.restore import read_payload, restore_backup
+    from dbs.engine.restore import backup_files, restore_backup
 
     from .servers.models import Server
 
@@ -80,15 +79,15 @@ def import_manager(source, passphrase, *, replace=False):
             "this data directory already manages servers; pass --replace to replace them."
         )
     try:
-        data = Path(source).read_bytes()
+        handle = Path(source).open("rb")
     except OSError as exc:
         raise TransferError(f"cannot read {source}: {exc}") from exc
-    try:
-        result = restore_backup(data, passphrase, flush=True, write_files=False)
-        payload = read_payload(data, passphrase)
-    except DBSError as exc:
-        raise TransferError(str(exc)) from exc
-    written = write_roots(payload.files, conf.data_dir())
+    with handle:
+        try:
+            result = restore_backup(handle, passphrase, flush=True, write_files=False)
+            written = write_roots(backup_files(handle, passphrase), conf.data_dir())
+        except DBSError as exc:
+            raise TransferError(str(exc)) from exc
     removed = mark_missing_backups()
     audit.record(
         IMPORT,
@@ -124,7 +123,8 @@ def write_roots(files, data_dir):
             target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, paths.FILE_MODE
         )
         with os.fdopen(descriptor, "wb") as handle:
-            handle.write(content)
+            for piece in content:
+                handle.write(piece)
         written += 1
     return written
 

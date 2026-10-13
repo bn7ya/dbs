@@ -838,7 +838,7 @@ def _backup_pattern(prefix: str) -> re.Pattern[str]:
 
 
 def _require_backup(local_path: str, passphrase: str) -> None:
-    structure = validate_backup(Path(local_path).read_bytes())
+    structure = validate_backup(local_path)
     if not structure.ok:
         Path(local_path).unlink(missing_ok=True)
         raise BackupInvalid(output=_tail(structure.summary(), passphrase))

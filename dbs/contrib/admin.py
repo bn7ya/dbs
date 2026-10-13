@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import tempfile
+
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from django.template import RequestContext, Template
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_http_methods
 
-from ..engine import create_backup, restore_backup
+from ..engine import restore_backup, write_backup
 from ..exceptions import DBSError
 from ..naming import backup_filename
 
@@ -63,12 +65,15 @@ def backup_download(request):
             request, "Backup", fields,
             message="Passphrases are empty or do not match.",
         )
+    container = tempfile.TemporaryFile()
     try:
-        container = create_backup(passphrase)
+        write_backup(container, passphrase)
     except DBSError as exc:
+        container.close()
         return _render(request, "Backup", fields, message=str(exc))
 
-    response = HttpResponse(container, content_type="application/octet-stream")
+    container.seek(0)
+    response = FileResponse(container, content_type="application/octet-stream")
     response["Content-Disposition"] = f'attachment; filename="{backup_filename()}"'
     return response
 
@@ -97,7 +102,7 @@ def restore_upload(request):
             message=f"Upload is larger than the {max_bytes} byte limit.",
         )
     try:
-        result = restore_backup(upload.read(), passphrase)
+        result = restore_backup(upload, passphrase)
     except DBSError as exc:
         return _render(
             request, "Restore", fields, multipart=True,

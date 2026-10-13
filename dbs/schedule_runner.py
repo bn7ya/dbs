@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import threading
@@ -69,7 +68,7 @@ def available_name(directory, prefix):
 
 
 def run_cycle(passphrase, plan):
-    from .engine import create_backup
+    from .engine import write_backup
 
     os.makedirs(plan["output_dir"], exist_ok=True)
     name = available_name(plan["output_dir"], plan["prefix"])
@@ -80,24 +79,23 @@ def run_cycle(passphrase, plan):
         target=name,
         data={"file": name, "database": plan["database"]},
     ) as entry:
-        container = create_backup(
+        summary = write_backup(
+            output,
             passphrase,
             using=plan["database"],
             compress=plan["compress"],
             verify=plan["verify"],
             kdf_params=plan.get("kdf_params"),
-            output=output,
             **extra,
         )
-        digest = hashlib.sha256(container).hexdigest()
         entry.data.update(
-            size=len(container),
-            sha256=digest,
+            size=summary.bytes_written,
+            sha256=summary.sha256,
             verified=plan["verify"],
             compressed=plan["compress"],
         )
-        audit.record_backup(output, container, digest, plan["database"])
-    logger.info("scheduled backup wrote %s (%d bytes)", output, len(container))
+        audit.record_backup(output, summary.bytes_written, summary.sha256, plan["database"])
+    logger.info("scheduled backup wrote %s (%d bytes)", output, summary.bytes_written)
 
     removed = prune_directory(plan["output_dir"], plan["keep"], plan["prefix"])
     if removed:

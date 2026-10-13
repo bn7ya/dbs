@@ -1,5 +1,6 @@
 """The DBS control panel mounted inside the Django admin."""
 
+import hashlib
 import io
 
 import pytest
@@ -139,9 +140,11 @@ def test_taking_a_backup_downloads_it_and_records_it(panel):
 
     assert response.status_code == 200
     assert response["Content-Disposition"].startswith("attachment;")
-    assert response.content[:8] == b"DBSCON01"
+    container = b"".join(response.streaming_content)
+    assert container[:8] == b"DBSCON01"
     record = BackupRecord.objects.get()
-    assert record.size_bytes == len(response.content)
+    assert record.size_bytes == len(container)
+    assert record.sha256 == hashlib.sha256(container).hexdigest()
     assert AuditEvent.objects.filter(action="backup.create").exists()
 
 
@@ -150,9 +153,9 @@ def test_a_dry_run_restore_changes_nothing(panel):
     author = Author.objects.create(name="Linus")
     book = Book.objects.create(title="Kernel", author=author)
     book.cover.save("k.bin", ContentFile(b"KERNELBYTES"), save=True)
-    container = panel.post(
-        CREATE, {"database": "default", "destination": "", "note": ""}
-    ).content
+    container = b"".join(
+        panel.post(CREATE, {"database": "default", "destination": "", "note": ""}).streaming_content
+    )
     Book.objects.all().delete()
     Author.objects.all().delete()
 
@@ -170,9 +173,9 @@ def test_a_real_restore_brings_the_rows_back(panel):
     author = Author.objects.create(name="Linus")
     book = Book.objects.create(title="Kernel", author=author)
     book.cover.save("k.bin", ContentFile(b"KERNELBYTES"), save=True)
-    container = panel.post(
-        CREATE, {"database": "default", "destination": "", "note": ""}
-    ).content
+    container = b"".join(
+        panel.post(CREATE, {"database": "default", "destination": "", "note": ""}).streaming_content
+    )
     Book.objects.all().delete()
     Author.objects.all().delete()
 

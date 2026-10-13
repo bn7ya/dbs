@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
+import tempfile
 
 from django.contrib import messages
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.http.request import RawPostDataException
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
@@ -13,9 +13,10 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from . import audit
 from .conf import setting
-from .engine import create_backup, restore_backup
+from .engine import restore_backup, write_backup
 from .exceptions import DBSError
 from .forms import CreateBackupForm, RestoreRecordForm, RestoreUploadForm, SetupForm
+from .io import file_digest
 from .keys import with_passphrase
 from .models import (
     AnomalyEvent,
@@ -137,24 +138,29 @@ def create_backup_view(request):
     form = CreateBackupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
+        container = tempfile.TemporaryFile()
         try:
-            container = create_backup(
+            summary = write_backup(
+                container,
                 data["passphrase"] or _default_passphrase(),
                 using=data["database"],
             )
         except DBSError as exc:
+            container.close()
             _audit(request, "backup.create", detail=str(exc), succeeded=False)
             messages.error(request, f"Backup failed: {exc}")
             return redirect("admin:dbs_backup_create")
 
         name = backup_filename()
-        digest = hashlib.sha256(container).hexdigest()
+        digest = summary.sha256
+        size = summary.bytes_written
         if data["destination"]:
             target = BackupTarget.objects.get(pk=data["destination"])
-            return _push(request, container, name, digest, target, data)
+            with container:
+                return _push(request, container, size, name, digest, target, data)
         BackupRecord.objects.create(
             filename=name,
-            size_bytes=len(container),
+            size_bytes=size,
             sha256=digest,
             database=data["database"],
             created_by=request.user,
@@ -165,15 +171,16 @@ def create_backup_view(request):
             request,
             "backup.create",
             target=name,
-            detail=f"{len(container)} bytes",
+            detail=f"{size} bytes",
             data={
                 "file": name,
-                "size": len(container),
+                "size": size,
                 "sha256": digest,
                 "database": data["database"],
             },
         )
-        response = HttpResponse(container, content_type="application/octet-stream")
+        container.seek(0)
+        response = FileResponse(container, content_type="application/octet-stream")
         response["Content-Disposition"] = f'attachment; filename="{name}"'
         return response
     return _page(
@@ -183,7 +190,7 @@ def create_backup_view(request):
     )
 
 
-def _push(request, container, name, digest, target, data):
+def _push(request, container, size, name, digest, target, data):
     from .transports.ssh import open_session
 
     try:
@@ -195,7 +202,7 @@ def _push(request, container, name, digest, target, data):
         return redirect("admin:dbs_backup_create")
     BackupRecord.objects.create(
         filename=name,
-        size_bytes=len(container),
+        size_bytes=size,
         sha256=digest,
         target=target,
         database=data["database"],
@@ -225,11 +232,10 @@ def restore_view(request):
         if upload.size > limit:
             messages.error(request, f"Upload is larger than the {limit} byte limit.")
             return redirect("admin:dbs_backup_restore")
-        data = upload.read()
         try:
             result = with_passphrase(
                 lambda secret: restore_backup(
-                    data,
+                    upload,
                     secret,
                     dry_run=form.cleaned_data["dry_run"],
                     flush=form.cleaned_data["flush"],
@@ -276,19 +282,18 @@ def restore_record(request, pk):
     form = RestoreRecordForm(request.POST or None, filename=record.filename)
     if request.method == "POST" and form.is_valid():
         dry_run = form.cleaned_data["dry_run"]
-        with open(path, "rb") as fh:
-            data = fh.read()
+        size, digest = file_digest(path)
         details = {
             "file": record.filename,
-            "size": len(data),
-            "sha256": hashlib.sha256(data).hexdigest(),
+            "size": size,
+            "sha256": digest,
             "dry_run": dry_run,
             "flushed": form.cleaned_data["flush"],
         }
         try:
             result = with_passphrase(
                 lambda secret: restore_backup(
-                    data, secret, dry_run=dry_run, flush=form.cleaned_data["flush"]
+                    path, secret, dry_run=dry_run, flush=form.cleaned_data["flush"]
                 ),
                 form.cleaned_data["passphrase"] or None,
             )

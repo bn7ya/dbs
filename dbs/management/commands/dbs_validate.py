@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 
 from django.core.management.base import BaseCommand, CommandError
@@ -9,6 +8,7 @@ from dbs import audit
 from dbs._cli import resolve_read_passphrase
 from dbs.engine import validate_backup
 from dbs.exceptions import InvalidPassphrase
+from dbs.io import file_digest
 from dbs.keys import with_passphrase
 
 
@@ -27,12 +27,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         name = os.path.basename(options["input"])
         with audit.track("backup.validate", target=name, data={"file": name}) as entry:
+            data = options["input"]
             try:
-                with open(options["input"], "rb") as fh:
-                    data = fh.read()
+                size, digest = file_digest(data)
             except OSError as exc:
-                raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
-            entry.data.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
+                raise CommandError(f"Cannot read {data}: {exc}") from exc
+            entry.data.update(size=size, sha256=digest)
 
             if options.get("passphrase"):
                 given = options["passphrase"]
