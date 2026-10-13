@@ -605,13 +605,13 @@ class StreamReader:
     def __iter__(self):
         return self.chunks()
 
-    def chunks(self):
+    def chunks(self, *, check_spares: bool = False):
         if self._cipher is None:
             raise ContainerError(
                 "Decrypting needs the passphrase; this reader checks structure only."
             )
         last = self.blocks - 1
-        for index, block in self._pass(check_spares=False):
+        for index, block in self._pass(check_spares=check_spares):
             if block is None:
                 raise CorruptionError(
                     f"Block {index} is damaged beyond repair: {self.report.summary()}",
