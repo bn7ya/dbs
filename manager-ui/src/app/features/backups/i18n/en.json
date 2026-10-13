@@ -98,10 +98,11 @@
     },
     "take": {
       "action": "Back up now",
-      "body": "A one-off backup belongs to no plan and stays until someone deletes it.",
+      "body": "A one-off backup belongs to no plan. The manager keeps the five newest.",
       "working": "Backing up…",
       "running": "A backup is running. It continues if you leave this page.",
       "done": "Backup finished.",
+      "keptOnServer": "The connection broke before the backup arrived. The server keeps it, and the manager collects it at the next connection.",
       "warning": {
         "files_changed": "Backup finished. Some files changed while they were archived."
       }
@@ -128,7 +129,9 @@
     "validation": {
       "structure_ok": "Structure checked",
       "verified": "Verified",
-      "failed": "Failed verification"
+      "failed": "Failed verification",
+      "quarantined": "Quarantined",
+      "quarantinedBody": "Failed verification when it arrived. It is kept aside, never restored, and never counted toward how many are kept."
     },
     "sealedValidation": {
       "structure_ok": "Stored",

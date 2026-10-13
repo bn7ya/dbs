@@ -358,6 +358,10 @@
                     @if (row.validated_at; as validatedAt) {
                       <time class="text-sm text-secondary" [attr.datetime]="validatedAt">{{ validatedAt | appDate }}</time>
                     }
+                    @if (row.failure) {
+                      <span class="text-sm text-secondary">{{ 'backups.validation.quarantinedBody' | t }}</span>
+                      <bdi class="text-sm backups__code" dir="ltr">{{ row.failure }}</bdi>
+                    }
                   </div>
                 </td>
               </ng-container>

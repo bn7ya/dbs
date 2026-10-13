@@ -21,6 +21,7 @@ SHAPE = {
     "sha256",
     "validation",
     "validated_at",
+    "failure",
     "remote_path",
     "taken_by",
     "plan",
@@ -83,7 +84,8 @@ def test_a_backup_has_the_documented_shape(api, server, taken):
     assert row["name"] == backup.name
     assert row["size"] == backup.size
     assert row["sha256"] == backup.sha256
-    assert row["validation"] == "structure_ok"
+    assert row["validation"] == "verified"
+    assert row["failure"] == ""
     assert row["validated_at"] is not None
     assert row["remote_path"] == backup.remote_path
     assert row["taken_by"] == "sara"

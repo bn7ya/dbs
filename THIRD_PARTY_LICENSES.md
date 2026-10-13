@@ -26,9 +26,9 @@ help a developer review their dependencies; it is not legal advice.
 | [paramiko](https://github.com/paramiko/paramiko) | `>=3` | LGPL-2.1-or-later | SSH and SFTP transports, and the manager's connections to servers |
 | [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15` | BSD-3-Clause | The manager's REST API |
 | [waitress](https://github.com/Pylons/waitress) | `>=3` | ZPL-2.1 | The web server behind `django_dbs run` |
-| [tomli](https://github.com/hukkin/tomli) | `>=1.1.0`, Python < 3.11 only | MIT | Reading `dbs-client.toml` |
 
-The `ssh` and `client` extras name paramiko and tomli, which the list above already installs.
+The `ssh` and `manager` extras name paramiko, djangorestframework and waitress, which the list
+above already installs.
 
 ### Brought in by those packages
 
@@ -94,6 +94,7 @@ None of these is installed with `django-dbs`.
 | packaging | Apache-2.0 OR BSD-2-Clause |
 | Pygments | BSD-2-Clause |
 | exceptiongroup (Python < 3.11 only) | MIT |
+| tomli (Python < 3.11 only) | MIT |
 | colorama (Windows only) | BSD-3-Clause |
 
 The PostgreSQL test job also installs `psycopg[binary]>=3`, under LGPL-3.0-only.

@@ -111,6 +111,21 @@ describe('ActivityPage', () => {
     expect(page.actionLabel('example.unknown')).toBe('example.unknown');
   });
 
+  it('shows a backup kept on the server as its own outcome, not a failure', async () => {
+    const page = await show('/activity');
+    const kept = { ...ENTRY, id: 3, action: 'backup.take', detail: { outcome: 'kept_on_server', pulled: 0 } };
+    listRequest().flush(pageOf([kept, ENTRY]));
+    await settle();
+    harness.detectChanges();
+
+    expect(page.keptOnServer(kept)).toBe(true);
+    expect(page.keptOnServer(ENTRY)).toBe(false);
+    expect(page.keptOnServer({ ...kept, status: 'failed' })).toBe(false);
+    const text = harness.routeNativeElement?.textContent ?? '';
+    expect(text).toContain('Kept on the server');
+    expect(text).toContain('Collected at the next connection');
+  });
+
   it('reads an entry with no actor as scheduled, except a refused sign-in', async () => {
     const page = await show('/activity');
     listRequest().flush(pageOf([]));

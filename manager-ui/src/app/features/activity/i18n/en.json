@@ -36,8 +36,10 @@
       "queued": "Queued",
       "running": "Running",
       "succeeded": "Succeeded",
-      "failed": "Failed"
+      "failed": "Failed",
+      "keptOnServer": "Kept on the server"
     },
+    "keptOnServer": "Collected at the next connection",
     "actions": {
       "server": {
         "create": "Add server",

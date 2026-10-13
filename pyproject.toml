@@ -43,12 +43,11 @@ dependencies = [
     "paramiko>=3",
     "djangorestframework>=3.15",
     "waitress>=3",
-    "tomli>=1.1.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
 ssh = ["paramiko>=3"]
-client = ["paramiko>=3", "tomli>=1.1.0; python_version < '3.11'"]
+manager = ["paramiko>=3", "djangorestframework>=3.15", "waitress>=3"]
 dev = [
     "pytest>=7",
     "pytest-django>=4",
@@ -59,7 +58,6 @@ dev = [
 ]
 
 [project.scripts]
-dbs-client = "dbs.client.cli:main"
 django_dbs = "dbs.manager.cli:main"
 
 [project.urls]

@@ -35,6 +35,7 @@ SHAPE = {
     "sha256",
     "validation",
     "validated_at",
+    "failure",
     "remote_path",
     "taken_by",
     "plan",

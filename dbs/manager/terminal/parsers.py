@@ -267,20 +267,6 @@ def servers(commands, location: Location) -> None:
     )
     capture.add_argument("server", help="The server's name or id.")
 
-    profiles = _verb(
-        verbs,
-        "import-profiles",
-        "Add the servers of a dbs-client config file.",
-        "terminal.servers:import_profiles",
-        location,
-    )
-    profiles.add_argument(
-        "file",
-        nargs="?",
-        help="The dbs-client.toml. Defaults to where dbs-client looks.",
-    )
-    _yes(profiles)
-
 
 def backups(commands, location: Location) -> None:
     verbs = _area(commands, "backup", "Take, verify, restore and keep backups.")

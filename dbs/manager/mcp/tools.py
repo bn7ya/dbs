@@ -313,7 +313,10 @@ class Toolbox:
                 "take_backups",
                 "Take backups",
                 "Take a backup of each server, one after another, and wait for each. "
-                "A server already backing up is reported, not waited for.",
+                "The manager first collects the backups waiting on the server, then "
+                "streams a fresh one to itself. When the connection breaks, the result "
+                "says kept_on_server: the server keeps that backup and the next take "
+                "collects it. A server already backing up is reported, not waited for.",
                 dict(servers=SERVERS, all=EVERY),
                 self.take_backups,
             ),

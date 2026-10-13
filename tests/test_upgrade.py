@@ -196,6 +196,27 @@ def test_a_backup_directory_that_does_not_exist_yet_is_fine(settings, tmp_path):
     assert upgrade.BackupDirectory().check().level == OK
 
 
+def test_a_dbs_client_config_left_behind_is_pointed_at_the_manager(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("DBS_CLIENT_CONFIG", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dbs-client.toml").write_text("[servers.web]\nhost = 'h'\n")
+
+    finding = upgrade.ClientRetired().check()
+
+    assert finding.level == WARN
+    assert "dbs-client.toml" in finding.message
+    assert "django_dbs" in finding.remedy
+
+
+def test_no_dbs_client_config_is_fine(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("DBS_CLIENT_CONFIG", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    assert upgrade.ClientRetired().check().level == OK
+
+
 def test_an_unknown_scheduler_mode_blocks(settings):
     settings.DBS_SCHEDULER = "cron"
 

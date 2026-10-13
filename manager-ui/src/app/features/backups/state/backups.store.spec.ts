@@ -582,6 +582,21 @@ describe('BackupsStore', () => {
       expect(store.files()).toEqual([FILE]);
     });
 
+    it('warns that a backup whose connection broke is kept on the server', async () => {
+      await openWith({ files: [] });
+
+      store.take();
+      http.expectOne('/api/backups/take/').flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
+      jobs.report(jobOf('backup.take', { detail: { outcome: 'kept_on_server', pulled: 0 } }));
+
+      expect(lastToast()).toEqual({
+        severity: 'warning',
+        summary:
+          'The connection broke before the backup arrived. The server keeps it, and the manager collects it at the next connection.',
+      });
+      await answerReload([]);
+    });
+
     it('takes one backup of a server at a time, and shows it only on that server', async () => {
       await openWith();
       store.take();

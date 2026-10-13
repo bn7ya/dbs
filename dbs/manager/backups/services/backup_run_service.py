@@ -7,7 +7,6 @@ from datetime import datetime
 from datetime import timezone as dt_timezone
 from fnmatch import fnmatchcase
 from itertools import count
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
@@ -19,13 +18,19 @@ from rest_framework.exceptions import APIException, NotFound
 
 from dbs import validate_backup
 from dbs.manager.activity.services import ActivityService
-from dbs.manager.backups.exceptions import ArchiveMismatch, BackupMissing, BackupRunning
+from dbs.manager.backups.exceptions import (
+    ArchiveMismatch,
+    BackupMissing,
+    BackupQuarantined,
+    BackupRunning,
+)
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
 from dbs.manager.backups.restore_modes import RestoreMode
 from dbs.manager.backups.services import vault_contexts
 from dbs.manager.backups.services.actions import Action
+from dbs.manager.backups.services.dbs_runs import DbsOutcome, DbsRun, moment_of
 from dbs.manager.backups.services.plan_runs import last_run, run_detail
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.common.uploads import upload_name
@@ -38,7 +43,10 @@ from dbs.models import AuditEvent
 if TYPE_CHECKING:
     from dbs.manager.servers.gateways import RemoteFile, RemoteHost
 
-KEEP_REMOTE = 1
+KEEP_MAX = 5
+TAKE_KEEP = KEEP_MAX
+TAKE_KEEP_REMOTE = 0
+KEPT_ON_SERVER = "kept_on_server"
 FALLBACK_PREFIX = "backup"
 ARCHIVE_STAMP = "%Y%m%d-%H%M%S"
 ARCHIVE_SUFFIX = ".tar.gz"
@@ -125,10 +133,11 @@ class BackupRunService:
         if not self.locks.hold(server_id, job.pk):
             raise BackupRunning()
         server = ServerService(job.actor).get(server_id)
-        file = self._back_up(
-            job, server, prefix=take_prefix(server), keep_remote=KEEP_REMOTE, plan=None
+        outcome = self._back_up(
+            job, server, prefix=take_prefix(server), keep_remote=TAKE_KEEP_REMOTE, plan=None
         )
-        return {"backup": str(file.pk), "size": file.size}
+        self._retain_dbs(job, server, None, TAKE_KEEP)
+        return self._reported(job, outcome)
 
     def _run_plan(self, job: AuditEvent, plan_id: UUID) -> Detail:
         server_id: UUID = UUID(job.subject)
@@ -145,14 +154,15 @@ class BackupRunService:
             outcome = {"backup": str(file.pk), "size": file.size}
             outcome |= {"warning": warning} if warning else {}
         else:
-            file = self._back_up(
+            backed_up = self._back_up(
                 job,
                 server,
                 prefix=plan_prefix(server, plan),
-                keep_remote=plan.keep_remote,
+                keep_remote=min(plan.keep_remote, KEEP_MAX),
                 plan=plan,
             )
-            outcome = {"backup": str(file.pk), "size": file.size}
+            self._retain_dbs(job, server, plan, min(plan.keep, KEEP_MAX))
+            return {**run_detail(plan), **self._reported(job, backed_up)}
         self._retain(job, plan)
         return {**run_detail(plan), **outcome}
 
@@ -164,29 +174,39 @@ class BackupRunService:
         prefix: str,
         keep_remote: int,
         plan: BackupPlan | None,
-    ) -> BackupFile:
+    ) -> DbsOutcome:
         connections = ServerConnectionService(job.actor)
+        profile = connections.dbs_profile(server)
+        passphrase = connections.backup_passphrase(server)
+        self.storage.directory(server.pk)
         with connections.open(server) as remote:
-            fetched = remote.take_dbs_backup(
-                profile=connections.dbs_profile(server),
-                passphrase=connections.backup_passphrase(server),
-                dest_dir=str(self.storage.directory(server.pk)),
+            return DbsRun(
+                job,
+                server,
+                plan,
+                remote=remote,
+                profile=profile,
+                passphrase=passphrase,
                 prefix=prefix,
                 keep_remote=keep_remote,
-                remote_dir=server.remote_backup_dir,
-            )
-        stored = self.storage.keep(fetched.local_path)
-        return self._record(
-            job,
-            server,
-            plan,
-            kind=BackupFile.Kind.DBS,
-            name=Path(fetched.local_path).name,
-            size=stored.size,
-            sha256=stored.sha256,
-            storage_path=stored.relative_path,
-            remote_path=fetched.remote_path,
-        )
+            ).run()
+
+    def _reported(self, job: AuditEvent, outcome: DbsOutcome) -> Detail:
+        detail: Detail = {"pulled": len(outcome.pulled)}
+        quarantined = [str(file.pk) for file in outcome.quarantined]
+        if quarantined:
+            detail["quarantined"] = quarantined
+        if outcome.kept_on_server:
+            return {"outcome": KEPT_ON_SERVER, **detail}
+        streamed = cast(BackupFile, outcome.streamed)
+        if streamed.validation == BackupFile.Validation.FAILED:
+            raise BackupQuarantined(output=streamed.failure, backup=str(streamed.pk))
+        return {
+            "backup": str(streamed.pk),
+            "size": streamed.size,
+            **detail,
+            "released": len(outcome.released),
+        }
 
     def _archive(
         self, job: AuditEvent, server: Server, plan: BackupPlan
@@ -322,17 +342,41 @@ class BackupRunService:
             raise
 
     def _retain(self, job: AuditEvent, plan: BackupPlan) -> None:
-        stale = list(self.files.alive_for_plan(plan.pk)[plan.keep :])
+        stale = list(self.files.alive_for_plan(plan.pk)[min(plan.keep, KEEP_MAX) :])
+        self._expire(job, plan.server, plan, stale)
+
+    def _retain_dbs(
+        self, job: AuditEvent, server: Server, plan: BackupPlan | None, keep: int
+    ) -> None:
+        plan_id = plan and plan.pk
+        good = sorted(
+            self.files.good_backups(server.pk, plan_id), key=moment_of, reverse=True
+        )
+        quarantined = sorted(
+            self.files.quarantined(server.pk, plan_id), key=moment_of, reverse=True
+        )
+        self._expire(job, server, plan, [*good[max(keep, 1) :], *quarantined[KEEP_MAX:]])
+
+    def _expire(
+        self,
+        job: AuditEvent,
+        server: Server,
+        plan: BackupPlan | None,
+        stale: list[BackupFile],
+    ) -> None:
         if not stale:
             return
+        detail: Detail = {"removed": [file.name for file in stale]}
+        if plan is not None:
+            detail["plan"] = plan.name
         with transaction.atomic():
             for file in stale:
                 self.files.soft_delete(file)
             ActivityService(job.actor).record(
                 Action.RETENTION,
-                server=plan.server,
-                target=plan.name,
-                detail={"removed": [file.name for file in stale], "plan": plan.name},
+                server=server,
+                target=server.name if plan is None else plan.name,
+                detail=detail,
             )
 
     def _restore(self, job: AuditEvent, file_id: UUID) -> Detail:
@@ -408,6 +452,8 @@ class BackupRunService:
 
 
 def _failure_detail(job: AuditEvent, exc: APIException) -> Detail | None:
+    if isinstance(exc, BackupQuarantined):
+        return {**job.data, "output": exc.output, "quarantined": [exc.backup]}
     if isinstance(exc, RemoteCommandFailed) and exc.output:
         return {**job.data, "output": exc.output}
     return None

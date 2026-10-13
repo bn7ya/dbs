@@ -36,8 +36,10 @@
       "queued": "في الانتظار",
       "running": "قيد التنفيذ",
       "succeeded": "تم بنجاح",
-      "failed": "فشل"
+      "failed": "فشل",
+      "keptOnServer": "محفوظة على الخادم"
     },
+    "keptOnServer": "تجلب عند الاتصال التالي",
     "actions": {
       "server": {
         "create": "إضافة خادم",

@@ -10,10 +10,7 @@ from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupRunService, BackupService
 from dbs.manager.backups.storage import BackupStorage
-from tests.manager.backups.support import BackupHost
-from tests.manager.servers.support import connecting_to, dbs_backup
-
-CONNECT = "dbs.manager.servers.services.connection_service.connect"
+from tests.manager.servers.support import dbs_backup
 
 
 def url(backup) -> str:
@@ -52,7 +49,7 @@ def test_a_verify_answers_before_it_runs(api, taken, entry):
     job = entry(api.post(url(backup)).json()["activity"])
 
     assert job.status == audit.QUEUED
-    assert stored(backup).validation == BackupFile.Validation.STRUCTURE_OK
+    assert stored(backup).validated_at == backup.validated_at
 
 
 @pytest.mark.django_db
@@ -64,10 +61,10 @@ def test_a_verify_answers_before_it_runs(api, taken, entry):
     ],
 )
 def test_a_backup_that_does_not_decrypt_is_a_result_not_an_error(
-    api, admin, monkeypatch, server, run_jobs, taken, entry, content
+    api, admin, server, run_jobs, taken, entry, storage, content
 ):
-    monkeypatch.setattr(CONNECT, connecting_to(BackupHost(content=content())))
     backup = taken()
+    (storage / backup.storage_path).write_bytes(content())
 
     with run_jobs():
         job = entry(api.post(url(backup)).json()["activity"])
@@ -89,7 +86,7 @@ def test_a_file_that_left_the_disk_fails_the_job(api, run_jobs, taken, entry):
     job = entry(job.pk)
     assert job.status == audit.FAILED
     assert job.error_code == "backup_missing"
-    assert stored(backup).validation == BackupFile.Validation.STRUCTURE_OK
+    assert stored(backup).validated_at == backup.validated_at
 
 
 @pytest.mark.django_db

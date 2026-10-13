@@ -14,6 +14,7 @@ export const FILE: BackupFile = {
   sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
   validation: 'structure_ok',
   validated_at: null,
+  failure: '',
   remote_path: '/var/backups/dbs/production-web-20260930-120000.dbs',
   taken_by: 'sara',
   plan: null,
@@ -108,6 +109,15 @@ export const VERIFIED: BackupFile = {
   taken_by: null,
   plan: PLAN.id,
   plan_name: PLAN.name,
+};
+
+export const QUARANTINED: BackupFile = {
+  ...FILE,
+  id: '5b2d8e10-3333-4a6c-b1f2-0d9e8c7b0006',
+  name: 'production-web-20260928-120000.dbs.quarantined',
+  validation: 'failed',
+  validated_at: '2026-09-28T12:01:00Z',
+  failure: 'The bytes that arrived are not the ones the server sent.',
 };
 
 export const STAGING: TargetServer = { id: '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002', name: 'staging-web' };

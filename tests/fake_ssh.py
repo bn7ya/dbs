@@ -4,6 +4,7 @@ import errno
 import io
 import os
 import posixpath
+import threading
 import types
 
 
@@ -168,9 +169,20 @@ class FakeSFTP:
 class FakeChannel:
     def __init__(self, session):
         self._session = session
+        self.status_event = threading.Event()
+        self.status_event.set()
 
     def shutdown_write(self):
         self._session.stdin_closed = True
+
+    def settimeout(self, timeout):
+        self._session.timeouts.append(timeout)
+
+    def recv(self, size):
+        return self._session.take(1, size)
+
+    def close(self):
+        self._session.channel_closed = True
 
     def recv_exit_status(self):
         return self._session.resolve()[0]
@@ -197,7 +209,7 @@ class FakeStdout:
         self.channel = FakeChannel(session)
 
     def read(self, size=-1):
-        return self._session.resolve()[self._index].encode()
+        return self._session.take(self._index, size)
 
 
 class FakeExec:
@@ -207,11 +219,22 @@ class FakeExec:
         self.command = command
         self.stdin = ""
         self.stdin_closed = False
+        self.channel_closed = False
+        self.timeouts = []
+        self._offsets = {1: 0, 2: 0}
 
     def resolve(self):
         if self._outcome is None:
             self._outcome = self._registry.handle(self.command, self)
         return self._outcome
+
+    def take(self, index, size=-1):
+        produced = self.resolve()[index]
+        data = produced.encode() if isinstance(produced, str) else produced
+        start = self._offsets[index]
+        end = len(data) if size is None or size < 0 else min(len(data), start + size)
+        self._offsets[index] = end
+        return data[start:end]
 
     @property
     def exit_status(self):

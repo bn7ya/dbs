@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
 
 from dbs.manager.servers.gateways import RemoteHost
+from dbs.manager.servers.gateways.ssh_gateway import LIST_FILES
 from dbs.manager.servers.services.pythons import VERSION_PROBE
+from dbs.naming import backup_filename
 from dbs.transports import RemoteResult
+from dbs.transports.ssh import StreamInterrupted
 from tests.manager.remote import argv_of
 from tests.manager.servers.support import LocalSftpSession, dbs_backup
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 HOST_UID = "1000"
 COMPOSE_VERSION = "2.29.1"
+CONTAINER_BACKUP_DIR = "/app/backups"
 
 
 class ComposeHost(LocalSftpSession):
@@ -26,8 +33,12 @@ class ComposeHost(LocalSftpSession):
         docker: bool = True,
         backup_fails: str = "",
         chown_fails: bool = False,
+        backup_dir: str = CONTAINER_BACKUP_DIR,
+        stream_breaks: bool = False,
     ) -> None:
         super().__init__()
+        self.backup_dir = backup_dir
+        self.stream_breaks = stream_breaks
         self.container = container
         self.running = running
         self.with_dbs = with_dbs
@@ -80,7 +91,53 @@ class ComposeHost(LocalSftpSession):
         self.owners[path] = HOST_UID
         return RemoteResult(0, "", "")
 
-    def exec(self, arguments: list[str], stdin_line: str | None) -> RemoteResult:
+    def stream(self, script, sink, stdin_line=None, timeout=None, progress=None):
+        argv, setup = argv_of(script)
+        self.runs.append(
+            {"argv": argv, "setup": setup, "stdin": stdin_line, "streamed": True}
+        )
+        rest = argv[2:]
+        while rest[:1] == ["-f"]:
+            rest = rest[2:]
+        options, service, command = self.split_exec(rest[1:])
+        if service not in self.running:
+            return RemoteResult(1, "", f'service "{service}" is not running')
+        if command[:2] == ["cat", "--"]:
+            sink.write(self.inside(command[2]).read_bytes())
+            return RemoteResult(0, "", "")
+        if self.backup_fails:
+            return RemoteResult(1, "", self.backup_fails)
+        prefix = command[command.index("--prefix") + 1]
+        folder = (
+            command[command.index("--output-dir") + 1]
+            if "--output-dir" in command
+            else self.backup_dir
+        )
+        data = dbs_backup(stdin_line)
+        directory = self.inside(folder)
+        directory.mkdir(parents=True, exist_ok=True)
+        name = next(
+            backup_filename(prefix, ordinal=ordinal)
+            for ordinal in range(1, 1000)
+            if not (directory / backup_filename(prefix, ordinal=ordinal)).exists()
+        )
+        (directory / name).write_bytes(data)
+        self.owners[f"{folder}/{name}"] = self.container_uid
+        if self.stream_breaks:
+            sink.write(data[: len(data) // 2])
+            raise StreamInterrupted("The connection was lost: Socket is closed")
+        sink.write(data)
+        summary = {
+            "name": name,
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+        return RemoteResult(0, "", f"Streamed {name}\n{json.dumps(summary)}\n")
+
+    def listed(self, folder: str) -> list:
+        return _listed_entries(self.inside(folder))
+
+    def split_exec(self, arguments: list[str]) -> tuple[dict, str, list[str]]:
         options = {"user": self.container_uid, "env": {}}
         while arguments[0] in ("-T", "-u", "-e"):
             flag = arguments.pop(0)
@@ -89,9 +146,17 @@ class ComposeHost(LocalSftpSession):
             elif flag == "-e":
                 name, _, value = arguments.pop(0).partition("=")
                 options["env"][name] = value
-        service, command = arguments[0], arguments[1:]
+        return options, arguments[0], arguments[1:]
+
+    def exec(self, arguments: list[str], stdin_line: str | None) -> RemoteResult:
+        options, service, command = self.split_exec(arguments)
         if service not in self.running:
             return RemoteResult(1, "", f'service "{service}" is not running')
+        if command[:2] == ["sha256sum", "--"]:
+            digest = hashlib.sha256(self.inside(command[2]).read_bytes()).hexdigest()
+            return RemoteResult(0, f"{digest}  {command[2]}\n", "")
+        if command[1:3] == ["-c", LIST_FILES]:
+            return RemoteResult(0, json.dumps(self.listed(command[3])), "")
         if command == ["id", "-u"]:
             return RemoteResult(0, f"{self.container_uid}\n", "")
         if command[:1] == ["chown"]:
@@ -100,7 +165,7 @@ class ComposeHost(LocalSftpSession):
             self.owners[command[2]] = command[1]
             return RemoteResult(0, "", "")
         if command[:2] == ["rm", "-f"]:
-            path = command[2]
+            path = command[3] if command[2:3] == ["--"] else command[2]
             owner = self.owners.get(path, self.container_uid)
             if options["user"] not in ("0", owner):
                 return RemoteResult(1, "", "rm: Permission denied")
@@ -141,6 +206,8 @@ class ComposeHost(LocalSftpSession):
             return RemoteResult(
                 0, "Dry run: 3 records and 0 files would be restored", ""
             )
+        if command[:2] == ["dbs_connection", "--json"]:
+            return RemoteResult(0, json.dumps({"remote_backup_dir": self.backup_dir}), "")
         if command[:2] == ["dbs_key", "--show"]:
             return RemoteResult(0, "derived-passphrase-from-the-container\n", "")
         if command[:3] == ["dbs", "health", "--json"]:
@@ -160,3 +227,14 @@ def connected_to(monkeypatch, host: ComposeHost) -> ComposeHost:
 
     monkeypatch.setattr(CONNECT, connect)
     return host
+
+
+def _listed_entries(directory: Path) -> list:
+    if not directory.is_dir():
+        return []
+    return [
+        [entry.name, entry.stat().st_size, int(entry.stat().st_mtime)]
+        for entry in os.scandir(directory)
+        if entry.is_file(follow_symlinks=False)
+    ]
+

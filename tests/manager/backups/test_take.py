@@ -13,7 +13,7 @@ from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupRunService, BackupService
 from dbs.manager.servers.exceptions import (
-    BackupInvalid,
+    DbsTooOld,
     HostKeyChanged,
     RemoteCommandFailed,
     SSHAuthFailed,
@@ -104,7 +104,12 @@ def test_a_taken_backup_is_stored_and_described(
     assert job.error_code == ""
     assert job.finished_at >= job.started_at
     backup = BackupFileRepository().get(job.data["backup"])
-    assert job.data == {"backup": str(backup.pk), "size": backup.size}
+    assert job.data == {
+        "backup": str(backup.pk),
+        "size": backup.size,
+        "pulled": 0,
+        "released": 1,
+    }
 
     path = storage / str(server.pk) / backup.name
     assert path.stat().st_size == backup.size
@@ -113,9 +118,13 @@ def test_a_taken_backup_is_stored_and_described(
     assert backup.name.startswith("web-1-") and backup.name.endswith(".dbs")
     assert backup.server_id == server.pk
     assert backup.kind == BackupFile.Kind.DBS
-    assert backup.validation == BackupFile.Validation.STRUCTURE_OK
+    assert backup.validation == BackupFile.Validation.VERIFIED
     assert backup.validated_at is not None
-    assert backup.remote_path == f"{BACKUP_DIR}/{backup.name}"
+    assert backup.failure == ""
+    assert backup.remote_path == ""
+    assert backup.remote_size == backup.size
+    assert host.removed == [f"{BACKUP_DIR}/{backup.name}"]
+    assert host.remote_names() == []
     assert backup.created_by == admin
     assert backup.sealed is False
 
@@ -137,9 +146,8 @@ def test_the_server_is_asked_for_its_own_backup(admin, server, host, run_jobs, s
         settings_module=SETTINGS_MODULE,
     )
     assert take.passphrase == BACKUP_PASSPHRASE
-    assert take.dest_dir == str(storage / str(server.pk))
+    assert take.folder == BACKUP_DIR
     assert take.prefix == "web-1"
-    assert take.keep_remote == 1
     assert host.credentials.host == "10.0.0.5"
 
 
@@ -190,7 +198,7 @@ def test_a_server_that_cannot_be_reached_fails_the_job(
             RemoteCommandFailed(output="exit 1: No module named dbs"),
             "remote_command_failed",
         ),
-        (BackupInvalid(output="[INVALID] Not a DBS container"), "backup_invalid"),
+        (DbsTooOld(output="error: unrecognized arguments: --stream"), "dbs_too_old"),
     ],
 )
 def test_a_take_the_server_fails_keeps_the_end_of_its_output(

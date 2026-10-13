@@ -372,40 +372,6 @@ def test_revealing_the_passphrase_needs_the_password(terminal, admin, make_serve
 
 
 @pytest.mark.django_db
-def test_import_profiles_adds_the_servers_of_a_client_config(
-    terminal, admin, offered, tmp_path, monkeypatch
-):
-    key = tmp_path / "id_ed25519"
-    key.write_text(private_key_text())
-    config = tmp_path / "dbs-client.toml"
-    config.write_text(
-        f"""
-[defaults]
-username = "deploy"
-key_filename = "{key}"
-host_key = "{host_key_line()}"
-
-[servers.shop]
-host = "10.0.0.5"
-project_dir = "/srv/shop"
-python = "/srv/shop/.venv/bin/python"
-
-[servers.blog]
-host = "10.0.0.6"
-"""
-    )
-    config.chmod(0o600)
-
-    ran = terminal("server", "import-profiles", config)
-
-    assert ran.code == 0, ran.out
-    servers = {server.name: server for server in ServerRepository().active()}
-    assert set(servers) == {"shop", "blog"}
-    assert servers["shop"].python_path == "/srv/shop/.venv/bin/python"
-    assert servers["shop"].project_dir == "/srv/shop"
-
-
-@pytest.mark.django_db
 def test_discover_save_on_a_checked_server_asks_for_the_password(
     terminal, admin, make_server, remote
 ):

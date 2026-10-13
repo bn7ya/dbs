@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 import io
-import stat
 
 import pytest
 
 from dbs import validate_backup
-from dbs.manager.servers.exceptions import RemoteCommandFailed, RestoreFailed
+from dbs.manager.servers.exceptions import (
+    RemoteCommandFailed,
+    RestoreFailed,
+    StreamBroken,
+)
 from dbs.manager.servers.gateways import ComposeService, DbsProfile, RemoteHost
-from dbs.naming import is_backup_name
-from tests.manager.servers.compose import ComposeHost
+from dbs.naming import backup_filename, is_backup_name
+from tests.manager.servers.compose import CONTAINER_BACKUP_DIR, ComposeHost
 from tests.manager.servers.support import BACKUP_PASSPHRASE, dbs_backup
 
 PROJECT = "/srv/shop"
@@ -38,15 +42,16 @@ def folders(tmp_path):
     }
 
 
-def take(host, folders, keep_remote=2):
-    return RemoteHost(host).take_dbs_backup(
-        profile=PROFILE,
+def streamed(host, folder=CONTAINER_BACKUP_DIR):
+    sink = io.BytesIO()
+    found = RemoteHost(host).stream_dbs_backup(
+        PROFILE,
         passphrase=BACKUP_PASSPHRASE,
-        dest_dir=str(folders["manager"]),
         prefix="shop",
-        keep_remote=keep_remote,
-        remote_dir=str(folders["host"]),
+        folder=folder,
+        sink=sink,
     )
+    return found, sink.getvalue()
 
 
 def restore(host, folders, *, dry_run=True, flush=False):
@@ -83,74 +88,121 @@ def test_a_manage_command_runs_inside_the_service_from_the_project_folder(folder
     assert run["setup"] == [f"cd {PROJECT} || exit 1"]
 
 
-def test_a_backup_is_made_in_the_container_copied_out_and_fetched(folders):
+def test_a_backup_streams_out_of_the_service_and_the_container_keeps_a_copy(
+    folders,
+):
     host = ComposeHost(folders["container"])
 
-    fetched = take(host, folders)
+    found, received = streamed(host)
 
-    local = folders["manager"] / fetched.local_path.rsplit("/", 1)[1]
-    assert is_backup_name(local.name, "shop")
-    result = validate_backup(local.read_bytes(), BACKUP_PASSPHRASE)
+    assert is_backup_name(found.name, "shop")
+    assert found.path == f"{CONTAINER_BACKUP_DIR}/{found.name}"
+    result = validate_backup(received, BACKUP_PASSPHRASE)
     assert result.ok and result.decrypted_ok
-    assert stat.S_IMODE(local.stat().st_mode) == 0o600
-    assert fetched.remote_path == str(folders["host"] / local.name)
-    assert (folders["host"] / local.name).read_bytes() == local.read_bytes()
-    assert list(folders["container"].rglob("*.dbs")) == []
-    backup_run = next(run for run in host.runs if "dbs_backup" in run["argv"])
-    assert backup_run["stdin"] == BACKUP_PASSPHRASE
-    assert BACKUP_PASSPHRASE not in " ".join(
-        part for run in host.runs for part in run["argv"]
-    )
-    inside = backup_run["argv"][backup_run["argv"].index("dbs_backup") + 1]
-    assert inside.startswith("/tmp/.dbs-backup-")
-    assert [*COMPOSE_PREFIX, "cp", f"backend:{inside}", fetched.remote_path] in [
-        run["argv"] for run in host.runs
+    assert found.sha256 == hashlib.sha256(received).hexdigest()
+    assert host.inside(found.path).read_bytes() == received
+    [run] = host.runs
+    assert run["argv"] == [
+        *COMPOSE_PREFIX,
+        "exec",
+        "-T",
+        "-e",
+        "DJANGO_SETTINGS_MODULE=config.settings.prod",
+        "backend",
+        "python",
+        "manage.py",
+        "dbs_backup",
+        "--stream",
+        "--prefix",
+        "shop",
+        "--passphrase-stdin",
+        "--output-dir",
+        CONTAINER_BACKUP_DIR,
     ]
+    assert run["setup"] == [f"cd {PROJECT} || exit 1"]
+    assert run["stdin"] == BACKUP_PASSPHRASE
+    assert BACKUP_PASSPHRASE not in " ".join(run["argv"])
 
 
-def test_keeping_no_copy_on_the_server_removes_it_once_fetched(folders):
+def test_the_service_names_where_it_keeps_its_backups(folders):
+    host = ComposeHost(folders["container"])
+    unset = ComposeHost(folders["container"], backup_dir="")
+
+    assert RemoteHost(host).backup_folder(PROFILE, "/var/backups/dbs") == CONTAINER_BACKUP_DIR
+    assert RemoteHost(unset).backup_folder(PROFILE, "/var/backups/dbs") == ""
+    assert host.runs[0]["argv"][-3:] == ["manage.py", "dbs_connection", "--json"]
+
+
+def test_backups_waiting_in_the_container_are_listed_pulled_checked_and_removed(
+    folders,
+):
+    host = ComposeHost(folders["container"])
+    folder = host.inside(CONTAINER_BACKUP_DIR)
+    folder.mkdir(parents=True)
+    name = backup_filename("shop")
+    (folder / name).write_bytes(b"kept by the server")
+    (folder / backup_filename("other")).write_bytes(b"not this prefix")
+    (folder / "notes.txt").write_text("not a backup")
+    remote = RemoteHost(host)
+
+    [waiting] = remote.waiting_backups(PROFILE, CONTAINER_BACKUP_DIR, "shop")
+    sink = io.BytesIO()
+    remote.pull_backup(PROFILE, waiting.path, sink)
+    digest = remote.backup_sha256(PROFILE, waiting.path)
+    remote.remove_backup(PROFILE, waiting.path)
+
+    assert (waiting.name, waiting.size) == (name, len(b"kept by the server"))
+    assert sink.getvalue() == b"kept by the server"
+    assert digest == hashlib.sha256(b"kept by the server").hexdigest()
+    assert not (folder / name).exists()
+    argvs = [run["argv"] for run in host.runs]
+    assert [*COMPOSE_PREFIX, "exec", "-T", "backend", "cat", "--", waiting.path] in argvs
+    assert [
+        *COMPOSE_PREFIX,
+        "exec",
+        "-T",
+        "backend",
+        "rm",
+        "-f",
+        "--",
+        waiting.path,
+    ] in argvs
+
+
+def test_nothing_waits_in_a_folder_the_container_does_not_have(folders):
     host = ComposeHost(folders["container"])
 
-    fetched = take(host, folders, keep_remote=0)
-
-    assert fetched.remote_path == ""
-    assert list(folders["host"].iterdir()) == []
+    assert RemoteHost(host).waiting_backups(PROFILE, CONTAINER_BACKUP_DIR, "shop") == []
 
 
-def test_the_server_keeps_only_the_newest_copies(folders):
-    host = ComposeHost(folders["container"])
-    folders["host"].mkdir(parents=True)
-    (folders["host"] / "shop-20260101-000000Z.dbs").write_bytes(b"old")
-    (folders["host"] / "notes.txt").write_text("not a backup")
-
-    take(host, folders, keep_remote=1)
-
-    kept = sorted(path.name for path in folders["host"].iterdir())
-    assert len(kept) == 2 and "notes.txt" in kept
-    assert "shop-20260101-000000Z.dbs" not in kept
-
-
-def test_a_backup_that_fails_in_the_container_says_why_and_leaves_nothing(folders):
+def test_a_backup_that_fails_in_the_container_says_why(folders):
     printed = f"read {BACKUP_PASSPHRASE} from stdin\nCommandError: the database is not reachable"
     host = ComposeHost(folders["container"], backup_fails=printed)
 
     with pytest.raises(RemoteCommandFailed) as failed:
-        take(host, folders)
+        streamed(host)
 
     assert failed.value.output.endswith("CommandError: the database is not reachable")
     assert BACKUP_PASSPHRASE not in failed.value.output
-    assert list(folders["manager"].iterdir()) == []
-    assert any(run["argv"][-3:-1] == ["rm", "-f"] for run in host.runs)
 
 
 def test_a_service_that_is_not_running_is_reported(folders):
     host = ComposeHost(folders["container"], running=("db",))
 
     with pytest.raises(RemoteCommandFailed) as failed:
-        take(host, folders)
+        streamed(host)
 
     assert 'service "backend" is not running' in failed.value.output
-    assert list(folders["manager"].iterdir()) == []
+
+
+def test_a_connection_lost_while_the_service_streams_leaves_the_copy_inside(folders):
+    host = ComposeHost(folders["container"], stream_breaks=True)
+
+    with pytest.raises(StreamBroken):
+        streamed(host)
+
+    [kept] = list(host.inside(CONTAINER_BACKUP_DIR).iterdir())
+    assert is_backup_name(kept.name, "shop")
 
 
 def test_a_restore_hands_the_file_to_the_container_user_and_cleans_up(folders):

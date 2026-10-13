@@ -37,6 +37,52 @@ class BackupFileRepository(BaseRepository):
             .values_list("remote_path", "remote_size", "remote_mtime")
         )
 
+    def recorded_at(
+        self, server_id: UUID, remote_paths: Iterable[str]
+    ) -> QuerySet[BackupFile]:
+        return self.all_including_deleted().filter(
+            server_id=server_id,
+            kind=BackupFile.Kind.DBS,
+            remote_path__in=list(remote_paths),
+        )
+
+    def server_copies(
+        self, server_id: UUID, plan_id: UUID | None
+    ) -> QuerySet[BackupFile]:
+        return (
+            self.all_including_deleted()
+            .filter(
+                server_id=server_id,
+                plan_id=plan_id,
+                kind=BackupFile.Kind.DBS,
+                validation=BackupFile.Validation.VERIFIED,
+            )
+            .exclude(remote_path="")
+        )
+
+    def good_backups(
+        self, server_id: UUID, plan_id: UUID | None
+    ) -> QuerySet[BackupFile]:
+        return (
+            self.active()
+            .filter(server_id=server_id, plan_id=plan_id, kind=BackupFile.Kind.DBS)
+            .exclude(validation=BackupFile.Validation.FAILED)
+        )
+
+    def quarantined(
+        self, server_id: UUID, plan_id: UUID | None
+    ) -> QuerySet[BackupFile]:
+        return (
+            self.active()
+            .filter(
+                server_id=server_id,
+                plan_id=plan_id,
+                kind=BackupFile.Kind.DBS,
+                validation=BackupFile.Validation.FAILED,
+            )
+            .exclude(failure="")
+        )
+
     def find_including_deleted(self, file_id: UUID) -> BackupFile | None:
         return (
             self.all_including_deleted()
@@ -56,6 +102,7 @@ class BackupFileRepository(BaseRepository):
         return (
             self.alive_for_server(server_id)
             .filter(kind=kind, removed_at__isnull=True)
+            .exclude(validation=BackupFile.Validation.FAILED)
             .first()
         )
 

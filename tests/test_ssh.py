@@ -1,6 +1,9 @@
 """SSH transport: target configuration, auth wiring, and session operations."""
 
+import io
 import os
+import posixpath
+import time
 
 import pytest
 from django.test import override_settings
@@ -8,7 +11,9 @@ from django.test import override_settings
 from dbs.exceptions import ConfigurationError, DBSError
 from dbs.naming import backup_filename
 from dbs.transports import HostKey, HostKeyError, SSHTarget, fetch_host_key, open_session
+from dbs.tee import PARTIAL_STALE_SECONDS, is_partial_name, partial_name
 from dbs.transports.ssh import (
+    StreamInterrupted,
     check_connection,
     delete_backup,
     list_backup_details,
@@ -20,6 +25,20 @@ from dbs.transports.ssh import (
 from tests.fake_ssh import AutoAddPolicy, RejectPolicy
 
 REMOTE_DIR = "/var/backups/app"
+
+
+def local_folder(tmp_path):
+    folder = tmp_path / "local"
+    folder.mkdir()
+    return folder
+
+
+def real_backup(kdf_params):
+    from django.contrib.auth.models import Group
+
+    from dbs import create_backup
+
+    return create_backup("transport-pass", models=[Group], kdf_params=kdf_params)
 
 
 def target(**overrides):
@@ -188,15 +207,17 @@ def test_details_report_size_and_time(fake_ssh):
     assert details[0].modified is not None
 
 
-def test_pull_to_streams_to_disk_and_leaves_no_partial(fake_ssh, tmp_path):
+@pytest.mark.django_db
+def test_pull_to_streams_to_disk_and_leaves_no_partial(fake_ssh, tmp_path, fast_kdf):
     name = backup_filename()
-    fake_ssh.write_remote(REMOTE_DIR, name, b"payload")
-    destination = tmp_path / "local.dbs"
+    content = real_backup(fast_kdf)
+    fake_ssh.write_remote(REMOTE_DIR, name, content)
+    destination = local_folder(tmp_path) / "local.dbs"
 
-    assert pull_backup_to(name, str(destination), target()) == 7
-    assert destination.read_bytes() == b"payload"
+    assert pull_backup_to(name, str(destination), target()) == len(content)
+    assert destination.read_bytes() == content
     assert destination.stat().st_mode & 0o777 == 0o600
-    assert not (tmp_path / "local.dbs.part").exists()
+    assert os.listdir(destination.parent) == ["local.dbs"]
 
 
 def test_a_failed_pull_does_not_clobber_an_existing_file(fake_ssh, tmp_path):
@@ -480,3 +501,183 @@ def test_an_agent_target_without_a_key_still_looks_for_local_keys(fake_ssh):
         session.names()
 
     assert fake_ssh.connections[0]["look_for_keys"] is True
+
+
+def stale(path):
+    old = time.time() - PARTIAL_STALE_SECONDS - 60
+    os.utime(path, (old, old))
+    return path
+
+
+@pytest.mark.django_db
+def test_a_pulled_file_that_is_not_a_backup_is_never_installed(fake_ssh, tmp_path):
+    name = backup_filename()
+    fake_ssh.write_remote(REMOTE_DIR, name, b"not a backup at all")
+    destination = local_folder(tmp_path) / "local.dbs"
+
+    with pytest.raises(DBSError, match="not a valid DBS backup"):
+        pull_backup_to(name, str(destination), target())
+
+    assert os.listdir(destination.parent) == []
+
+
+def test_a_pull_onto_an_existing_file_is_refused_before_it_starts(fake_ssh, tmp_path):
+    name = backup_filename()
+    fake_ssh.write_remote(REMOTE_DIR, name, b"remote")
+    destination = local_folder(tmp_path) / "local.dbs"
+    destination.write_bytes(b"previous")
+
+    with pytest.raises(DBSError, match="already exists"):
+        pull_backup_to(name, str(destination), target())
+
+    assert destination.read_bytes() == b"previous"
+
+
+def test_a_failed_pull_sweeps_stale_partials_and_leaves_none_of_its_own(fake_ssh, tmp_path):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+    folder = local_folder(tmp_path)
+    old = folder / partial_name("local.dbs")
+    old.write_bytes(b"left by a crash")
+    stale(old)
+    fresh = folder / partial_name("other.dbs")
+    fresh.write_bytes(b"in flight")
+
+    with pytest.raises(DBSError):
+        pull_backup_to(backup_filename(), str(folder / "local.dbs"), target())
+
+    assert os.listdir(folder) == [fresh.name]
+
+
+def test_push_refuses_to_overwrite_a_backup_already_on_the_server(fake_ssh):
+    name = backup_filename()
+    fake_ssh.write_remote(REMOTE_DIR, name, b"the original")
+
+    with pytest.raises(DBSError, match="already exists"):
+        push_backup(b"a replacement", name, target())
+
+    assert os.listdir(fake_ssh.remote_path(REMOTE_DIR)) == [name]
+    with open(fake_ssh.remote_path(REMOTE_DIR, name), "rb") as fh:
+        assert fh.read() == b"the original"
+
+
+def test_a_failed_push_removes_its_partial(fake_ssh, monkeypatch):
+    from tests.fake_ssh import FakeSFTP
+
+    def half_written(self, handle, remote_path):
+        with open(self._local(remote_path), "wb") as fh:
+            fh.write(handle.read(3))
+        raise OSError("connection reset")
+
+    monkeypatch.setattr(FakeSFTP, "putfo", half_written)
+
+    with pytest.raises(DBSError, match="upload failed"):
+        push_backup(b"payload", backup_filename(), target())
+
+    assert os.listdir(fake_ssh.remote_path(REMOTE_DIR)) == []
+
+
+def test_push_uses_a_partial_name_of_its_own_and_sweeps_stale_ones(fake_ssh, monkeypatch):
+    from tests.fake_ssh import FakeSFTP
+
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+    legacy = backup_filename("old") + ".part"
+    fake_ssh.write_remote(REMOTE_DIR, legacy, b"left behind")
+    stale(fake_ssh.remote_path(REMOTE_DIR, legacy))
+    fresh = partial_name(backup_filename("other"))
+    fake_ssh.write_remote(REMOTE_DIR, fresh, b"another upload in flight")
+    fake_ssh.write_remote(REMOTE_DIR, "notes.part", b"not ours")
+    stale(fake_ssh.remote_path(REMOTE_DIR, "notes.part"))
+    written = []
+    original = FakeSFTP.putfo
+
+    def recording(self, handle, remote_path):
+        written.append(posixpath.basename(remote_path))
+        return original(self, handle, remote_path)
+
+    monkeypatch.setattr(FakeSFTP, "putfo", recording)
+    name = backup_filename()
+
+    push_backup(b"payload", name, target())
+
+    [partial] = written
+    assert is_partial_name(partial) and partial.startswith(f".{name}.part-")
+    assert sorted(os.listdir(fake_ssh.remote_path(REMOTE_DIR))) == sorted(
+        [name, fresh, "notes.part"]
+    )
+
+
+def streaming(fake_ssh, outcome):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+    fake_ssh.on_exec(lambda command, session: outcome)
+
+
+def test_a_stream_writes_stdout_to_the_sink_and_keeps_stderr(fake_ssh):
+    payload = os.urandom(600 * 1024)
+    streaming(fake_ssh, (0, payload, 'made it\n{"name": "x"}\n'))
+    sink = io.BytesIO()
+    seen = []
+
+    with open_session(target()) as session:
+        result = session.stream(
+            "dbs backup --stream", sink, stdin_line="secret", progress=seen.append
+        )
+
+    assert sink.getvalue() == payload
+    assert (result.exit_status, result.stdout) == (0, "")
+    assert result.stderr.splitlines()[-1] == '{"name": "x"}'
+    assert seen == [256 * 1024, 512 * 1024, len(payload)]
+    assert fake_ssh.executions[0].stdin == "secret\n"
+    assert fake_ssh.executions[0].stdin_closed is True
+    assert fake_ssh.commands[0]["get_pty"] is False
+
+
+def test_a_command_that_fails_reports_its_status_and_stderr(fake_ssh):
+    streaming(fake_ssh, (1, b"", "CommandError: no database"))
+
+    with open_session(target()) as session:
+        result = session.stream("dbs backup --stream", io.BytesIO())
+
+    assert result.exit_status == 1
+    assert "no database" in result.stderr
+
+
+def test_a_stream_that_ends_without_an_exit_status_was_interrupted(fake_ssh):
+    streaming(fake_ssh, (-1, b"half", ""))
+    sink = io.BytesIO()
+
+    with open_session(target()) as session:
+        with pytest.raises(StreamInterrupted):
+            session.stream("dbs backup --stream", sink)
+
+    assert sink.getvalue() == b"half"
+    assert fake_ssh.executions[0].channel_closed is True
+
+
+def test_a_sink_that_cannot_write_stops_the_stream_and_closes_the_channel(fake_ssh):
+    streaming(fake_ssh, (0, b"payload", ""))
+
+    class Full:
+        def write(self, data):
+            raise OSError(28, "No space left on device")
+
+    with open_session(target()) as session:
+        with pytest.raises(OSError, match="No space"):
+            session.stream("dbs backup --stream", Full())
+
+    assert fake_ssh.executions[0].channel_closed is True
+
+
+def test_a_connection_that_drops_while_reading_is_interrupted(fake_ssh, monkeypatch):
+    from tests.fake_ssh import FakeChannel, SSHException
+
+    streaming(fake_ssh, (0, b"payload", ""))
+
+    def dropped(self, size):
+        raise SSHException("Socket is closed")
+
+    monkeypatch.setattr(FakeChannel, "recv", dropped)
+
+    with open_session(target()) as session:
+        with pytest.raises(StreamInterrupted, match="lost"):
+            session.stream("dbs backup --stream", io.BytesIO())
+
