@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .conf import setting
-from .container.format import FORMAT_VERSION, container_version
+from .container import FORMAT_VERSION, read_format_version
+from .container.format import container_version
 from .exceptions import DBSError
 
 OK = "ok"
@@ -466,6 +467,45 @@ class RestorePathMap(Step):
         return self.ok("every new root in DBS_RESTORE_PATH_MAP is inside a restore root")
 
 
+class BackupFormat(Step):
+    name = "backup format"
+    since = "0.7.0"
+    settings = (
+        ("DBS_KDF_TIME_COST", "UNTRUSTED_MAX_TIME_COST", ""),
+        ("DBS_KDF_MEMORY_COST", "UNTRUSTED_MAX_MEMORY_COST", " KiB"),
+    )
+
+    def check(self):
+        from .crypto import kdf
+
+        refused = []
+        for name, ceiling_name, unit in self.settings:
+            value = setting(name, None)
+            ceiling = getattr(kdf, ceiling_name)
+            if value is None:
+                continue
+            try:
+                number = int(value)
+            except (TypeError, ValueError):
+                refused.append(f"{name} = {value!r} is not a number")
+                continue
+            if number > ceiling:
+                refused.append(f"{name} = {number}{unit} is above {ceiling}{unit}")
+        if refused:
+            return self.action(
+                "format 2 backups refuse "
+                + " and ".join(refused)
+                + ", so every new backup would fail",
+                f"DBS_KDF_TIME_COST = {kdf.UNTRUSTED_MAX_TIME_COST} and "
+                f"DBS_KDF_MEMORY_COST = {kdf.UNTRUSTED_MAX_MEMORY_COST} at most, or unset them",
+            )
+        return self.ok(
+            f"since 0.7.0 new backups are written in format {FORMAT_VERSION} and streamed "
+            "with bounded memory; format 1 backups still restore and validate, and "
+            "`dbs upgrade --backups DIR` converts them into new files beside the originals"
+        )
+
+
 class AiInstructions(Step):
     name = "ai instructions"
     since = "0.3.1"
@@ -522,6 +562,7 @@ STEPS = (
     SourceFiles,
     BackupPaths,
     RestorePathMap,
+    BackupFormat,
     AiInstructions,
 )
 
@@ -584,7 +625,15 @@ class Converter:
     needs_passphrase: bool = False
 
 
-CONVERTERS: dict = {}
+def _convert_format_1(data, passphrase):
+    from .engine.convert import convert_v1
+
+    return convert_v1(data, passphrase)
+
+
+CONVERTERS: dict = {
+    1: Converter(produces=FORMAT_VERSION, convert=_convert_format_1, needs_passphrase=True),
+}
 
 
 @dataclass
@@ -605,10 +654,10 @@ class BackupState:
 
 def inspect_backup(path: Path) -> BackupState:
     try:
-        data = path.read_bytes()
+        with path.open("rb") as handle:
+            version = read_format_version(handle)
     except OSError as exc:
         return BackupState(path, None, error=f"cannot read the file: {exc}")
-    version = container_version(data)
     if version is None:
         return BackupState(path, None, error="not a DBS container, or the header is destroyed")
     return BackupState(path, version)

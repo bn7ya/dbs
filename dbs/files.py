@@ -5,12 +5,13 @@ import logging
 import os
 import secrets
 import stat
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 from django.apps import apps
 from django.core.exceptions import FieldDoesNotExist, SuspiciousFileOperation
-from django.core.files.base import ContentFile
+from django.core.files.base import File
 from django.core.files.storage import FileSystemStorage
 from django.core.files.utils import validate_file_name
 
@@ -102,22 +103,16 @@ def regular_file(path: str, root: str | None = None) -> str:
     return resolved
 
 
-def _read_descriptor(path: str) -> bytes:
+def open_regular(path: str):
     try:
         descriptor = os.open(path, READ_FLAGS)
     except OSError as exc:
         raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
-    with os.fdopen(descriptor, "rb") as fh:
-        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
-            raise SkippedFile("not a regular file")
-        try:
-            return fh.read()
-        except OSError as exc:
-            raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
-
-
-def read_regular_file(path: str, root: str | None = None) -> bytes:
-    return _read_descriptor(regular_file(path, root))
+    fh = os.fdopen(descriptor, "rb")
+    if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+        fh.close()
+        raise SkippedFile("not a regular file")
+    return fh
 
 
 def _reads_plain_files(storage) -> bool:
@@ -127,30 +122,67 @@ def _reads_plain_files(storage) -> bool:
     )
 
 
-def _read_through_storage(storage, name: str) -> bytes:
+@dataclass
+class SourceFile:
+    entry: FileEntry
+    described: str
+    path: str | None = None
+    storage: object = None
+
+
+def _local_size(path: str) -> int:
+    with open_regular(path) as fh:
+        return os.fstat(fh.fileno()).st_size
+
+
+def _storage_size(storage, name: str) -> int:
     try:
         with storage.open(name, "rb") as fh:
-            return fh.read()
+            size = getattr(fh, "size", 0)
+    except FileNotFoundError:
+        raise SkippedFile("missing") from None
+    except OSError as exc:
+        raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
+    return size if isinstance(size, int) else 0
+
+
+def _probe_storage(storage, name: str) -> tuple[str | None, int]:
+    try:
+        local = storage.path(name)
+    except NotImplementedError:
+        return None, _storage_size(storage, name)
+    except SuspiciousFileOperation:
+        raise SkippedFile("outside its storage") from None
+    resolved = regular_file(local, getattr(storage, "location", None))
+    if _reads_plain_files(storage):
+        return resolved, _local_size(resolved)
+    return None, _storage_size(storage, name)
+
+
+def open_source(source: SourceFile):
+    if source.path is not None:
+        return open_regular(source.path)
+    try:
+        return source.storage.open(source.entry.name, "rb")
     except FileNotFoundError:
         raise SkippedFile("missing") from None
     except OSError as exc:
         raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
 
 
-def read_storage_file(storage, name: str) -> bytes:
-    try:
-        local = storage.path(name)
-    except NotImplementedError:
-        return _read_through_storage(storage, name)
-    except SuspiciousFileOperation:
-        raise SkippedFile("outside its storage") from None
-    resolved = regular_file(local, getattr(storage, "location", None))
-    if _reads_plain_files(storage):
-        return _read_descriptor(resolved)
-    return _read_through_storage(storage, name)
+def read_chunks(source: SourceFile, size: int):
+    with open_source(source) as fh:
+        while True:
+            try:
+                chunk = fh.read(size)
+            except OSError as exc:
+                raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
+            if not chunk:
+                return
+            yield chunk
 
 
-def collect_instance_files(
+def list_instance_files(
     instance, file_field_types: dict[str, FieldType], skipped: list[str]
 ):
     label = f"{instance._meta.app_label}.{instance._meta.model_name}"
@@ -159,37 +191,36 @@ def collect_instance_files(
             fobj = getattr(instance, field_name, None)
             if not fobj or not getattr(fobj, "name", None):
                 continue
+            described = f"{label}.{field_name}: {fobj.name}"
             try:
-                data = read_storage_file(fobj.storage, fobj.name)
+                path, size = _probe_storage(fobj.storage, fobj.name)
             except SkippedFile as reason:
-                skipped.append(f"{label}.{field_name}: {fobj.name} ({reason})")
+                skipped.append(f"{described} ({reason})")
                 continue
-            yield (
-                FileEntry(
-                    kind="storage", size=len(data), sha256=_sha256(data),
-                    model=label, pk=instance.pk, field=field_name, name=fobj.name,
-                ),
-                data,
+            entry = FileEntry(
+                kind="storage", size=size, sha256="",
+                model=label, pk=instance.pk, field=field_name, name=fobj.name,
             )
+            yield SourceFile(entry, described, path=path, storage=fobj.storage)
         elif ftype is FieldType.FILE_PATH:
             path = getattr(instance, field_name, None)
             if not path:
                 continue
+            described = f"{label}.{field_name}: {path}"
             try:
-                data = read_regular_file(path)
+                resolved = regular_file(path)
+                size = _local_size(resolved)
             except SkippedFile as reason:
-                skipped.append(f"{label}.{field_name}: {path} ({reason})")
+                skipped.append(f"{described} ({reason})")
                 continue
-            yield (
-                FileEntry(
-                    kind="path", size=len(data), sha256=_sha256(data),
-                    model=label, pk=instance.pk, field=field_name, name=path,
-                ),
-                data,
+            entry = FileEntry(
+                kind="path", size=size, sha256="",
+                model=label, pk=instance.pk, field=field_name, name=path,
             )
+            yield SourceFile(entry, described, path=resolved)
 
 
-def collect_root_files(root: str, skipped: list[str]):
+def list_root_files(root: str, skipped: list[str]):
     root = os.path.abspath(root)
     if not os.path.isdir(root):
         return
@@ -207,23 +238,22 @@ def collect_root_files(root: str, skipped: list[str]):
         for filename in sorted(filenames):
             abspath = os.path.join(dirpath, filename)
             try:
-                data = read_regular_file(abspath, real_root)
+                resolved = regular_file(abspath, real_root)
+                size = _local_size(resolved)
             except SkippedFile as reason:
                 skipped.append(f"{abspath} ({reason})")
                 continue
-            yield (
-                FileEntry(
-                    kind="root", size=len(data), sha256=_sha256(data),
-                    root=root, name=os.path.relpath(abspath, root),
-                ),
-                data,
+            entry = FileEntry(
+                kind="root", size=size, sha256="",
+                root=root, name=os.path.relpath(abspath, root),
             )
+            yield SourceFile(entry, abspath, path=resolved)
 
 
 @dataclass
 class Placement:
     entry: FileEntry
-    data: bytes
+    data: bytes | None = None
     target: str = ""
     storage: object = None
     name: str = ""
@@ -333,12 +363,8 @@ def _place_storage(placement: Placement) -> Placement:
     return _place_local(placement, local, roots)
 
 
-def place_file(entry: FileEntry, data: bytes, roots: list[str], path_map: dict) -> Placement:
-    if _sha256(data) != entry.sha256:
-        raise CorruptionError(
-            f"File {entry.name!r} failed its integrity hash after extraction."
-        )
-    placement = Placement(entry, data)
+def place_entry(entry: FileEntry, roots: list[str], path_map: dict) -> Placement:
+    placement = Placement(entry)
     if entry.kind == "storage":
         return _place_storage(placement)
     if entry.kind == "path":
@@ -352,10 +378,26 @@ def place_file(entry: FileEntry, data: bytes, roots: list[str], path_map: dict) 
     return placement.refuse(f"{entry.name}: unknown file entry kind {entry.kind!r}")
 
 
+def place_file(entry: FileEntry, data: bytes, roots: list[str], path_map: dict) -> Placement:
+    if _sha256(data) != entry.sha256:
+        raise CorruptionError(
+            f"File {entry.name!r} failed its integrity hash after extraction."
+        )
+    placement = place_entry(entry, roots, path_map)
+    placement.data = data
+    return placement
+
+
 def plan_restore(files, *, registry=None) -> list[Placement]:
     roots = restore_roots(registry)
     path_map = restore_path_map()
     return [place_file(entry, data, roots, path_map) for entry, data in files]
+
+
+def plan_entries(entries, *, registry=None) -> list[Placement]:
+    roots = restore_roots(registry)
+    path_map = restore_path_map()
+    return [place_entry(entry, roots, path_map) for entry in entries]
 
 
 def refusal_message(problems: list[str]) -> str:
@@ -368,6 +410,58 @@ def refusal_message(problems: list[str]) -> str:
     )
 
 
+class Staging:
+    def __init__(self, staged: "StagedFiles", placement: Placement):
+        self._staged = staged
+        self.placement = placement
+        self.path = ""
+        self._fh = None
+        token = secrets.token_hex(6)
+        if placement.storage is not None:
+            self.path = f"{placement.name}.{token}.dbs-restore"
+            self._fh = tempfile.TemporaryFile()
+            return
+        directory = os.path.dirname(placement.target)
+        staged._make_directories(directory, placement.directory_mode)
+        self.path = os.path.join(
+            directory, f".{os.path.basename(placement.target)}.{token}.dbs-restore"
+        )
+        self._fh = os.fdopen(os.open(self.path, STAGING_FLAGS, 0o666), "wb")
+
+    def write(self, chunk: bytes) -> None:
+        self._fh.write(chunk)
+
+    def finish(self) -> None:
+        try:
+            staging = self._seal()
+        except BaseException:
+            self.abort()
+            raise
+        self._staged.pending.append((staging, self.placement))
+
+    def _seal(self) -> str:
+        fh, self._fh = self._fh, None
+        placement = self.placement
+        if placement.storage is not None:
+            with fh:
+                fh.seek(0)
+                return placement.storage.save(self.path, File(fh, name=self.path))
+        with fh:
+            fh.flush()
+            os.fsync(fh.fileno())
+        mode = _final_mode(placement)
+        if mode is not None:
+            os.chmod(self.path, mode)
+        return self.path
+
+    def abort(self) -> None:
+        fh, self._fh = self._fh, None
+        if fh is not None:
+            fh.close()
+        if self.placement.storage is None and self.path:
+            _remove_quietly(self.path)
+
+
 class StagedFiles:
     def __init__(self):
         self.pending: list = []
@@ -377,35 +471,22 @@ class StagedFiles:
     def stage_all(self, placements) -> None:
         try:
             for placement in placements:
-                self.pending.append((self._stage(placement), placement))
+                self._stage(placement)
         except BaseException:
             self.discard()
             raise
 
-    def _stage(self, placement: Placement) -> str:
-        token = secrets.token_hex(6)
-        if placement.storage is not None:
-            return placement.storage.save(
-                f"{placement.name}.{token}.dbs-restore", ContentFile(placement.data)
-            )
-        directory = os.path.dirname(placement.target)
-        self._make_directories(directory, placement.directory_mode)
-        staging = os.path.join(
-            directory, f".{os.path.basename(placement.target)}.{token}.dbs-restore"
-        )
-        descriptor = os.open(staging, STAGING_FLAGS, 0o666)
+    def begin(self, placement: Placement) -> Staging:
+        return Staging(self, placement)
+
+    def _stage(self, placement: Placement) -> None:
+        staging = self.begin(placement)
         try:
-            with os.fdopen(descriptor, "wb") as fh:
-                fh.write(placement.data)
-                fh.flush()
-                os.fsync(fh.fileno())
-            mode = _final_mode(placement)
-            if mode is not None:
-                os.chmod(staging, mode)
+            staging.write(placement.data)
         except BaseException:
-            _remove_quietly(staging)
+            staging.abort()
             raise
-        return staging
+        staging.finish()
 
     def _make_directories(self, directory: str, mode) -> None:
         missing = []
@@ -470,7 +551,8 @@ def _publish(staging: str, placement: Placement) -> None:
     storage = placement.storage
     if storage.exists(placement.name):
         storage.delete(placement.name)
-    saved = storage.save(placement.name, ContentFile(placement.data))
+    with storage.open(staging, "rb") as fh:
+        saved = storage.save(placement.name, File(fh, name=placement.name))
     storage.delete(staging)
     if saved != placement.name:
         logger.warning(

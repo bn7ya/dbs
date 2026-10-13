@@ -34,17 +34,16 @@ def _commit_a_new_author_and_book():
 
 
 def _write_after_serializing(model_to_watch, monkeypatch):
-    real = backup_module.serialize_model
+    real = backup_module.serialize_batches
 
     def serialize_then_write(model, *args, **kwargs):
-        records = real(model, *args, **kwargs)
+        yield from real(model, *args, **kwargs)
         if model is model_to_watch:
             writer = threading.Thread(target=_commit_a_new_author_and_book)
             writer.start()
             writer.join()
-        return records
 
-    monkeypatch.setattr(backup_module, "serialize_model", serialize_then_write)
+    monkeypatch.setattr(backup_module, "serialize_batches", serialize_then_write)
 
 
 @postgres_only

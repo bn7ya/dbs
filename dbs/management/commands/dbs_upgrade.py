@@ -6,7 +6,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from dbs.container.format import FORMAT_VERSION
+from dbs.container import FORMAT_VERSION
 from dbs.upgrade import (
     ACTION,
     FIXED,

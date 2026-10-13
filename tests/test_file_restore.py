@@ -7,11 +7,12 @@ from django.core.management.base import CommandError
 
 from dbs import ModelBackup
 from dbs.engine import create_backup, restore_backup
-from dbs.engine import restore as restore_engine
 from dbs.exceptions import ConfigurationError, RestoreError
 from dbs.files import FileEntry, _sha256, plan_restore
 from dbs.registry import BackupRegistry
+from dbs.serialize import RowLoader
 from tests.conftest import FAST_KDF
+from tests.format1 import as_format1
 from tests.testapp.dbs import BookBackup
 from tests.testapp.models import Author, Book
 
@@ -133,18 +134,21 @@ def test_files_wait_for_the_rows_to_commit(sidecar_book, tmp_path, settings, dja
     assert out.files_written == 1
 
 
-def test_a_failed_load_removes_the_staged_files(sidecar_book, tmp_path, settings, monkeypatch):
+@pytest.mark.parametrize("form", [2, 1])
+def test_a_failed_load_removes_the_staged_files(sidecar_book, tmp_path, settings, monkeypatch, form):
     book, sidecar = sidecar_book
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     container = create_backup(PASS, registry=_books(), kdf_params=FAST_KDF)
+    if form == 1:
+        container = as_format1(container, PASS)
     _wipe_books()
     sidecar.unlink()
     sidecar.parent.rmdir()
 
-    def fail(records, **kwargs):
+    def fail(self, records):
         raise RuntimeError("the load failed")
 
-    monkeypatch.setattr(restore_engine, "save_records", fail)
+    monkeypatch.setattr(RowLoader, "save", fail)
 
     with pytest.raises(RuntimeError):
         restore_backup(container, PASS, registry=_books())

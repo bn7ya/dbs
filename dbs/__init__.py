@@ -10,14 +10,18 @@ __all__ = [
     "ModelBackup",
     "default_passphrase",
     "create_backup",
+    "write_backup",
+    "BackupSummary",
     "restore_backup",
     "validate_backup",
     "__version__",
 ]
 
+_ENGINE = {"create_backup", "write_backup", "BackupSummary", "restore_backup", "validate_backup"}
+
 
 def __getattr__(name):
-    if name in {"create_backup", "restore_backup", "validate_backup"}:
+    if name in _ENGINE:
         from . import engine
 
         return getattr(engine, name)

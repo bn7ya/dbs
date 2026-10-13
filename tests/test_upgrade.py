@@ -8,17 +8,17 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from dbs import upgrade
-from dbs.container.format import (
-    FORMAT_VERSION,
-    SEALED_PREFIX,
-    container_version,
-    copy_offsets,
-    seal_header,
-)
-from dbs.engine import create_backup
+from dbs.container import FORMAT_VERSION
+from dbs.container.format import SEALED_PREFIX, container_version, seal_header
+from dbs.container.stream import HEADER_SIZE, TRAILER_SIZE
+from dbs.engine import create_backup, restore_backup, validate_backup
 from dbs.keys import default_passphrase
 from dbs.upgrade import ACTION, FIXED, OK, WARN, Converter
+from tests.conftest import FAST_KDF
+from tests.format1 import as_format1
 from tests.testapp.models import Author
+
+SHIPPED_CONVERTERS = dict(upgrade.CONVERTERS)
 
 OFFLINE = {"offline": True}
 
@@ -336,7 +336,7 @@ def test_an_empty_directory_is_fine(tmp_path):
 
 @pytest.mark.django_db
 def test_an_unconvertible_backup_blocks_and_touches_nothing(backups):
-    future = stamp_version(backups / "current.dbs", backups / "future.dbs", 2)
+    future = stamp_version(backups / "current.dbs", backups / "future.dbs", 3)
     before = {path: path.read_bytes() for path in backups.iterdir()}
 
     with pytest.raises(CommandError, match="cannot be read"):
@@ -348,7 +348,7 @@ def test_an_unconvertible_backup_blocks_and_touches_nothing(backups):
 
 @pytest.mark.django_db
 def test_an_unconvertible_backup_blocks_check_too(backups):
-    stamp_version(backups / "current.dbs", backups / "future.dbs", 2)
+    stamp_version(backups / "current.dbs", backups / "future.dbs", 3)
 
     with pytest.raises(CommandError, match="not readable"):
         run(backups=str(backups), check=True)
@@ -356,9 +356,9 @@ def test_an_unconvertible_backup_blocks_check_too(backups):
 
 @pytest.mark.django_db
 def test_a_registered_converter_rewrites_and_keeps_the_original(backups, monkeypatch):
-    source = stamp_version(backups / "current.dbs", backups / "old.dbs", 2)
+    source = stamp_version(backups / "current.dbs", backups / "old.dbs", 3)
     original = source.read_bytes()
-    monkeypatch.setattr(upgrade, "CONVERTERS", {2: restamp(FORMAT_VERSION)})
+    monkeypatch.setattr(upgrade, "CONVERTERS", {3: restamp(FORMAT_VERSION)})
 
     printed = run(backups=str(backups))
 
@@ -371,30 +371,29 @@ def test_a_registered_converter_rewrites_and_keeps_the_original(backups, monkeyp
 
 @pytest.mark.django_db
 def test_conversion_chains_across_several_versions(backups, monkeypatch):
-    source = stamp_version(backups / "current.dbs", backups / "ancient.dbs", 3)
-    monkeypatch.setattr(upgrade, "CONVERTERS", {3: restamp(2), 2: restamp(FORMAT_VERSION)})
+    source = stamp_version(backups / "current.dbs", backups / "ancient.dbs", 4)
+    monkeypatch.setattr(upgrade, "CONVERTERS", {4: restamp(3), 3: restamp(FORMAT_VERSION)})
 
     run(backups=str(backups))
 
     converted = backups / "ancient.dbs.converted"
     assert container_version(converted.read_bytes()) == FORMAT_VERSION
-    assert container_version(source.read_bytes()) == 3
+    assert container_version(source.read_bytes()) == 4
 
 
 @pytest.mark.django_db
 def test_a_converter_that_destroys_the_payload_beyond_repair_is_caught(backups, monkeypatch):
-    stamp_version(backups / "current.dbs", backups / "old.dbs", 2)
+    stamp_version(backups / "current.dbs", backups / "old.dbs", 3)
 
     def wreck(data, passphrase):
         current = unwrap(data)
-        copies_start, copy_b_offset, copy_len = copy_offsets(current)
         patched = bytearray(current)
-        copies_end = copy_b_offset + copy_len
-        patched[copies_start:copies_end] = bytes(copies_end - copies_start)
+        copies_end = len(current) - HEADER_SIZE - 2 * TRAILER_SIZE
+        patched[HEADER_SIZE:copies_end] = bytes(copies_end - HEADER_SIZE)
         return bytes(patched)
 
     monkeypatch.setattr(
-        upgrade, "CONVERTERS", {2: Converter(produces=FORMAT_VERSION, convert=wreck)}
+        upgrade, "CONVERTERS", {3: Converter(produces=FORMAT_VERSION, convert=wreck)}
     )
 
     with pytest.raises(CommandError, match="cannot be read"):
@@ -405,17 +404,74 @@ def test_a_converter_that_destroys_the_payload_beyond_repair_is_caught(backups, 
 
 @pytest.mark.django_db
 def test_a_converter_that_raises_is_reported_not_propagated(backups, monkeypatch):
-    stamp_version(backups / "current.dbs", backups / "old.dbs", 2)
+    stamp_version(backups / "current.dbs", backups / "old.dbs", 3)
 
     def explode(data, passphrase):
         raise ValueError("no")
 
     monkeypatch.setattr(
-        upgrade, "CONVERTERS", {2: Converter(produces=FORMAT_VERSION, convert=explode)}
+        upgrade, "CONVERTERS", {3: Converter(produces=FORMAT_VERSION, convert=explode)}
     )
 
     with pytest.raises(CommandError, match="cannot be read"):
         run(backups=str(backups))
+
+
+def test_the_backup_format_step_explains_format_2():
+    finding = upgrade.BackupFormat().check()
+
+    assert finding.level == OK
+    assert f"format {FORMAT_VERSION}" in finding.message
+    assert "format 1 backups still restore" in finding.message
+    assert "dbs upgrade --backups DIR" in finding.message
+
+
+@pytest.mark.parametrize(
+    "name, value",
+    [("DBS_KDF_TIME_COST", 11), ("DBS_KDF_MEMORY_COST", 256 * 1024 + 1), ("DBS_KDF_TIME_COST", "x")],
+)
+def test_the_backup_format_step_reports_kdf_settings_format_2_refuses(settings, name, value):
+    setattr(settings, name, value)
+
+    finding = upgrade.BackupFormat().check()
+
+    assert finding.level == ACTION
+    assert name in finding.message
+    assert "DBS_KDF_TIME_COST = 10" in finding.remedy
+
+
+def test_kdf_settings_at_the_format_2_ceiling_are_fine(settings):
+    settings.DBS_KDF_TIME_COST = 10
+    settings.DBS_KDF_MEMORY_COST = 256 * 1024
+
+    assert upgrade.BackupFormat().check().level == OK
+
+
+@pytest.mark.django_db
+def test_a_format_1_backup_is_converted_beside_the_original(backups, monkeypatch, settings):
+    monkeypatch.setattr(upgrade, "CONVERTERS", SHIPPED_CONVERTERS)
+    passphrase = default_passphrase()
+    format1 = as_format1(create_backup(passphrase, kdf_params=FAST_KDF), passphrase)
+    source = backups / "old.dbs"
+    source.write_bytes(format1)
+
+    printed = run(backups=str(backups))
+
+    assert "original is untouched" in printed
+    assert source.read_bytes() == format1
+    converted = backups / "old.dbs.converted"
+    assert container_version(converted.read_bytes()) == FORMAT_VERSION
+    checked = validate_backup(converted, passphrase)
+    assert checked.ok and checked.decrypted_ok
+    assert checked.stats["records"] == validate_backup(format1, passphrase).stats["records"]
+    Author.objects.all().delete()
+    restore_backup(converted, passphrase)
+    assert Author.objects.filter(name="Ada").exists()
+
+
+def test_the_shipped_converter_turns_format_1_into_the_current_format():
+    assert SHIPPED_CONVERTERS[1].produces == FORMAT_VERSION == 2
+    assert SHIPPED_CONVERTERS[1].needs_passphrase
 
 
 @pytest.mark.django_db

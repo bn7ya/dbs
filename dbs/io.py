@@ -4,6 +4,7 @@ import errno
 import os
 import shutil
 import tempfile
+from contextlib import contextmanager
 
 LINK_UNSUPPORTED = {
     errno.EPERM,
@@ -22,6 +23,12 @@ def refuse_existing(path: str) -> None:
 
 
 def write_new_file(path: str, data: bytes, verify=None) -> None:
+    with create_new_file(path, verify) as fh:
+        fh.write(data)
+
+
+@contextmanager
+def create_new_file(path: str, verify=None):
     refuse_existing(path)
     directory = os.path.dirname(os.path.abspath(path))
     descriptor, partial = tempfile.mkstemp(
@@ -30,7 +37,7 @@ def write_new_file(path: str, data: bytes, verify=None) -> None:
     try:
         with os.fdopen(descriptor, "wb") as fh:
             os.fchmod(fh.fileno(), 0o600)
-            fh.write(data)
+            yield fh
             fh.flush()
             os.fsync(fh.fileno())
         if verify is not None:
