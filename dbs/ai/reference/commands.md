@@ -83,7 +83,7 @@ Also reachable as `manage.py dbs_upgrade` and `manage.py dbs-upgrade`.
 [--with-backups]`, `import FILE [--replace]`, `createuser NAME`, `password NAME`, `paths`.
 
 Everything the manager's interface does is also a command, on the same data:
-- `server list|show|add|edit|remove|check|discover|browse|public-key|host-key|passphrase|capture-passphrase|import-profiles`
+- `server list|show|add|edit|remove|check|discover|browse|public-key|host-key|passphrase|capture-passphrase`
 - `backup list|take|verify|restore|download|upload|delete|undo-delete` (`take SERVER…` or `--all`)
 - `plan list|show|add|edit|remove|run`, `activity list|show`
 - `env list|pull|compare|reveal|push`, `files list|download|upload|mkdir|delete`
@@ -108,8 +108,5 @@ take, verify and save backups, add and run plans, keep `.env` versions (key name
 rehearse restores and redeploys. It never takes the account password and has no tool that
 reveals a secret, restores or redeploys for real, removes or deletes.
 
-`dbs-client` is deprecated: prefer `django_dbs server import-profiles` and
-`django_dbs backup take`.
-
 `python -m dbs.manager COMMAND` is the same, for when pip put `django_dbs` in a folder that
-is not on `PATH`; `python -m dbs.client COMMAND` does the same for `dbs-client`.
+is not on `PATH`.

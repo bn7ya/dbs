@@ -20,6 +20,7 @@ PASS = "chain-pass-phrase"
 @pytest.fixture
 def root(db, settings):
     settings.DBS_SETUP_WIZARD = False
+    settings.DBS_TRUSTED_NETWORKS = ["127.0.0.0/8"]
     return User.objects.create_superuser("root", "root@example.com", "pw")
 
 
@@ -315,4 +316,4 @@ def test_no_dbs_command_deletes_audit_rows(settings):
     call_command("dbs", "security", "purge", stdout=out)
 
     assert AuditEvent.objects.filter(pk=event.pk).exists()
-    assert "Audit rows are kept" in out.getvalue()
+    assert "audit trail is kept" in out.getvalue()

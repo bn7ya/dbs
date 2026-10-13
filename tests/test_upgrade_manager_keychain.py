@@ -1,7 +1,7 @@
-import importlib
+import sys
 
 from dbs import upgrade
-from dbs.upgrade import OK, WARN
+from dbs.upgrade import OK
 
 
 def test_the_manager_keychain_step_finds_keyring():
@@ -11,21 +11,18 @@ def test_the_manager_keychain_step_finds_keyring():
     assert "system keychain" in finding.message
 
 
-def test_without_keyring_the_manager_keychain_step_warns(monkeypatch):
-    real_import = importlib.import_module
+def test_without_keyring_the_manager_extra_names_it_once(monkeypatch):
+    monkeypatch.setitem(sys.modules, "keyring", None)
 
-    def without_keyring(name, *args, **kwargs):
-        if name == "keyring":
-            raise ImportError(name)
-        return real_import(name, *args, **kwargs)
+    keychain = upgrade.ManagerKeychain().check()
+    extra = upgrade.ManagerExtra().check()
 
-    monkeypatch.setattr(importlib, "import_module", without_keyring)
-
-    finding = upgrade.ManagerKeychain().check()
-
-    assert finding.level == WARN
-    assert "in a file next to the data" in finding.message
-    assert "django-dbs>=0.7" in finding.remedy
+    assert keychain.level == OK
+    assert "keyring" not in keychain.message
+    assert "manager extra" in keychain.message
+    assert extra.level == OK
+    assert "keyring" in extra.message
+    assert 'pip install "django-dbs[manager]"' in extra.remedy
 
 
 def test_the_manager_keychain_step_runs_with_the_others():

@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 import pytest
+from django.db import connection
 from django.utils import timezone
 
 import dbs
@@ -196,7 +197,7 @@ def test_about_names_the_version_and_where_the_data_lives(api, data_dir, setting
         "last_export_at": None,
         "key_store": "file",
     }
-    assert body["database"].startswith("sqlite:")
+    assert body["database"].startswith(f"{connection.vendor}:")
 
 
 @pytest.mark.django_db

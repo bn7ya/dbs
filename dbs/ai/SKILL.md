@@ -26,7 +26,7 @@ guard does nothing at all unless the middleware is installed, so never describe 
 guarded in a project that lacks it.
 
 **On any upgrade from 0.2.x, `manage.py migrate` is required**: 0.3.0 added database tables.
-`scikit-learn` became a hard dependency at the same time.
+The guard's detector needs scikit-learn, which `pip install "django-dbs[guard]"` installs.
 
 ## Keep the project current
 

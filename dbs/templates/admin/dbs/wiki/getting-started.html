@@ -3,6 +3,9 @@
 {% block wiki %}
 <h1>Getting started</h1>
 <h2>What this project needs</h2>
+<pre><code>pip install "django-dbs[guard]"</code></pre>
+<p>The <code>guard</code> extra installs scikit-learn for the session guard. A project that
+does not run the guard needs only <code>pip install django-dbs</code>.</p>
 <pre><code>INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
 MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]</code></pre>
 <pre><code>python manage.py migrate</code></pre>

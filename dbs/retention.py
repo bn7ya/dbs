@@ -17,7 +17,6 @@ MAXIMUM_KEEP = 5
 PASSED = "passed"
 FAILED = "failed"
 UNKNOWN = "unknown"
-MANIFEST_LIMIT = 16 * 1024 * 1024
 LEFTOVER_SECONDS = 3600
 
 _LEFTOVER_PATTERN = re.compile(r"^\..+\.dbs\.[A-Za-z0-9_]{8}$")
@@ -147,28 +146,18 @@ def prune_remote(
 
 
 def read_created(path: str) -> tuple[bool, datetime.datetime | None]:
-    from .container.format import HEADER_SIZE, _parse_header, _read_manifest
+    from .container.format import first_verified_header
 
     try:
         with open(path, "rb") as fh:
-            header = _parse_header(fh.read(HEADER_SIZE))
-            if header is None:
-                fh.seek(0, os.SEEK_END)
-                if fh.tell() < HEADER_SIZE:
-                    return False, None
-                fh.seek(-HEADER_SIZE, os.SEEK_END)
-                header = _parse_header(fh.read(HEADER_SIZE))
-                if header is None:
-                    return False, None
-            length = header["manifest_dup_offset"] + header["manifest_len"]
-            if length > MANIFEST_LIMIT:
-                return True, None
-            fh.seek(0)
-            data = fh.read(length)
-        created = datetime.datetime.fromisoformat(_read_manifest(data, header)["created"])
-    except OSError:
+            found = first_verified_header(fh)
+    except (OSError, ContainerError):
         return False, None
-    except (ContainerError, KeyError, TypeError, ValueError):
+    if found is None:
+        return False, None
+    try:
+        created = datetime.datetime.fromisoformat(found.manifest["created"])
+    except (KeyError, TypeError, ValueError):
         return True, None
     if created.tzinfo is None:
         created = created.replace(tzinfo=datetime.timezone.utc)

@@ -2,12 +2,19 @@ import os
 import tempfile
 
 os.environ["DBS_MANAGER_HOME"] = tempfile.mkdtemp(prefix="dbs-manager-test-")
-os.environ.pop("DBS_MANAGER_DATABASE_URL", None)
+TEST_DATABASE_URL = os.environ.pop("DBS_MANAGER_DATABASE_URL", "")
 os.environ.setdefault("DBS_MANAGER_KEY_STORE", "file")
 
+from dbs.manager.database import parse_database_url  # noqa: E402
 from dbs.manager.settings import *  # noqa: E402,F403
 
-DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+DATABASES = {
+    "default": (
+        parse_database_url(TEST_DATABASE_URL)
+        if TEST_DATABASE_URL
+        else {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}
+    )
+}
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 

@@ -15,6 +15,7 @@ _UNSAFE_CHARACTERS = re.compile(r"[^A-Za-z0-9_.]+")
 
 _NAME_PATTERN = re.compile(
     r"^(?P<prefix>.+)-(?P<stamp>\d{8}-\d{6})Z(?:-(?P<ordinal>\d+))?"
+    + r"(?:\.v(?P<format>\d+)(?:-(?P<copy>\d+))?)?"
     + re.escape(BACKUP_SUFFIX)
     + r"$"
 )

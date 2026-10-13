@@ -11,6 +11,7 @@ from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.backups.repositories import BackupPlanRepository
 from dbs.manager.servers.services import ServerService
 from tests.manager.servers.support import PASSWORD
+from tests.manager.support import needs_partial_unique_constraints
 
 PLANS = "/api/backups/plans/"
 
@@ -222,6 +223,7 @@ def test_a_name_is_unique_among_a_servers_plans_that_are_not_deleted(
 
 
 @pytest.mark.django_db
+@needs_partial_unique_constraints
 def test_a_name_taken_between_the_check_and_the_write_is_still_name_taken(
     api, monkeypatch, make_plan
 ):

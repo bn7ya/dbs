@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from django.core import serializers
+from django.db import connection
 from django.db.models import Sum
 
 from dbs.crypto.kdf import KDFParams
@@ -50,8 +51,16 @@ EPOCH_DATE = date(2020, 1, 1)
 STRESS_KDF = KDFParams(time_cost=1, memory_cost=8 * 1024, parallelism=1)
 
 
+def created(model, objects, **options):
+    made = model.objects.bulk_create(objects, **options)
+    if connection.features.can_return_rows_from_bulk_insert:
+        return made
+    return list(model.objects.order_by("-pk")[: len(made)])[::-1]
+
+
 def populate(rng):
-    publishers = Publisher.objects.bulk_create(
+    publishers = created(
+        Publisher,
         [
             Publisher(
                 name_en=f"{corpus.english_name(rng)} Press {index}",
@@ -65,7 +74,8 @@ def populate(rng):
         batch_size=BATCH,
     )
 
-    branches = Branch.objects.bulk_create(
+    branches = created(
+        Branch,
         [
             Branch(
                 publisher=rng.choice(publishers),
@@ -95,7 +105,7 @@ def populate(rng):
                     badge=rng.randbytes(16),
                 )
             )
-        employees.extend(Employee.objects.bulk_create(batch))
+        employees.extend(created(Employee, batch))
 
     EmployeeProfile.objects.bulk_create(
         [
@@ -109,7 +119,8 @@ def populate(rng):
         batch_size=BATCH,
     )
 
-    writers = Writer.objects.bulk_create(
+    writers = created(
+        Writer,
         [
             Writer(
                 name_en=corpus.english_name(rng),
@@ -121,7 +132,8 @@ def populate(rng):
         batch_size=BATCH,
     )
 
-    keywords = Keyword.objects.bulk_create(
+    keywords = created(
+        Keyword,
         [
             Keyword(
                 word_en=f"{rng.choice(corpus.ENGLISH_WORDS)}-{index}",
@@ -132,7 +144,8 @@ def populate(rng):
         batch_size=BATCH,
     )
 
-    series_list = Series.objects.bulk_create(
+    series_list = created(
+        Series,
         [
             Series(
                 publisher=rng.choice(publishers) if rng.random() < 0.9 else None,
@@ -160,7 +173,7 @@ def populate(rng):
                 summary=corpus.bilingual_json(rng, 1),
             )
         )
-    volumes = Volume.objects.bulk_create(volumes, batch_size=BATCH)
+    volumes = created(Volume, volumes, batch_size=BATCH)
 
     Volume.keywords.through.objects.bulk_create(
         [

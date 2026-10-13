@@ -249,13 +249,12 @@ def _take_backup(job, runner, output, stem, database, passphrase, note, actor):
     from .engine import create_backup
     from .keys import default_passphrase
     from .models import BackupSchedule
-    from .schedule_runner import discard_reservation, keep_newest
+    from .schedule_runner import discard_reservation, keep_newest, write_reserved
 
     try:
         with job.tracked():
-            container = create_backup(
-                passphrase or default_passphrase(), using=database, output=output
-            )
+            container = create_backup(passphrase or default_passphrase(), using=database)
+            write_reserved(output, container)
             digest = hashlib.sha256(container).hexdigest()
             job.data.update(size=len(container), sha256=digest, verified=True, compressed=True)
             audit.record_backup(

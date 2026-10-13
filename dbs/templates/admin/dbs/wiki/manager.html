@@ -2,15 +2,20 @@
 
 {% block wiki %}
 <h1>The DBS manager</h1>
-<p>The DBS manager is a separate application in the same package. Run it on your own
-machine with:</p>
-<pre><code>django_dbs run</code></pre>
+<p>The DBS manager is a separate application in the same package. Install it with its
+extra and run it on your own machine:</p>
+<pre><code>pip install "django-dbs[manager]"
+django_dbs run</code></pre>
 <p>If the shell says <code>django_dbs</code> is not recognized, pip put the script in a
 folder that is not on your <code>PATH</code>. Run <code>python -m dbs.manager run</code>
-instead, or install with <code>pipx install django-dbs</code>.</p>
+instead, or install with <code>pipx install "django-dbs[manager]"</code>.</p>
 <p>It opens in your browser and looks after many servers over SSH: it takes and pulls their
 backups, keeps their <code>.env</code> versions and folder archives, and can restore a
 project onto a new server when the old one goes down.</p>
+<h2>Accounts</h2>
+<p>The master account manages the other accounts, each an admin, an operator or a viewer, each
+allowed less than the one before. Every sign-in takes the password and a code from an
+authenticator app, set up at the first sign-in, and passwords expire after 30 days.</p>
 <h2>From a terminal</h2>
 <p>Everything the manager's interface does is also a command, on the same data and the same
 audit trail:</p>

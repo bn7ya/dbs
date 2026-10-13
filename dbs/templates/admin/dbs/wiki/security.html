@@ -15,8 +15,10 @@ new network.</p>
 request, joined by a forest fitted to your own history once there is enough of it. The
 personal forest is refit in the background from your newest requests, so a burst of requests
 never waits for it. Nothing is ever pickled or unpickled: models are refit from stored feature
-rows. The model needs scikit-learn (<code>pip install "django-dbs[guard]"</code>); without it
-the guard scores with its rules alone and <code>manage.py check</code> says so.</p>
+rows.</p>
+<p>The forest needs scikit-learn, which <code>pip install "django-dbs[guard]"</code>
+installs. Without it the guard scores with its rules alone, and both
+<code>python manage.py check</code> and <code>python manage.py dbs upgrade</code> say so.</p>
 <h2>Learning</h2>
 <p>For an account's first sessions (the policy's learning period) the model is muted, because
 everything about a new account looks unusual. The rules and both thresholds still apply.</p>

@@ -11,7 +11,8 @@ from django.utils import timezone
 
 from . import audit, jobs, leases, retention
 from .conf import setting
-from .exceptions import DBSError
+from .exceptions import BackupError, CorruptionError, DBSError
+from .io import write_new_file
 from .naming import DEFAULT_PREFIX, backup_stem, parse_backup_moment, reserve_backup_name
 
 logger = logging.getLogger("dbs")
@@ -85,6 +86,22 @@ def discard_reservation(path):
         pass
 
 
+def write_reserved(output, container, verify=True):
+    def same_bytes(partial):
+        with open(partial, "rb") as fh:
+            if fh.read() != container:
+                raise CorruptionError(
+                    "verify-after-write: the file on disk does not match the backup."
+                )
+
+    try:
+        write_new_file(output, container, same_bytes if verify else None, reserved=True)
+    except FileExistsError:
+        raise BackupError(
+            f"{output} already exists. DBS never replaces a backup file; choose a new name."
+        ) from None
+
+
 def run_cycle(passphrase, plan, runner=None):
     from .engine import create_backup
 
@@ -108,9 +125,9 @@ def run_cycle(passphrase, plan, runner=None):
                 compress=plan["compress"],
                 verify=plan["verify"],
                 kdf_params=plan.get("kdf_params"),
-                output=output,
                 **extra,
             )
+            write_reserved(output, container, plan["verify"])
             digest = hashlib.sha256(container).hexdigest()
             job.data.update(
                 size=len(container),

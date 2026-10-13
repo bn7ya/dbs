@@ -41,6 +41,7 @@ DEFAULT_IO_TIMEOUT = 30.0
 DEFAULT_COMMAND_TIMEOUT = 6 * 60 * 60.0
 KEEPALIVE_REQUEST = "keepalive@openssh.com"
 CLOSED_WITHOUT_STATUS = -1
+PRIVATE_MODE = 0o600
 
 _TARGET_KEYS = {
     "host",
@@ -71,7 +72,7 @@ def _paramiko():
         import paramiko
     except ImportError as exc:
         raise ConfigurationError(
-            'SSH transport requires paramiko: pip install "django-dbs[manager]"'
+            'SSH transport requires paramiko: pip install "django-dbs[ssh]"'
         ) from exc
     return paramiko
 
@@ -476,8 +477,8 @@ class SSHSession:
         try:
             self.ensure_dir()
             self.sweep_partials()
+            _create_private_remote(self.sftp, partial)
             self.sftp.putfo(io.BytesIO(data), partial)
-            self.sftp.chmod(partial, 0o600)
             _install_remote(self.sftp, partial, remote_path)
         except OSError as exc:
             self._discard_remote(partial)
@@ -511,8 +512,8 @@ class SSHSession:
         sweep_partials(directory)
         partial = os.path.join(directory, partial_name(os.path.basename(local_path)))
         try:
-            self.sftp.get(remote_path, partial)
-            os.chmod(partial, 0o600)
+            with _private_local_file(partial) as handle:
+                self.sftp.getfo(remote_path, handle)
             _require_backup(partial, remote_name)
             if not place_without_replacing(partial, local_path):
                 raise DBSError(f"{local_path} already exists; nothing was overwritten.")
@@ -865,6 +866,22 @@ def _discard(path: str) -> None:
         os.remove(path)
     except OSError:
         pass
+
+
+def _private_local_file(path: str):
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, PRIVATE_MODE)
+    try:
+        os.fchmod(descriptor, PRIVATE_MODE)
+    except OSError:
+        os.close(descriptor)
+        raise
+    return os.fdopen(descriptor, "wb")
+
+
+def _create_private_remote(sftp, path: str) -> None:
+    sftp.putfo(io.BytesIO(b""), path)
+    sftp.chmod(path, PRIVATE_MODE)
 
 
 def _install_remote(sftp, partial: str, remote_path: str) -> None:

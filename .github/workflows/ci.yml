@@ -4,46 +4,259 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  DBS_TEST_HOUR: "3"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
   lint:
+    name: Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: "3.12"
-      - run: pip install ruff
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install "ruff>=0.4,<1"
       - run: ruff check .
 
-  test:
+  sqlite:
+    name: SQLite, Python ${{ matrix.python }}, Django ${{ matrix.django }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-        django: ["4.2"]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        django: ["4.2", "5.2", "6.x"]
+        exclude:
+          - { python: "3.13", django: "4.2" }
+          - { python: "3.9", django: "5.2" }
+          - { python: "3.9", django: "6.x" }
+          - { python: "3.10", django: "6.x" }
+          - { python: "3.11", django: "6.x" }
         include:
-          - python-version: "3.11"
-            django: "5.0"
-          - python-version: "3.12"
-            django: "5.1"
-          - python-version: "3.13"
-            django: "6.0"
+          - { python: "3.13", django: "6.x", coverage: "--cov=dbs --cov-report=term-missing" }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]" "Django~=${{ matrix.django }}.0"
-      - run: python -m pytest --cov=dbs --cov-report=term-missing
-      - run: python -m pytest tests/manager --ds=tests.manager.settings
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install DBS with every extra and Django ${{ matrix.django }}
+        env:
+          DJANGO_SERIES: ${{ matrix.django }}
+        run: |
+          case "$DJANGO_SERIES" in
+            4.2) django="Django>=4.2,<5.0" ;;
+            5.2) django="Django>=5.2,<6.0" ;;
+            6.x) django="Django>=6.0,<7.0" ;;
+          esac
+          python -m pip install -e ".[dev]" "$django"
+          python -m pip list
+      - name: Library suite
+        env:
+          COVERAGE_OPTIONS: ${{ matrix.coverage }}
+        run: python -m pytest $COVERAGE_OPTIONS
+      - name: Manager suite
+        run: python -m pytest tests/manager --ds=tests.manager.settings
+
+  postgres:
+    name: PostgreSQL, Python ${{ matrix.python }}, Django ${{ matrix.django }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.12", django: "4.2", spec: "Django>=4.2,<5.0" }
+          - { python: "3.13", django: "5.2", spec: "Django>=5.2,<6.0" }
+          - { python: "3.13", django: "6.x", spec: "Django>=6.0,<7.0" }
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: dbs
+          POSTGRES_PASSWORD: dbs
+          POSTGRES_DB: dbs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dbs"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DBS_TEST_DB: postgres
+      DBS_TEST_PG_NAME: dbs_test
+      DBS_TEST_PG_USER: dbs
+      DBS_TEST_PG_PASSWORD: dbs
+      DBS_TEST_PG_HOST: localhost
+      DBS_TEST_PG_PORT: "5432"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install DBS, Django ${{ matrix.django }} and psycopg
+        env:
+          DJANGO_SPEC: ${{ matrix.spec }}
+        run: python -m pip install -e ".[dev]" "$DJANGO_SPEC" "psycopg[binary]>=3.1,<4"
+      - name: Library suite
+        run: python -m pytest
+      - name: Manager suite
+        env:
+          DBS_MANAGER_DATABASE_URL: postgres://dbs:dbs@localhost:5432/dbs_test
+        run: python -m pytest tests/manager --ds=tests.manager.settings
+
+  mysql:
+    name: MySQL, Python ${{ matrix.python }}, Django ${{ matrix.django }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { python: "3.12", django: "4.2", spec: "Django>=4.2,<5.0" }
+          - { python: "3.13", django: "5.2", spec: "Django>=5.2,<6.0" }
+          - { python: "3.13", django: "6.x", spec: "Django>=6.0,<7.0" }
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: dbs
+          MYSQL_DATABASE: dbs_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pdbs"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DBS_TEST_DB: mysql
+      DBS_TEST_MYSQL_NAME: dbs_test
+      DBS_TEST_MYSQL_USER: root
+      DBS_TEST_MYSQL_PASSWORD: dbs
+      DBS_TEST_MYSQL_HOST: 127.0.0.1
+      DBS_TEST_MYSQL_PORT: "3306"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install the MySQL client library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libmysqlclient-dev pkg-config
+      - name: Install DBS, Django ${{ matrix.django }} and mysqlclient
+        env:
+          DJANGO_SPEC: ${{ matrix.spec }}
+        run: python -m pip install -e ".[dev]" "$DJANGO_SPEC" "mysqlclient>=2.2,<3"
+      - name: Library suite
+        run: python -m pytest
+      - name: Manager suite
+        env:
+          DBS_MANAGER_DATABASE_URL: mysql://root:dbs@127.0.0.1:3306/dbs_test?charset=utf8mb4
+        run: python -m pytest tests/manager --ds=tests.manager.settings
+
+  minimum:
+    name: Lowest supported dependencies, Python 3.9
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.9"
+      - name: Install the lower bound of every dependency
+        run: |
+          python -m pip install "tomli>=1.1.0,<3"
+          python scripts/minimum_requirements.py > "$RUNNER_TEMP/minimum.txt"
+          cat "$RUNNER_TEMP/minimum.txt"
+          python -m pip install --constraint "$RUNNER_TEMP/minimum.txt" -e ".[dev]"
+          python -m pip list
+      - name: Library suite
+        run: python -m pytest
+      - name: Manager suite
+        run: python -m pytest tests/manager --ds=tests.manager.settings
+
+  openssh:
+    name: SSH against a real OpenSSH server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e ".[dev]"
+      - name: Start an OpenSSH server on 127.0.0.1:2222
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openssh-server
+          sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
+      - name: SSH suites
+        env:
+          DBS_TEST_SSH_REQUIRED: "1"
+        run: python -m pytest tests/test_ssh_live.py tests/test_ssh_openssh.py -rs
+      - name: Server log
+        if: failure()
+        run: sudo cat "$RUNNER_TEMP/sshd/sshd.log"
+
+  stress:
+    name: Stress round trip of a damaged backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e ".[dev]"
+      - name: Back up, damage, validate and restore a large database
+        env:
+          DBS_STRESS_SCALE: "4"
+          DBS_STRESS_FLIPS: "400"
+        run: python scripts/stress_roundtrip.py
 
   manager-ui:
+    name: Manager interface and wheel
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: npm
@@ -56,41 +269,11 @@ jobs:
         working-directory: manager-ui
       - run: npm run build:package
         working-directory: manager-ui
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
-      - run: |
+          python-version: "3.13"
+      - name: Build the wheel and check what it carries
+        run: |
           python -m pip install build
           python -m build
           python scripts/check_wheel.py dist/*.whl
-
-  test-postgres:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: dbs
-          POSTGRES_PASSWORD: dbs
-          POSTGRES_DB: dbs_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U dbs"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DBS_TEST_DB: postgres
-      DBS_TEST_PG_NAME: dbs_test
-      DBS_TEST_PG_USER: dbs
-      DBS_TEST_PG_PASSWORD: dbs
-      DBS_TEST_PG_HOST: localhost
-      DBS_TEST_PG_PORT: "5432"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: pip install -e ".[dev]" "psycopg[binary]>=3"
-      - run: python -m pytest
