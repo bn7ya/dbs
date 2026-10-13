@@ -552,22 +552,25 @@ def test_a_removed_push_setting_points_at_the_manager(settings, name):
     assert "django_dbs server add" in finding.remedy
 
 
+def historical(model, migration="0004_schedule_lease"):
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+
+    state = MigrationExecutor(connection).loader.project_state(("dbs", migration))
+    return state.apps.get_model("dbs", model)
+
+
 @pytest.mark.django_db(transaction=True)
 def test_sftp_targets_are_reported_before_and_after_the_migration_drops_them():
-    from django.db import connection
-
     call_command("migrate", "dbs", "0004", verbosity=0)
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO dbs_backuptarget (name, host, port, username, remote_dir, "
-                "auth_method, key_filename, known_hosts, auto_add_host_key, connect_timeout, "
-                "is_default, notes, secret_password, secret_key_material, "
-                "secret_key_passphrase, created_at, updated_at) VALUES ('offsite', "
-                "'backups.example.com', 22, 'deploy', '/var/backups', 'agent', '', '', "
-                "%s, 30.0, %s, '', '', '', '', %s, %s)",
-                [False, False, "2026-01-01 00:00:00", "2026-01-01 00:00:00"],
-            )
+        historical("BackupTarget").objects.create(
+            name="offsite",
+            host="backups.example.com",
+            username="deploy",
+            remote_dir="/var/backups",
+            secret_password="hunter2",
+        )
 
         before = upgrade.PulledBackups().check()
         call_command("migrate", "dbs", verbosity=0)
@@ -585,6 +588,8 @@ def test_sftp_targets_are_reported_before_and_after_the_migration_drops_them():
     assert removed.target_name == "offsite"
     assert removed.data["host"] == "backups.example.com"
     assert "django_dbs server add" in removed.detail
+    assert "hunter2" not in f"{removed.data}{removed.detail}"
+    assert set(removed.data) == {"host", "port", "username", "remote_dir"}
 
 
 @pytest.mark.django_db
@@ -608,16 +613,9 @@ def test_a_keep_setting_outside_one_to_five_is_reported(settings, keep):
 
 @pytest.mark.django_db(transaction=True)
 def test_the_migration_lowers_a_schedule_keeping_more_than_five():
-    from django.db import connection
-
     call_command("migrate", "dbs", "0004", verbosity=0)
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO dbs_backupschedule (enabled, interval, keep, database, "
-                "last_status, last_error, updated_at) VALUES (%s, '6h', 9, 'default', '', '', %s)",
-                [False, "2026-01-01 00:00:00"],
-            )
+        historical("BackupSchedule").objects.create(interval="6h", keep=9)
 
         before = upgrade.KeepAtMostFive().check()
         call_command("migrate", "dbs", verbosity=0)
