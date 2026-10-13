@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 
 DISTRIBUTION = "django-dbs"
@@ -24,6 +25,15 @@ def missing(extra: str) -> list:
 
 def available(extra: str) -> bool:
     return not missing(extra)
+
+
+def import_error(extra: str) -> str | None:
+    for module in EXTRAS[extra]:
+        try:
+            importlib.import_module(module)
+        except Exception as exc:
+            return f"{type(exc).__name__}: {exc}"
+    return None
 
 
 def installed() -> list:

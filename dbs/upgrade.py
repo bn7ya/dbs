@@ -258,11 +258,12 @@ class GuardExtra(Step):
     def check(self):
         if MIDDLEWARE_PATH not in (setting("MIDDLEWARE", ()) or ()):
             return self.ok("the session guard is off, so scikit-learn is not needed")
-        if extras.available("guard"):
+        failure = extras.import_error("guard")
+        if failure is None:
             return self.ok("scikit-learn is installed for the session guard")
         return self.action(
-            "DBSSecurityMiddleware is on, but scikit-learn cannot be imported, so the "
-            "session guard runs without its anomaly detector",
+            f"DBSSecurityMiddleware is on, but scikit-learn cannot be imported ({failure}), "
+            "so the session guard runs without its anomaly detector",
             extras.install_command("guard"),
         )
 

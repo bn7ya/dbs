@@ -2,6 +2,7 @@
 
 import stat
 import struct
+import sys
 from io import StringIO
 from pathlib import Path
 
@@ -805,10 +806,8 @@ def test_a_custom_get_queryset_is_left_alone(monkeypatch):
 
 
 def without(monkeypatch, *modules):
-    from dbs import extras
-
-    real = extras.importable
-    monkeypatch.setattr(extras, "importable", lambda name: name not in modules and real(name))
+    for module in modules:
+        monkeypatch.setitem(sys.modules, module, None)
 
 
 def test_the_guard_extra_is_fine_when_scikit_learn_is_installed():
@@ -822,7 +821,26 @@ def test_the_guard_middleware_without_scikit_learn_asks_for_the_guard_extra(monk
 
     assert finding.level == ACTION
     assert "DBSSecurityMiddleware" in finding.message
+    assert "ModuleNotFoundError" in finding.message
     assert finding.remedy == 'pip install "django-dbs[guard]"'
+
+
+def test_a_scikit_learn_that_fails_to_import_counts_as_missing(monkeypatch):
+    import importlib
+
+    real = importlib.import_module
+
+    def broken(name, *args, **kwargs):
+        if name == "sklearn":
+            raise ValueError("numpy.dtype size changed, may indicate binary incompatibility")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", broken)
+
+    finding = upgrade.GuardExtra().check()
+
+    assert finding.level == ACTION
+    assert "binary incompatibility" in finding.message
 
 
 @pytest.mark.django_db
