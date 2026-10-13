@@ -677,6 +677,10 @@ class PulledBackups(Step):
         "`django_dbs server add NAME --host HOST --user USER` for this server, then "
         "delete the settings listed here"
     )
+    explicit_target = (
+        "; code that read DBS_SSH_TARGETS through SSHTarget.from_settings builds "
+        "SSHTarget(host=..., username=..., ...) from explicit values now"
+    )
 
     def check(self):
         from django.conf import settings
@@ -693,7 +697,7 @@ class PulledBackups(Step):
         if problems:
             return self.warn(
                 "this server no longer pushes backups anywhere, but " + "; ".join(problems),
-                self.remedy,
+                self.remedy + (self.explicit_target if "DBS_SSH_TARGETS" in left else ""),
             )
         if removed:
             return self.ok(
