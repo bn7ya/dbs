@@ -5,8 +5,10 @@ import stat
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.services import BackupPlanService, BackupService
+from dbs.manager.permissions import Role
 from dbs.manager.servers.exceptions import HostKeyNotConfirmed, HostKeyRejected
 from dbs.manager.servers.gateways import parse_host_key
 from dbs.manager.servers.services import HostKeyConfirmationService
@@ -111,6 +113,23 @@ def test_a_script_cannot_confirm_a_host_key(terminal, admin, held):
     ran = terminal("server", "confirm-host-key", held.id, stdin="y\n")
 
     assert ran.code == 1 and "run it in a terminal" in ran.err
+    with pytest.raises(HostKeyNotConfirmed):
+        HostKeyConfirmationService(admin).approved(held.id, "10.0.0.5", 22)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role", [Role.VIEWER, Role.OPERATOR])
+def test_only_an_account_that_may_add_servers_is_asked_about_a_host_key(
+    terminal, typing, admin, held, role
+):
+    UserRepository().create(username="vera", password=PASSWORD, role=role)
+
+    ran = terminal("server", "confirm-host-key", held.id, "--as", "vera")
+
+    assert ran.code == 1
+    assert "admin role or higher" in ran.err
+    assert held.fingerprint not in ran.out
+    assert logged("server.host_key_confirm") == logged("server.host_key_reject") == []
     with pytest.raises(HostKeyNotConfirmed):
         HostKeyConfirmationService(admin).approved(held.id, "10.0.0.5", 22)
 

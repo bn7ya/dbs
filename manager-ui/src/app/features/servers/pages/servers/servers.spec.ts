@@ -7,7 +7,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
-import { MASTER_ACCOUNT } from '@core/auth/testing/identity.fixtures';
+import { MASTER_ACCOUNT, OPERATOR } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Toaster } from '@shared/toaster/toaster';
@@ -43,10 +43,13 @@ describe('ServersPage', () => {
   const hostKeysRequest = (): TestRequest =>
     http.expectOne((request) => request.url === '/api/servers/host-keys/');
 
-  const showWith = async (pending: readonly HostKeyConfirmation[]): Promise<ServersPage> => {
+  const showWith = async (
+    pending: readonly HostKeyConfirmation[],
+    identity: Identity = IDENTITY,
+  ): Promise<ServersPage> => {
     harness = await RouterTestingHarness.create();
     const navigating = harness.navigateByUrl('/servers', ServersPage);
-    (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush(IDENTITY);
+    (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush(identity);
     const page = await navigating;
     TestBed.tick();
     hostKeysRequest().flush(pageOf(pending));
@@ -96,6 +99,14 @@ describe('ServersPage', () => {
     expect(card?.textContent).toContain('ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub');
     expect(buttonLabelled(`Confirm the host key of ${ADDRESS}`)).not.toBeNull();
     expect(buttonLabelled(`Reject the host key of ${ADDRESS}`)?.classList).toContain('app-danger');
+  });
+
+  it('leaves a host key to an account that may add servers', async () => {
+    await showWith([HOST_KEY_CONFIRMATION], OPERATOR);
+
+    expect(element().textContent).not.toContain('Host keys awaiting confirmation');
+    expect(buttonLabelled(`Confirm the host key of ${ADDRESS}`)).toBeNull();
+    expect(buttonLabelled(`Reject the host key of ${ADDRESS}`)).toBeNull();
   });
 
   it('confirms a host key only after asking, then says Claude can add the server', async () => {

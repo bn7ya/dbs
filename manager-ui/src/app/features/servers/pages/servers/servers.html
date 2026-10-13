@@ -11,7 +11,7 @@
   </header>
 
   @if (pendingHostKeys().length > 0) {
-    <mat-card appearance="outlined">
+    <mat-card *appCan="'servers.manage'" appearance="outlined">
       <mat-card-content class="servers__body">
         <div class="servers__title">
           <h2>{{ 'servers.pendingKeys.title' | t }}</h2>
