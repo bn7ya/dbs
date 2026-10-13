@@ -321,7 +321,7 @@
     },
     "move": {
       "title": "Move to another server",
-      "body": "Restore this server onto another one, with its .env file and folders.",
+      "body": "Move this project onto a new server that already has the same environment.",
       "action": "Move to another server"
     },
     "browser": {

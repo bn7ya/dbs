@@ -1,20 +1,19 @@
 {
   "redeploy": {
     "title": "Move to another server",
-    "body": "Restore this server's data, .env file and folders onto another server.",
-    "needsCode": "The other server must already have the project's code and its virtual environment.",
+    "body": "Move this project onto a new server. This server is left as it is.",
+    "needsCode": "The new server must already run the project's code with the same environment: its virtual environment, django-dbs and the same settings.",
+    "how": "When this server answers, a fresh backup of it is taken now and restored. The new server's .env file and data are recorded first; then the .env file is pushed, the migrations run, the backup is restored and the new server is checked.",
     "target": "Move to",
     "addTarget": "Add a server",
-    "backup": "Backup to restore",
-    "backupHint": "The newest django-dbs backup is chosen.",
-    "env": ".env version",
+    "backup": "Backup to restore if this server does not answer",
+    "backupHint": "The newest is chosen. When this server answers, a fresh backup is restored instead.",
+    "noBackup": "None: stop if this server does not answer",
+    "env": ".env version to push",
     "noEnv": "Do not push a .env file",
-    "archives": "Folder archives to unpack",
-    "archivesHint": "Optional. Each archive is unpacked in its own folder on the other server.",
-    "migrate": "Run the migrations first",
-    "flush": "Replace the data on the other server instead of merging",
+    "flush": "Replace the data on the new server instead of merging",
     "passwordHint": "Needed to move for real. A rehearsal needs no password.",
-    "confirmName": "Name of the other server",
+    "confirmName": "Name of the new server",
     "confirmNameHint": "Type {name} to move for real.",
     "rehearse": "Rehearse",
     "move": "Move for real",
@@ -22,14 +21,18 @@
       "title": "Moving",
       "rehearsal": "Rehearsal",
       "done": "The move finished.",
-      "rehearsed": "The rehearsal finished. Nothing was changed on the other server."
+      "rehearsed": "The rehearsal finished. Nothing was changed on either server.",
+      "chosenBackup": "This server did not answer, so the chosen backup was restored.",
+      "stoppedAt": "The move stopped at: {step}."
     },
     "steps": {
-      "check": "Check the other server",
+      "check": "Check the new server",
+      "source_backup": "Back up this server now",
+      "record_env": "Record the new server's .env file",
+      "safety_backup": "Back up the new server's data",
       "env": "Push the .env file",
       "migrate": "Run the migrations",
       "restore": "Restore the backup",
-      "archives": "Unpack the folder archives",
       "final_check": "Check again"
     },
     "status": {
@@ -39,15 +42,34 @@
       "failed": "Failed",
       "skipped": "Skipped"
     },
+    "revert": {
+      "title": "Revert the new server",
+      "body": "Push the new server's recorded .env file back and restore the backup of its data taken before the move, replacing what the move left there.",
+      "passwordHint": "Needed to revert for real. A rehearsal needs no password.",
+      "confirmNameHint": "Type {name} to revert for real.",
+      "rehearse": "Rehearse the revert",
+      "action": "Revert the new server",
+      "progress": "Reverting",
+      "rehearsal": "Revert rehearsal",
+      "done": "The new server is back as it was before the move.",
+      "rehearsed": "The revert rehearsal finished. Nothing was changed.",
+      "steps": {
+        "check": "Check the new server",
+        "env": "Push the recorded .env file back",
+        "restore": "Restore the data from before the move"
+      }
+    },
     "errors": {
-      "targetRequired": "Choose the server to move to.",
-      "backupRequired": "Choose a backup."
+      "targetRequired": "Choose the server to move to."
     }
   },
   "errors": {
     "passphrase_missing": "The backup passphrase of this server is not saved here.",
-    "confirm_name_mismatch": "Type the other server's name exactly as shown.",
+    "confirm_name_mismatch": "Type the new server's name exactly as shown.",
     "same_server": "Choose a server other than this one.",
-    "target_not_ready": "django-dbs is not installed on the other server, or the project is not ready there."
+    "target_not_ready": "django-dbs is not installed on the new server, or the project is not ready there.",
+    "source_unreachable": "This server did not answer and no backup of it was chosen.",
+    "no_backup_to_rehearse": "There is no backup of this server here for the rehearsal to restore. Take one first.",
+    "move_not_revertable": "Only a move that stopped after it changed the new server can be reverted."
   }
 }

@@ -20,23 +20,31 @@ export interface RedeployEnvVersion {
 export interface RedeployRequest {
   readonly source_server: string;
   readonly target_server: string;
-  readonly backup: string;
+  readonly backup: string | null;
   readonly env_version: string | null;
-  readonly archives: readonly string[];
-  readonly migrate: boolean;
   readonly flush: boolean;
   readonly rehearsal: boolean;
   readonly password: string;
   readonly confirm_name: string;
 }
 
-export type RedeployStepCode = 'check' | 'env' | 'migrate' | 'restore' | 'archives' | 'final_check';
+export interface RevertRequest {
+  readonly rehearsal: boolean;
+  readonly password: string;
+  readonly confirm_name: string;
+}
 
 export type RedeployStepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
 
 export interface RedeployStep {
-  readonly step: RedeployStepCode;
+  readonly step: string;
   readonly status: RedeployStepStatus;
+}
+
+export interface MoveOutcome {
+  readonly failedStep: string | null;
+  readonly revertable: boolean;
+  readonly usedChosenBackup: boolean;
 }
 
 export const REDEPLOY_LIST_SIZE = 100;
@@ -53,4 +61,13 @@ export function stepsOf(detail: Readonly<Record<string, unknown>>): readonly Red
       typeof (each as RedeployStep).step === 'string' &&
       typeof (each as RedeployStep).status === 'string',
   );
+}
+
+export function outcomeOf(detail: Readonly<Record<string, unknown>>): MoveOutcome {
+  const failed = detail['failed_step'];
+  return {
+    failedStep: typeof failed === 'string' ? failed : null,
+    revertable: detail['revertable'] === true,
+    usedChosenBackup: detail['fresh_backup'] === false,
+  };
 }

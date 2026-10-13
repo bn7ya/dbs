@@ -110,12 +110,12 @@ export const COPY = {
   // Move to another server
   moveTo: { en: 'Move to', ar: 'النقل إلى' },
   rehearse: { en: 'Rehearse', ar: 'تجريب' },
-  stepCheckOther: { en: 'Check the other server', ar: 'فحص الخادم الآخر' },
+  stepCheckNew: { en: 'Check the new server', ar: 'فحص الخادم الجديد' },
   stepRestore: { en: 'Restore the backup', ar: 'استعادة النسخة الاحتياطية' },
   stepDone: { en: 'Done', ar: 'تم' },
   rehearsed: {
-    en: 'The rehearsal finished. Nothing was changed on the other server.',
-    ar: 'اكتمل التجريب. لم يتغير شيء على الخادم الآخر.',
+    en: 'The rehearsal finished. Nothing was changed on either server.',
+    ar: 'اكتمل التجريب. لم يتغير شيء على أي من الخادمين.',
   },
 
   // Dashboard and About

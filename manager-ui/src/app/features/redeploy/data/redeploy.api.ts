@@ -10,6 +10,7 @@ import {
   type RedeployEnvVersion,
   type RedeployRequest,
   type RedeployServer,
+  type RevertRequest,
 } from './redeploy.types';
 
 @Injectable({ providedIn: 'root' })
@@ -30,6 +31,10 @@ export class RedeployApi {
 
   run(request: RedeployRequest): Observable<JobStarted> {
     return this.http.post<JobStarted>('/api/redeploy/', request);
+  }
+
+  revert(move: number, request: RevertRequest): Observable<JobStarted> {
+    return this.http.post<JobStarted>(`/api/redeploy/${move}/revert/`, request);
   }
 }
 
