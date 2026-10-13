@@ -1,0 +1,31 @@
+$ DBS_STRESS_FLIPS=10000 python scripts/stress_roundtrip.py
+complexapp.Publisher: 40 rows
+complexapp.Branch: 200 rows
+complexapp.Employee: 3000 rows
+complexapp.EmployeeProfile: 3000 rows
+complexapp.Writer: 400 rows
+complexapp.Keyword: 300 rows
+complexapp.Series: 200 rows
+complexapp.Volume: 4000 rows
+complexapp.EditingAssignment: 8000 rows
+complexapp.Review: 12000 rows
+database file: 13,045,760 bytes
+backup container: 3,917,816 bytes
+[VALID] CLEAN: all 28 blocks verified, no repair needed | Decryption + payload hash: OK
+flipped 10,000 bytes across the container
+corruption detected and healed: REPAIRED: 28 blocks intact after healing (0 Reed-Solomon corrected, 0 restored from the second copy, 28 rebuilt from both copies)
+[VALID] REPAIRED: 28 blocks intact after healing (0 Reed-Solomon corrected, 0 restored from the second copy, 28 rebuilt from both copies) | Decryption + payload hash: OK
+database file deleted
+corruption detected and healed: REPAIRED: 28 blocks intact after healing (0 Reed-Solomon corrected, 0 restored from the second copy, 28 rebuilt from both copies)
+records restored: 31,140
+restored database matches the original: counts, hashes, samples and aggregates all equal
+create schema: 0.65s
+populate: 2.45s
+snapshot before: 3.74s
+backup: 1.72s
+validate: 0.18s
+validate damaged: 2.49s
+rebuild schema: 0.70s
+restore: 20.39s
+snapshot after: 4.05s
+exit status: 0
