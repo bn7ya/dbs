@@ -7,6 +7,8 @@ RESTORE_MODES = ("merge", "replace")
 PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
 ACTIVITY_LIMIT = 20
+KEEP_CHOICES = range(1, 6)
+KEEP_REMOTE_CHOICES = range(0, 6)
 
 Location = Callable[[argparse.ArgumentParser], None]
 
@@ -378,9 +380,20 @@ def _plan_fields(parser) -> None:
         help="Run every this many minutes.",
     )
     parser.add_argument("--manual", action="store_true", help="Run only when asked.")
-    parser.add_argument("--keep", type=int, help="How many to keep here.")
     parser.add_argument(
-        "--keep-remote", type=int, help="How many to keep on the server."
+        "--keep",
+        type=int,
+        choices=KEEP_CHOICES,
+        metavar="N",
+        help="How many to keep here, 1 to 5. Keeping fewer asks for your password.",
+    )
+    parser.add_argument(
+        "--keep-remote",
+        type=int,
+        choices=KEEP_REMOTE_CHOICES,
+        metavar="N",
+        help="How many to keep on the server, 0 to 5. Keeping fewer asks for your "
+        "password.",
     )
 
 

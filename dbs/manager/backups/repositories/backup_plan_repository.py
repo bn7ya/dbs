@@ -23,6 +23,14 @@ class BackupPlanRepository(BaseRepository):
             plans = plans.exclude(pk=excluding)
         return plans.exists()
 
+    def names_for_server(
+        self, server_id: UUID, *, excluding: UUID | None = None
+    ) -> QuerySet[BackupPlan, str]:
+        plans = self.active().filter(server_id=server_id)
+        if excluding is not None:
+            plans = plans.exclude(pk=excluding)
+        return plans.values_list("name", flat=True)
+
     def lock_scheduled_by(self, moment: datetime) -> QuerySet[BackupPlan]:
         return (
             self.active()

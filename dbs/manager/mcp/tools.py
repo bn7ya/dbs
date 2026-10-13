@@ -133,14 +133,26 @@ PLAN_FIELDS = {
         "type": ["integer", "null"],
         "description": "Run every this many minutes; null runs only when asked.",
     },
-    "keep": {"type": "integer", "minimum": 1, "description": "How many to keep here."},
+    "keep": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "How many to keep here, 1 to 5.",
+    },
     "keep_remote": {
         "type": "integer",
         "minimum": 0,
-        "description": "How many to keep on the server.",
+        "maximum": 5,
+        "description": "How many to keep on the server, 0 to 5.",
     },
     "enabled": {"type": "boolean"},
 }
+
+KEEPS_FEWER = (
+    "Keeping fewer backups than the plan keeps now deletes the oldest ones, so Claude "
+    "cannot do it. Ask the person to change it in the manager's interface or with "
+    "django_dbs plan edit in a terminal; it asks for their password."
+)
 
 INSTRUCTIONS = (
     "These tools drive the DBS manager, which backs up the Django projects on the servers "
@@ -386,7 +398,9 @@ class Toolbox:
             Tool(
                 "update_plan",
                 "Change a plan",
-                "Change a plan's name, schedule, retention or switch it on or off.",
+                "Change a plan's name or schedule, switch it on or off, or keep more "
+                "backups. Keeping fewer deletes the oldest backups on the next run, so "
+                "this tool refuses it: the person does it in the manager.",
                 dict(plan=PLAN, name=TEXT, **PLAN_FIELDS),
                 self.update_plan,
                 required=("plan",),
@@ -643,9 +657,10 @@ class Toolbox:
         if not changes:
             raise AdapterError("name at least one thing to change.")
         data = validated(PlanUpdateSerializer, changes, partial=True)
-        return BackupPlanSerializer(
-            BackupPlanService(self.user).update(plan_id, **data)
-        ).data
+        service = BackupPlanService(self.user)
+        if service.keeps_fewer(plan_id, data):
+            raise AdapterError(KEEPS_FEWER)
+        return BackupPlanSerializer(service.update(plan_id, **data)).data
 
     def run_plan(self, arguments: Arguments) -> dict[str, Any]:
         plan_id = references.identifier(arguments["plan"], "plan")

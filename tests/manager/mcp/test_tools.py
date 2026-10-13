@@ -243,7 +243,8 @@ def test_plans_and_backups_through_tools(mcp, admin, host, make_server, tmp_path
         "add_plan", server="shop", name="nightly", kind="dbs", interval_minutes=1440
     )
     assert plan.ok, plan.text
-    assert mcp("update_plan", plan=plan.data["id"], keep=3).data["keep"] == 3
+    assert plan.data["keep"] == 5
+    assert mcp("update_plan", plan=plan.data["id"], interval_minutes=60).ok
     assert mcp("run_plan", plan=plan.data["id"]).data["ok"]
 
     backup = mcp("list_backups").data["results"][0]
