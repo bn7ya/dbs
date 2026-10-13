@@ -27,8 +27,8 @@ class Command(BaseCommand):
         if check.unsealed:
             self.stdout.write(
                 self.style.WARNING(
-                    f"{check.unsealed} finished rows are not sealed yet; the next audit "
-                    "row seals them."
+                    f"{check.unsealed} finished rows are not sealed yet; they are sealed, "
+                    "oldest first, as new audit rows are written."
                 )
             )
         if check.unfinished:

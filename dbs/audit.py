@@ -32,7 +32,7 @@ ERROR_CODE_MAX = 64
 SUBJECT_MAX = 64
 
 CHAIN_LOCK = "dbs.audit.chain"
-SEAL_BATCH = 500
+SEAL_BATCH = 200
 CHAINED_FIELDS = (
     "action",
     "target_name",

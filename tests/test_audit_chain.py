@@ -39,7 +39,8 @@ def sealing(django_capture_on_commit_callbacks):
 
 
 def chained():
-    return list(AuditEvent.objects.order_by("chain_index").values_list("chain_index", flat=True))
+    sealed = AuditEvent.objects.exclude(chain_index=None).order_by("chain_index")
+    return list(sealed.values_list("chain_index", flat=True))
 
 
 @pytest.mark.django_db
@@ -93,6 +94,23 @@ def test_rows_written_before_the_chain_are_caught_up_in_order(sealing):
     assert chained() == [1, 2, 3, 4]
     assert AuditEvent.objects.get(pk=older[0].pk).chain_index == 1
     assert audit.verify_chain().intact
+
+
+@pytest.mark.django_db
+def test_a_backlog_is_sealed_a_batch_at_a_time_and_reported_until_then():
+    for n in range(3):
+        audit.record("backup.create", target=f"{n}.dbs")
+    audit.record("backup.create", status=audit.RUNNING)
+
+    assert audit.seal_pending(limit=2) == 2
+    out = StringIO()
+    call_command("dbs", "audit", "verify", stdout=out)
+
+    assert chained() == [1, 2]
+    assert "intact: 2 rows checked" in out.getvalue()
+    assert "1 finished rows are not sealed yet" in out.getvalue()
+    assert "1 rows are still running" in out.getvalue()
+    assert audit.seal_pending() == 1 and audit.seal_pending() == 0
 
 
 @pytest.mark.django_db
