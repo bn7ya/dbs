@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import math
 from datetime import timedelta
 
 from django.utils import timezone
+
+from ..conf import setting
+from . import networks
 
 SCHEMA_VERSION = 1
 
@@ -43,14 +45,7 @@ def action_risk(name: str) -> float:
 
 
 def ip_prefix(address: str) -> str:
-    if not address:
-        return ""
-    try:
-        parsed = ipaddress.ip_address(address)
-    except ValueError:
-        return ""
-    network = 24 if parsed.version == 4 else 48
-    return str(ipaddress.ip_network(f"{parsed}/{network}", strict=False))
+    return networks.stored_prefix(address)
 
 
 def digest(value: str) -> str:
@@ -150,7 +145,7 @@ def observe_request(user, request, action, location=None):
         ),
         session_age_minutes=_session_age_minutes(request, now),
         recent_failures=_recent_failures(address, now),
-        new_ip_prefix=bool(prefix) and prefix not in seen_prefixes,
+        new_ip_prefix=not prefix or prefix not in seen_prefixes,
         new_user_agent=bool(agent) and agent not in seen_agents,
         distinct_prefixes_today=len(today) or 1,
         distance_km=distance,
@@ -208,13 +203,24 @@ def _session_age_minutes(request, now):
     return max(0.0, (now - parsed).total_seconds() / 60.0)
 
 
-def client_address(request) -> str:
-    from ..conf import setting
+def trusted_proxies():
+    return networks.parse_networks(setting("DBS_TRUSTED_PROXIES", ()))
 
-    if setting("DBS_TRUST_FORWARDED_FOR", False):
-        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-        parts = [part.strip() for part in forwarded.split(",") if part.strip()]
-        if parts:
-            proxies = max(1, int(setting("DBS_TRUSTED_PROXIES", 1)))
-            return parts[-min(proxies, len(parts))]
-    return request.META.get("REMOTE_ADDR", "") or ""
+
+def client_address(request) -> str:
+    peer = networks.parse_address(request.META.get("REMOTE_ADDR", ""))
+    if peer is None:
+        return ""
+    if not setting("DBS_TRUST_FORWARDED_FOR", False):
+        return str(peer)
+    proxies = trusted_proxies()
+    if not networks.contains(proxies, peer):
+        return str(peer)
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    hops = [hop.strip() for hop in forwarded.split(",")]
+    client = None
+    for hop in reversed(hops):
+        client = networks.parse_address(hop)
+        if client is None or not networks.contains(proxies, client):
+            break
+    return str(client) if client is not None else ""

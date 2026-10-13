@@ -256,11 +256,12 @@ def test_a_superuser_who_is_not_staff_is_not_bounced_in_a_loop(db):
 
 def test_forwarded_for_counts_back_from_the_proxy(rf, settings):
     settings.DBS_TRUST_FORWARDED_FOR = True
+    settings.DBS_TRUSTED_PROXIES = ["127.0.0.0/8"]
     request = rf.get("/admin/dbs/", HTTP_X_FORWARDED_FOR="1.2.3.4, 203.0.113.7")
 
     assert client_address(request) == "203.0.113.7"
 
-    settings.DBS_TRUSTED_PROXIES = 2
+    settings.DBS_TRUSTED_PROXIES = ["127.0.0.0/8", "203.0.113.0/24"]
     assert client_address(request) == "1.2.3.4"
 
 
