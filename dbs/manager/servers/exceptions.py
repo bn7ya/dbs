@@ -43,6 +43,14 @@ class BackupInvalid(RemoteCommandFailed):
     )
 
 
+class StreamBroken(RemoteCommandFailed):
+    default_code = "stream_broken"
+    default_detail = (
+        "The connection broke while the backup was arriving. The server keeps it, "
+        "and the manager collects it at the next connection."
+    )
+
+
 class ArchiveFailed(RemoteCommandFailed):
     default_code = "archive_failed"
     default_detail = "The server could not make the archive."

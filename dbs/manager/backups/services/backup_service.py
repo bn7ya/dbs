@@ -17,7 +17,11 @@ from dbs import audit
 from dbs.manager.accounts.exceptions import InvalidPassword, TooManyAttempts
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
-from dbs.manager.backups.exceptions import BackupMissing, NotRestorable
+from dbs.manager.backups.exceptions import (
+    BackupMissing,
+    BackupQuarantined,
+    NotRestorable,
+)
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import vault_contexts
@@ -170,6 +174,8 @@ class BackupService:
         file = self.get(file_id)
         if file.kind != BackupFile.Kind.DBS:
             raise NotRestorable()
+        if file.failure:
+            raise BackupQuarantined()
         source = self.servers.get(file.server_id)
         server = source if target_server is None else self.servers.get(target_server)
         detail = {"backup": str(file.pk), "mode": mode, "rehearse": rehearse}

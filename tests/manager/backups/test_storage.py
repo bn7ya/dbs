@@ -34,33 +34,72 @@ def test_a_servers_directory_is_private_whatever_the_umask(storage, permissive_u
     assert BackupStorage().directory(server_id) == directory
 
 
-def test_a_kept_file_is_private_and_described(storage, permissive_umask):
-    directory = BackupStorage().directory(uuid4())
-    path = directory / "web-1-20261001-120000Z.dbs"
-    path.write_bytes(b"backup bytes")
-    path.chmod(0o644)
+def test_a_received_file_is_private_described_and_installed_under_its_name(
+    storage, permissive_umask
+):
+    server_id = uuid4()
+    files = BackupStorage()
 
-    kept = BackupStorage().keep(str(path))
+    with files.receiving(server_id) as incoming:
+        incoming.write(b"backup ")
+        incoming.write(b"bytes")
+        assert incoming.path.name.endswith(".part")
+        assert mode(incoming.path) == 0o600
+        kept = files.install(incoming, server_id, "web-1-20261001-120000Z.dbs")
 
-    assert mode(path) == 0o600
-    assert kept.relative_path == f"{directory.name}/{path.name}"
+    stored = storage / str(server_id) / "web-1-20261001-120000Z.dbs"
+    assert kept.relative_path == f"{server_id}/{stored.name}"
     assert kept.size == len(b"backup bytes")
     assert kept.sha256 == hashlib.sha256(b"backup bytes").hexdigest()
+    assert stored.read_bytes() == b"backup bytes"
+    assert mode(stored) == 0o600
+    assert sorted(os.listdir(stored.parent)) == [stored.name]
 
 
-@pytest.mark.parametrize("where", ["root", "nested", "outside"])
-def test_only_a_file_in_a_servers_directory_is_kept(storage, tmp_path, where):
-    directory = BackupStorage().directory(uuid4())
-    path = {
-        "root": storage / "loose.dbs",
-        "nested": directory / "deeper" / "file.dbs",
-        "outside": tmp_path / "elsewhere.dbs",
-    }[where]
-    path.parent.mkdir(exist_ok=True)
-    path.write_bytes(b"x")
+def test_an_installed_file_never_replaces_one_already_there(storage):
+    server_id = uuid4()
+    files = BackupStorage()
+    taken = files.directory(server_id) / "web-1-20261001-120000Z.dbs"
+    taken.write_bytes(b"the good backup")
 
-    with pytest.raises(ValueError):
-        BackupStorage().keep(str(path))
+    with files.receiving(server_id) as incoming:
+        incoming.write(b"a newer arrival")
+        kept = files.install(incoming, server_id, taken.name)
+
+    assert kept.relative_path == f"{server_id}/web-1-20261001-120000Z-2.dbs"
+    assert taken.read_bytes() == b"the good backup"
+
+
+def test_a_file_that_is_not_installed_leaves_nothing_behind(storage):
+    server_id = uuid4()
+    files = BackupStorage()
+
+    with pytest.raises(RuntimeError):
+        with files.receiving(server_id) as incoming:
+            incoming.write(b"half")
+            raise RuntimeError("the connection went away")
+
+    assert os.listdir(files.directory(server_id)) == []
+
+
+def test_only_partial_files_left_for_an_hour_are_swept(storage):
+    server_id = uuid4()
+    files = BackupStorage()
+    directory = files.directory(server_id)
+    old = (datetime.now(dt_timezone.utc) - timedelta(hours=2)).timestamp()
+    stale = directory / ".incoming-0123456789abcdef.part"
+    sealed = directory / "media.tar.gz.sealed.part"
+    fresh = directory / ".incoming-fedcba9876543210.part"
+    backup = directory / "web-1-20261001-120000Z.dbs"
+    for path in (stale, sealed, fresh, backup):
+        path.write_bytes(b"x")
+    for path in (stale, sealed, backup):
+        os.utime(path, (old, old))
+
+    removed = files.sweep_partials(server_id)
+
+    assert removed == sorted([stale.name, sealed.name])
+    assert sorted(os.listdir(directory)) == sorted([fresh.name, backup.name])
 
 
 def test_a_stored_file_is_read_checked_and_removed(storage):

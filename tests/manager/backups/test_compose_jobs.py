@@ -7,7 +7,11 @@ from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.redeploy.services import RedeployService
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerService
-from tests.manager.servers.compose import ComposeHost, connected_to
+from tests.manager.servers.compose import (
+    CONTAINER_BACKUP_DIR,
+    ComposeHost,
+    connected_to,
+)
 from tests.manager.servers.support import (
     BACKUP_PASSPHRASE,
     host_key_line,
@@ -57,8 +61,20 @@ def test_a_take_from_a_compose_server_stores_a_backup_that_decrypts(
     content = (storage / file.storage_path).read_bytes()
     result = validate_backup(content, BACKUP_PASSPHRASE)
     assert result.ok and result.decrypted_ok
-    assert file.remote_path.startswith(compose_server.remote_backup_dir)
-    assert any("dbs_backup" in run["argv"] for run in docker_host.runs)
+    assert file.validation == "verified"
+    assert file.remote_path == ""
+    assert list(docker_host.inside(CONTAINER_BACKUP_DIR).iterdir()) == []
+    [streamed] = [run for run in docker_host.runs if "dbs_backup" in run["argv"]]
+    assert streamed["argv"][-7:] == [
+        "dbs_backup",
+        "--stream",
+        "--prefix",
+        "shop",
+        "--passphrase-stdin",
+        "--output-dir",
+        CONTAINER_BACKUP_DIR,
+    ]
+    assert streamed["stdin"] == BACKUP_PASSPHRASE
 
 
 @pytest.mark.django_db

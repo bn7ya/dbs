@@ -11,7 +11,10 @@ from rest_framework.exceptions import APIException
 from dbs.manager.adapters import AdapterError, jobs
 from dbs.manager.adapters.problems import problem
 from dbs.manager.backups.services import BackupService
+from dbs.manager.backups.services.backup_run_service import KEPT_ON_SERVER
 from dbs.manager.servers.models import Server
+
+KEPT_ON_SERVER_RESULT = "kept on the server; collected at the next connection"
 
 
 @dataclass(frozen=True)
@@ -22,11 +25,19 @@ class Taken:
     size: int | None
     error: str
     activity: dict[str, Any] | None
+    kept_on_server: bool = False
+
+    @property
+    def result(self) -> str:
+        if not self.ok:
+            return f"failed: {self.error}"
+        return KEPT_ON_SERVER_RESULT if self.kept_on_server else "ok"
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "server": self.server,
             "ok": self.ok,
+            "kept_on_server": self.kept_on_server,
             "backup": self.backup,
             "size": self.size,
             "error": self.error,
@@ -58,6 +69,7 @@ def take(
                 size=detail.get("size") if ok else None,
                 error="" if ok else jobs.failure(entry),
                 activity=jobs.described(user, entry),
+                kept_on_server=ok and detail.get("outcome") == KEPT_ON_SERVER,
             )
         )
     return taken

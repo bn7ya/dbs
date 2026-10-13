@@ -50,6 +50,25 @@ def test_take_all_backs_up_every_server_and_waits_for_each(
 
 
 @RUNS_JOBS
+def test_a_take_whose_connection_breaks_is_kept_on_the_server_not_failed(
+    terminal, admin, monkeypatch, tmp_path, make_server
+):
+    monkeypatch.setattr(
+        CONNECT, connecting_to(BackupHost(root=tmp_path / "server", breaks=True))
+    )
+    make_server(name="shop")
+
+    ran = terminal("backup", "take", "shop")
+    shown = terminal("backup", "take", "shop", "--json")
+
+    assert ran.code == 0, ran.out + ran.err
+    assert "kept on the server; collected at the next connection" in ran.out
+    assert shown.json()[0]["kept_on_server"] is True
+    [collected] = BackupFile.objects.all()
+    assert collected.validation == BackupFile.Validation.VERIFIED
+
+
+@RUNS_JOBS
 def test_take_reports_a_server_already_backing_up_and_fails(
     terminal, admin, host, two_servers
 ):

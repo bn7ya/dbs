@@ -27,3 +27,24 @@ class ArchiveMismatch(APIException):
     default_detail = (
         "The archive that arrived is not the one the server made, so it was not kept."
     )
+
+
+class BackupQuarantined(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "backup_quarantined"
+    default_detail = (
+        "The backup failed verification when it arrived, so it is kept aside and is "
+        "never restored."
+    )
+
+    def __init__(
+        self,
+        detail: str | None = None,
+        code: str | None = None,
+        *,
+        output: str = "",
+        backup: str = "",
+    ) -> None:
+        super().__init__(detail, code)
+        self.output: str = output
+        self.backup: str = backup

@@ -32,6 +32,7 @@ class BackupFile(BaseModel):
     sealed = models.BooleanField(default=False)
     validation = models.CharField(max_length=16, choices=Validation.choices)
     validated_at = models.DateTimeField(null=True, blank=True)
+    failure = models.CharField(max_length=500, blank=True)
     remote_path = models.CharField(max_length=1024, blank=True)
     remote_size = models.PositiveBigIntegerField(null=True, blank=True)
     remote_mtime = models.DateTimeField(null=True, blank=True)

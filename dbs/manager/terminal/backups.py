@@ -57,7 +57,7 @@ def take(session: TerminalSession) -> int:
     rows = [
         {
             "server": item.server,
-            "result": "ok" if item.ok else f"failed: {item.error}",
+            "result": item.result,
             "backup": item.backup,
             "size": item.size,
         }
