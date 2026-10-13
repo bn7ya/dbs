@@ -1,6 +1,8 @@
-from django.db import migrations
+import django.core.validators
+from django.db import migrations, models
 from django.utils import timezone
 
+MAXIMUM_KEEP = 5
 TARGET_REMOVED = "target.remove"
 TARGET_REMOVED_DETAIL = (
     "This server no longer pushes backups anywhere. The DBS manager pulls them: "
@@ -31,6 +33,13 @@ def record_removed_targets(apps, schema_editor):
         )
 
 
+def keep_at_most_five(apps, schema_editor):
+    BackupSchedule = apps.get_model("dbs", "BackupSchedule")
+    schedules = BackupSchedule.objects.using(schema_editor.connection.alias)
+    schedules.filter(keep__gt=MAXIMUM_KEEP).update(keep=MAXIMUM_KEEP)
+    schedules.filter(keep__lt=1).update(keep=1)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -54,4 +63,16 @@ class Migration(migrations.Migration):
         migrations.DeleteModel(
             name="BackupTarget",
         ),
+        migrations.AlterField(
+            model_name="backupschedule",
+            name="keep",
+            field=models.PositiveIntegerField(
+                default=5,
+                validators=[
+                    django.core.validators.MinValueValidator(1),
+                    django.core.validators.MaxValueValidator(5),
+                ],
+            ),
+        ),
+        migrations.RunPython(keep_at_most_five, migrations.RunPython.noop),
     ]

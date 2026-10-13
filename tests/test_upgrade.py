@@ -585,3 +585,48 @@ def test_sftp_targets_are_reported_before_and_after_the_migration_drops_them():
     assert removed.target_name == "offsite"
     assert removed.data["host"] == "backups.example.com"
     assert "django_dbs server add" in removed.detail
+
+
+@pytest.mark.django_db
+def test_keeping_five_or_fewer_needs_nothing(settings):
+    settings.DBS_SCHEDULE_KEEP = 5
+
+    assert upgrade.KeepAtMostFive().check().level == OK
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("keep", [6, 14, 0, "lots"])
+def test_a_keep_setting_outside_one_to_five_is_reported(settings, keep):
+    settings.DBS_SCHEDULE_KEEP = keep
+
+    finding = upgrade.KeepAtMostFive().check()
+
+    assert finding.level == WARN
+    assert f"DBS_SCHEDULE_KEEP is {keep}" in finding.message
+    assert finding.remedy.startswith("DBS_SCHEDULE_KEEP = 5")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_migration_lowers_a_schedule_keeping_more_than_five():
+    from django.db import connection
+
+    call_command("migrate", "dbs", "0004", verbosity=0)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO dbs_backupschedule (enabled, interval, keep, database, "
+                "last_status, last_error, updated_at) VALUES (%s, '6h', 9, 'default', '', '', %s)",
+                [False, "2026-01-01 00:00:00"],
+            )
+
+        before = upgrade.KeepAtMostFive().check()
+        call_command("migrate", "dbs", verbosity=0)
+        after = upgrade.KeepAtMostFive().check()
+    finally:
+        call_command("migrate", "dbs", verbosity=0)
+
+    from dbs.models import BackupSchedule
+
+    assert before.level == WARN and "keeps 9" in before.message
+    assert after.level == OK
+    assert BackupSchedule.objects.get().keep == 5

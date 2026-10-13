@@ -90,9 +90,16 @@ def test_output_directory_is_created_and_read_from_settings(
 
 @pytest.mark.django_db
 def test_retention_keeps_only_the_newest(tmp_path, passphrase_env):
+    from dbs.container.format import write_container
+
     for hour in range(4):
         stale = backup_filename(moment=_moment(hour))
-        (tmp_path / stale).write_bytes(b"old")
+        manifest = {
+            "created": _moment(hour).isoformat(),
+            "blocks": {"block_size": 1024},
+            "copy_len": 0,
+        }
+        (tmp_path / stale).write_bytes(write_container(manifest, b"", b"", flags=0))
     (tmp_path / "keep-me.sql").write_bytes(b"not a backup")
 
     call_command("dbs_schedule", "--once", output_dir=str(tmp_path), keep=2, **FAST)

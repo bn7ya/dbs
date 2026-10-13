@@ -21,6 +21,24 @@ due. A lease in the database lets exactly one of them take each backup.</p>
 </ul>
 <p><a href="{% url 'admin:dbs_health' %}">Health</a> shows when the scheduler last checked in
 and whether the last backup is on time.</p>
+<h2>What is kept</h2>
+<p>The server keeps at most five backups in <code>DBS_BACKUP_DIR</code>; the schedule keeps
+between one and five. After each backup, retention removes the oldest of this project's
+backups beyond that number, and only those:</p>
+<ul>
+  <li>It only touches files named for this project and database:
+      <code>backup-YYYYMMDD-HHMMSSZ.dbs</code> for the <code>default</code> database and
+      <code>backup-ALIAS-YYYYMMDD-HHMMSSZ.dbs</code> for any other, with
+      <code>DBS_BACKUP_PREFIX</code> in place of <code>backup</code>. Two backups taken in the
+      same second get <code>-2</code>, <code>-3</code> and so on.</li>
+  <li>Backups are ordered by the time recorded when they were taken, then the time written
+      inside the file, and only then the name.</li>
+  <li>A file whose name carries a time in the future, a link, or a file that is not a DBS
+      backup is never counted and never removed.</li>
+  <li>A backup that failed verification never takes one of the places, and the newest backup
+      that passed verification is always kept.</li>
+</ul>
+<p>Unfinished temporary files older than an hour are cleared from the folder.</p>
 <h2>A fixed plan from the command line</h2>
 <p>Flags still run their own plan, ignoring the panel:</p>
 <pre><code>python manage.py dbs schedule --interval 6h --output-dir /var/backups --keep 5</code></pre>

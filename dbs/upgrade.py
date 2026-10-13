@@ -502,6 +502,42 @@ class PulledBackups(Step):
             return []
 
 
+class KeepAtMostFive(Step):
+    name = "retention"
+    since = "0.7.0"
+
+    def check(self):
+        from django.db import DatabaseError
+
+        from .models import BackupSchedule
+        from .retention import MAXIMUM_KEEP
+
+        problems = []
+        configured = setting("DBS_SCHEDULE_KEEP", None)
+        if configured is not None and not self._within(configured, MAXIMUM_KEEP):
+            problems.append(f"DBS_SCHEDULE_KEEP is {configured}")
+        try:
+            kept = BackupSchedule.objects.order_by("pk").values_list("keep", flat=True).first()
+        except DatabaseError:
+            kept = None
+        if kept is not None and kept > MAXIMUM_KEEP:
+            problems.append(f"the panel's schedule keeps {kept}, which migrate lowers to 5")
+        if problems:
+            return self.warn(
+                f"the server now keeps at most {MAXIMUM_KEEP} backups in DBS_BACKUP_DIR, but "
+                + "; ".join(problems),
+                f"DBS_SCHEDULE_KEEP = {MAXIMUM_KEEP}  # dbs schedule refuses larger values",
+            )
+        return self.ok(f"the server keeps at most {MAXIMUM_KEEP} backups")
+
+    @staticmethod
+    def _within(value, maximum):
+        try:
+            return 1 <= int(value) <= maximum
+        except (TypeError, ValueError):
+            return False
+
+
 STEPS = (
     InstalledApp,
     Migrations,
@@ -518,6 +554,7 @@ STEPS = (
     HiddenRows,
     AiInstructions,
     PulledBackups,
+    KeepAtMostFive,
 )
 
 

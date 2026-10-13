@@ -10,8 +10,9 @@ from dbs._cli import require_env_passphrase
 from dbs.conf import setting
 from dbs.crypto.kdf import KDFParams
 from dbs import schedule_runner
-from dbs.exceptions import DBSError
+from dbs.exceptions import ConfigurationError, DBSError
 from dbs.naming import DEFAULT_PREFIX
+from dbs.retention import MAXIMUM_KEEP, server_keep
 from dbs.scheduling import install_stop_handlers, parse_interval, run_schedule
 
 logger = logging.getLogger("dbs")
@@ -27,7 +28,7 @@ class Command(BaseCommand):
         parser.add_argument("--interval", default=None, help="How often to back up: 90s, 30m, 6h, 1d.")
         parser.add_argument("--output-dir", default=None, help="Directory the backups are written to.")
         parser.add_argument("--prefix", default=None, help="Filename prefix for this project.")
-        parser.add_argument("--keep", type=int, default=None, help="How many local backups to retain.")
+        parser.add_argument("--keep", type=int, default=None, help=f"How many backups to retain, 1 to {MAXIMUM_KEEP}.")
         parser.add_argument("--database", default="default", help="Database alias to back up.")
         parser.add_argument("--no-compress", action="store_true", help="Disable zlib compression.")
         parser.add_argument("--no-verify", action="store_true", help="Skip the verify-after-write check.")
@@ -38,9 +39,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         passphrase = require_env_passphrase("dbs_schedule")
+        keep = self._keep(options)
         if _follows_database(options):
             return self._run_database_schedule(options)
-        plan = self._plan(options)
+        plan = self._plan(options, keep)
         interval = parse_interval(plan["interval"])
         if interval < MINIMUM_SENSIBLE_INTERVAL and not options["once"]:
             logger.warning("scheduling backups every %d seconds is very frequent", interval)
@@ -71,13 +73,12 @@ class Command(BaseCommand):
         if options["once"]:
             self.stdout.write(self.style.SUCCESS("Backup cycle complete."))
 
-    def _plan(self, options) -> dict:
+    def _plan(self, options, keep) -> dict:
         output_dir = options["output_dir"] or setting("DBS_BACKUP_DIR", None)
         if not output_dir:
             raise CommandError(
                 "Set --output-dir or the DBS_BACKUP_DIR setting so backups have a home."
             )
-        keep = options["keep"] if options["keep"] is not None else setting("DBS_SCHEDULE_KEEP", 7)
         kdf_params = None
         if options["kdf_time"] or options["kdf_memory"]:
             base = KDFParams()
@@ -90,13 +91,23 @@ class Command(BaseCommand):
             "interval": options["interval"] or setting("DBS_SCHEDULE_INTERVAL", "24h"),
             "output_dir": os.path.expanduser(str(output_dir)),
             "prefix": options["prefix"] or setting("DBS_BACKUP_PREFIX", DEFAULT_PREFIX),
-            "keep": int(keep),
+            "keep": keep,
             "database": options["database"],
             "compress": not options["no_compress"],
             "verify": not options["no_verify"],
             "block_size": options["block_size"],
             "kdf_params": kdf_params,
         }
+
+    def _keep(self, options) -> int:
+        if options["keep"] is not None:
+            source, value = "--keep", options["keep"]
+        else:
+            source, value = "DBS_SCHEDULE_KEEP", setting("DBS_SCHEDULE_KEEP", MAXIMUM_KEEP)
+        try:
+            return server_keep(value)
+        except ConfigurationError as exc:
+            raise CommandError(f"{source}: {exc}") from exc
 
     def _cycle(self, passphrase: str, plan: dict) -> None:
         try:
