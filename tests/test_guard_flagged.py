@@ -6,6 +6,8 @@ from django.test import Client
 
 from dbs.models import AnomalyEvent, BackupRecord, KnownLocation, SecurityPolicy, SessionEvent
 from dbs.security import detector
+from dbs.security.features import ACTION_RISK
+from dbs.security.middleware import DBSSecurityMiddleware
 from dbs.security.sessions import REAUTH_FLAG
 
 SETUP = "/admin/dbs/panel/setup/"
@@ -173,3 +175,39 @@ def test_downloads_are_scored_as_downloads_even_without_a_post(panel, stored_bac
 
     risks = {event.features["action_risk"] for event in SessionEvent.objects.all()}
     assert 0.7 in risks
+
+
+@pytest.mark.django_db
+def test_known_location_changes_are_scored_like_the_other_security_pages(panel):
+    panel.post(ADD_LOCATION, {})
+
+    newest = SessionEvent.objects.order_by("-id").first()
+    assert newest.features["action_risk"] == ACTION_RISK["settings_write"]
+
+
+@pytest.mark.parametrize(
+    "path, action",
+    [
+        ("/admin/dbs/panel/setup/", "settings_write"),
+        ("/admin/dbs/securitypolicy/1/change/", "settings_write"),
+        ("/admin/dbs/backupschedule/1/change/", "settings_write"),
+        ("/admin/dbs/knownlocation/add/", "settings_write"),
+        ("/admin/dbs/knownlocation/4/change/", "settings_write"),
+        ("/admin/dbs/knownlocation/4/delete/", "delete"),
+        ("/admin/dbs/backuptarget/1/console/", "view"),
+        ("/admin/dbs/backuptarget/add/", "view"),
+    ],
+)
+@pytest.mark.django_db
+def test_admin_writes_are_named_by_the_page_they_change(rf, path, action):
+    middleware = DBSSecurityMiddleware(lambda request: None)
+
+    assert middleware._action(rf.post(path), "admin") == action
+
+
+def test_every_named_action_has_a_risk():
+    from dbs.security.middleware import ADMIN_ACTIONS, CONTRIB_ACTIONS
+
+    named = {action for _, action in ADMIN_ACTIONS + CONTRIB_ACTIONS}
+
+    assert named <= set(ACTION_RISK)

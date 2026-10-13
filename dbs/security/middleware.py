@@ -18,14 +18,13 @@ UNSAFE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 
 ADMIN_ACTIONS = (
     ("/restore/", "restore"),
-    ("/console/", "console"),
     ("/download/", "download"),
     ("/create/", "backup"),
     ("/delete/", "delete"),
-    ("/backuptarget/", "target_write"),
-    ("/panel/setup/", "target_write"),
-    ("/securitypolicy/", "target_write"),
-    ("/backupschedule/", "target_write"),
+    ("/panel/setup/", "settings_write"),
+    ("/securitypolicy/", "settings_write"),
+    ("/knownlocation/", "settings_write"),
+    ("/backupschedule/", "settings_write"),
 )
 
 EXPORT_FRAGMENTS = ("/download/", "/export/")
