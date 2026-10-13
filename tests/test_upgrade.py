@@ -651,3 +651,124 @@ def test_a_path_map_into_a_directory_no_root_allows_is_reported(settings, tmp_pa
     settings.DBS_RESTORE_PATH_MAP = {"/srv/old": str(tmp_path / "allowed" / "media")}
 
     assert _finding("restore path map").level == OK
+
+
+REMOVED_PUSH_SETTINGS = (
+    "DBS_SSH_TARGETS",
+    "DBS_SCHEDULE_PUSH_TARGET",
+    "DBS_SCHEDULE_KEEP_REMOTE",
+    "DBS_ADMIN_CONSOLE_SHELL",
+)
+
+
+@pytest.mark.django_db
+def test_a_project_that_pushes_nowhere_needs_nothing():
+    assert upgrade.PulledBackups().check().level == OK
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("name", REMOVED_PUSH_SETTINGS)
+def test_a_removed_push_setting_points_at_the_manager(settings, name):
+    setattr(settings, name, {"offsite": {"host": "h"}})
+
+    finding = upgrade.PulledBackups().check()
+
+    assert finding.level == WARN
+    assert name in finding.message
+    assert "django_dbs server add" in finding.remedy
+
+
+def historical(model, migration="0004_schedule_lease"):
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+
+    state = MigrationExecutor(connection).loader.project_state(("dbs", migration))
+    return state.apps.get_model("dbs", model)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sftp_targets_are_reported_before_and_after_the_migration_drops_them():
+    call_command("migrate", "dbs", "0004", verbosity=0)
+    try:
+        historical("BackupTarget").objects.create(
+            name="offsite",
+            host="backups.example.com",
+            username="deploy",
+            remote_dir="/var/backups",
+            secret_password="hunter2",
+        )
+
+        before = upgrade.PulledBackups().check()
+        call_command("migrate", "dbs", verbosity=0)
+        after = upgrade.PulledBackups().check()
+    finally:
+        call_command("migrate", "dbs", verbosity=0)
+
+    assert before.level == WARN
+    assert "offsite (deploy@backups.example.com:22)" in before.message
+    assert after.level == OK
+    assert "offsite (deploy@backups.example.com:22)" in after.message
+    from dbs.models import AuditEvent
+
+    removed = AuditEvent.objects.get(action="target.remove")
+    assert removed.target_name == "offsite"
+    assert removed.data["host"] == "backups.example.com"
+    assert "django_dbs server add" in removed.detail
+    assert "hunter2" not in f"{removed.data}{removed.detail}"
+    assert set(removed.data) == {"host", "port", "username", "remote_dir"}
+
+
+@pytest.mark.django_db
+def test_keeping_five_or_fewer_needs_nothing(settings):
+    settings.DBS_SCHEDULE_KEEP = 5
+
+    assert upgrade.KeepAtMostFive().check().level == OK
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("keep", [6, 14, 0, "lots"])
+def test_a_keep_setting_outside_one_to_five_is_reported(settings, keep):
+    settings.DBS_SCHEDULE_KEEP = keep
+
+    finding = upgrade.KeepAtMostFive().check()
+
+    assert finding.level == WARN
+    assert f"DBS_SCHEDULE_KEEP is {keep}" in finding.message
+    assert finding.remedy.startswith("DBS_SCHEDULE_KEEP = 5")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_migration_lowers_a_schedule_keeping_more_than_five():
+    call_command("migrate", "dbs", "0004", verbosity=0)
+    try:
+        historical("BackupSchedule").objects.create(interval="6h", keep=9)
+
+        before = upgrade.KeepAtMostFive().check()
+        call_command("migrate", "dbs", verbosity=0)
+        after = upgrade.KeepAtMostFive().check()
+    finally:
+        call_command("migrate", "dbs", verbosity=0)
+
+    from dbs.models import BackupSchedule
+
+    assert before.level == WARN and "keeps 9" in before.message
+    assert after.level == OK
+    assert BackupSchedule.objects.get().keep == 5
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_audit_chain_step_applies_its_migration():
+    call_command("migrate", "dbs", "0004", verbosity=0)
+    try:
+        step = upgrade.AuditChain()
+
+        reported = step.check()
+        applied = step.fix()
+
+        assert reported.level == ACTION
+        assert reported.remedy == "python manage.py migrate dbs"
+        assert applied.level == FIXED
+        assert step.check().level == OK
+        assert "dbs audit verify" in step.check().message
+    finally:
+        call_command("migrate", "dbs", verbosity=0)

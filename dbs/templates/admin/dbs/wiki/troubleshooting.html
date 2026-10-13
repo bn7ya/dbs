@@ -2,9 +2,6 @@
 
 {% block wiki %}
 <h1>Troubleshooting</h1>
-<h2>"Credential cannot be read with the current SECRET_KEY"</h2>
-<p>The target's stored secret was encrypted under a different key. Add the old key to
-<code>SECRET_KEY_FALLBACKS</code>, or re-enter the credential.</p>
 <h2>The panel logged me out</h2>
 <p>Run <code>python manage.py dbs security unlock USERNAME</code>, then add your network to the
 trusted list in setup.</p>

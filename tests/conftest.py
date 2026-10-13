@@ -46,6 +46,13 @@ def fake_ssh(tmp_path, monkeypatch):
     return fake
 
 
+@pytest.fixture
+def inline_jobs(monkeypatch):
+    from dbs import jobs
+
+    monkeypatch.setattr(jobs, "launch", lambda work, name="dbs-job": work())
+
+
 @pytest.fixture(autouse=True)
 def shifted_clock(monkeypatch):
     target = os.environ.get(CLOCK_ENV)

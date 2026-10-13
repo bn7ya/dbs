@@ -10,31 +10,25 @@ from dbs._cli import require_env_passphrase
 from dbs.conf import setting
 from dbs.crypto.kdf import KDFParams
 from dbs import schedule_runner
-from dbs.exceptions import DBSError
+from dbs.exceptions import ConfigurationError, DBSError
 from dbs.naming import DEFAULT_PREFIX
+from dbs.retention import MAXIMUM_KEEP, server_keep
 from dbs.scheduling import install_stop_handlers, parse_interval, run_schedule
-from dbs.transports.ssh import SSHTarget
 
 logger = logging.getLogger("dbs")
 
 MINIMUM_SENSIBLE_INTERVAL = 60
-PLAN_OPTIONS = ("interval", "output_dir", "prefix", "keep", "push", "keep_remote")
-
-
-def _push_target(name):
-    return SSHTarget.from_settings(name) if name else None
+PLAN_OPTIONS = ("interval", "output_dir", "prefix", "keep")
 
 
 class Command(BaseCommand):
-    help = "Run backups on a repeating interval, with retention and optional offsite push."
+    help = "Run backups on a repeating interval, keeping the newest few."
 
     def add_arguments(self, parser):
         parser.add_argument("--interval", default=None, help="How often to back up: 90s, 30m, 6h, 1d.")
         parser.add_argument("--output-dir", default=None, help="Directory the backups are written to.")
         parser.add_argument("--prefix", default=None, help="Filename prefix for this project.")
-        parser.add_argument("--keep", type=int, default=None, help="How many local backups to retain.")
-        parser.add_argument("--push", default=None, help="Name of a DBS_SSH_TARGETS entry to also push to.")
-        parser.add_argument("--keep-remote", type=int, default=None, help="How many pushed backups to retain.")
+        parser.add_argument("--keep", type=int, default=None, help=f"How many backups to retain, 1 to {MAXIMUM_KEEP}.")
         parser.add_argument("--database", default="default", help="Database alias to back up.")
         parser.add_argument("--no-compress", action="store_true", help="Disable zlib compression.")
         parser.add_argument("--no-verify", action="store_true", help="Skip the verify-after-write check.")
@@ -45,9 +39,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         passphrase = require_env_passphrase("dbs_schedule")
+        keep = self._keep(options)
         if _follows_database(options):
             return self._run_database_schedule(options)
-        plan = self._plan(options)
+        plan = self._plan(options, keep)
         interval = parse_interval(plan["interval"])
         if interval < MINIMUM_SENSIBLE_INTERVAL and not options["once"]:
             logger.warning("scheduling backups every %d seconds is very frequent", interval)
@@ -78,18 +73,12 @@ class Command(BaseCommand):
         if options["once"]:
             self.stdout.write(self.style.SUCCESS("Backup cycle complete."))
 
-    def _plan(self, options) -> dict:
+    def _plan(self, options, keep) -> dict:
         output_dir = options["output_dir"] or setting("DBS_BACKUP_DIR", None)
         if not output_dir:
             raise CommandError(
                 "Set --output-dir or the DBS_BACKUP_DIR setting so backups have a home."
             )
-        keep = options["keep"] if options["keep"] is not None else setting("DBS_SCHEDULE_KEEP", 7)
-        keep_remote = (
-            options["keep_remote"]
-            if options["keep_remote"] is not None
-            else setting("DBS_SCHEDULE_KEEP_REMOTE", None)
-        )
         kdf_params = None
         if options["kdf_time"] or options["kdf_memory"]:
             base = KDFParams()
@@ -102,15 +91,23 @@ class Command(BaseCommand):
             "interval": options["interval"] or setting("DBS_SCHEDULE_INTERVAL", "24h"),
             "output_dir": os.path.expanduser(str(output_dir)),
             "prefix": options["prefix"] or setting("DBS_BACKUP_PREFIX", DEFAULT_PREFIX),
-            "keep": int(keep),
-            "keep_remote": None if keep_remote is None else int(keep_remote),
-            "push": _push_target(options["push"] or setting("DBS_SCHEDULE_PUSH_TARGET", None)),
+            "keep": keep,
             "database": options["database"],
             "compress": not options["no_compress"],
             "verify": not options["no_verify"],
             "block_size": options["block_size"],
             "kdf_params": kdf_params,
         }
+
+    def _keep(self, options) -> int:
+        if options["keep"] is not None:
+            source, value = "--keep", options["keep"]
+        else:
+            source, value = "DBS_SCHEDULE_KEEP", setting("DBS_SCHEDULE_KEEP", MAXIMUM_KEEP)
+        try:
+            return server_keep(value)
+        except ConfigurationError as exc:
+            raise CommandError(f"{source}: {exc}") from exc
 
     def _cycle(self, passphrase: str, plan: dict) -> None:
         try:

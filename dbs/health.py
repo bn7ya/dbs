@@ -136,7 +136,7 @@ def _newest_file():
     directory = backup_directory()
     if not directory:
         return Check("newest file", INFO, "DBS_BACKUP_DIR is not set.")
-    for record in BackupRecord.objects.filter(target__isnull=True).exclude(location=""):
+    for record in BackupRecord.objects.exclude(location=""):
         if not _inside(directory, record.location):
             continue
         if os.path.isfile(record.location):

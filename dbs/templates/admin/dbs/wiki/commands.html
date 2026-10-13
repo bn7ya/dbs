@@ -6,10 +6,16 @@
 python manage.py dbs backup --stream [--prefix PREFIX] [--output-dir DIR]
 python manage.py dbs restore INPUT [--dry-run] [--flush]
 python manage.py dbs validate INPUT [--passphrase]
-python manage.py dbs schedule [--interval 6h] [--once]
+python manage.py dbs schedule [--interval 6h] [--keep 1-5] [--once]
+python manage.py dbs health [--json]
+python manage.py dbs audit verify
 python manage.py dbs key --show
 python manage.py dbs security status|unlock USER|retrain|purge
 python manage.py dbs ai [--agents] [--check]</code></pre>
+<p><code>dbs audit verify</code> walks the audit trail's hash chain: each finished row is sealed
+with the SHA-256 of the row before it and its own content, so a row changed or deleted after
+it was written breaks the chain there. It prints the first broken link, or the head of the
+chain to keep somewhere else. No DBS command deletes audit rows.</p>
 <p>The standalone manager, outside any project:</p>
 <pre><code>django_dbs run [--port] [--host] [--no-browser]
 django_dbs server list|show|add|edit|remove|check|discover|browse

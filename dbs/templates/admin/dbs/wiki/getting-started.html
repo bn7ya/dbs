@@ -20,6 +20,6 @@ class InvoiceBackup(ModelBackup):
 <p>From this panel, use <em>Take a backup</em>. From a shell:</p>
 <pre><code>python manage.py dbs backup /var/backups/app.dbs</code></pre>
 <h2>Keep taking them</h2>
-<pre><code>python manage.py dbs schedule --interval 6h --output-dir /var/backups --keep 14</code></pre>
+<pre><code>python manage.py dbs schedule --interval 6h --output-dir /var/backups --keep 5</code></pre>
 <p>Run one scheduler per output directory. Two loops sharing a directory race on retention.</p>
 {% endblock %}

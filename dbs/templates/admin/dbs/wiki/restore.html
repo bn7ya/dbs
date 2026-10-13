@@ -2,6 +2,13 @@
 
 {% block wiki %}
 <h1>Restoring</h1>
+<h2>From the panel</h2>
+<p>Restore a backup kept in <code>DBS_BACKUP_DIR</code> from its row under
+<a href="{% url 'admin:dbs_backuprecord_changelist' %}">Backups</a>, or upload a
+<code>.dbs</code> file under <a href="{% url 'admin:dbs_backup_restore' %}">Restore</a>. The
+restore runs in the background, outside the web request, on a page that refreshes until it
+ends; only one backup or restore runs at a time. Taking a backup works the same way, and its
+download is served from the finished file in <code>DBS_BACKUP_DIR</code>.</p>
 <h2>Rehearse first</h2>
 <p><em>Dry run</em> performs the real load inside a transaction it rolls back, and writes no
 files. It reports what would be restored and changes nothing.</p>

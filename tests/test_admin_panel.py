@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.test import Client
 
-from dbs.models import AuditEvent, BackupRecord, BackupTarget
+from dbs.models import AuditEvent, BackupRecord
 from tests.testapp.models import Author, Book
 
 PANEL = "/admin/dbs/"
@@ -21,22 +21,6 @@ CONFIGURE = {
     "expected_networks": "",
     "trusted_networks": "127.0.0.0/8",
     "notify_emails": "",
-}
-
-TARGET = {
-    "name": "offsite",
-    "host": "backups.example.com",
-    "port": 22,
-    "username": "deploy",
-    "remote_dir": "/var/backups",
-    "auth_method": "password",
-    "key_filename": "",
-    "known_hosts": "/home/deploy/.ssh/known_hosts",
-    "connect_timeout": 30.0,
-    "notes": "",
-    "password": "hunter2",
-    "key_material": "",
-    "key_passphrase": "",
 }
 
 
@@ -71,8 +55,8 @@ def test_every_wiki_page_renders(panel):
     for page in (
         "getting-started",
         "passphrases",
-        "targets",
         "scheduling",
+        "manager",
         "restore",
         "commands",
         "upgrading",
@@ -90,99 +74,130 @@ def test_an_unknown_wiki_page_is_a_404(panel):
 
 
 @pytest.mark.django_db
-def test_a_target_is_created_through_the_admin_with_its_password_encrypted(panel):
-    response = panel.post("/admin/dbs/backuptarget/add/", TARGET)
-
-    assert response.status_code == 302
-    target = BackupTarget.objects.get(name="offsite")
-    assert target.secret_password.startswith("dbs1:")
-    assert target.secret("secret_password") == "hunter2"
-
-
-@pytest.mark.django_db
-def test_editing_a_target_without_retyping_keeps_the_password(panel):
-    panel.post("/admin/dbs/backuptarget/add/", TARGET)
-    target = BackupTarget.objects.get(name="offsite")
-
-    panel.post(
-        f"/admin/dbs/backuptarget/{target.pk}/change/",
-        dict(TARGET, password="", notes="edited"),
-    )
-
-    target.refresh_from_db()
-    assert target.notes == "edited"
-    assert target.secret("secret_password") == "hunter2"
+def test_the_panel_has_no_sftp_targets_or_console(panel):
+    assert panel.get("/admin/dbs/backuptarget/").status_code == 404
+    assert panel.get("/admin/dbs/backuptarget/1/console/").status_code == 404
+    assert panel.get(f"{WIKI}targets/").status_code == 404
+    page = panel.get(PANEL).content
+    assert b"SFTP" not in page and b"console" not in page.lower()
+    assert b"pulls them" in page
 
 
 @pytest.mark.django_db
-def test_a_target_needs_a_host_key_policy(panel):
-    response = panel.post("/admin/dbs/backuptarget/add/", dict(TARGET, known_hosts=""))
+def test_taking_a_backup_offers_no_push(panel):
+    response = panel.get(CREATE)
 
-    assert response.status_code == 200
-    assert not BackupTarget.objects.exists()
-    assert b"known_hosts" in response.content
+    assert b'name="destination"' not in response.content
+    assert b"Push to" not in response.content
+
+
+@pytest.fixture
+def backup_dir(tmp_path, settings):
+    settings.DBS_BACKUP_DIR = str(tmp_path / "backups")
+    return tmp_path / "backups"
+
+
+def take_backup(panel):
+    response = panel.post(CREATE, {"database": "default", "note": "nightly"}, follow=True)
+    return response, BackupRecord.objects.order_by("-pk").first()
 
 
 @pytest.mark.django_db
-def test_password_auth_needs_a_password(panel):
-    response = panel.post("/admin/dbs/backuptarget/add/", dict(TARGET, password=""))
-
-    assert response.status_code == 200
-    assert not BackupTarget.objects.exists()
-
-
-@pytest.mark.django_db
-def test_taking_a_backup_downloads_it_and_records_it(panel):
+def test_taking_a_backup_writes_it_to_the_backup_folder_and_offers_it(
+    panel, backup_dir, inline_jobs
+):
     Author.objects.create(name="Linus")
 
-    response = panel.post(CREATE, {"database": "default", "destination": "", "note": ""})
+    response, record = take_backup(panel)
 
-    assert response.status_code == 200
-    assert response["Content-Disposition"].startswith("attachment;")
-    assert response.content[:8] == b"DBSCON01"
-    record = BackupRecord.objects.get()
-    assert record.size_bytes == len(response.content)
-    assert AuditEvent.objects.filter(action="backup.create").exists()
+    assert response.redirect_chain[-1][0].startswith("/admin/dbs/backuprecord/jobs/")
+    assert b"Wrote" in response.content and b"verified" in response.content
+    path = backup_dir / record.filename
+    assert record.local_path() == str(path)
+    assert record.note == "nightly" and record.created_by.username == "root"
+    event = AuditEvent.objects.get(action="backup.create")
+    assert event.status == "succeeded" and event.target_name == record.filename
+    assert event.data["size"] == path.stat().st_size == record.size_bytes
+    download = f"/admin/dbs/backuprecord/{record.pk}/download/".encode()
+    assert download in response.content
+
+    served = panel.get(download.decode())
+
+    assert served["Content-Disposition"].startswith("attachment;")
+    assert b"".join(served.streaming_content) == path.read_bytes()
+    assert path.read_bytes()[:8] == b"DBSCON01"
+    downloaded = AuditEvent.objects.get(action="backup.download")
+    assert downloaded.data == {
+        "file": record.filename,
+        "size": record.size_bytes,
+        "sha256": record.sha256,
+        "actor_username": "root",
+    }
 
 
 @pytest.mark.django_db
-def test_a_dry_run_restore_changes_nothing(panel):
+def test_without_a_backup_folder_the_panel_says_so_and_takes_nothing(panel, settings):
+    settings.DBS_BACKUP_DIR = None
+
+    page = panel.get(CREATE)
+    posted = panel.post(CREATE, {"database": "default", "note": ""}, follow=True)
+
+    assert b"Set <code>DBS_BACKUP_DIR</code>" in page.content
+    assert b"did not start" in posted.content
+    assert not AuditEvent.objects.filter(action="backup.create").exists()
+
+
+@pytest.mark.django_db
+def test_a_second_backup_waits_for_the_first(panel, backup_dir, inline_jobs):
+    from dbs import jobs
+
+    running = jobs.Runner().take()
+    try:
+        response = panel.post(CREATE, {"database": "default", "note": ""}, follow=True)
+    finally:
+        running.release()
+
+    assert b"did not start" in response.content and b"running" in response.content
+    assert not BackupRecord.objects.exists()
+
+
+@pytest.mark.django_db
+def test_a_dry_run_restore_changes_nothing(panel, backup_dir, inline_jobs):
     author = Author.objects.create(name="Linus")
     book = Book.objects.create(title="Kernel", author=author)
     book.cover.save("k.bin", ContentFile(b"KERNELBYTES"), save=True)
-    container = panel.post(
-        CREATE, {"database": "default", "destination": "", "note": ""}
-    ).content
+    _, record = take_backup(panel)
     Book.objects.all().delete()
     Author.objects.all().delete()
 
-    upload = io.BytesIO(container)
+    upload = io.BytesIO((backup_dir / record.filename).read_bytes())
     upload.name = "backup.dbs"
     response = panel.post(RESTORE, {"backup": upload, "dry_run": "on"}, follow=True)
 
     assert response.status_code == 200
     assert b"Dry run" in response.content
     assert not Author.objects.exists()
+    assert sorted(path.name for path in backup_dir.iterdir()) == [record.filename]
 
 
 @pytest.mark.django_db
-def test_a_real_restore_brings_the_rows_back(panel):
+def test_a_real_restore_brings_the_rows_back(panel, backup_dir, inline_jobs):
     author = Author.objects.create(name="Linus")
     book = Book.objects.create(title="Kernel", author=author)
     book.cover.save("k.bin", ContentFile(b"KERNELBYTES"), save=True)
-    container = panel.post(
-        CREATE, {"database": "default", "destination": "", "note": ""}
-    ).content
+    _, record = take_backup(panel)
     Book.objects.all().delete()
     Author.objects.all().delete()
 
-    upload = io.BytesIO(container)
+    upload = io.BytesIO((backup_dir / record.filename).read_bytes())
     upload.name = "backup.dbs"
     response = panel.post(RESTORE, {"backup": upload}, follow=True)
 
     assert b"Restored" in response.content
     assert Book.objects.get(title="Kernel").author.name == "Linus"
-    assert AuditEvent.objects.filter(action="backup.restore", succeeded=True).exists()
+    restored = AuditEvent.objects.get(action="backup.restore")
+    assert restored.succeeded and restored.target_name == "backup.dbs"
+    assert restored.data["records"] >= 2 and restored.data["dry_run"] is False
 
 
 @pytest.mark.django_db
@@ -197,7 +212,7 @@ def test_an_upload_over_the_limit_is_refused(panel, settings):
 
 
 @pytest.mark.django_db
-def test_a_corrupt_upload_reports_instead_of_crashing(panel):
+def test_a_corrupt_upload_reports_instead_of_crashing(panel, backup_dir, inline_jobs):
     upload = io.BytesIO(b"not a container at all")
     upload.name = "junk.dbs"
 
@@ -206,6 +221,7 @@ def test_a_corrupt_upload_reports_instead_of_crashing(panel):
     assert response.status_code == 200
     assert b"Restore failed" in response.content
     assert AuditEvent.objects.filter(action="backup.restore", succeeded=False).exists()
+    assert list(backup_dir.iterdir()) == []
 
 
 @pytest.mark.django_db
@@ -221,5 +237,5 @@ def test_staff_without_superuser_see_nothing(db):
     client = Client()
     client.force_login(staff)
 
-    for path in (PANEL, CREATE, RESTORE, WIKI, "/admin/dbs/backuptarget/"):
+    for path in (PANEL, CREATE, RESTORE, WIKI, "/admin/dbs/backupschedule/"):
         assert client.get(path).status_code in (403, 404), path

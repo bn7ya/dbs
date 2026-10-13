@@ -7,7 +7,7 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
-from dbs import leases, schedule_runner
+from dbs import jobs, leases, schedule_runner
 from dbs.forms import BackupScheduleForm
 from dbs.models import AuditEvent, BackupRecord, BackupSchedule
 from tests.testapp.models import Author
@@ -97,7 +97,7 @@ def test_a_due_schedule_backs_up_once_per_interval(backup_dir):
 @pytest.mark.django_db
 def test_a_schedule_held_by_another_worker_is_left_alone(backup_dir):
     BackupSchedule.objects.create(enabled=True, interval="6h")
-    leases.acquire(schedule_runner.SCHEDULE_LEASE, "other-worker", 600)
+    leases.acquire(jobs.RUNNER_LEASE, "other-worker", 600)
 
     assert schedule_runner.run_due() is None
     assert not backup_dir.exists()

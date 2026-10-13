@@ -1,0 +1,27 @@
+{% extends "admin/dbs/base.html" %}
+
+{% block extrahead %}{{ block.super }}{% if running %}
+<meta http-equiv="refresh" content="{{ refresh_seconds }}">{% endif %}{% endblock %}
+
+{% block dbs_content %}
+<h1>{{ title }} of {{ event.target_name }}</h1>
+<section class="dbs-card dbs-job">
+  <p><strong class="dbs-status dbs-status-{% if running %}info{% elif event.status == 'succeeded' %}ok{% else %}error{% endif %}">{{ event.status }}</strong></p>
+  <p class="dbs-job-summary">{{ summary }}</p>
+  <table>
+    <tr><th>Started</th><td>{{ event.started_at|date:"Y-m-d H:i:s" }}</td></tr>
+    {% if event.finished_at %}<tr><th>Finished</th><td>{{ event.finished_at|date:"Y-m-d H:i:s" }}</td></tr>{% endif %}
+    {% if event.data.size %}<tr><th>Size</th><td>{{ event.data.size|filesizeformat }}</td></tr>{% endif %}
+    {% if event.data.sha256 %}<tr><th>SHA-256</th><td><code>{{ event.data.sha256 }}</code></td></tr>{% endif %}
+    {% if event.data.database %}<tr><th>Database</th><td>{{ event.data.database }}</td></tr>{% endif %}
+  </table>
+  {% if running %}
+  <p class="help">This runs in the background, so it is safe to leave this page. It refreshes every {{ refresh_seconds }} seconds.</p>
+  {% endif %}
+  <p>
+    {% if record %}<a class="button default" href="{% url 'admin:dbs_backup_download' record.pk %}">Download {{ record.filename }}</a>{% endif %}
+    <a class="button" href="{% url 'admin:dbs_auditevent_changelist' %}">Audit trail</a>
+    <a class="button" href="{% url 'admin:dbs_backuprecord_changelist' %}">Backups</a>
+  </p>
+</section>
+{% endblock %}
