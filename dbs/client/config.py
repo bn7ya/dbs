@@ -43,7 +43,7 @@ def _load_toml(path: str) -> dict:
         except ImportError as exc:
             raise ConfigurationError(
                 'Reading the client config needs a TOML parser: '
-                'pip install "django-dbs[client]"'
+                'pip install "django-dbs[manager]"'
             ) from exc
     with open(path, "rb") as fh:
         return tomllib.load(fh)

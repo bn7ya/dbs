@@ -164,6 +164,47 @@ def test_python_dash_m_runs_the_manager_without_the_script_on_path():
     assert result.stdout.strip() == f"django_dbs {__version__}"
 
 
+def test_without_the_manager_extra_one_line_names_the_install(monkeypatch, capsys):
+    from dbs import extras
+
+    real = extras.importable
+    monkeypatch.setattr(extras, "importable", lambda name: name != "waitress" and real(name))
+
+    assert cli.main(["run", "--no-browser"]) == 1
+
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert printed.err.splitlines() == [
+        "django_dbs: the DBS manager needs waitress, which this environment lacks; "
+        'install them with pip install "django-dbs[manager]"'
+    ]
+
+
+@pytest.mark.parametrize("entry", ["dbs.manager", "dbs.manager.cli"])
+def test_python_dash_m_without_the_manager_extra_exits_without_a_traceback(entry):
+    script = (
+        "import runpy, sys\n"
+        "sys.modules['rest_framework'] = None\n"
+        "sys.argv = ['django_dbs', 'run', '--no-browser']\n"
+        f"runpy.run_module({entry!r}, run_name='__main__', alter_sys=True)\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=BOOT_SECONDS,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert len(result.stderr.splitlines()) == 1
+    assert "rest_framework" in result.stderr
+    assert 'pip install "django-dbs[manager]"' in result.stderr
+
+
 def test_paths_names_every_file(tmp_path, capsys):
     assert cli.main(["paths", "--data-dir", str(tmp_path / "home")]) == 0
 

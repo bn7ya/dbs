@@ -501,27 +501,50 @@ def test_a_custom_get_queryset_is_left_alone(monkeypatch):
     assert finding.message == "no backed-up model has a default manager that hides rows"
 
 
-def test_the_dependencies_step_checks_what_the_manager_needs():
-    finding = upgrade.Dependencies().check()
+def without(monkeypatch, *modules):
+    from dbs import extras
 
-    assert finding.level == OK
-    assert "waitress" in finding.message and "rest_framework" in finding.message
+    real = extras.importable
+    monkeypatch.setattr(extras, "importable", lambda name: name not in modules and real(name))
 
 
-def test_a_missing_manager_dependency_is_reported(monkeypatch):
-    import importlib
+def test_the_guard_extra_is_fine_when_scikit_learn_is_installed():
+    assert upgrade.GuardExtra().check().level == OK
 
-    real_import = importlib.import_module
 
-    def without_waitress(name, *args, **kwargs):
-        if name == "waitress":
-            raise ImportError(name)
-        return real_import(name, *args, **kwargs)
+def test_the_guard_middleware_without_scikit_learn_asks_for_the_guard_extra(monkeypatch):
+    without(monkeypatch, "sklearn")
 
-    monkeypatch.setattr(importlib, "import_module", without_waitress)
-
-    finding = upgrade.Dependencies().check()
+    finding = upgrade.GuardExtra().check()
 
     assert finding.level == ACTION
+    assert "DBSSecurityMiddleware" in finding.message
+    assert finding.remedy == 'pip install "django-dbs[guard]"'
+
+
+@pytest.mark.django_db
+def test_without_the_guard_middleware_scikit_learn_is_not_needed(settings, monkeypatch):
+    without(monkeypatch, "sklearn")
+    settings.MIDDLEWARE = [m for m in settings.MIDDLEWARE if "DBSSecurityMiddleware" not in m]
+
+    assert upgrade.GuardExtra().check().level == OK
+    assert levels(upgrade.run_steps(apply_fixes=False))["guard extra"] == OK
+
+
+def test_the_manager_extra_is_reported_when_installed():
+    finding = upgrade.ManagerExtra().check()
+
+    assert finding.level == OK
+    assert "django_dbs run" in finding.message
+
+
+@pytest.mark.django_db
+def test_a_missing_manager_extra_is_named_but_never_demanded(monkeypatch):
+    without(monkeypatch, "waitress")
+
+    finding = upgrade.ManagerExtra().check()
+
+    assert finding.level == OK
     assert "waitress" in finding.message and "paramiko" not in finding.message
-    assert "django-dbs>=0.5" in finding.remedy
+    assert 'pip install "django-dbs[manager]"' in finding.remedy
+    assert not upgrade.run_steps(apply_fixes=False).blocked

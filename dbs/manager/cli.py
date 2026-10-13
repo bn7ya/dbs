@@ -8,6 +8,8 @@ import signal
 import sys
 import webbrowser
 
+from dbs import extras
+
 from . import paths
 from .processes import abandoned
 from .terminal import CommandFailed, parsers
@@ -153,6 +155,10 @@ def location(parser):
 
 
 def main(argv=None):
+    absent = extras.missing("manager")
+    if absent:
+        print(f"{PROG}: {extras.manager_missing_message(absent)}", file=sys.stderr)
+        return 1
     parser = build_parser()
     args = parser.parse_args(argv)
     if getattr(args, "handler", None) is None:

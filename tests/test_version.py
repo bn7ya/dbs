@@ -39,10 +39,10 @@ def test_the_wheel_would_carry_the_data_files():
         assert needed in patterns, needed
 
 
-def test_scikit_learn_is_declared():
+def test_scikit_learn_is_declared_by_the_guard_extra():
     config = read_pyproject()
 
     assert any(
         dependency.startswith("scikit-learn")
-        for dependency in config["project"]["dependencies"]
+        for dependency in config["project"]["optional-dependencies"]["guard"]
     )

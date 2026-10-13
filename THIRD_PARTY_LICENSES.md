@@ -9,49 +9,56 @@ DBS manager's interface; its license texts travel with it in
 `dbs/manager/static/dbs_manager/3rdpartylicenses.txt`.
 
 Licenses are given as [SPDX identifiers](https://spdx.org/licenses/), read from each package's
-own metadata and license files for django-dbs 0.6.0 on 2026-10-11. A package can change its license between
+own metadata and license files on 2026-10-13. A package can change its license between
 versions, so the metadata of the version you install is what applies. This file is a summary to
 help a developer review their dependencies; it is not legal advice.
 
 ## Installed with `pip install django-dbs`
 
+The backup library itself: what a Django project needs to back up, restore and validate.
+
 | Package | Required | License | What DBS uses it for |
 |---|---|---|---|
 | [Django](https://www.djangoproject.com/) | `>=4.2,<7` | BSD-3-Clause | The framework DBS runs in |
-| [cryptography](https://github.com/pyca/cryptography) | `>=41` | Apache-2.0 OR BSD-3-Clause | AES-256-GCM encryption and HKDF key derivation |
-| [argon2-cffi](https://github.com/hynek/argon2-cffi) | `>=21.3` | MIT | Argon2id key derivation from the passphrase |
-| [reedsolo](https://github.com/tomerfiliba/reedsolomon) | `>=1.7` | Unlicense OR MIT-0 | Reed-Solomon parity that repairs damaged blocks |
-| [scikit-learn](https://scikit-learn.org/) | `>=1.3` | BSD-3-Clause | The session guard's IsolationForest detector |
-| [paramiko](https://github.com/paramiko/paramiko) | `>=3` | LGPL-2.1-or-later | SSH and SFTP transports, and the manager's connections to servers |
-| [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15` | BSD-3-Clause | The manager's REST API |
-| [waitress](https://github.com/Pylons/waitress) | `>=3` | ZPL-2.1 | The web server behind `django_dbs run` |
-| [tomli](https://github.com/hukkin/tomli) | `>=1.1.0`, Python < 3.11 only | MIT | Reading `dbs-client.toml` |
+| [cryptography](https://github.com/pyca/cryptography) | `>=41,<51` | Apache-2.0 OR BSD-3-Clause | AES-256-GCM encryption and HKDF key derivation |
+| [argon2-cffi](https://github.com/hynek/argon2-cffi) | `>=21.3,<26` | MIT | Argon2id key derivation from the passphrase |
+| [reedsolo](https://github.com/tomerfiliba/reedsolomon) | `>=1.7,<2` | Unlicense OR MIT-0 | Reed-Solomon parity that repairs damaged blocks |
 
-The `ssh` and `client` extras name paramiko and tomli, which the list above already installs.
+## Installed with an extra
+
+Each extra adds what one part of DBS needs. `pip install "django-dbs[all]"` installs all three.
+
+| Package | Required | Extra | License | What DBS uses it for |
+|---|---|---|---|---|
+| [scikit-learn](https://scikit-learn.org/) | `>=1.3,<2` | `guard` | BSD-3-Clause | The session guard's IsolationForest detector |
+| [paramiko](https://github.com/paramiko/paramiko) | `>=3,<6` | `ssh`, `manager` | LGPL-2.1-or-later | The `dbs.transports` SSH and SFTP API, and the manager's connections to servers |
+| [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15,<4` | `manager` | BSD-3-Clause | The manager's REST API |
+| [waitress](https://github.com/Pylons/waitress) | `>=3,<4` | `manager` | ZPL-2.1 | The web server behind `django_dbs run` |
+| [tomli](https://github.com/hukkin/tomli) | `>=1.1.0,<3`, Python < 3.11 only | `manager` | MIT | Reading a `dbs-client.toml` for `django_dbs server import-profiles` |
 
 ### Brought in by those packages
 
 The exact set depends on the versions pip resolves. This is the set for the newest releases on
-2026-10-11.
+2026-10-13.
 
-| Package | Brought in by | License |
-|---|---|---|
-| asgiref | Django | BSD-3-Clause |
-| sqlparse | Django | BSD-3-Clause |
-| tzdata (Windows only) | Django | Apache-2.0 |
-| cffi | cryptography, argon2-cffi-bindings, PyNaCl | MIT-0 from 2.1, MIT before |
-| pycparser | cffi | BSD-3-Clause |
-| argon2-cffi-bindings | argon2-cffi | MIT |
-| typing_extensions (Python < 3.11 only) | asgiref, cryptography | PSF-2.0 |
-| numpy | scikit-learn, scipy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
-| scipy | scikit-learn | BSD-3-Clause |
-| joblib | scikit-learn | BSD-3-Clause |
-| cloudpickle | joblib (1.6 and later) | BSD-3-Clause |
-| threadpoolctl | scikit-learn | BSD-3-Clause |
-| narwhals | scikit-learn (1.9 and later) | MIT |
-| bcrypt | paramiko | Apache-2.0 |
-| PyNaCl | paramiko | Apache-2.0 |
-| invoke | paramiko (recent releases) | BSD-2-Clause |
+| Package | Brought in by | Installed with | License |
+|---|---|---|---|
+| asgiref | Django | `django-dbs` | BSD-3-Clause |
+| sqlparse | Django | `django-dbs` | BSD-3-Clause |
+| tzdata (Windows only) | Django | `django-dbs` | Apache-2.0 |
+| cffi | cryptography, argon2-cffi-bindings, PyNaCl | `django-dbs` | MIT-0 from 2.1, MIT before |
+| pycparser | cffi | `django-dbs` | BSD-3-Clause |
+| argon2-cffi-bindings | argon2-cffi | `django-dbs` | MIT |
+| typing_extensions (Python < 3.11 only) | asgiref, cryptography | `django-dbs` | PSF-2.0 |
+| numpy | scikit-learn, scipy | `guard` | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
+| scipy | scikit-learn | `guard` | BSD-3-Clause |
+| joblib | scikit-learn | `guard` | BSD-3-Clause |
+| cloudpickle | joblib (1.6 and later) | `guard` | BSD-3-Clause |
+| threadpoolctl | scikit-learn | `guard` | BSD-3-Clause |
+| narwhals | scikit-learn (1.9 and later) | `guard` | MIT |
+| bcrypt | paramiko | `ssh`, `manager` | Apache-2.0 |
+| PyNaCl | paramiko | `ssh`, `manager` | Apache-2.0 |
+| invoke | paramiko (recent releases) | `ssh`, `manager` | BSD-2-Clause |
 
 The binary wheels of numpy and scipy also carry the native libraries they link against, each
 named with its license in the wheel's own `LICENSE.txt`. The Linux wheels, for example, carry
@@ -81,7 +88,7 @@ production build compiles ahead of time and runs without zone.js, so neither is 
 
 None of these is installed with `django-dbs`.
 
-`pip install -e ".[dev]"`:
+`pip install -e ".[dev]"` installs the `all` extra above and these:
 
 | Package | License |
 |---|---|
@@ -96,7 +103,9 @@ None of these is installed with `django-dbs`.
 | exceptiongroup (Python < 3.11 only) | MIT |
 | colorama (Windows only) | BSD-3-Clause |
 
-The PostgreSQL test job also installs `psycopg[binary]>=3`, under LGPL-3.0-only.
+The PostgreSQL test jobs also install `psycopg[binary]>=3`, under LGPL-3.0-only, and the MySQL
+test jobs install `mysqlclient`, under GPL-2.0-or-later. Neither is a dependency of
+`django-dbs`; a project installs the database driver it uses.
 
 `npm ci` in `manager-ui/`, to build and test the interface:
 
@@ -134,7 +143,7 @@ packages in the bundle table above ship in the wheel.
 For the Python packages, in a fresh virtual environment:
 
 ```bash
-pip install django-dbs pip-licenses
+pip install "django-dbs[all]" pip-licenses
 pip-licenses --from=mixed --with-urls --ignore-packages pip-licenses prettytable wcwidth
 ```
 

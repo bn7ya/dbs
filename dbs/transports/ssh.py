@@ -46,7 +46,7 @@ def _paramiko():
         import paramiko
     except ImportError as exc:
         raise ConfigurationError(
-            'SSH transport requires paramiko: pip install "django-dbs[client]"'
+            'SSH transport requires paramiko: pip install "django-dbs[ssh]"'
         ) from exc
     return paramiko
 

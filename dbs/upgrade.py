@@ -5,6 +5,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import extras
 from .conf import setting
 from .container.format import FORMAT_VERSION, container_version
 from .exceptions import DBSError
@@ -55,8 +56,8 @@ class Step:
     def fix(self) -> Finding:
         raise NotImplementedError
 
-    def ok(self, message):
-        return Finding(self.name, self.since, OK, message)
+    def ok(self, message, remedy=""):
+        return Finding(self.name, self.since, OK, message, remedy)
 
     def action(self, message, remedy=""):
         return Finding(self.name, self.since, ACTION, message, remedy)
@@ -231,37 +232,35 @@ class BackupDirectory(Step):
         return self.ok(f"backups are kept in {directory}")
 
 
-class Dependencies(Step):
-    name = "dependencies"
-    since = "0.3.0"
+class GuardExtra(Step):
+    name = "guard extra"
+    since = "0.7.0"
 
     def check(self):
-        try:
-            import sklearn  # noqa: F401
-        except ImportError:
-            return self.action(
-                "scikit-learn is missing, so the session guard cannot score anything",
-                'pip install "django-dbs>=0.3"',
-            )
-        missing = [name for name in self.manager_modules if not self.importable(name)]
-        if missing:
-            return self.action(
-                f"{', '.join(missing)} missing, so `django_dbs run` cannot start",
-                'pip install --upgrade "django-dbs>=0.5"',
-            )
-        return self.ok("scikit-learn, paramiko, rest_framework and waitress are available")
+        if MIDDLEWARE_PATH not in (setting("MIDDLEWARE", ()) or ()):
+            return self.ok("the session guard is off, so scikit-learn is not needed")
+        if extras.available("guard"):
+            return self.ok("scikit-learn is installed for the session guard")
+        return self.action(
+            "DBSSecurityMiddleware is on, but scikit-learn cannot be imported, so the "
+            "session guard runs without its anomaly detector",
+            extras.install_command("guard"),
+        )
 
-    manager_modules = ("paramiko", "rest_framework", "waitress")
 
-    @staticmethod
-    def importable(name):
-        import importlib
+class ManagerExtra(Step):
+    name = "manager extra"
+    since = "0.7.0"
 
-        try:
-            importlib.import_module(name)
-        except ImportError:
-            return False
-        return True
+    def check(self):
+        absent = extras.missing("manager")
+        if not absent:
+            return self.ok("the DBS manager can run here (django_dbs run)")
+        return self.ok(
+            f"the DBS manager is not installed here ({', '.join(absent)} missing); "
+            "this project does not need it",
+            f"to run django_dbs on this machine: {extras.install_command('manager')}",
+        )
 
 
 class AdminPanel(Step):
@@ -433,7 +432,8 @@ STEPS = (
     ScheduleInDatabase,
     SchedulerMode,
     BackupDirectory,
-    Dependencies,
+    GuardExtra,
+    ManagerExtra,
     AdminPanel,
     GuardMiddleware,
     ExcludeSemantics,
