@@ -4,7 +4,7 @@ from datetime import datetime
 
 from django.db.models import Count, QuerySet
 
-from dbs.audit import FAILED, RUNNING, SUCCEEDED
+from dbs.audit import FAILED, RUNNING, SUCCEEDED, UNFINISHED
 from dbs.models import AuditEvent
 
 
@@ -33,6 +33,13 @@ class ActivityRepository:
 
     def get(self, entry_id: int) -> AuditEvent:
         return self.joined().get(pk=entry_id)
+
+    def unfinished_ids(self) -> set[int]:
+        return set(
+            AuditEvent.objects.filter(status__in=UNFINISHED).values_list(
+                "pk", flat=True
+            )
+        )
 
     def set_running_data(self, entry_id: int, data: dict) -> int:
         return AuditEvent.objects.filter(pk=entry_id, status=RUNNING).update(data=data)

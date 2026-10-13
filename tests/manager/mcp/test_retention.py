@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from functools import lru_cache
 from uuid import uuid4
 
 import pytest
@@ -11,7 +12,12 @@ from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupPlanService
 from dbs.manager.mcp.tools import KEEPS_FEWER
 from tests.manager.backups.support import BackupHost
-from tests.manager.servers.support import PASSWORD, connecting_to
+from tests.manager.servers.support import (
+    BACKUP_PASSPHRASE,
+    PASSWORD,
+    connecting_to,
+    dbs_backup,
+)
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 SEEDED = 3
@@ -19,9 +25,14 @@ DEPTH = 4
 ONE_OFF = ""
 
 
+@lru_cache(maxsize=None)
+def made_backup() -> bytes:
+    return dbs_backup(BACKUP_PASSPHRASE)
+
+
 @pytest.fixture
 def host(monkeypatch, tmp_path):
-    found = BackupHost(content=b"DBS stand-in", root=tmp_path / "server")
+    found = BackupHost(content=made_backup(), root=tmp_path / "server")
     monkeypatch.setattr(CONNECT, connecting_to(found))
     return found
 
@@ -181,4 +192,7 @@ def test_only_the_password_lets_a_plan_keep_fewer(mcp, api, admin, host, make_se
 
     assert not refused.ok and refused.text == KEEPS_FEWER
     assert after_refusal == SEEDED
-    assert BackupFileRepository().alive_for_plan(plan.pk).count() == 1
+    [kept] = BackupFileRepository().alive_for_plan(plan.pk)
+    newest = BackupFile.objects.filter(plan=plan).latest("created_at")
+    assert kept.pk == newest.pk
+    assert kept.validation == BackupFile.Validation.VERIFIED

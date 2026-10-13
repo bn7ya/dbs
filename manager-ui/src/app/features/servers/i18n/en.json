@@ -24,6 +24,7 @@
       "label": "Servers",
       "name": "Name",
       "address": "Address",
+      "connection": "Connection",
       "status": "Status",
       "lastChecked": "Last checked",
       "never": "Never",
@@ -78,6 +79,7 @@
         "backupCommand": "Backup command",
         "envFile": ".env file",
         "remoteBackupDir": "Remote backup folder",
+        "timeout": "The timeout command, to stop a command that runs out of time",
         "roots": "Allowed folders",
         "docker": "Docker Compose",
         "service": "Compose service"
@@ -333,7 +335,7 @@
     },
     "move": {
       "title": "Move to another server",
-      "body": "Restore this server onto another one, with its .env file and folders.",
+      "body": "Move this project onto a new server that already has the same environment.",
       "action": "Move to another server"
     },
     "browser": {

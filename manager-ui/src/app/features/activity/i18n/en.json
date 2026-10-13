@@ -93,12 +93,19 @@
       },
       "redeploy": {
         "run": "Move to another server",
-        "check": "Move: check the other server",
+        "check": "Move: check the new server",
+        "source_backup": "Move: back up the old server",
+        "record_env": "Move: record the new server's .env file",
+        "safety_backup": "Move: back up the new server's data",
         "env": "Move: push the .env file",
         "migrate": "Move: run the migrations",
         "restore": "Move: restore the backup",
         "archives": "Move: unpack the folder archives",
-        "final_check": "Move: check again"
+        "final_check": "Move: check again",
+        "revert": "Revert the new server after a move",
+        "revert_check": "Revert: check the new server",
+        "revert_env": "Revert: push the recorded .env file back",
+        "revert_restore": "Revert: restore the data from before the move"
       },
       "manager": {
         "export": "Export DBS data",

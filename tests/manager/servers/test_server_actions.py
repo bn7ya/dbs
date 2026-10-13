@@ -126,6 +126,7 @@ def test_the_check_runs_argv_lists_in_the_project(api, monkeypatch, configured_s
             "cwd": PROJECT_DIR,
             "env": {"DJANGO_SETTINGS_MODULE": SETTINGS_MODULE},
         },
+        {"argv": ["timeout", "-k", "1", "5", "true"], "cwd": None, "env": None},
     ]
 
 

@@ -10,6 +10,15 @@ class BackupRunning(APIException):
     default_detail = "A backup or restore of this server is already queued or running."
 
 
+class ServerSettling(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "server_settling"
+    default_detail = (
+        "A command that ran out of time may still be stopping on this server. "
+        "Try again in a minute."
+    )
+
+
 class BackupMissing(NotFound):
     default_code = "backup_missing"
     default_detail = "The backup file is no longer on disk."

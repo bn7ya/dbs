@@ -7,6 +7,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
+import { MASTER_ACCOUNT } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Toaster } from '@shared/toaster/toaster';
@@ -25,6 +26,7 @@ const IDENTITY: Identity = {
   is_superuser: false,
   groups: [],
   permissions: [],
+  ...MASTER_ACCOUNT,
 };
 
 const ROUTES: Routes = [{ path: 'servers', loadChildren: () => import('../../servers.routes').then((m) => m.routes) }];

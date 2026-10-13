@@ -9,6 +9,7 @@ import {
   map,
   of,
   switchMap,
+  tap,
   type Observable,
   type Subscription,
 } from 'rxjs';
@@ -18,7 +19,7 @@ import type { ApiError, Page } from '@core/http/api.types';
 import { errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { JobWatcher } from '@core/jobs/job-watcher';
-import type { Job, JobStarted } from '@core/jobs/job.types';
+import type { Job, JobConnection, JobStarted } from '@core/jobs/job.types';
 import { Toaster } from '@shared/toaster/toaster';
 import type { ToastSeverity } from '@shared/toaster/toaster.types';
 import { BackupsApi } from '../data/backups.api';
@@ -38,7 +39,15 @@ import type {
   UploadEvent,
   VerifyOutcome,
 } from '../data/backups.types';
-import type { CollectCounts, JobTarget, PlanRun, RestoreProgress, RestoreTarget, Upload } from './backups.store.types';
+import type {
+  CollectCounts,
+  JobTarget,
+  LiveJob,
+  PlanRun,
+  RestoreProgress,
+  RestoreTarget,
+  Upload,
+} from './backups.store.types';
 
 export const BACKUP_PAGE_SIZES: readonly number[] = [20, 50, 100];
 
@@ -283,6 +292,14 @@ export class BackupsStore {
     return this.taking() || this.runs().some((run) => run.server === server);
   });
 
+  private readonly liveJobs = signal<ReadonlyMap<number, LiveJob>>(new Map());
+
+  readonly liveConnection = computed<JobConnection | null>(() => {
+    const server = this.server();
+    const live = [...this.liveJobs().values()].find((each) => each.server === server && each.job.connection);
+    return live?.job.connection ?? null;
+  });
+
   isRunning(plan: BackupPlan): boolean {
     return this.runs().some((run) => run.plan === plan.id);
   }
@@ -346,7 +363,7 @@ export class BackupsStore {
       return;
     }
     this.takingOn.update((servers) => withItem(servers, server));
-    this.follow(started, () => this.takingOn.update((servers) => withoutItem(servers, server))).subscribe({
+    this.follow(server, started, () => this.takingOn.update((servers) => withoutItem(servers, server))).subscribe({
       next: (job) => {
         this.listResource.reload();
         if (job.status === 'succeeded') {
@@ -364,7 +381,9 @@ export class BackupsStore {
       return;
     }
     this.runs.update((runs) => [...runs, plan]);
-    this.follow(started, () => this.runs.update((runs) => runs.filter((run) => run.plan !== plan.plan))).subscribe({
+    this.follow(plan.server, started, () =>
+      this.runs.update((runs) => runs.filter((run) => run.plan !== plan.plan)),
+    ).subscribe({
       next: (job) => {
         this.plansResource.reload();
         this.listResource.reload();
@@ -383,8 +402,9 @@ export class BackupsStore {
       return;
     }
     this.checks.update((checks) => [...checks, file]);
-    this.follow(started, () => this.checks.update((checks) => checks.filter((check) => !sameTarget(check, file))))
-      .subscribe({
+    this.follow(file.server, started, () =>
+      this.checks.update((checks) => checks.filter((check) => !sameTarget(check, file))),
+    ).subscribe({
         next: (job) => {
           this.listResource.reload();
           if (job.status === 'failed') {
@@ -406,9 +426,14 @@ export class BackupsStore {
       });
   }
 
-  private follow(started: Observable<JobStarted>, done: () => void): Observable<Job> {
+  private follow(server: string, started: Observable<JobStarted>, done: () => void): Observable<Job> {
     return started.pipe(
-      switchMap(({ activity }) => this.jobs.watch(activity)),
+      switchMap(({ activity }) =>
+        this.jobs.watch(activity).pipe(
+          tap((job) => this.liveJobs.update((jobs) => new Map(jobs).set(activity, { server, job }))),
+          finalize(() => this.liveJobs.update((jobs) => withoutKey(jobs, activity))),
+        ),
+      ),
       last(),
       finalize(done),
       takeUntilDestroyed(this.destroyRef),
@@ -466,7 +491,7 @@ export class BackupsStore {
       return;
     }
     this.restores.update((restores) => [...restores, file]);
-    this.follow(started, () =>
+    this.follow(file.server, started, () =>
       this.restores.update((restores) => restores.filter((restore) => !sameTarget(restore, file))),
     ).subscribe({
       next: (job) => {
@@ -677,5 +702,11 @@ function withItem(items: ReadonlySet<string>, item: string): ReadonlySet<string>
 function withoutItem(items: ReadonlySet<string>, item: string): ReadonlySet<string> {
   const rest = new Set(items);
   rest.delete(item);
+  return rest;
+}
+
+function withoutKey(jobs: ReadonlyMap<number, LiveJob>, key: number): ReadonlyMap<number, LiveJob> {
+  const rest = new Map(jobs);
+  rest.delete(key);
   return rest;
 }

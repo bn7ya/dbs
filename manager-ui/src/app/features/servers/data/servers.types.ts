@@ -1,4 +1,5 @@
 import type { Page } from '@core/http/api.types';
+import type { ConnectionState } from '@shared/connection-dot/connection-dot.types';
 
 export type AuthMethod = 'key' | 'password';
 
@@ -14,6 +15,9 @@ export interface ServerSummary {
   readonly username: string;
   readonly last_check_status: CheckStatus;
   readonly last_checked_at: string | null;
+  readonly connection_state: ConnectionState;
+  readonly last_seen_at: string | null;
+  readonly last_connection_error: string;
 }
 
 export interface PythonSuggestion {
@@ -58,6 +62,8 @@ export interface Server extends ServerSummary {
   readonly env_path: string;
   readonly last_check_error: string;
   readonly last_check_report: CheckReport;
+  readonly timeout_on_host: boolean | null;
+  readonly timeout_in_container: boolean | null;
   readonly created_at: string;
   readonly updated_at: string;
 }

@@ -52,6 +52,9 @@ class ServerListSerializer(serializers.ModelSerializer):
             "username",
             "last_check_status",
             "last_checked_at",
+            "connection_state",
+            "last_seen_at",
+            "last_connection_error",
         ]
         read_only_fields = fields
 
@@ -93,6 +96,11 @@ class ServerSerializer(serializers.ModelSerializer):
             "last_checked_at",
             "last_check_report",
             "last_health",
+            "timeout_on_host",
+            "timeout_in_container",
+            "connection_state",
+            "last_seen_at",
+            "last_connection_error",
             "created_at",
             "updated_at",
         ]

@@ -48,7 +48,7 @@ test.describe('moving to another server', () => {
     await page.getByRole('button', { name: t('rehearse'), exact: true }).click();
 
     const steps = page.getByRole('main').getByRole('listitem');
-    await expect(steps.filter({ hasText: t('stepCheckOther') })).toContainText(t('stepDone'), { timeout: 120_000 });
+    await expect(steps.filter({ hasText: t('stepCheckNew') })).toContainText(t('stepDone'), { timeout: 120_000 });
     await expect(page.getByText(t('rehearsed'))).toBeVisible({ timeout: 240_000 });
     await expect(steps.filter({ hasText: t('stepRestore') })).toContainText(t('stepDone'));
     await journey.shot(page, 'redeploy-rehearsed');

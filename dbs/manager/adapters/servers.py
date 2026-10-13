@@ -24,6 +24,7 @@ class Settled:
 @dataclass(frozen=True)
 class Checked:
     name: str
+    connection: str
     status: str
     remote_version: str | None
     problem: str
@@ -62,6 +63,7 @@ def checked(user: Any, chosen: Iterable[Server]) -> list[Checked]:
             results.append(
                 Checked(
                     name=server.name,
+                    connection=_connection(service.get(server.pk)),
                     status="failed",
                     remote_version=None,
                     problem=problem(exc),
@@ -77,6 +79,7 @@ def checked(user: Any, chosen: Iterable[Server]) -> list[Checked]:
         results.append(
             Checked(
                 name=done.server.name,
+                connection=_connection(done.server),
                 status=done.server.last_check_status,
                 remote_version=data.get("remote_version"),
                 problem=checks.problem(done.server),
@@ -84,3 +87,13 @@ def checked(user: Any, chosen: Iterable[Server]) -> list[Checked]:
             )
         )
     return results
+
+
+def connection_label(state: str, error: str) -> str:
+    if state != Server.ConnectionState.OFFLINE or not error:
+        return state
+    return f"{state} ({error})"
+
+
+def _connection(server: Server) -> str:
+    return connection_label(server.connection_state, server.last_connection_error)

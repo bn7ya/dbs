@@ -711,7 +711,7 @@ def command_run(args):
     setup_django(data_dir, args.database_url, args.host, proxies)
     from dbs import leases
 
-    from .activity.services import ActivityService
+    from .recovery import recover
     from .runner import get_runner
     from .scheduler import Scheduler
 
@@ -723,7 +723,7 @@ def command_run(args):
     scheduler = Scheduler()
     server = None
     try:
-        ActivityService(None).interrupt()
+        recover()
         runner.start()
         scheduler.start()
         server = create_server(args.host, args.port)

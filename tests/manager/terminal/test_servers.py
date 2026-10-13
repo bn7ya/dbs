@@ -337,8 +337,14 @@ def test_check_all_reports_every_server_and_fails_if_one_does(
     ran = terminal("server", "check", "--all")
 
     assert ran.code == 1
+    assert ran.out.splitlines()[0].split()[:3] == ["SERVER", "CONNECTION", "STATUS"]
     rows = {line.split()[0]: line for line in ran.out.splitlines()[1:]}
-    assert " ok " in rows["web-1"] and "failed" in rows["web-2"]
+    assert " online " in rows["web-1"] and " ok " in rows["web-1"]
+    assert "offline (ssh_unreachable)" in rows["web-2"] and "failed" in rows["web-2"]
+
+    listed = terminal("server", "list").out.splitlines()
+    assert listed[0].split()[:4] == ["NAME", "HOST", "CONNECTION", "STATUS"]
+    assert "online" in listed[1] and "offline (ssh_unreachable)" in listed[2]
 
 
 @pytest.mark.django_db

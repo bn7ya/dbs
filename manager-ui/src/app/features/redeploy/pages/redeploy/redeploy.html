@@ -3,6 +3,7 @@
     <h2>{{ 'redeploy.title' | t }}</h2>
     <p class="text-secondary">{{ 'redeploy.body' | t }}</p>
     <app-notice severity="info">{{ 'redeploy.needsCode' | t }}</app-notice>
+    <p class="text-sm text-secondary">{{ 'redeploy.how' | t }}</p>
   </header>
 
   @if (loadError(); as failure) {
@@ -40,12 +41,8 @@
 
           <mat-form-field>
             <mat-label>{{ 'redeploy.backup' | t }}</mat-label>
-            <mat-select
-              name="backup"
-              [appFieldError]="backupMissing() ? ('redeploy.errors.backupRequired' | t) : ''"
-              [ngModel]="backup()"
-              (ngModelChange)="backup.set($event)"
-            >
+            <mat-select name="backup" [canSelectNullableOptions]="true" [ngModel]="backup()" (ngModelChange)="backup.set($event)">
+              <mat-option [value]="null">{{ 'redeploy.noBackup' | t }}</mat-option>
               @for (each of backups(); track each.id) {
                 <mat-option [value]="each.id">
                   <bdi dir="ltr">{{ each.name }}</bdi> · {{ each.created_at | appDate }}
@@ -53,9 +50,6 @@
               }
             </mat-select>
             <mat-hint>{{ 'redeploy.backupHint' | t }}</mat-hint>
-            @if (backupMissing()) {
-              <mat-error>{{ 'redeploy.errors.backupRequired' | t }}</mat-error>
-            }
           </mat-form-field>
 
           <mat-form-field>
@@ -68,24 +62,9 @@
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field>
-            <mat-label>{{ 'redeploy.archives' | t }}</mat-label>
-            <mat-select name="archives" multiple [ngModel]="archives()" (ngModelChange)="archives.set($event)">
-              @for (archive of archiveOptions(); track archive.id) {
-                <mat-option [value]="archive.id"><bdi dir="ltr">{{ archive.name }}</bdi></mat-option>
-              }
-            </mat-select>
-            <mat-hint>{{ 'redeploy.archivesHint' | t }}</mat-hint>
-          </mat-form-field>
-
-          <div class="redeploy__checks">
-            <mat-checkbox name="migrate" [ngModel]="migrate()" (ngModelChange)="migrate.set($event)">
-              {{ 'redeploy.migrate' | t }}
-            </mat-checkbox>
-            <mat-checkbox name="flush" [ngModel]="flush()" (ngModelChange)="flush.set($event)">
-              {{ 'redeploy.flush' | t }}
-            </mat-checkbox>
-          </div>
+          <mat-checkbox name="flush" [ngModel]="flush()" (ngModelChange)="flush.set($event)">
+            {{ 'redeploy.flush' | t }}
+          </mat-checkbox>
 
           <app-password-input
             [label]="'password.label' | t"
@@ -139,28 +118,119 @@
   @if (job(); as current) {
     <section class="redeploy__progress" aria-live="polite">
       <h3>{{ (rehearsing() ? 'redeploy.progress.rehearsal' : 'redeploy.progress.title') | t }}</h3>
-      <ol class="redeploy__steps" role="list">
-        @for (each of steps(); track each.step) {
-          <li class="redeploy__step">
-            <span>{{ 'redeploy.steps.' + each.step | t }}</span>
-            <app-status-tag
-              [severity]="stepLook(each.status).severity"
-              [icon]="stepLook(each.status).icon"
-              [label]="'redeploy.status.' + each.status | t"
-            />
-          </li>
-        }
-      </ol>
+      <app-move-steps [steps]="steps()" labels="redeploy.steps" />
+      @if (current.connection; as connection) {
+        <app-job-connection [connection]="connection" />
+      }
       @switch (current.status) {
         @case ('succeeded') {
           <app-notice severity="success">
             {{ (rehearsing() ? 'redeploy.progress.rehearsed' : 'redeploy.progress.done') | t }}
           </app-notice>
+          @if (outcome().usedChosenBackup) {
+            <app-notice severity="warning">{{ 'redeploy.progress.chosenBackup' | t }}</app-notice>
+          }
+          @if (outcome().sourceSilent) {
+            <app-notice severity="warning">{{ 'redeploy.progress.sourceSilent' | t }}</app-notice>
+          }
         }
         @case ('failed') {
-          <app-notice severity="danger">{{ current.error_code | errorText }}</app-notice>
+          <app-notice severity="danger">
+            @if (outcome().failedStep; as step) {
+              {{ 'redeploy.progress.stoppedAt' | t: { step: ('redeploy.steps.' + step | t) } }}
+            }
+            {{ current.error_code | errorText }}
+          </app-notice>
         }
       }
     </section>
+
+    @if (outcome().revertable) {
+      <mat-card appearance="outlined">
+        <mat-card-content>
+          <section class="redeploy__revert">
+            <h3>{{ 'redeploy.revert.title' | t }}</h3>
+            <p class="text-secondary">{{ 'redeploy.revert.body' | t }}</p>
+
+            <form class="redeploy__form" novalidate (ngSubmit)="revertForReal()">
+              @if (revertFailure(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              }
+
+              <app-password-input
+                [label]="'password.label' | t"
+                [hint]="'redeploy.revert.passwordHint' | t"
+                [error]="revertPasswordError()"
+                name="revert_password"
+                autocomplete="current-password"
+                [ngModel]="revertPassword()"
+                (ngModelChange)="setRevertPassword($event)"
+              />
+
+              <mat-form-field>
+                <mat-label>{{ 'redeploy.confirmName' | t }}</mat-label>
+                <input
+                  matInput
+                  name="revert_name"
+                  dir="auto"
+                  autocomplete="off"
+                  spellcheck="false"
+                  [appFieldError]="revertNameError()"
+                  [ngModel]="revertName()"
+                  (ngModelChange)="setRevertName($event)"
+                />
+                @if (targetName(); as name) {
+                  <mat-hint>{{ 'redeploy.revert.confirmNameHint' | t: { name: '⁨' + name + '⁩' } }}</mat-hint>
+                }
+                @if (revertNameError(); as message) {
+                  <mat-error>{{ message }}</mat-error>
+                }
+              </mat-form-field>
+
+              <div class="redeploy__actions">
+                <button matButton="outlined" type="button" [disabled]="reverting()" (click)="rehearseRevert()">
+                  @if (reverting() && revertRehearsing()) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ 'redeploy.revert.rehearse' | t }}
+                </button>
+                <button
+                  matButton="filled"
+                  class="app-danger"
+                  type="submit"
+                  [disabled]="reverting()"
+                  [attr.aria-busy]="reverting()"
+                >
+                  @if (reverting() && !revertRehearsing()) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ 'redeploy.revert.action' | t }}
+                </button>
+              </div>
+            </form>
+
+            @if (revertJob(); as undoing) {
+              <div class="redeploy__progress" aria-live="polite">
+                <h4>{{ (revertRehearsing() ? 'redeploy.revert.rehearsal' : 'redeploy.revert.progress') | t }}</h4>
+                <app-move-steps [steps]="revertSteps()" labels="redeploy.revert.steps" />
+                @if (undoing.connection; as connection) {
+                  <app-job-connection [connection]="connection" />
+                }
+                @switch (undoing.status) {
+                  @case ('succeeded') {
+                    <app-notice severity="success">
+                      {{ (revertRehearsing() ? 'redeploy.revert.rehearsed' : 'redeploy.revert.done') | t }}
+                    </app-notice>
+                  }
+                  @case ('failed') {
+                    <app-notice severity="danger">{{ undoing.error_code | errorText }}</app-notice>
+                  }
+                }
+              </div>
+            }
+          </section>
+        </mat-card-content>
+      </mat-card>
+    }
   }
 </div>

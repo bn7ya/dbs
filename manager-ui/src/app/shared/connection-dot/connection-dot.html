@@ -1,0 +1,6 @@
+<i class="connection-dot__dot fa-solid fa-circle" aria-hidden="true"></i>
+@if (state() === 'offline' && lastSeenAt(); as seen) {
+  <span>{{ 'connection.offlineSeen' | t: { age: (seen | timeAgo) } }}</span>
+} @else {
+  <span>{{ 'connection.' + state() | t }}</span>
+}

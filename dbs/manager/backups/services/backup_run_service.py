@@ -34,7 +34,7 @@ from dbs.manager.backups.services.dbs_runs import DbsOutcome, DbsRun, moment_of
 from dbs.manager.backups.services.plan_runs import last_run, run_detail
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.common.uploads import upload_name
-from dbs.manager.servers.exceptions import RemoteCommandFailed
+from dbs.manager.servers.exceptions import RemoteCommandFailed, StreamBroken
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerConnectionService, ServerService
 from dbs.manager.vault import VaultError, open_stream, seal_stream
@@ -117,6 +117,17 @@ class BackupRunService:
         finally:
             self.locks.release(UUID(job.subject), job.pk)
 
+    def back_up(self, job: AuditEvent, server: Server, *, keep_remote: int) -> BackupFile:
+        outcome = self._back_up(
+            job, server, prefix=take_prefix(server), keep_remote=keep_remote, plan=None
+        )
+        if outcome.kept_on_server:
+            raise StreamBroken()
+        streamed = cast(BackupFile, outcome.streamed)
+        if streamed.validation == BackupFile.Validation.FAILED:
+            raise BackupQuarantined(output=streamed.failure, backup=str(streamed.pk))
+        return streamed
+
     def _run(self, job: AuditEvent, work: Callable[[AuditEvent], Detail]) -> None:
         try:
             detail = work(job)
@@ -136,7 +147,7 @@ class BackupRunService:
         outcome = self._back_up(
             job, server, prefix=take_prefix(server), keep_remote=TAKE_KEEP_REMOTE, plan=None
         )
-        self._retain_dbs(job, server, None, TAKE_KEEP)
+        self._retain_dbs(job, server, None, TAKE_KEEP, outcome)
         return self._reported(job, outcome)
 
     def _run_plan(self, job: AuditEvent, plan_id: UUID) -> Detail:
@@ -161,7 +172,7 @@ class BackupRunService:
                 keep_remote=min(plan.keep_remote, KEEP_MAX),
                 plan=plan,
             )
-            self._retain_dbs(job, server, plan, min(plan.keep, KEEP_MAX))
+            self._retain_dbs(job, server, plan, min(plan.keep, KEEP_MAX), backed_up)
             return {**run_detail(plan), **self._reported(job, backed_up)}
         self._retain(job, plan)
         return {**run_detail(plan), **outcome}
@@ -346,11 +357,19 @@ class BackupRunService:
         self._expire(job, plan.server, plan, stale)
 
     def _retain_dbs(
-        self, job: AuditEvent, server: Server, plan: BackupPlan | None, keep: int
+        self,
+        job: AuditEvent,
+        server: Server,
+        plan: BackupPlan | None,
+        keep: int,
+        outcome: DbsOutcome,
     ) -> None:
         plan_id = plan and plan.pk
+        arrived = outcome.streamed and outcome.streamed.pk
         good = sorted(
-            self.files.good_backups(server.pk, plan_id), key=moment_of, reverse=True
+            self.files.good_backups(server.pk, plan_id),
+            key=lambda file: (file.pk == arrived, moment_of(file)),
+            reverse=True,
         )
         quarantined = sorted(
             self.files.quarantined(server.pk, plan_id), key=moment_of, reverse=True

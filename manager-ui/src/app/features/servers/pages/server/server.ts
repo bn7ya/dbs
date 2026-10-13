@@ -5,6 +5,7 @@ import { MatTabLink, MatTabNav, MatTabNavPanel } from '@angular/material/tabs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { ConnectionDot } from '@shared/connection-dot/connection-dot';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { Notice } from '@shared/notice/notice';
 import { Skeleton } from '@shared/skeleton/skeleton';
@@ -42,6 +43,7 @@ const TAB_MATCH: IsActiveMatchOptions = {
     Skeleton,
     EmptyState,
     CheckStatusTag,
+    ConnectionDot,
     ErrorTextPipe,
     TranslatePipe,
   ],

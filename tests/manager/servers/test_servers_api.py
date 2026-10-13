@@ -255,6 +255,9 @@ def test_the_list_is_paginated_searchable_and_free_of_secrets(
         "username",
         "last_check_status",
         "last_checked_at",
+        "connection_state",
+        "last_seen_at",
+        "last_connection_error",
     }
     assert [row["name"] for row in searched.json()["results"]] == ["web-1"]
     assert [row["name"] for row in by_host.json()["results"]] == ["db-1"]

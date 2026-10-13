@@ -1,3 +1,5 @@
+import type { ConnectionState } from '@shared/connection-dot/connection-dot.types';
+
 export type DashboardCheckStatus = 'unknown' | 'ok' | 'problem' | 'failed';
 
 export type HealthStatus = 'ok' | 'warn' | 'error';
@@ -31,6 +33,8 @@ export interface DashboardServer {
   readonly host: string;
   readonly check_status: DashboardCheckStatus;
   readonly checked_at: string | null;
+  readonly connection_state: ConnectionState;
+  readonly last_seen_at: string | null;
   readonly last_backup: DashboardBackup | null;
   readonly next_plan_run: string | null;
   readonly failures_7d: number;

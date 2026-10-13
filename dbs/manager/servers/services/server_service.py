@@ -353,6 +353,7 @@ class ServerService:
                 with self.connections.open(server) as remote:
                     report = self._inspect(server, remote)
                     health = self._health(server, remote, report["dbs_version"])
+                    limits = self._limits(server, remote, report)
             except CONNECTION_ERRORS as exc:
                 self._record(server, Server.CheckStatus.FAILED, error_code_of(exc), {})
                 entry.detail = {"status": Server.CheckStatus.FAILED}
@@ -361,7 +362,7 @@ class ServerService:
                 Server.CheckStatus.OK if _ready(report) else Server.CheckStatus.PROBLEM
             )
             entry.detail = {"status": status}
-            self.servers.update(server, last_health=health)
+            self.servers.update(server, last_health=health, **limits)
             return self._record(server, status, "", report)
 
     def checked(self, server_id: UUID) -> CheckedServer:
@@ -402,6 +403,19 @@ class ServerService:
         except RemoteCommandFailed:
             return None
         return _health_report(result.stdout)
+
+    def _limits(
+        self, server: Server, remote: RemoteHost, report: dict[str, Any]
+    ) -> dict[str, bool | None]:
+        running = (report.get("compose") or {}).get("running", False)
+        return {
+            "timeout_on_host": remote.has_timeout(),
+            "timeout_in_container": (
+                remote.has_timeout(self.connections.dbs_profile(server))
+                if running
+                else None
+            ),
+        }
 
     def _inspect(self, server: Server, remote: RemoteHost) -> dict[str, Any]:
         profile = self.connections.dbs_profile(server)

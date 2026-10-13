@@ -185,6 +185,26 @@ def test_an_operator_takes_and_rehearses_but_restores_nothing_for_real(
 
 
 @pytest.mark.django_db
+def test_an_operator_rehearses_putting_a_server_back_but_never_does_it(as_role):
+    revert = "/api/redeploy/999999/revert/"
+    operator = as_role(Role.OPERATOR)
+
+    real = operator.post(
+        revert,
+        {"rehearsal": False, "password": PASSWORD, "confirm_name": "web-2"},
+        format="json",
+    )
+    rehearsed = operator.post(revert, {"rehearsal": True}, format="json")
+    watched = as_role(Role.VIEWER).post(revert, {"rehearsal": True}, format="json")
+
+    assert refusal(real)["message"] == (
+        "This needs the admin role or higher; your account is an operator."
+    )
+    assert rehearsed.status_code == 404
+    assert refusal(watched)["code"] == "role_required"
+
+
+@pytest.mark.django_db
 def test_an_operator_takes_backups(as_role, server):
     operator = as_role(Role.OPERATOR)
 

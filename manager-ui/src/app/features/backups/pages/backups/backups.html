@@ -264,6 +264,10 @@
           <app-notice severity="info">{{ 'backups.take.running' | t }}</app-notice>
         }
 
+        @if (liveConnection(); as connection) {
+          <app-job-connection [connection]="connection" />
+        }
+
         @if (deleted(); as file) {
           <app-notice severity="success" closable (closed)="dismissDeleted()">
             <span class="backups__deleted">

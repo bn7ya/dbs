@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from dbs import audit
+from dbs.manager.activity import heartbeat
 from dbs.models import AuditEvent
+
+
+class JobConnectionSerializer(serializers.Serializer):
+    state = serializers.CharField()
+    last_activity_at = serializers.DateTimeField()
+    bytes = serializers.IntegerField()
 
 
 class ActivitySerializer(serializers.ModelSerializer):
@@ -14,6 +22,7 @@ class ActivitySerializer(serializers.ModelSerializer):
     )
     server = serializers.SerializerMethodField()
     server_name = serializers.SerializerMethodField()
+    connection = serializers.SerializerMethodField()
 
     class Meta:
         model = AuditEvent
@@ -28,6 +37,7 @@ class ActivitySerializer(serializers.ModelSerializer):
             "actor",
             "server",
             "server_name",
+            "connection",
             "created_at",
             "started_at",
             "finished_at",
@@ -49,6 +59,12 @@ class ActivitySerializer(serializers.ModelSerializer):
     def get_server_name(self, entry):
         server = self._server(entry)
         return None if server is None else server.name
+
+    def get_connection(self, entry):
+        if entry.status != audit.RUNNING:
+            return None
+        found = heartbeat.connection_of(entry.pk)
+        return None if found is None else JobConnectionSerializer(found).data
 
 
 class ActivityFilterSerializer(serializers.Serializer):

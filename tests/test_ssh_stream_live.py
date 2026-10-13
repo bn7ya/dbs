@@ -55,6 +55,7 @@ class StreamingServer:
                 self.released.wait(30)
             channel.send_exit_status(0)
             channel.close()
+            _until_the_client_leaves(transport)
         except Exception:
             pass
         finally:
@@ -67,6 +68,12 @@ class StreamingServer:
             self._socket.close()
         except OSError:
             pass
+
+
+def _until_the_client_leaves(transport, seconds=30):
+    deadline = time.monotonic() + seconds
+    while transport.is_active() and time.monotonic() < deadline:
+        time.sleep(0.01)
 
 
 @pytest.fixture

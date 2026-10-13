@@ -14,6 +14,7 @@ import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Confirmation } from '@shared/confirm/confirmation';
+import { ConnectionDot } from '@shared/connection-dot/connection-dot';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { Notice } from '@shared/notice/notice';
 import { Skeleton } from '@shared/skeleton/skeleton';
@@ -44,6 +45,7 @@ import { SERVER_PAGE_SIZES, ServersStore } from '../../state/servers.store';
     EmptyState,
     CheckStatusTag,
     HostKeyFacts,
+    ConnectionDot,
     ErrorTextPipe,
     TranslatePipe,
   ],
@@ -70,7 +72,7 @@ export class ServersPage {
   readonly searching = this.store.searching;
   readonly skeletonLines = [1, 2, 3, 4, 5, 6];
 
-  readonly columns = ['name', 'address', 'status', 'lastChecked'];
+  readonly columns = ['name', 'address', 'connection', 'status', 'lastChecked'];
 
   readonly pendingHostKeys = this.store.pendingHostKeys;
 

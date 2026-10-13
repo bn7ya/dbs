@@ -517,6 +517,27 @@ class RestorePathMap(Step):
         return self.ok("every new root in DBS_RESTORE_PATH_MAP is inside a restore root")
 
 
+class RemoteCommandLimits(Step):
+    name = "remote command limits"
+    since = "0.7.0"
+
+    def check(self):
+        targets = setting("DBS_SSH_TARGETS", {}) or {}
+        unlimited = sorted(
+            name for name, target in targets.items() if "command_timeout" not in target
+        )
+        if not targets:
+            return self.ok("no SSH targets are configured")
+        if not unlimited:
+            return self.ok("every SSH target sets its own command_timeout")
+        return self.ok(
+            "since 0.7.0 an SSH connection sends a keepalive every 15 seconds and a "
+            "command on it stops after 6 hours unless it sets its own time; give "
+            + ", ".join(unlimited)
+            + " a command_timeout if a remote backup there runs longer"
+        )
+
+
 class AiInstructions(Step):
     name = "ai instructions"
     since = "0.3.1"
@@ -598,6 +619,7 @@ STEPS = (
     SourceFiles,
     BackupPaths,
     RestorePathMap,
+    RemoteCommandLimits,
     AiInstructions,
     ClientRetired,
 )
