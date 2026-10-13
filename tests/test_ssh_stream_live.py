@@ -1,5 +1,3 @@
-"""Streaming a command's stdout over a real SSH handshake, including a lost connection."""
-
 import io
 import os
 import socket
