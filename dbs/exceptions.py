@@ -10,6 +10,14 @@ class HostKeyError(ConfigurationError):
     pass
 
 
+class RemoteTimeout(DBSError):
+    pass
+
+
+class ConnectionLost(DBSError):
+    pass
+
+
 class CryptoError(DBSError):
     pass
 
