@@ -8,6 +8,7 @@ from django.utils import timezone
 from dbs.models import KnownLocation, SecurityPolicy, SessionEvent
 from dbs.security import detector, geo
 from dbs.security.features import FEATURE_NAMES, haversine_km, observe_request
+from dbs.security.telemetry import SESSION_COUNT
 
 GUARD = "/admin/dbs/panel/guard/"
 SETUP = "/admin/dbs/panel/setup/"
@@ -203,4 +204,6 @@ def test_purge_drops_telemetry_past_the_retention_window(panel, settings):
 
     call_command("dbs", "security", "purge", stdout=StringIO())
 
-    assert not SessionEvent.objects.filter(created_at__lt=timezone.now()).exists()
+    left = SessionEvent.objects.filter(created_at__lt=timezone.now())
+    assert not left.exclude(kind=SESSION_COUNT).exists()
+    assert not left.filter(latitude__isnull=False).exists()

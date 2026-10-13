@@ -7,11 +7,30 @@ every request through it is scored.</p>
 <h2>What is scored</h2>
 <p>Time of day, how fast requests are arriving, how risky the attempted action is, session
 age, whether the network prefix and browser are ones this account has used before, and — when
-enabled — distance from a known location and implied travel speed.</p>
+enabled — distance from a known location and implied travel speed. Changes to users, groups,
+permissions and passwords count as high-risk actions. An address DBS cannot read counts as a
+new network.</p>
 <h2>The model</h2>
 <p>An IsolationForest, shipped pre-trained on a synthetic corpus so it works from the first
-request, joined by a forest fitted to your own history once there is enough of it. Nothing is
-ever pickled or unpickled: models are refit from stored feature rows.</p>
+request, joined by a forest fitted to your own history once there is enough of it. The
+personal forest is refit in the background from your newest requests, so a burst of requests
+never waits for it. Nothing is ever pickled or unpickled: models are refit from stored feature
+rows. The model needs scikit-learn (<code>pip install "django-dbs[guard]"</code>); without it
+the guard scores with its rules alone and <code>manage.py check</code> says so.</p>
+<h2>Learning</h2>
+<p>For an account's first sessions (the policy's learning period) the model is muted, because
+everything about a new account looks unusual. The rules and both thresholds still apply.</p>
+<h2>Flagged sessions</h2>
+<p>A warning flags the session. A flagged session can still read, but every change in the admin
+and every download or export ends it, and it must sign in again.</p>
+<h2>Idle sessions</h2>
+<p>A session with no activity in the admin for the policy's idle timeout is ended on its next
+request. Set the timeout to 0 to turn this off.</p>
+<h2>Behind a proxy</h2>
+<p><code>X-Forwarded-For</code> is read only when <code>DBS_TRUST_FORWARDED_FOR = True</code> and
+the request arrives from a network in <code>DBS_TRUSTED_PROXIES</code>, for example
+<code>["10.0.0.0/24"]</code>. DBS walks the header from the right and takes the first address
+that is not one of your proxies.</p>
 <h2>Getting back in</h2>
 <p>A locked-out account is cleared from a shell, which always beats the detector:</p>
 <pre><code>python manage.py dbs security unlock alice</code></pre>

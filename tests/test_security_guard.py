@@ -10,6 +10,7 @@ from django.test import Client
 
 from dbs.models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
 from dbs.security import detector, guard
+from dbs.security.telemetry import SESSION_COUNT
 
 SETUP = "/admin/dbs/panel/setup/"
 GUARD = "/admin/dbs/panel/guard/"
@@ -134,7 +135,7 @@ def test_a_trusted_network_is_scored_but_never_enforced_against(panel, settings)
 
 
 @pytest.mark.django_db
-def test_the_learning_period_records_without_enforcing(panel):
+def test_the_learning_period_still_enforces_the_thresholds(panel, root):
     policy = SecurityPolicy.load()
     policy.trusted_networks = ""
     policy.learning_logins = 500
@@ -144,8 +145,8 @@ def test_the_learning_period_records_without_enforcing(panel):
 
     body = panel.post(GUARD, "{}", content_type="application/json").json()
 
-    assert body["action"] == "continue"
-    assert not Lockout.objects.exists()
+    assert body["action"] == "logout"
+    assert Lockout.objects.filter(user=root).exists()
 
 
 @pytest.mark.django_db
@@ -223,7 +224,7 @@ def test_status_and_purge_report_what_they_did(panel, settings):
 
     assert "level" in status.getvalue()
     assert "Removed" in purged.getvalue()
-    assert not SessionEvent.objects.exists()
+    assert not SessionEvent.objects.exclude(kind=SESSION_COUNT).exists()
 
 
 @pytest.mark.django_db

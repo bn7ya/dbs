@@ -80,8 +80,10 @@ A superuser is trusted with the database by definition, so the guard raises the 
   and then runs the connection check will receive that password. This is inherent to
   password authentication; prefer a key file.
 - `DBS_TRUST_FORWARDED_FOR` puts the client IP under the control of whatever sets that
-  header. Enable it only behind a proxy you control, and set `DBS_TRUSTED_PROXIES` to the
-  number of hops so the address is read from the correct end.
+  header. Enable it only behind a proxy you control, and list that proxy's networks in
+  `DBS_TRUSTED_PROXIES` (for example `["10.0.0.0/24"]`). The header is read only when the
+  request comes from one of those networks, and the client is the right-most address that is
+  not a proxy. With no proxies listed the header is ignored and `manage.py check` warns.
 - Sessions held in a cache or signed-cookie backend cannot be deleted server-side. A lockout
   is checked on every request instead, so such a session stops at its next request rather
   than instantly.

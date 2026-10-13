@@ -10,9 +10,11 @@ from django.utils import timezone
 
 from ..conf import setting
 from ..models import SecurityPolicy
-from . import guard, sessions
+from . import guard, sessions, telemetry
 
 SESSION_STARTED = "dbs_session_started"
+
+UNSAFE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 
 ADMIN_ACTIONS = (
     ("/restore/", "restore"),
@@ -25,6 +27,17 @@ ADMIN_ACTIONS = (
     ("/securitypolicy/", "target_write"),
     ("/backupschedule/", "target_write"),
 )
+
+EXPORT_FRAGMENTS = ("/download/", "/export/")
+
+CONTRIB_ACTIONS = (
+    ("dbs:backup_download", "download"),
+    ("dbs:restore_upload", "restore"),
+)
+
+FLAGGED = "DBS flagged this session, so it must sign in again before doing this."
+
+IDLE = "This session was idle for too long, so DBS ended it."
 
 
 class DBSSecurityMiddleware:
@@ -43,27 +56,36 @@ class DBSSecurityMiddleware:
         if scope is None:
             return self.get_response(request)
 
+        policy = SecurityPolicy.load()
+        now = timezone.now().timestamp()
+        if sessions.idle_expired(request, policy.idle_timeout_minutes, now):
+            return self._stop(request, IDLE)
+
         request.session.setdefault(SESSION_STARTED, timezone.now().isoformat())
+        guard_endpoint = self._is_guard_endpoint(request)
+        if not guard_endpoint:
+            sessions.mark_active(request, now)
 
         if scope == "admin":
-            redirect_response = self._setup_redirect(request)
+            redirect_response = self._setup_redirect(request, policy)
             if redirect_response is not None:
                 return redirect_response
 
-        action = self._action(request)
-        if action != "view" and request.session.get(sessions.REAUTH_FLAG):
-            return self._stop(
-                request,
-                "DBS flagged this session, so it must sign in again before doing this.",
-            )
+        action = self._action(request, scope)
+        restricted = not guard_endpoint and self._restricted(request, action)
+        if restricted and sessions.must_reauthenticate(request):
+            return self._stop(request, FLAGGED)
 
-        if self._is_guard_endpoint(request):
+        if guard_endpoint:
             return self.get_response(request)
 
-        verdict = guard.evaluate(request, action=action)
+        telemetry.purge_if_due()
+        verdict = guard.evaluate(request, action=action, policy=policy)
         guard.apply(verdict, request)
         if verdict.level == guard.BLOCK:
             return self._stop(request, "; ".join(verdict.reasons))
+        if restricted and sessions.must_reauthenticate(request):
+            return self._stop(request, FLAGGED)
         request.dbs_verdict = verdict
         return self._with_poller(request, self.get_response(request), scope)
 
@@ -106,15 +128,25 @@ class DBSSecurityMiddleware:
             return "contrib"
         return None
 
-    def _action(self, request) -> str:
-        if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+    def _action(self, request, scope) -> str:
+        unsafe = request.method in UNSAFE_METHODS
+        if scope == "contrib":
+            return _contrib_action(request.path) if unsafe else "view"
+        if any(fragment in request.path for fragment in EXPORT_FRAGMENTS):
+            return "download"
+        if not unsafe:
             return "view"
+        if _is_account_path(request.path):
+            return "account_write"
         for fragment, name in ADMIN_ACTIONS:
             if fragment in request.path:
                 return name
         return "view"
 
-    def _setup_redirect(self, request):
+    def _restricted(self, request, action) -> bool:
+        return request.method in UNSAFE_METHODS or action == "download"
+
+    def _setup_redirect(self, request, policy):
         if not setting("DBS_SETUP_WIZARD", True) or not request.user.is_staff:
             return None
         try:
@@ -123,7 +155,7 @@ class DBSSecurityMiddleware:
             return None
         if request.path in (wizard, reverse("admin:dbs_guard")):
             return None
-        if SecurityPolicy.load().configured:
+        if policy.configured:
             return None
         return redirect(wizard)
 
@@ -141,12 +173,42 @@ class DBSSecurityMiddleware:
 
 def _contrib_paths():
     paths = []
-    for name in ("dbs:backup_download", "dbs:restore_upload"):
+    for name, _ in CONTRIB_ACTIONS:
         try:
             paths.append(reverse(name))
         except NoReverseMatch:
             continue
     return paths
+
+
+def _contrib_action(path) -> str:
+    for name, action in CONTRIB_ACTIONS:
+        try:
+            if path == reverse(name):
+                return action
+        except NoReverseMatch:
+            continue
+    return "download"
+
+
+def _account_paths():
+    from django.contrib.auth import get_user_model
+    from django.contrib.auth.models import Group, Permission
+
+    names = ["admin:password_change"]
+    for model in (get_user_model(), Group, Permission):
+        names.append(f"admin:{model._meta.app_label}_{model._meta.model_name}_changelist")
+    paths = []
+    for name in names:
+        try:
+            paths.append(reverse(name))
+        except NoReverseMatch:
+            continue
+    return paths
+
+
+def _is_account_path(path) -> bool:
+    return any(path.startswith(prefix) for prefix in _account_paths())
 
 
 def _poller_tag() -> str:

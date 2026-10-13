@@ -308,6 +308,14 @@ class GuardMiddleware(Step):
     def check(self):
         from django.apps import apps
 
+        from .security.checks import AUTH_MIDDLEWARE, runs_before_authentication
+
+        if runs_before_authentication():
+            return self.warn(
+                "DBSSecurityMiddleware runs before AuthenticationMiddleware, so the session "
+                "guard never sees a signed-in user and scores nothing",
+                f'move "{MIDDLEWARE_PATH}" below "{AUTH_MIDDLEWARE}" in MIDDLEWARE',
+            )
         if MIDDLEWARE_PATH in (setting("MIDDLEWARE", ()) or ()):
             return self.ok("the session guard is active")
         if not apps.is_installed("django.contrib.admin"):
@@ -316,6 +324,32 @@ class GuardMiddleware(Step):
             "the control panel is reachable but nothing is scoring requests",
             f'MIDDLEWARE = [..., "{MIDDLEWARE_PATH}"]',
         )
+
+
+class ForwardedFor(Step):
+    name = "forwarded addresses"
+    since = "0.7.0"
+
+    def check(self):
+        from .security.features import trusted_proxies
+
+        configured = setting("DBS_TRUSTED_PROXIES", None)
+        trusting = bool(setting("DBS_TRUST_FORWARDED_FOR", False))
+        if isinstance(configured, (int, float)) and not isinstance(configured, bool):
+            return self.warn(
+                f"DBS_TRUSTED_PROXIES is the number {configured}; since 0.7.0 it lists the "
+                "proxy networks, and the guard trusts X-Forwarded-For only from them",
+                'DBS_TRUSTED_PROXIES = ["10.0.0.0/24"]  # the networks your proxies are in',
+            )
+        if trusting and not trusted_proxies():
+            return self.warn(
+                "DBS_TRUST_FORWARDED_FOR is on but DBS_TRUSTED_PROXIES names no proxy "
+                "network, so the guard ignores X-Forwarded-For",
+                'DBS_TRUSTED_PROXIES = ["10.0.0.0/24"]  # the networks your proxies are in',
+            )
+        if trusting:
+            return self.ok("X-Forwarded-For is trusted only from DBS_TRUSTED_PROXIES")
+        return self.ok("the guard scores the direct peer address")
 
 
 class ExcludeSemantics(Step):
@@ -555,6 +589,7 @@ STEPS = (
     ManagerKeychain,
     AdminPanel,
     GuardMiddleware,
+    ForwardedFor,
     ExcludeSemantics,
     Passphrase,
     RestoreRoots,
