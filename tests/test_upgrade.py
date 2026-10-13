@@ -1,6 +1,5 @@
 """`manage.py dbs upgrade`: the checks, the fixes, and the refusal to lose backups."""
 
-import struct
 from io import StringIO
 from pathlib import Path
 
@@ -9,15 +8,19 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from dbs import upgrade
-from dbs.container.format import FORMAT_VERSION, container_version
+from dbs.container.format import (
+    FORMAT_VERSION,
+    SEALED_PREFIX,
+    container_version,
+    copy_offsets,
+    seal_header,
+)
 from dbs.engine import create_backup
 from dbs.keys import default_passphrase
 from dbs.upgrade import ACTION, FIXED, OK, WARN, Converter
 from tests.testapp.models import Author
 
 OFFLINE = {"offline": True}
-
-VERSION_OFFSET = 8
 
 
 def run(**options):
@@ -30,18 +33,25 @@ def levels(report):
     return {finding.step: finding.level for finding in report.findings}
 
 
+def as_version(current: bytes, version: int) -> bytes:
+    if version == FORMAT_VERSION:
+        return current
+    return seal_header(version, b"") + current
+
+
+def unwrap(data: bytes) -> bytes:
+    _magic, version, length = SEALED_PREFIX.unpack_from(data)
+    return data if version == FORMAT_VERSION else data[length:]
+
+
 def stamp_version(source: Path, destination: Path, version: int):
-    data = bytearray(source.read_bytes())
-    struct.pack_into(">H", data, VERSION_OFFSET, version)
-    destination.write_bytes(bytes(data))
+    destination.write_bytes(as_version(source.read_bytes(), version))
     return destination
 
 
 def restamp(version):
     def convert(data, passphrase):
-        patched = bytearray(data)
-        struct.pack_into(">H", patched, VERSION_OFFSET, version)
-        return bytes(patched)
+        return as_version(unwrap(data), version)
 
     return Converter(produces=version, convert=convert)
 
@@ -376,11 +386,11 @@ def test_a_converter_that_destroys_the_payload_beyond_repair_is_caught(backups, 
     stamp_version(backups / "current.dbs", backups / "old.dbs", 2)
 
     def wreck(data, passphrase):
-        from dbs.container.format import HEADER_SIZE
-
-        patched = bytearray(data)
-        struct.pack_into(">H", patched, VERSION_OFFSET, FORMAT_VERSION)
-        patched[HEADER_SIZE:] = b"\x00" * (len(patched) - HEADER_SIZE)
+        current = unwrap(data)
+        copies_start, copy_b_offset, copy_len = copy_offsets(current)
+        patched = bytearray(current)
+        copies_end = copy_b_offset + copy_len
+        patched[copies_start:copies_end] = bytes(copies_end - copies_start)
         return bytes(patched)
 
     monkeypatch.setattr(
