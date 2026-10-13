@@ -2,6 +2,7 @@
 
 import os
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -32,12 +33,24 @@ def fast_kdf():
 
 
 @pytest.fixture
+def committed(django_capture_on_commit_callbacks):
+    return partial(django_capture_on_commit_callbacks, execute=True)
+
+
+@pytest.fixture
 def fake_ssh(tmp_path, monkeypatch):
     root = tmp_path / "remote-host"
     root.mkdir()
     fake = FakeParamiko(str(root))
     monkeypatch.setattr("dbs.transports.ssh._paramiko", lambda: fake)
     return fake
+
+
+@pytest.fixture
+def inline_jobs(monkeypatch):
+    from dbs import jobs
+
+    monkeypatch.setattr(jobs, "launch", lambda work, name="dbs-job": work())
 
 
 @pytest.fixture(autouse=True)

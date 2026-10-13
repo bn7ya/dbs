@@ -9,9 +9,11 @@ DBS to another tool.
 ## Stack
 
 Angular 22 (standalone, signals, zoneless, TypeScript 6), Angular Material 22 and the CDK, Font
-Awesome Free from npm, Tajawal from `@fontsource/tajawal`. Unit tests are Vitest through
-`@angular/build:unit-test`; journeys are Playwright. Nothing is fetched from the network at run
-time: fonts, icons and styles are all in the bundle.
+Awesome Free from npm, Tajawal from `@fontsource/tajawal`, and `qrcode-generator` (MIT) for the
+two-factor enrollment QR code. Unit tests are Vitest through `@angular/build:unit-test`; journeys
+are Playwright. Nothing is fetched from the network at run time: fonts, icons, styles and the QR
+code are all in the bundle. A new dependency goes into `THIRD_PARTY_LICENSES.md` in the same
+commit.
 
 ## Commands
 
@@ -32,8 +34,8 @@ built directory is gitignored. The Angular CLI needs Node 22.22.3+ or 24.15+.
 `angular.json` has a `package` configuration layered on `production`: `outputPath` is
 `{"base": "../dbs/manager/static/dbs_manager", "browser": ""}` and `baseHref` is
 `/static/dbs_manager/`, so the bundle and its fonts resolve under the static prefix. `app.config.ts`
-provides `APP_BASE_HREF` as `/`, so router URLs stay at `/`, `/servers`, `/setup`. API calls are
-absolute (`/api/...`) and unaffected by either.
+provides `APP_BASE_HREF` as `/`, so router URLs stay at `/`, `/servers`, `/setup`, `/sign-in/code`.
+API calls are absolute (`/api/...`) and unaffected by either.
 
 ## Hard rules
 
@@ -47,7 +49,9 @@ absolute (`/api/...`) and unaffected by either.
    not render.
 4. **No `setTimeout` or `setInterval`.** Model timing in state (`timer` + `exhaustMap` in
    `JobWatcher`, `afterNextRender`, `afterRenderEffect`).
-5. **Every route has a guard.** Every one.
+5. **Every route has a guard.** Every one. A route a role may not use has a `capabilityGuard`, and
+   an action a role may not take is wrapped in `*appCan="'capability'"`. Both only hide; the
+   backend refuses with `role_required`.
 6. **Material for every interactive element.** A button is `matButton` (`filled`, `outlined`,
    `tonal`, or text) or `matIconButton`; a link that looks like a button is `<a matButton
    routerLink>`. A field is `mat-form-field` with `matInput`, `mat-select`, `mat-chip-grid`; choices
@@ -158,14 +162,25 @@ and the text says what is happening.
 the backend envelope `{"error": {...}}`). Stores hold it; pages render `{{ error | errorText }}`,
 which reads `errors.<code>`, or `errors.checkFields` when `fields` is set. `message` is English for
 API clients and is never printed. A 401/403 whose code is `not_authenticated` or
-`authentication_failed`, outside `/api/auth/`, forgets the identity and goes to sign in.
+`authentication_failed`, outside `/api/auth/`, forgets the identity and goes to sign in; a
+`password_change_required` refusal reloads the identity and goes to `/password`.
+
+**CSRF.** The interceptor sends the `csrftoken` cookie as `X-CSRFToken`. Behind a TLS proxy the
+cookie is HttpOnly, so it asks `/api/auth/csrf/` once and keeps the token in `CsrfToken`, in
+memory.
 
 **XHR, not fetch.** `provideHttpClient(withXhr(), …)`: only XHR reports upload progress.
 
 **Jobs.** Work that outlives a request answers `202 {activity}`; `JobWatcher.watch(id)` reads
-`/api/activity/{id}/` at once and then on a timer until the job is `succeeded` or `failed`. An
-activity id is a number (the audit event's primary key); server, backup, plan and `.env` version ids
-are UUID strings.
+`/api/activity/{id}/` at once and then on a timer until the job is `succeeded` or `failed`. While it
+runs with a connection open, the job carries `connection: {state: alive|lost, last_activity_at,
+bytes}`, which `JobConnection` renders. An activity id is a number (the audit event's primary key);
+server, backup, plan and `.env` version ids are UUID strings; an account id is a number.
+
+**Passwords before secrets.** Anything that decrypts on download, deletes, keeps fewer backups or
+acts for real asks for the account password through `PasswordPrompt` (or a password field in the
+form). A download that needs it trades the password for a one-time link (`{url}`, valid once for a
+minute) that `Downloader` hands to the browser, so the file streams to disk.
 
 **Strings.** Feature bundles register on their route with `provideTranslations(en, ar)`. Shared and
 core strings live in `core/i18n/{en,ar}.json`. Two bundles never define the same `errors.<code>`. A
@@ -181,22 +196,39 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
 
 ## core
 
-- **`AuthApi` / `AuthStore`** — `/api/auth/{csrf,login,logout,me}`. The store holds the identity as
-  signals; `restore()` treats a refusal as signed out, `signIn()` primes CSRF first, `signOut()`
-  always ends on `/sign-in`, `forget()` drops the identity without a request.
-- **Guards** — `authGuard` (signed in, else `/setup` while no account exists, else `/sign-in?next=`),
-  `guestGuard` (keeps a signed-in user off sign-in; `/setup` while no account exists),
-  `groupGuard(...)`. The setup redirect keeps `?token=`.
+- **`AuthApi` / `AuthStore`** — `/api/auth/{csrf,login,two-factor,two-factor/enrollment,
+  two-factor/enrollment/confirm,password,recovery-codes,logout,me}`. The store holds the identity
+  (role, capabilities, two-factor state, recovery codes left, password dates) and the sign-in
+  `step` as signals; `can(capability)` and `forbids(capability)` read the capabilities;
+  `restore()` treats a refusal as signed out, `signIn()` primes CSRF first and lands on the step the
+  backend names, `signOut()` always ends on `/sign-in`, `forget()` drops the identity without a
+  request.
+- **Guards** — `authGuard` (signed in, else `/setup` while no account exists, else `/sign-in?next=`;
+  a session whose password must change goes to `/password`), `guestGuard` (keeps a signed-in user
+  off sign-in; `/setup` while no account exists), `stepGuard('code' | 'enroll')` (only while
+  sign-in is at that step), `passwordGuard` (only while the password must change),
+  `capabilityGuard(capability)` and `groupGuard(...)` (`/forbidden` otherwise). The setup redirect
+  keeps `?token=`.
+- **`Can`** (`*appCan="'servers.manage'"`) — renders its template only while the signed-in role
+  has the capability.
 - **`SetupApi` / `SetupStore` / `setupGuard` / `SetupPage`** — the first run. `check()` asks
-  `GET /api/setup/` once and keeps the answer; `complete()` primes CSRF and posts the first account,
-  closing the setup on success or on `setup_done`. `/setup` is open only while setup is needed. The
-  page asks for the setup key only when the link lacks `?token=`, then username, password and its
-  confirmation; on success it loads `/api/auth/me/` and opens `/`.
-- **`SignInPage`** — username and password, follows `?next=`.
+  `GET /api/setup/` once and keeps the answer; `complete()` primes CSRF and posts the master
+  account, closing the setup on success or on `setup_done`. `/setup` is open only while setup is
+  needed. The page asks for the setup key only when the link lacks `?token=`, then username,
+  password and its confirmation; on success it goes straight to `/sign-in/enroll`.
+- **`SignInPage`** (`/sign-in`) — username and password, follows `?next=`, then the step the
+  backend names. **`TwoFactorPage`** (`/sign-in/code`) — an authenticator code, or a recovery code.
+  **`EnrollPage`** (`/sign-in/enroll`) — `QrCode` (drawn with `qrcode-generator`), the key as text
+  to type by hand, a confirming code, then the ten `RecoveryCodes` shown once.
+- **`PasswordPage`** (`/password`) — holds a session whose password expired, or whose new password
+  the master asked for, until it changes it. **`AccountPage`** (`/account`, "Your account" in the
+  account menu) — the role, when the password expires, `ChangePasswordForm`, and new recovery codes
+  behind the password.
 - **`AppLayout`** — the signed-in frame: a `mat-toolbar` header with the product name, the language
-  switch and an account `mat-menu` holding About and sign-out; a `mat-nav-list` of `SECTIONS`
-  (dashboard, servers, activity); the one `<main id="main">`. It provides `SHELL_FRAME`, so
-  `StatusPage` knows it is inside.
+  switch and an account `mat-menu` holding Your account, About and sign-out; a `mat-nav-list` of
+  `SECTIONS` (dashboard, servers, activity, and accounts for the master), each section shown only
+  for its capability; the one `<main id="main">`. It provides `SHELL_FRAME`, so `StatusPage` knows
+  it is inside.
 - **`LocaleStore`, `TranslatePipe` (`t`), `ErrorTextPipe` (`errorText`), `provideTranslations()`,
   `LocaleSwitcher`** (a `mat-button-toggle-group`), **`AppDirectionality`, `AppPaginatorIntl`**.
 - **`csrfInterceptor`, `errorInterceptor`, `apiErrorOf()`** — CSRF on unsafe requests; failures as
@@ -224,25 +256,46 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   in a toast, or says to copy it by hand where the clipboard is unavailable.
 - **`TimeAgoPipe`** (`timeAgo`) — "3 hours ago" through `Intl.RelativeTimeFormat`, Latin digits in
   both languages.
-- **`PasswordInput`**, **`PasswordPrompt`** (asks for the account password and runs the guarded
-  operation, retrying a wrong password in place), **`EmptyState`**, **`StatusPage`**,
-  **`FieldError`**, **`AppDatePipe`**, **`FileSizePipe`**, **`uniqueId()`**.
+- **`ConnectionDot`** (`<app-connection-dot [state] [lastSeenAt]>`) — a server's connection as a
+  dot and a word: online, offline with when it was last seen, or not seen yet.
+- **`JobConnection`** (`<app-job-connection [connection]>`) — a running job's connection as alive or
+  lost, how much it moved and when the server last answered.
+- **`Downloader.start(url)`** — follows a one-time download link with a temporary `<a download>`,
+  so the browser streams the file to disk.
+- **`PasswordPrompt`** — asks for the account password and runs the guarded operation, retrying a
+  wrong password in place; `bodyValues` fill its text, `destructive` styles the submit as
+  `app-danger`.
+- **`isolated(text)`** — wraps a name in FSI … PDI so it keeps its own direction inside a sentence of
+  either language.
+- **`PasswordInput`**, **`EmptyState`**, **`StatusPage`**, **`FieldError`**, **`AppDatePipe`**,
+  **`FileSizePipe`**, **`uniqueId()`**.
 
 ## features
 
-Every feature is mounted under `AppLayout` and its guard mirrors the backend's `IsAuthenticated`;
-the backend permission is the boundary.
+Every feature is mounted under `AppLayout` and its guard mirrors the backend's `IsAuthenticated`
+(and, for accounts, the master's capability); the backend permission is the boundary. Actions the
+role cannot take are left out with `*appCan`.
 
-- **dashboard** (`/`) — every server as a card (check, health, last backup, next plan run, failures
-  in the last 7 days, storage), the totals, recent failures, and a reminder to export when the last
-  export is missing or older than 7 days. With no server it offers "Add a server".
-- **servers** (`/servers`, `/servers/:serverId`) — list, search and page servers. The server page has
-  a `mat-tab-nav-bar` (overview, backups, files, environment, activity) over the child route. The
-  overview runs the connection check, shows the settings, edits them in a two-step dialog
-  (connection, django-dbs and folders), re-pins a changed host key, reveals the backup passphrase
-  behind the account password, links to the move, and deletes. Secrets are write-only; an edit that
-  changes more than the name asks for the account password. Every path field in the dialog has a
-  browse button. Where the project runs (on the server, or in a Docker Compose service with its
+- **dashboard** (`/`) — every server as a card (connection dot, check, health, last backup, next
+  plan run, failures in the last 7 days, storage), the totals, recent failures, a reminder to export
+  when the last export is missing or older than 7 days, and a warning when `key_store` says the
+  sealing key sits in a file because no system keychain works. With no server it offers "Add a
+  server".
+- **accounts** (`/accounts`, master only) — every account with its role, status, two-factor state
+  and password expiry; add one with a first password (`AccountForm`, `RoleChoice`); change a role
+  (`RoleForm`); disable or enable; reset two-factor sign-in; ask for a new password; hand the master
+  role over with the password and a code (`HandOverForm`).
+- **servers** (`/servers`, `/servers/:serverId`) — list, search and page servers, with a Connection
+  column. Above the list, the host keys Claude read and a person has not decided yet: address, key
+  type, fingerprint and the command to compare it, with Confirm (asked once more) and Reject. The
+  server page has a `ConnectionDot` in its header and a `mat-tab-nav-bar` (overview, backups, files,
+  environment, activity) over the child route. The overview runs the connection check, shows the
+  settings and whether the server has the `timeout` command, edits them in a two-step dialog
+  (connection, django-dbs and folders), re-pins a changed host key (`HostKeyReview`,
+  `HostKeyFacts`), reveals the backup passphrase behind the account password with a warning that it
+  must never change, links to the move, and deletes behind the account password. Secrets are
+  write-only; an edit that changes more than the name asks for the account password. Every path
+  field in the dialog has a browse button. Where the project runs (on the server, or in a Docker Compose service with its
   service name and compose files) is `components/runtime-fields/`, which the dialog and the wizard
   share with `composeProblems()`; the check of a Compose server adds Docker Compose's version and
   whether the service is running, and what Docker said when it would not run.
@@ -265,22 +318,32 @@ the backend permission is the boundary.
   "Show more settings", opened by itself when one of them has an error), check (runs on arrival;
   the two django-dbs versions must be compatible; when the saved Python cannot import django-dbs
   it shows the error and offers the Python discovery found with it, saved and re-checked in one
-  click), the optional backup passphrase capture, and a test backup. Steps up to sign-in lock once
+  click), the optional backup passphrase capture (warning that it must be read before the first
+  backup and never changed), and a test backup. Steps up to sign-in lock once
   the server exists. A discovery the developer did not ask for keeps a snippet's Python unless it
   found one that imports django-dbs. When discovery or "Use this Python" answers that the account
   password is required (the setup window is over), the wizard asks through `PasswordPrompt` and
   retries with it; that ask is kept out of the page's own notices.
-- **redeploy** (`/servers/:serverId/move`) — move a server onto another one: target, django-dbs
-  backup, `.env` version, folder archives, migrate and flush. A rehearsal needs no password; a real
-  move needs the account password and the target's name typed out. The job's steps render as a list
-  with a status each.
+- **redeploy** (`/servers/:serverId/move`) — move a project onto a new server with the same
+  environment: the new server, the backup to restore if this server does not answer (the newest,
+  or none), the `.env` version and whether to replace the data. A rehearsal needs no password; a
+  real move needs the account password and the new server's name typed out. The job's steps
+  (`MoveSteps`) render as a list with a status each, with `JobConnection` while it runs and a note
+  when the old server did not answer. A move that stopped after changing the new server offers
+  "Revert the new server", rehearsed or real, with its own steps.
 - **backups** (`/servers/:serverId/backups`) — plans (django-dbs, folders, or existing files
-  collected from one folder) with a schedule and how many to keep here and on the server; files,
-  newest first: take, upload with progress, download, verify, restore (rehearsal by default, the
-  server name typed for a real one; optionally onto another server, whose name is then the one
-  typed), delete with undo.
+  collected from one folder) with a schedule, keeping 1 to 5 here (5 for a new plan) and 0 to 5 on
+  the server (none for a new plan); an edit that keeps fewer asks for the password and says the next
+  run deletes the oldest. Files, newest first: take, upload with progress, download, verify, restore
+  (rehearsal by default, the server name typed for a real one; optionally onto another server, whose
+  name is then the one typed), delete behind the password with undo. A django-dbs backup downloads
+  through its plain link; a folder archive, a collected or an uploaded file through the password
+  prompt and `Downloader`. A running take or restore shows `JobConnection`; a run whose connection
+  broke says the backup is kept on the server and collected next time; a quarantined file shows its
+  reason and is never offered for restore.
 - **files** (`/servers/:serverId/files?path=`) — the server's allowed folders: a breadcrumb, open,
-  download, upload, new folder, delete an empty folder or a file.
+  download (the store asks the server for a link and prompts for the password only when the file
+  holds secrets), upload, new folder, delete an empty folder or a file.
 - **envfiles** (`/servers/:serverId/environment`) — versions of the server's `.env`: pull, show
   key names masked, reveal values behind the password, compare with the version before, push one
   back.
@@ -297,17 +360,30 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | Method | Path | Body → answer |
 |---|---|---|
 | GET | `/api/setup/` | → `{needed}` |
-| POST | `/api/setup/` | `{token, username, password}` → 201 `{username}`, signed in |
-| GET | `/api/auth/csrf/` | sets the `csrftoken` cookie |
-| POST | `/api/auth/login/` | `{username, password}` → `Identity` |
+| POST | `/api/setup/` | `{token, username, password}` → 201 `{username, step}`, the master account, at the enroll step |
+| GET | `/api/auth/csrf/` | → `{csrf_token}`; sets the `csrftoken` cookie |
+| POST | `/api/auth/login/` | `{username, password}` → `{step}`, `code` or `enroll` |
+| POST | `/api/auth/two-factor/` | `{code}` or `{recovery_code}` → `Identity` |
+| POST | `/api/auth/two-factor/enrollment/` | `{}` → `{secret, uri, issuer, username}` |
+| POST | `/api/auth/two-factor/enrollment/confirm/` | `{code}` → `{identity, recovery_codes}` |
+| POST | `/api/auth/password/` | `{current_password, new_password}` → `Identity` |
+| POST | `/api/auth/recovery-codes/` | `{password}` → `{recovery_codes}` |
 | POST | `/api/auth/logout/` | → 204 |
-| GET | `/api/auth/me/` | → `Identity` |
-| GET | `/api/dashboard/` | → `{servers, storage_bytes, last_export_at, recent_failures}` |
+| GET | `/api/auth/me/` | → `Identity` (with `role`, `capabilities`, `two_factor`, `recovery_codes_left`, `password_changed_at`, `password_expires_at`, `password_change_required`) |
+| GET/POST | `/api/accounts/` | `{username, password, role}` → `Account[]` / 201 `Account`; master only |
+| PATCH | `/api/accounts/{id}/` | `{role?, is_active?}` → `Account` |
+| POST | `/api/accounts/{id}/two-factor/reset/` | → `Account` |
+| POST | `/api/accounts/{id}/password/expire/` | → `Account` |
+| POST | `/api/accounts/{id}/master/` | `{password, code}` → `Account`, the new master |
+| GET | `/api/dashboard/` | → `{servers, storage_bytes, last_export_at, recent_failures, key_store}` |
 | GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at}` |
-| GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` |
+| GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` (with `connection_state`, `last_seen_at`, `last_connection_error`) |
 | POST | `/api/servers/` | `ServerCreate` (`host_key`, `generate_key?`, project fields, `runtime`, `compose_service`, `compose_files`) → `Server` with `public_key?`, `authorized_keys_hint?` |
-| GET/PATCH/DELETE | `/api/servers/{id}/` | `ServerUpdate` → `Server` |
+| GET/PATCH | `/api/servers/{id}/` | `ServerUpdate` → `Server` |
+| DELETE | `/api/servers/{id}/` | `{account_password}` → 204 |
 | POST | `/api/servers/fingerprint/` | `{host, port}` → `{key_type, line, fingerprint}` |
+| GET | `/api/servers/host-keys/?page=&page_size=` | → page of `HostKeyConfirmation` (`id`, `host`, `port`, `key_type`, `fingerprint`, `status`, `requested_at`, `expires_at`) |
+| POST | `/api/servers/host-keys/{id}/confirm/` · `…/reject/` | `{}` → `HostKeyConfirmation` |
 | GET | `/api/servers/{id}/public-key/` | → `{public_key}`; `no_private_key` on a password server |
 | POST | `/api/servers/{id}/discover/` | `{project_dir?, account_password?}` → `Discovery` (fields with `runtime`, `compose_service`, `compose_files`; `dbs_version`, `is_project`, `candidates` with `compose_services`); the password is required once setup is over |
 | GET | `/api/servers/{id}/browse/?path=&page=&page_size=` | → `RemoteFolder` (`path`, `parent`, `home`, `project`, `truncated`, page of entries); no `path` is the home folder |
@@ -318,16 +394,17 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | GET | `/api/backups/?server=&page=&page_size=` | → page of `BackupFile` |
 | POST | `/api/backups/take/` | `{server}` → 202 `{activity}` |
 | POST | `/api/backups/upload/` | multipart `server`, `file` → 201 `BackupFile` |
-| GET | `/api/backups/{id}/download/` | a link |
+| GET | `/api/backups/{id}/download/` | a link, for a django-dbs backup |
+| POST | `/api/backups/{id}/download/` | `{account_password}` → `{url}`, a one-time link for a file the manager keeps encrypted |
 | POST | `/api/backups/{id}/verify/` | → 202 `{activity}` |
 | POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, server_name?, target_server?}` → 202 `{activity}` |
-| DELETE | `/api/backups/{id}/` | → 204 |
+| DELETE | `/api/backups/{id}/` | `{account_password}` → 204 |
 | POST | `/api/backups/{id}/undo-delete/` | → `BackupFile` |
-| GET/POST | `/api/backups/plans/` | `PlanCreate` → `BackupPlan` |
-| PATCH/DELETE | `/api/backups/plans/{id}/` | `PlanUpdate` → `BackupPlan` |
+| GET/POST | `/api/backups/plans/` | `PlanCreate` (`keep` 1–5, `keep_remote` 0–5, `account_password?`) → `BackupPlan` |
+| PATCH/DELETE | `/api/backups/plans/{id}/` | `PlanUpdate` (`account_password` when it keeps fewer) → `BackupPlan` |
 | POST | `/api/backups/plans/{id}/run/` | → 202 `{activity}` |
 | GET | `/api/files/{server}/?path=&page=&page_size=` | → `Listing` |
-| GET | `/api/files/{server}/download/?path=` | a link |
+| POST | `/api/files/{server}/download/` | `{path, account_password?}` → `{url}`, a one-time link; the password is required for a `.env` |
 | POST | `/api/files/{server}/upload/` | multipart `path`, `file` → 201 `Entry` |
 | POST | `/api/files/{server}/folders/` | `{path, name}` → 201 `Entry` |
 | DELETE | `/api/files/{server}/?path=` | → 204 |
@@ -336,21 +413,28 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | GET | `/api/envfiles/{from}/compare/?to=` | → `{from, to, added, removed, changed}` |
 | POST | `/api/envfiles/{id}/reveal/` | `{password}` → `{content}` |
 | POST | `/api/envfiles/{id}/push/` | `{password}` → `{version}` |
-| GET | `/api/activity/?server=&action=&status=&page=&page_size=` | → page of `ActivityEntry` |
+| GET | `/api/activity/?server=&action=&status=&page=&page_size=` | → page of `ActivityEntry`, a running one with `connection` |
 | GET | `/api/activity/{id}/` | → `Job`; `id` is a number |
-| POST | `/api/redeploy/` | `{source_server, target_server, backup, env_version, archives, migrate, flush, rehearsal, password, confirm_name}` → 202 `{activity}` |
+| POST | `/api/redeploy/` | `{source_server, target_server, backup, env_version, flush, rehearsal, password, confirm_name}` → 202 `{activity}`; `backup` may be null |
+| POST | `/api/redeploy/{move}/revert/` | `{rehearsal, password, confirm_name}` → 202 `{activity}` |
 
 Errors arrive as `{"error": {"code", "message", "fields"?}}`. Setup answers `setup_done` (409),
 `setup_token_invalid` (403), and `invalid` with `fields.password` codes from Django's password
 validators (`password_too_short`, `password_too_common`, `password_entirely_numeric`,
-`password_too_similar`).
+`password_too_similar`). A role that may not do something gets `role_required` (403); an expired
+password `password_change_required`. Connection codes are `connection_lost`,
+`remote_command_timed_out` and `server_settling`; a move adds `source_unreachable`,
+`no_backup_to_rehearse` and `move_not_revertable`; a backup `backup_quarantined`, `stream_broken`
+and `dbs_too_old`.
 
 ## e2e
 
 `playwright.config.ts` starts `django_dbs run --no-browser --port 8799 --data-dir <tmp>` (set
 `E2E_BASE_URL` to use a running manager instead, `E2E_DATA_DIR` to choose the data dir). The `setup`
 project runs `00-setup.spec.ts` first: it reads the one-time key from `<data dir>/setup.token` (or
-`E2E_SETUP_TOKEN`) and creates the `ADMIN` account through the setup page. The `ltr` and `rtl`
+`E2E_SETUP_TOKEN`), creates the `ADMIN` account through the setup page and enrolls it in two-factor
+sign-in, keeping the key in the data dir (`E2E_ADMIN_TOTP_SECRET` supplies it for a manager set up
+beforehand). Sign-ins take a fresh code per 30-second step under a file lock. The `ltr` and `rtl`
 projects depend on it. The journeys need an SSH fixture serving a Django project with django-dbs;
 `e2e/support/config.ts` lists every knob as an environment variable. `09-redeploy` also needs a
 second project on the fixture (`E2E_SSH_TARGET_PROJECT_DIR`, `E2E_SSH_TARGET_PYTHON`) and skips

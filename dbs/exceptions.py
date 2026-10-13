@@ -10,6 +10,14 @@ class HostKeyError(ConfigurationError):
     pass
 
 
+class RemoteTimeout(DBSError):
+    pass
+
+
+class ConnectionLost(DBSError):
+    pass
+
+
 class CryptoError(DBSError):
     pass
 
@@ -30,3 +38,13 @@ class CorruptionError(ContainerError):
 
 class RestoreError(DBSError):
     pass
+
+
+class BackupError(DBSError):
+    pass
+
+
+class MissingSourceFiles(BackupError):
+    def __init__(self, message, files):
+        super().__init__(message)
+        self.files = files

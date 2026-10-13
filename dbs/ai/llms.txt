@@ -2,19 +2,24 @@
 
 > Redundant, self-healing, encrypted single-file backup for Django projects. One command
 > writes an encrypted container holding two copies of the payload plus Reed-Solomon parity,
-> so silent corruption is detected and repaired on restore. One install gives the library,
-> a panel at /admin/dbs/ (schedule, health, audit, restore) and the `django_dbs run`
-> manager for many servers.
+> so silent corruption is detected and repaired on restore. Backups stream with flat memory.
+> The library comes with a panel at /admin/dbs/ (schedule, health, hash-chained audit,
+> restore); the `django_dbs run` manager for many servers is an extra.
 
 ## Install
 
 ```
-pip install django-dbs
+pip install django-dbs                 # the backup library
+pip install "django-dbs[guard]"        # + the session guard's detector (scikit-learn)
+pip install "django-dbs[manager]"      # + django_dbs, the DBS manager
+pip install "django-dbs[ssh]"          # + dbs.transports
+pip install "django-dbs[all]"
 ```
 
 ```python
 INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
-MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
+MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]  # below AuthenticationMiddleware
+DBS_BACKUP_DIR = "/var/backups/myproject"
 ```
 
 ```
@@ -25,15 +30,17 @@ python manage.py dbs backup backup.dbs
 Upgrading requires `manage.py dbs upgrade`, which applies DBS migrations.
 
 The manager runs outside any project: `django_dbs run` (local app, opens the browser),
-`django_dbs export` / `import` to move it.
+`django_dbs export` / `import` to move it, `django_dbs mcp` for Claude.
 
 ## Commands
-- `manage.py dbs backup OUTPUT` - write an encrypted backup
+- `manage.py dbs backup OUTPUT` - write an encrypted backup; refuses a path that exists
+- `manage.py dbs backup --stream` - write it to stdout and keep a copy in DBS_BACKUP_DIR
 - `manage.py dbs restore INPUT [--dry-run] [--flush]` - restore; merges unless flushed
 - `manage.py dbs validate INPUT [--passphrase]` - check structure, blocks and decryption
 - `manage.py dbs schedule [--once]` - follow the schedule set in the panel
-- `manage.py dbs schedule --interval 6h --output-dir DIR` - a fixed plan with retention
+- `manage.py dbs schedule --interval 6h --output-dir DIR --keep 5` - a fixed plan, 1 to 5 kept
 - `manage.py dbs health [--json]` - backup health report
+- `manage.py dbs audit verify` - check the audit trail's hash chain
 - `manage.py dbs connection [--json]` - what the DBS manager needs to reach this project
 - `manage.py dbs key --show` - print the passphrase derived from SECRET_KEY
 - `manage.py dbs security unlock USER` - clear an anomaly lockout
@@ -50,14 +57,17 @@ upgrading the package. Never confirm the abandonment of unconvertible backups: s
 a human.
 
 ## Key facts
-- The passphrase comes from `settings.SECRET_KEY` unless `DBS_PASSPHRASE` overrides it.
-  `SECRET_KEY_FALLBACKS` is tried on restore. A backup under a lost key cannot be opened.
+- The passphrase comes from `settings.SECRET_KEY` unless `DBS_PASSPHRASE` overrides it, and
+  it must never change: older backups would no longer open. `SECRET_KEY_FALLBACKS` is tried
+  on restore. A backup under a lost key cannot be opened.
 - The admin panel is mounted automatically at `/admin/dbs/`, for superusers only.
 - The backup frequency is set in the panel. `DBS_SCHEDULER` = "thread" (default), "command"
-  or "off" picks where it runs. Every backup, restore and validation is audited by the
-  process itself, never naming who started it.
-- SFTP target credentials are encrypted at rest under a key derived from `SECRET_KEY`.
-- Admin sessions are scored by an IsolationForest; a high score ends the session.
+  or "off" picks where it runs. The server keeps at most five backups. Every backup, restore
+  and validation is audited by the process itself, never naming which program started it.
+- The server pushes nothing: the DBS manager connects over SSH and pulls backups. There are
+  no SFTP targets, no console and no dbs-client.
+- Admin sessions are scored by an IsolationForest; a flagged session cannot change or
+  export anything, and a high score ends the session.
   `manage.py dbs security unlock USER` always gets you back in.
 
 ## Documentation

@@ -20,6 +20,12 @@ MIN_KEY_LENGTH = 16
 
 MAX_KEY_LENGTH = 64
 
+UNTRUSTED_MAX_TIME_COST = 10
+
+UNTRUSTED_MAX_MEMORY_COST = 256 * 1024
+
+UNTRUSTED_MAX_PARALLELISM = 16
+
 
 @dataclass(frozen=True)
 class KDFParams:
@@ -55,6 +61,27 @@ class KDFParams:
                     f"KDF parameter {name}={value} is outside the accepted "
                     f"range [{lower}, {upper}]."
                 )
+
+    def validate_untrusted(self) -> None:
+        self.validate()
+        ceilings = (
+            (self.time_cost, UNTRUSTED_MAX_TIME_COST, "time_cost"),
+            (self.memory_cost, UNTRUSTED_MAX_MEMORY_COST, "memory_cost"),
+            (self.parallelism, UNTRUSTED_MAX_PARALLELISM, "parallelism"),
+        )
+        for value, ceiling, name in ceilings:
+            if value > ceiling:
+                raise CryptoError(
+                    f"KDF parameter {name}={value} exceeds {ceiling}, the most a "
+                    "backup file may ask for."
+                )
+        if self.memory_cost < 8 * self.parallelism:
+            raise CryptoError(
+                f"KDF memory_cost={self.memory_cost} is below 8 KiB per lane "
+                f"for parallelism={self.parallelism}."
+            )
+        if self.key_length != KEY_LENGTH:
+            raise CryptoError(f"KDF key_length must be {KEY_LENGTH} for AES-256.")
 
 
 def derive_key(passphrase: bytes, salt: bytes, params: KDFParams) -> bytes:

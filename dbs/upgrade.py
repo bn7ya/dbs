@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import itertools
+import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import extras
 from .conf import setting
-from .container.format import FORMAT_VERSION, container_version
+from .container import FORMAT_VERSION, read_format_version
+from .container.format import container_version
 from .exceptions import DBSError
+from .io import write_new
+from .naming import BACKUP_SUFFIX
 
 OK = "ok"
 ACTION = "action"
@@ -16,6 +23,20 @@ FIXED = "fixed"
 SKIP = "skip"
 
 MIDDLEWARE_PATH = "dbs.security.middleware.DBSSecurityMiddleware"
+
+PYPI = "https://pypi.org/pypi/django-dbs"
+VERSION_PATTERN = re.compile(r"\d+(\.\d+){0,3}((a|b|rc)\d+)?(\.post\d+)?(\.dev\d+)?")
+CHECKOUT_MARKERS = ("pyproject.toml", "setup.py", ".git")
+PROJECT_FILES = (
+    "requirements.in",
+    "pyproject.toml",
+    "setup.cfg",
+    "Pipfile",
+    "Pipfile.lock",
+    "poetry.lock",
+    "uv.lock",
+    "pdm.lock",
+)
 
 
 @dataclass
@@ -55,8 +76,8 @@ class Step:
     def fix(self) -> Finding:
         raise NotImplementedError
 
-    def ok(self, message):
-        return Finding(self.name, self.since, OK, message)
+    def ok(self, message, remedy=""):
+        return Finding(self.name, self.since, OK, message, remedy)
 
     def action(self, message, remedy=""):
         return Finding(self.name, self.since, ACTION, message, remedy)
@@ -233,35 +254,65 @@ class BackupDirectory(Step):
 
 class Dependencies(Step):
     name = "dependencies"
-    since = "0.3.0"
+    since = "0.7.0"
 
     def check(self):
-        try:
-            import sklearn  # noqa: F401
-        except ImportError:
-            return self.action(
-                "scikit-learn is missing, so the session guard cannot score anything",
-                'pip install "django-dbs>=0.3"',
+        failure = extras.import_failure("numpy")
+        if failure is None:
+            return self.ok("numpy is installed for the Reed-Solomon parity")
+        return self.action(
+            f"numpy cannot be imported ({failure}), so backups cannot compute their "
+            "Reed-Solomon parity",
+            f'pip install --upgrade "{extras.DISTRIBUTION}>=0.7"',
+        )
+
+
+class GuardExtra(Step):
+    name = "guard extra"
+    since = "0.7.0"
+
+    def check(self):
+        if MIDDLEWARE_PATH not in (setting("MIDDLEWARE", ()) or ()):
+            return self.ok("the session guard is off, so scikit-learn is not needed")
+        failure = extras.import_error("guard")
+        if failure is None:
+            return self.ok("scikit-learn is installed for the session guard")
+        return self.action(
+            f"DBSSecurityMiddleware is on, but scikit-learn cannot be imported ({failure}), "
+            "so the session guard runs without its anomaly detector",
+            extras.install_command("guard"),
+        )
+
+
+class ManagerExtra(Step):
+    name = "manager extra"
+    since = "0.7.0"
+
+    def check(self):
+        absent = extras.missing("manager")
+        if not absent:
+            return self.ok("the DBS manager can run here (django_dbs run)")
+        return self.ok(
+            f"the DBS manager is not installed here ({', '.join(absent)} missing); "
+            "this project does not need it",
+            f"to run django_dbs on this machine: {extras.install_command('manager')}",
+        )
+
+
+class ManagerKeychain(Step):
+    name = "manager keychain"
+    since = "0.7.0"
+
+    def check(self):
+        if extras.missing("manager"):
+            return self.ok(
+                "the DBS manager does not run here, so it keeps no sealing key; "
+                "the manager extra names what it needs"
             )
-        missing = [name for name in self.manager_modules if not self.importable(name)]
-        if missing:
-            return self.action(
-                f"{', '.join(missing)} missing, so `django_dbs run` cannot start",
-                'pip install --upgrade "django-dbs>=0.5"',
-            )
-        return self.ok("scikit-learn, paramiko, rest_framework and waitress are available")
-
-    manager_modules = ("paramiko", "rest_framework", "waitress")
-
-    @staticmethod
-    def importable(name):
-        import importlib
-
-        try:
-            importlib.import_module(name)
-        except ImportError:
-            return False
-        return True
+        return self.ok(
+            "keyring is available, so the DBS manager keeps its sealing key in "
+            "the system keychain wherever one works"
+        )
 
 
 class AdminPanel(Step):
@@ -286,6 +337,14 @@ class GuardMiddleware(Step):
     def check(self):
         from django.apps import apps
 
+        from .security.checks import AUTH_MIDDLEWARE, runs_before_authentication
+
+        if runs_before_authentication():
+            return self.warn(
+                "DBSSecurityMiddleware runs before AuthenticationMiddleware, so the session "
+                "guard never sees a signed-in user and scores nothing",
+                f'move "{MIDDLEWARE_PATH}" below "{AUTH_MIDDLEWARE}" in MIDDLEWARE',
+            )
         if MIDDLEWARE_PATH in (setting("MIDDLEWARE", ()) or ()):
             return self.ok("the session guard is active")
         if not apps.is_installed("django.contrib.admin"):
@@ -294,6 +353,32 @@ class GuardMiddleware(Step):
             "the control panel is reachable but nothing is scoring requests",
             f'MIDDLEWARE = [..., "{MIDDLEWARE_PATH}"]',
         )
+
+
+class ForwardedFor(Step):
+    name = "forwarded addresses"
+    since = "0.7.0"
+
+    def check(self):
+        from .security.features import trusted_proxies
+
+        configured = setting("DBS_TRUSTED_PROXIES", None)
+        trusting = bool(setting("DBS_TRUST_FORWARDED_FOR", False))
+        if isinstance(configured, (int, float)) and not isinstance(configured, bool):
+            return self.warn(
+                f"DBS_TRUSTED_PROXIES is the number {configured}; since 0.7.0 it lists the "
+                "proxy networks, and the guard trusts X-Forwarded-For only from them",
+                'DBS_TRUSTED_PROXIES = ["10.0.0.0/24"]  # the networks your proxies are in',
+            )
+        if trusting and not trusted_proxies():
+            return self.warn(
+                "DBS_TRUST_FORWARDED_FOR is on but DBS_TRUSTED_PROXIES names no proxy "
+                "network, so the guard ignores X-Forwarded-For",
+                'DBS_TRUSTED_PROXIES = ["10.0.0.0/24"]  # the networks your proxies are in',
+            )
+        if trusting:
+            return self.ok("X-Forwarded-For is trusted only from DBS_TRUSTED_PROXIES")
+        return self.ok("the guard scores the direct peer address")
 
 
 class ExcludeSemantics(Step):
@@ -351,7 +436,8 @@ class RestoreRoots(Step):
             return self.ok("restores are confined to DBS_FILE_ROOTS")
         if not restore_roots:
             return self.warn(
-                "DBS_RESTORE_ROOTS is empty, so file restores will refuse every path",
+                "DBS_RESTORE_ROOTS is empty, so file restores will refuse every path "
+                "outside the file fields' storage and ModelBackup.file_roots",
                 "List the directories a restore may write into, or unset it",
             )
         return self.ok("restores are confined to DBS_RESTORE_ROOTS")
@@ -385,6 +471,132 @@ class HiddenRows(Step):
             "since 0.4.0 backups include the rows hidden by the default manager of "
             + ", ".join(filtered)
             + "; override ModelBackup.get_queryset to leave them out"
+        )
+
+
+class UnmanagedModels(Step):
+    name = "unmanaged models"
+    since = "0.7.0"
+
+    def check(self):
+        from .introspect import unmanaged_models_left_out
+        from .registry import backup_registry
+
+        if not backup_registry.is_empty():
+            return self.ok("backup_registry chooses the models, so an unmanaged one is backed up when registered")
+        left_out = sorted(model._meta.label_lower for model in unmanaged_models_left_out())
+        if not left_out:
+            return self.ok("no unmanaged model is left out of backups")
+        return self.ok(
+            "since 0.7.0 backups leave out unmanaged models (managed = False): "
+            + ", ".join(left_out)
+            + "; list '-app.model' in DBS_EXCLUDE_MODELS or register one to keep backing it up"
+        )
+
+
+class SourceFiles(Step):
+    name = "missing source files"
+    since = "0.7.0"
+
+    def check(self):
+        return self.ok(
+            "since 0.7.0 a backup stops and names every source file it cannot read; "
+            "pass --allow-missing-files (allow_missing_files=True) to back up without them"
+        )
+
+
+class BackupPaths(Step):
+    name = "backup paths"
+    since = "0.7.0"
+
+    def check(self):
+        return self.ok(
+            "since 0.7.0 dbs backup PATH and create_backup(output=PATH) refuse a PATH that "
+            "already exists; a script that reuses one name must choose a new one each run"
+        )
+
+
+class RestorePathMap(Step):
+    name = "restore path map"
+    since = "0.7.0"
+
+    def check(self):
+        from .exceptions import ConfigurationError
+        from .files import is_inside, restore_path_map, restore_roots
+
+        try:
+            path_map = restore_path_map()
+        except ConfigurationError as exc:
+            return self.warn(str(exc), 'DBS_RESTORE_PATH_MAP = {"/old/root": "/new/root"}')
+        if not path_map:
+            return self.ok("no restore path map is configured")
+        roots = restore_roots()
+        unreachable = sorted(
+            new
+            for new in path_map.values()
+            if not any(is_inside(os.path.realpath(new), root) for root in roots)
+        )
+        if unreachable:
+            return self.warn(
+                "DBS_RESTORE_PATH_MAP sends files to "
+                + ", ".join(unreachable)
+                + ", which no restore root allows, so those files would be refused",
+                "Add those directories to DBS_RESTORE_ROOTS (or DBS_FILE_ROOTS)",
+            )
+        return self.ok("every new root in DBS_RESTORE_PATH_MAP is inside a restore root")
+
+
+class RemoteCommandLimits(Step):
+    name = "remote command limits"
+    since = "0.7.0"
+
+    def check(self):
+        from .transports.ssh import DEFAULT_COMMAND_TIMEOUT, DEFAULT_KEEPALIVE_INTERVAL
+
+        return self.ok(
+            "since 0.7.0 an SSH connection sends a keepalive every "
+            f"{DEFAULT_KEEPALIVE_INTERVAL:g} seconds and a remote command stops after "
+            f"{DEFAULT_COMMAND_TIMEOUT / 3600:g} hours; an SSHTarget that runs longer "
+            "commands sets its own command_timeout"
+        )
+
+
+class BackupFormat(Step):
+    name = "backup format"
+    since = "0.7.0"
+    settings = (
+        ("DBS_KDF_TIME_COST", "UNTRUSTED_MAX_TIME_COST", ""),
+        ("DBS_KDF_MEMORY_COST", "UNTRUSTED_MAX_MEMORY_COST", " KiB"),
+    )
+
+    def check(self):
+        from .crypto import kdf
+
+        refused = []
+        for name, ceiling_name, unit in self.settings:
+            value = setting(name, None)
+            ceiling = getattr(kdf, ceiling_name)
+            if value is None:
+                continue
+            try:
+                number = int(value)
+            except (TypeError, ValueError):
+                refused.append(f"{name} = {value!r} is not a number")
+                continue
+            if number > ceiling:
+                refused.append(f"{name} = {number}{unit} is above {ceiling}{unit}")
+        if refused:
+            return self.action(
+                "format 2 backups refuse "
+                + " and ".join(refused)
+                + ", so every new backup would fail",
+                f"DBS_KDF_TIME_COST = {kdf.UNTRUSTED_MAX_TIME_COST} and "
+                f"DBS_KDF_MEMORY_COST = {kdf.UNTRUSTED_MAX_MEMORY_COST} at most, or unset them",
+            )
+        return self.ok(
+            f"since 0.7.0 new backups are written in format {FORMAT_VERSION} and streamed "
+            "with bounded memory; format 1 backups still restore and validate, and "
+            "`dbs upgrade --backups DIR` converts them into new files beside the originals"
         )
 
 
@@ -426,6 +638,166 @@ class AiInstructions(Step):
         return self.fixed(f"refreshed {len(stale)} AI instruction file(s)")
 
 
+class ClientRetired(Step):
+    name = "dbs-client"
+    since = "0.7.0"
+    config_paths = ("dbs-client.toml", "~/.config/dbs/client.toml")
+
+    def _configs(self):
+        candidates = [os.environ.get("DBS_CLIENT_CONFIG", ""), *self.config_paths]
+        expanded = [os.path.expanduser(path) for path in candidates if path]
+        return [path for path in dict.fromkeys(expanded) if os.path.isfile(path)]
+
+    def check(self):
+        found = self._configs()
+        if not found:
+            return self.ok("no dbs-client config is left to move")
+        return self.warn(
+            "dbs-client was removed, and "
+            + ", ".join(found)
+            + " still lists the servers it backed up",
+            f"Install the manager on your own machine ({extras.install_command('manager')}), "
+            "add each server with `django_dbs run` or `django_dbs server add`, and back it "
+            "up from there",
+        )
+
+
+class PulledBackups(Step):
+    name = "off-site copies"
+    since = "0.7.0"
+    removed_settings = (
+        "DBS_SSH_TARGETS",
+        "DBS_SCHEDULE_PUSH_TARGET",
+        "DBS_SCHEDULE_KEEP_REMOTE",
+        "DBS_ADMIN_CONSOLE_SHELL",
+    )
+    remedy = (
+        "the DBS manager pulls backups from this server now: on your own machine run "
+        f"{extras.install_command('manager')} and "
+        "`django_dbs server add NAME --host HOST --user USER` for this server, then "
+        "delete the settings listed here"
+    )
+    explicit_target = (
+        "; code that read DBS_SSH_TARGETS through SSHTarget.from_settings builds "
+        "SSHTarget(host=..., username=..., ...) from explicit values now"
+    )
+
+    def check(self):
+        from django.conf import settings
+
+        left = [name for name in self.removed_settings if hasattr(settings, name)]
+        stored = self._stored_targets()
+        removed = self._removed_targets() if stored is None else []
+        stored = stored or []
+        problems = []
+        if stored:
+            problems.append("the panel still holds the SFTP targets " + ", ".join(stored))
+        if left:
+            problems.append(", ".join(left) + " no longer do anything")
+        if problems:
+            return self.warn(
+                "this server no longer pushes backups anywhere, but " + "; ".join(problems),
+                self.remedy + (self.explicit_target if "DBS_SSH_TARGETS" in left else ""),
+            )
+        if removed:
+            return self.ok(
+                "0.7.0 removed the SFTP targets "
+                + ", ".join(removed)
+                + "; the DBS manager pulls backups now (`django_dbs server add`)"
+            )
+        return self.ok("backups stay on this server and the DBS manager pulls them")
+
+    @staticmethod
+    def _stored_targets():
+        from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
+
+        connection = connections[DEFAULT_DB_ALIAS]
+        try:
+            if "dbs_backuptarget" not in connection.introspection.table_names():
+                return None
+            table = connection.ops.quote_name("dbs_backuptarget")
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT name, username, host, port FROM {table} ORDER BY name")
+                rows = cursor.fetchall()
+        except DatabaseError:
+            return None
+        return [f"{name} ({username}@{host}:{port})" for name, username, host, port in rows]
+
+    @staticmethod
+    def _removed_targets():
+        from django.db import DatabaseError
+
+        from .models import AuditEvent
+
+        try:
+            events = AuditEvent.objects.filter(action="target.remove").order_by("target_name")
+            return [
+                f"{event.target_name} ({event.data.get('username')}@{event.data.get('host')}"
+                f":{event.data.get('port')})"
+                for event in events
+            ]
+        except DatabaseError:
+            return []
+
+
+class AuditChain(AuditTrail):
+    name = "audit chain"
+    since = "0.7.0"
+    migration = ("dbs", "0005_pull_only_retention_chain")
+
+    def check(self):
+        finding = super().check()
+        if finding.level == OK:
+            return self.ok(
+                "every finished audit row is sealed in a hash chain; "
+                "`manage.py dbs audit verify` checks it"
+            )
+        return self.action(
+            "the audit trail cannot be sealed in a hash chain until dbs.0005 is applied",
+            finding.remedy,
+        )
+
+    def fix(self):
+        super().fix()
+        return self.fixed("applied the migration that seals the audit trail")
+
+
+class KeepAtMostFive(Step):
+    name = "retention"
+    since = "0.7.0"
+
+    def check(self):
+        from django.db import DatabaseError
+
+        from .models import BackupSchedule
+        from .retention import MAXIMUM_KEEP
+
+        problems = []
+        configured = setting("DBS_SCHEDULE_KEEP", None)
+        if configured is not None and not self._within(configured, MAXIMUM_KEEP):
+            problems.append(f"DBS_SCHEDULE_KEEP is {configured}")
+        try:
+            kept = BackupSchedule.objects.order_by("pk").values_list("keep", flat=True).first()
+        except DatabaseError:
+            kept = None
+        if kept is not None and kept > MAXIMUM_KEEP:
+            problems.append(f"the panel's schedule keeps {kept}, which migrate lowers to 5")
+        if problems:
+            return self.warn(
+                f"the server now keeps at most {MAXIMUM_KEEP} backups in DBS_BACKUP_DIR, but "
+                + "; ".join(problems),
+                f"DBS_SCHEDULE_KEEP = {MAXIMUM_KEEP}  # dbs schedule refuses larger values",
+            )
+        return self.ok(f"the server keeps at most {MAXIMUM_KEEP} backups")
+
+    @staticmethod
+    def _within(value, maximum):
+        try:
+            return 1 <= int(value) <= maximum
+        except (TypeError, ValueError):
+            return False
+
+
 STEPS = (
     InstalledApp,
     Migrations,
@@ -434,13 +806,27 @@ STEPS = (
     SchedulerMode,
     BackupDirectory,
     Dependencies,
+    GuardExtra,
+    ManagerExtra,
+    ManagerKeychain,
     AdminPanel,
     GuardMiddleware,
+    ForwardedFor,
     ExcludeSemantics,
     Passphrase,
     RestoreRoots,
     HiddenRows,
+    UnmanagedModels,
+    SourceFiles,
+    BackupPaths,
+    RestorePathMap,
+    RemoteCommandLimits,
+    BackupFormat,
     AiInstructions,
+    ClientRetired,
+    PulledBackups,
+    KeepAtMostFive,
+    AuditChain,
 )
 
 
@@ -464,23 +850,112 @@ def installed_version() -> str:
     return __version__
 
 
-def is_editable_install() -> bool:
+def package_directory() -> Path:
     from . import __file__ as package_file
 
-    return "site-packages" not in str(Path(package_file).resolve())
+    return Path(package_file).resolve().parent
+
+
+def installed_distribution():
+    from importlib import metadata
+
+    try:
+        return metadata.distribution(extras.DISTRIBUTION)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def installed_as_editable(distribution) -> bool:
+    raw = distribution.read_text("direct_url.json")
+    if not raw:
+        return False
+    try:
+        return bool(json.loads(raw).get("dir_info", {}).get("editable"))
+    except (ValueError, AttributeError):
+        return False
+
+
+def is_source_checkout(package_dir: Path, distribution) -> bool:
+    if distribution is None:
+        return True
+    if any((package_dir.parent / marker).exists() for marker in CHECKOUT_MARKERS):
+        return True
+    if installed_as_editable(distribution):
+        return True
+    return Path(distribution.locate_file("dbs")).resolve() != package_dir
+
+
+def is_editable_install() -> bool:
+    return is_source_checkout(package_directory(), installed_distribution())
+
+
+def is_system_interpreter(prefix: str | None = None, base_prefix: str | None = None) -> bool:
+    prefix = Path(prefix or sys.prefix)
+    base_prefix = Path(base_prefix or getattr(sys, "base_prefix", sys.prefix))
+    if prefix.resolve() != base_prefix.resolve():
+        return False
+    return not (prefix / "conda-meta").is_dir()
+
+
+def is_version(text: str) -> bool:
+    return bool(VERSION_PATTERN.fullmatch(text or ""))
+
+
+def pinned_install_command(version: str, installed_extras=()) -> list:
+    return [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        extras.requirement(sorted(installed_extras), version),
+    ]
+
+
+def requirement_files(root: Path) -> list:
+    candidates = sorted(root.glob("requirements*.txt")) + sorted(root.glob("requirements/*.txt"))
+    candidates += [root / name for name in PROJECT_FILES]
+    found = []
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace").lower()
+        except OSError:
+            continue
+        if any(name in text for name in ("django-dbs", "django_dbs")):
+            found.append(path)
+    return found
+
+
+def confirm_install(stream=None) -> bool:
+    stream = stream or sys.stdin
+    if not hasattr(stream, "isatty") or not stream.isatty():
+        return False
+    return input("Install it now? [y/N] ").strip().lower() in ("y", "yes")
+
+
+def _pypi_json(path: str, timeout: float):
+    import urllib.request
+
+    with urllib.request.urlopen(f"{PYPI}/{path}", timeout=timeout) as response:
+        return json.load(response)
 
 
 def latest_release(timeout: float = 10.0) -> str | None:
-    import json
-    import urllib.request
-
     try:
-        with urllib.request.urlopen(
-            "https://pypi.org/pypi/django-dbs/json", timeout=timeout
-        ) as response:
-            return json.load(response)["info"]["version"]
+        return _pypi_json("json", timeout)["info"]["version"]
     except Exception:
         return None
+
+
+def release_exists(version: str, timeout: float = 10.0) -> bool | None:
+    import urllib.error
+
+    try:
+        _pypi_json(f"{version}/json", timeout)
+    except urllib.error.HTTPError as exc:
+        return False if exc.code == 404 else None
+    except Exception:
+        return None
+    return True
 
 
 def _as_numbers(version: str):
@@ -502,7 +977,15 @@ class Converter:
     needs_passphrase: bool = False
 
 
-CONVERTERS: dict = {}
+def _convert_format_1(data, passphrase):
+    from .engine.convert import convert_v1
+
+    return convert_v1(data, passphrase)
+
+
+CONVERTERS: dict = {
+    1: Converter(produces=FORMAT_VERSION, convert=_convert_format_1, needs_passphrase=True),
+}
 
 
 @dataclass
@@ -510,6 +993,7 @@ class BackupState:
     path: Path
     version: int | None
     converted_to: Path | None = None
+    converted_earlier: bool = False
     error: str = ""
 
     @property
@@ -523,17 +1007,56 @@ class BackupState:
 
 def inspect_backup(path: Path) -> BackupState:
     try:
-        data = path.read_bytes()
+        with path.open("rb") as handle:
+            version = read_format_version(handle)
     except OSError as exc:
         return BackupState(path, None, error=f"cannot read the file: {exc}")
-    version = container_version(data)
     if version is None:
         return BackupState(path, None, error="not a DBS container, or the header is destroyed")
     return BackupState(path, version)
 
 
-def convert_backup(state: BackupState, passphrase: str | None) -> BackupState:
+class ConversionRejected(Exception):
+    pass
+
+
+def conversion_name(path: Path, version: int, copy: int = 1) -> Path:
+    name = path.name
+    stem = name[: -len(BACKUP_SUFFIX)] if name.endswith(BACKUP_SUFFIX) else name
+    marker = f".v{version}" if copy <= 1 else f".v{version}-{copy}"
+    return path.with_name(f"{stem}{marker}{BACKUP_SUFFIX}")
+
+
+def conversion_names(path: Path, version: int):
+    return (conversion_name(path, version, copy) for copy in itertools.count(1))
+
+
+def existing_conversion(path: Path) -> Path | None:
+    for candidate in conversion_names(path, FORMAT_VERSION):
+        if not candidate.exists():
+            return None
+        if inspect_backup(candidate).current:
+            return candidate
+    return None
+
+
+def require_valid(data: bytes, passphrase: str | None) -> None:
     from .engine import validate_backup
+
+    version = container_version(data)
+    if version != FORMAT_VERSION:
+        raise ConversionRejected(f"it is format version {version}, not {FORMAT_VERSION}")
+    result = validate_backup(data, passphrase)
+    if not result.ok:
+        raise ConversionRejected(result.summary())
+
+
+def convert_backup(state: BackupState, passphrase: str | None) -> BackupState:
+    earlier = existing_conversion(state.path)
+    if earlier is not None:
+        state.converted_to = earlier
+        state.converted_earlier = True
+        return state
 
     data = state.path.read_bytes()
     version = state.version
@@ -559,17 +1082,18 @@ def convert_backup(state: BackupState, passphrase: str | None) -> BackupState:
             return state
 
     try:
-        result = validate_backup(data, passphrase)
-    except DBSError as exc:
+        written = write_new(
+            data,
+            (str(name) for name in conversion_names(state.path, FORMAT_VERSION)),
+            verify=lambda on_disk: require_valid(on_disk, passphrase),
+        )
+    except (ConversionRejected, DBSError) as exc:
         state.error = f"the converted file did not validate: {exc}"
         return state
-    if not result.ok:
-        state.error = f"the converted file did not validate: {result.summary()}"
+    except OSError as exc:
+        state.error = f"could not write the converted file: {exc}"
         return state
-
-    destination = state.path.with_name(state.path.name + ".converted")
-    destination.write_bytes(data)
-    state.converted_to = destination
+    state.converted_to = Path(written)
     state.version = FORMAT_VERSION
     return state
 

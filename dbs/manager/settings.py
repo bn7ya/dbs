@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import os
 
-from dbs.manager import paths
-from dbs.manager.conf import DATABASE_URL_ENV, HOST_ENV, LOCAL_HOSTS
+from dbs.manager import keystore, paths
+from dbs.manager.conf import DATABASE_URL_ENV, HOST_ENV, LOCAL_HOSTS, TRUSTED_PROXY_ENV
 from dbs.manager.database import parse_database_url, sqlite_database
+from dbs.manager.middleware import trusted_networks
 
 DBS_MANAGER_DATA_DIR = str(paths.ensure_data_dir(paths.resolve_data_dir()))
-SECRET_KEY = paths.read_key(DBS_MANAGER_DATA_DIR)
+SEALING_KEY = keystore.load(DBS_MANAGER_DATA_DIR)
+SECRET_KEY = SEALING_KEY.value
+DBS_MANAGER_KEY_STORE = SEALING_KEY.store
+DBS_MANAGER_KEY_WARNING = SEALING_KEY.warning
 DEBUG = False
 
 DBS_MANAGER_HOST = os.environ.get(HOST_ENV, "").strip()
@@ -29,13 +33,17 @@ INSTALLED_APPS = [
     "dbs.manager",
 ]
 
+DBS_MANAGER_TRUSTED_PROXIES = trusted_networks(os.environ.get(TRUSTED_PROXY_ENV, ""))
+
 MIDDLEWARE = [
+    "dbs.manager.middleware.TrustedProxyMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "dbs.manager.middleware.RequestOriginMiddleware",
+    "dbs.manager.middleware.PasswordAgeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -78,6 +86,7 @@ CSRF_COOKIE_NAME = "csrftoken"
 CSRF_COOKIE_SAMESITE = "Lax"
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
+SECURE_HSTS_SECONDS = 31536000 if DBS_MANAGER_TRUSTED_PROXIES else 0
 
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
@@ -104,6 +113,11 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTH_FAILURES_PER_USER = 5
 AUTH_FAILURES_PER_ADDRESS = 20
 AUTH_FAILURE_WINDOW = 900
+AUTH_BACKOFF_SECONDS = 2
+AUTH_BACKOFF_MAX_SECONDS = 60
+AUTH_KNOWN_ADDRESS_SECONDS = 30 * 24 * 60 * 60
+AUTH_PENDING_SECONDS = 300
+AUTH_PASSWORD_MAX_AGE_DAYS = 30
 
 LANGUAGE_CODE = "en"
 TIME_ZONE = "UTC"
@@ -118,6 +132,9 @@ DBS_MANAGER_JOBS_INLINE = False
 
 SSH_CONNECT_TIMEOUT = 15.0
 SSH_COMMAND_TIMEOUT = 20.0
+SSH_KEEPALIVE_INTERVAL = 15.0
+SSH_IO_TIMEOUT = 30.0
+REMOTE_KILL_AFTER = 30
 BACKUP_STORAGE_DIR = str(paths.backups_path(DBS_MANAGER_DATA_DIR))
 BACKUP_EXEC_TIMEOUT = 3600.0
 BACKUP_TASK_TIME_LIMIT = 6 * 60 * 60

@@ -15,6 +15,7 @@ from dbs.manager.servers.services import ServerService
 from dbs.manager.adapters import backups, jobs, references
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.adapters.forms import validated
+from dbs.manager.terminal.progress import reported
 from dbs.manager.terminal.session import TerminalSession
 
 LIST_COLUMNS = (
@@ -51,13 +52,14 @@ def list_backups(session: TerminalSession) -> int:
 
 def take(session: TerminalSession) -> int:
     chosen = references.servers(session.user, session.args.servers, session.args.all)
-    taken = backups.take(
-        session.user, chosen, starting=lambda server: _starting(session, server)
-    )
+    with reported(session):
+        taken = backups.take(
+            session.user, chosen, starting=lambda server: _starting(session, server)
+        )
     rows = [
         {
             "server": item.server,
-            "result": "ok" if item.ok else f"failed: {item.error}",
+            "result": item.result,
             "backup": item.backup,
             "size": item.size,
         }
@@ -92,7 +94,8 @@ def restore(session: TerminalSession) -> int:
     if args.real:
         body["server_name"] = args.confirm_name or _typed_name(session, target.name)
         body["account_password"] = session.password()
-    job = service.restore(file_id, **validated(RestoreSerializer, body))
+    with reported(session):
+        job = service.restore(file_id, **validated(RestoreSerializer, body))
     entry = jobs.finished(session.user, job)
     done = "Restored" if args.real else "Rehearsed restoring"
     return session.outcome(entry, f"{done} {file.name} onto {target.name}.")
@@ -101,7 +104,11 @@ def restore(session: TerminalSession) -> int:
 def download(session: TerminalSession) -> int:
     file_id = references.identifier(session.args.backup, "backup")
     target = Path(session.args.output or BackupService(session.user).get(file_id).name)
-    saved = backups.save(session.user, file_id, target)
+    saved = session.guarded(
+        lambda password: backups.save(
+            session.user, file_id, target, account_password=password
+        )
+    )
     size = saved.stat().st_size
     session.out.say(
         f"Saved {saved} ({size} bytes).", {"path": str(saved.resolve()), "size": size}
@@ -121,7 +128,8 @@ def upload(session: TerminalSession) -> int:
 
 def delete(session: TerminalSession) -> int:
     file_id = references.identifier(session.args.backup, "backup")
-    BackupService(session.user).delete(file_id)
+    service = BackupService(session.user)
+    session.guarded(lambda password: service.delete(file_id, account_password=password))
     session.out.say(
         f"Deleted it. Bring it back with: django_dbs backup undo-delete {file_id}",
         {"deleted": str(file_id)},

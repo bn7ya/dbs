@@ -14,8 +14,9 @@ PASS = "record-pass-phrase"
 
 
 @pytest.fixture
-def panel(db, settings):
+def panel(db, settings, inline_jobs):
     settings.DBS_SETUP_WIZARD = False
+    settings.DBS_TRUSTED_NETWORKS = ["127.0.0.0/8"]
     client = Client()
     client.force_login(User.objects.create_superuser("root", "root@example.com", "pw"))
     return client

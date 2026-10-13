@@ -102,6 +102,7 @@
     <button
       matButton="filled"
       class="app-danger"
+      *appCan="'backups.restore'"
       type="submit"
       [disabled]="sending() !== null"
       [attr.aria-busy]="sending() === 'restore'"

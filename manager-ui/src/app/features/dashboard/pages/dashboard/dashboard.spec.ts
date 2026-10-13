@@ -8,6 +8,8 @@ import { MatTableHarness } from '@angular/material/table/testing';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuthStore } from '@core/auth/state/auth.store';
+import { OPERATOR } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import type { Dashboard } from '../../data/dashboard.types';
@@ -61,6 +63,8 @@ describe('DashboardPage', () => {
     const [web, staging] = cards.map((card) => card.textContent ?? '');
     expect(web).toContain('Production web');
     expect(web).toContain('Check: Ready');
+    expect(web).toContain('Online');
+    expect(staging).toContain('Offline, last seen 3 hours ago');
     expect(web).toContain('Health: Warning');
     expect(web).toContain('3 hours ago');
     expect(web).toContain('5 MB');
@@ -115,7 +119,13 @@ describe('DashboardPage', () => {
   });
 
   it('offers adding the first server when there is none', async () => {
-    const page = await show({ servers: [], storage_bytes: 0, last_export_at: null, recent_failures: [] });
+    const page = await show({
+      servers: [],
+      storage_bytes: 0,
+      last_export_at: null,
+      recent_failures: [],
+      key_store: 'keychain',
+    });
 
     expect(page.querySelector('app-empty-state')?.textContent).toContain('No servers yet');
     const add = await TestbedHarnessEnvironment.loader(fixture).getHarness(
@@ -123,5 +133,22 @@ describe('DashboardPage', () => {
     );
     expect(await add.getAppearance()).toBe('filled');
     expect(await (await add.host()).getAttribute('href')).toBe('/servers/new');
+  });
+
+  it('hides adding a server from a role that cannot add one', async () => {
+    const restoring = TestBed.inject(AuthStore).restore();
+    http.expectOne('/api/auth/me/').flush(OPERATOR);
+    await restoring;
+
+    const page = await show(DASHBOARD);
+
+    expect(page.querySelector('a[href="/servers/new"]')).toBeNull();
+    expect(page.querySelectorAll('mat-card')).toHaveLength(2);
+  });
+
+  it('warns while the sealing key sits in a file next to the data', async () => {
+    const page = await show({ ...DASHBOARD, key_store: 'file' });
+
+    expect(page.textContent).toContain('No system keychain works on this computer');
   });
 });

@@ -41,7 +41,12 @@
     },
     "download": {
       "action": "تنزيل",
-      "label": "تنزيل {name}"
+      "label": "تنزيل {name}",
+      "working": "جار التحضير…",
+      "prompt": {
+        "title": "تنزيل ملف ⁨.env⁩",
+        "body": "يحتوي {name} على أسرار الخادم. أدخل كلمة المرور لتنزيله."
+      }
     },
     "delete": {
       "label": "حذف {name}",

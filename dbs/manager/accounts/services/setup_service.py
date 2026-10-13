@@ -5,16 +5,17 @@ import threading
 import time
 from typing import Any
 
-from django.contrib.auth import login
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from rest_framework.exceptions import ErrorDetail, ValidationError
+from rest_framework.exceptions import ValidationError
 
 from dbs import audit, leases
 from dbs.manager import paths
 from dbs.manager.accounts.exceptions import SetupDone, SetupTokenInvalid
 from dbs.manager.accounts.repositories import UserRepository
+from dbs.manager.accounts.services.account_service import password_errors
+from dbs.manager.accounts.services.sign_in_service import SignInService
 from dbs.manager.conf import LEASE_SECONDS, SETUP_LEASE, data_dir
 from dbs.manager.middleware import current_ip
 
@@ -48,13 +49,6 @@ def remove_token() -> None:
         pass
 
 
-def password_errors(exc: DjangoValidationError) -> list:
-    return [
-        ErrorDetail(" ".join(error.messages), code=error.code or "password_invalid")
-        for error in exc.error_list
-    ]
-
-
 class SetupService:
     def __init__(self) -> None:
         self.users = UserRepository()
@@ -64,7 +58,7 @@ class SetupService:
 
     def complete(
         self, request: Any, *, token: str, username: str, password: str
-    ) -> Any:
+    ) -> tuple[Any, str]:
         owner = f"{leases.process_owner()}:{threading.get_ident()}"
         self._take(owner)
         try:
@@ -72,9 +66,9 @@ class SetupService:
                 user = self._create(token, username, password)
         finally:
             leases.release(SETUP_LEASE, owner)
-        login(request, user)
+        step = SignInService(request).begin(user)
         remove_token()
-        return user
+        return user, step
 
     def _take(self, owner: str) -> None:
         deadline = time.monotonic() + LEASE_WAIT_SECONDS

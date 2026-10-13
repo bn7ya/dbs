@@ -11,7 +11,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
 from dbs import audit
-from dbs.manager.activity import job_leases
+from dbs.manager.activity import heartbeat, job_leases
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.middleware import current_ip
@@ -125,11 +125,13 @@ class ActivityService:
         started = audit.start(activity_id)
         if started is not None:
             job_leases.hold(activity_id)
+            heartbeat.begin(activity_id)
         return started
 
     def succeed(self, activity_id: int, detail: dict[str, Any] | None = None) -> None:
         audit.finish(activity_id, data=detail)
         job_leases.let_go(activity_id)
+        heartbeat.end(activity_id)
 
     def fail(
         self,
@@ -139,6 +141,7 @@ class ActivityService:
     ) -> None:
         audit.fail(activity_id, error_code_of(error), data=detail)
         job_leases.let_go(activity_id)
+        heartbeat.end(activity_id)
 
     def progress(self, activity_id: int, detail: dict[str, Any]) -> None:
         self.entries.set_running_data(activity_id, detail)

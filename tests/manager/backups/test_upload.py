@@ -20,6 +20,7 @@ from dbs.manager.backups.services import BackupService, backup_service
 from dbs.manager.backups.uploads import UploadHandler
 from dbs.manager.common.uploads import FORM_ALLOWANCE, UploadTooLarge
 from dbs.manager.servers.services import ServerService
+from tests.manager.support import PASSWORD, downloaded
 
 URL = "/api/backups/upload/"
 BOUNDARY = "dbs-manager-upload-boundary"
@@ -35,6 +36,7 @@ SHAPE = {
     "sha256",
     "validation",
     "validated_at",
+    "failure",
     "remote_path",
     "taken_by",
     "plan",
@@ -141,7 +143,7 @@ def test_an_upload_downloads_as_it_was_sent(monkeypatch, api, send):
     monkeypatch.setattr(vault, "CHUNK_BYTES", 8)
     backup = send().json()
 
-    response = api.get(f"/api/backups/{backup['id']}/download/")
+    response = downloaded(api, backup["id"])
 
     assert b"".join(response.streaming_content) == CONTENT
     assert response["Content-Disposition"] == 'attachment; filename="db.sql.gz"'
@@ -156,7 +158,9 @@ def test_an_upload_is_verified_deleted_and_brought_back_like_any_backup(
 
     with run_jobs():
         verified = api.post(f"/api/backups/{backup['id']}/verify/")
-    deleted = api.delete(f"/api/backups/{backup['id']}/")
+    deleted = api.delete(
+        f"/api/backups/{backup['id']}/", {"account_password": PASSWORD}, format="json"
+    )
     restored = api.post(f"/api/backups/{backup['id']}/undo-delete/")
 
     job = entry(verified.json()["activity"])
@@ -253,7 +257,7 @@ def test_a_backup_is_named_after_the_file_without_its_folders_or_unprintable_cha
 
     assert response.status_code == 201
     assert response.json()["name"] == kept
-    download = api.get(f"/api/backups/{response.json()['id']}/download/")
+    download = downloaded(api, response.json()["id"])
     assert download["Content-Disposition"].startswith("attachment; filename")
 
 
@@ -305,7 +309,7 @@ def test_files_that_share_a_name_are_each_kept_and_download_as_they_were(
         (second, b"tuesday"),
         (third, b"wednesday"),
     ):
-        download = api.get(f"/api/backups/{backup['id']}/download/")
+        download = downloaded(api, backup["id"])
         assert b"".join(download.streaming_content) == content
 
 
@@ -451,7 +455,7 @@ def test_an_upload_to_a_server_that_is_not_there_is_not_found(
     api, admin, server, storage, send
 ):
     unknown = send(to=uuid4())
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
     deleted = send()
 
     for response in (unknown, deleted):

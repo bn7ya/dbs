@@ -1,0 +1,86 @@
+{
+  "accounts": {
+    "title": "Accounts",
+    "subtitle": "Who can sign in to this manager, and what each account may do.",
+    "add": "Add an account",
+    "roles": {
+      "admin": "Everything on servers, backups, plans, .env files and files, including real restores and moves. No account management.",
+      "operator": "Sees everything; takes, verifies and downloads backups, runs plans, rehearses restores and moves. Changes no server and deletes nothing.",
+      "viewer": "Sees everything and changes nothing."
+    },
+    "list": {
+      "label": "Accounts",
+      "username": "Username",
+      "role": "Role",
+      "status": "Status",
+      "active": "Can sign in",
+      "disabled": "Disabled",
+      "twoFactor": "Two-factor sign-in",
+      "twoFactorOn": "On, {left} recovery codes left",
+      "twoFactorNext": "Set up at next sign-in",
+      "password": "Password",
+      "passwordExpires": "Expires {date}",
+      "passwordRequired": "New one at next sign-in",
+      "lastLogin": "Last sign-in",
+      "never": "Never",
+      "you": "(you)",
+      "actions": "Actions",
+      "actionsFor": "Actions for {name}"
+    },
+    "form": {
+      "title": "Add an account",
+      "body": "The account sets up two-factor sign-in and chooses its own password the first time it signs in.",
+      "username": "Username",
+      "usernameHint": "Letters, digits and @ . + - _ only.",
+      "usernameRequired": "Enter a username.",
+      "role": "Role",
+      "password": "First password",
+      "passwordHint": "Give it to the person in a safe way; they replace it at their first sign-in.",
+      "passwordRequired": "Enter a first password.",
+      "confirm": "Confirm the first password",
+      "mismatch": "The two passwords do not match.",
+      "submit": "Add the account",
+      "working": "Adding the account…",
+      "done": "The account was added."
+    },
+    "roleForm": {
+      "title": "Change the role",
+      "body": "Choose what {name} may do.",
+      "submit": "Save the role",
+      "working": "Saving…",
+      "done": "{name} has a new role."
+    },
+    "disable": {
+      "title": "Disable the account",
+      "body": "{name} is signed out and cannot sign in until the account is enabled again. Nothing it did is removed.",
+      "accept": "Disable",
+      "done": "{name} can no longer sign in."
+    },
+    "enable": {
+      "title": "Enable the account",
+      "body": "{name} can sign in again with its password and two-factor code.",
+      "accept": "Enable",
+      "done": "{name} can sign in again."
+    },
+    "resetTwoFactor": {
+      "title": "Reset two-factor sign-in",
+      "body": "{name}'s authenticator and recovery codes stop working. It sets up two-factor sign-in again at its next sign-in.",
+      "accept": "Reset",
+      "done": "{name} sets up two-factor sign-in again at its next sign-in."
+    },
+    "expirePassword": {
+      "title": "Ask for a new password",
+      "body": "{name} must choose a new password at its next sign-in before it can do anything else.",
+      "accept": "Ask for a new password",
+      "done": "{name} chooses a new password at its next sign-in."
+    },
+    "handOver": {
+      "title": "Make it the master account",
+      "body": "{name} becomes the master account and manages every account. Your account becomes an admin and can no longer manage accounts.",
+      "codeHint": "The code your authenticator app shows now.",
+      "submit": "Hand over the master role",
+      "working": "Handing over…",
+      "done": "{name} is now the master account."
+    }
+  }
+}

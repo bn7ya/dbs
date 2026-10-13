@@ -9,6 +9,7 @@ import type { ApiError, ApiErrorResponse } from './api.types';
 
 // Only these 401/403 codes mean the session is gone; any other is about the request itself.
 const SESSION_FAILURES: ReadonlySet<string> = new Set(['not_authenticated', 'authentication_failed']);
+const PASSWORD_CHANGE_REQUIRED = 'password_change_required';
 
 export const errorInterceptor: HttpInterceptorFn = (request, next) => {
   const router = inject(Router);
@@ -26,6 +27,8 @@ export const errorInterceptor: HttpInterceptorFn = (request, next) => {
           queryParams: { next: router.url },
           replaceUrl: true,
         });
+      } else if (response instanceof HttpErrorResponse && error.code === PASSWORD_CHANGE_REQUIRED) {
+        void auth.restore().then(() => router.navigate(['/password'], { replaceUrl: true }));
       }
 
       return throwError(() => error);

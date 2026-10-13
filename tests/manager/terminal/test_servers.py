@@ -298,15 +298,24 @@ def test_renaming_needs_no_password(terminal, admin, make_server):
 
 
 @pytest.mark.django_db
-def test_remove_needs_the_name_typed_or_yes(terminal, admin, make_server, typing):
+def test_remove_needs_the_name_typed_or_yes_and_the_password(
+    terminal, admin, make_server, typing
+):
     make_server(name="web-1")
     make_server(name="web-2", host="10.0.0.6")
     typing.append("web")
 
     assert terminal("server", "remove", "web-1").code == 1
-    typing.append("web-1")
+    typing.extend(["web-1", PASSWORD])
     assert terminal("server", "remove", "web-1").code == 0
-    assert terminal("server", "remove", "web-2", "--yes").code == 0
+    no_password = terminal(
+        "server", "remove", "web-2", "--yes", "--password-stdin", stdin="\n"
+    )
+    assert no_password.code == 1 and ServerRepository().active().exists()
+    removed = terminal(
+        "server", "remove", "web-2", "--yes", "--password-stdin", stdin=f"{PASSWORD}\n"
+    )
+    assert removed.code == 0, removed.err
     assert not ServerRepository().active().exists()
 
 
@@ -328,8 +337,14 @@ def test_check_all_reports_every_server_and_fails_if_one_does(
     ran = terminal("server", "check", "--all")
 
     assert ran.code == 1
+    assert ran.out.splitlines()[0].split()[:3] == ["SERVER", "CONNECTION", "STATUS"]
     rows = {line.split()[0]: line for line in ran.out.splitlines()[1:]}
-    assert " ok " in rows["web-1"] and "failed" in rows["web-2"]
+    assert " online " in rows["web-1"] and " ok " in rows["web-1"]
+    assert "offline (ssh_unreachable)" in rows["web-2"] and "failed" in rows["web-2"]
+
+    listed = terminal("server", "list").out.splitlines()
+    assert listed[0].split()[:4] == ["NAME", "HOST", "CONNECTION", "STATUS"]
+    assert "online" in listed[1] and "offline (ssh_unreachable)" in listed[2]
 
 
 @pytest.mark.django_db
@@ -369,40 +384,6 @@ def test_revealing_the_passphrase_needs_the_password(terminal, admin, make_serve
         "server", "passphrase", "web-1", "--password-stdin", stdin=f"{PASSWORD}\n"
     )
     assert shown.code == 0 and shown.out.strip() != ""
-
-
-@pytest.mark.django_db
-def test_import_profiles_adds_the_servers_of_a_client_config(
-    terminal, admin, offered, tmp_path, monkeypatch
-):
-    key = tmp_path / "id_ed25519"
-    key.write_text(private_key_text())
-    config = tmp_path / "dbs-client.toml"
-    config.write_text(
-        f"""
-[defaults]
-username = "deploy"
-key_filename = "{key}"
-host_key = "{host_key_line()}"
-
-[servers.shop]
-host = "10.0.0.5"
-project_dir = "/srv/shop"
-python = "/srv/shop/.venv/bin/python"
-
-[servers.blog]
-host = "10.0.0.6"
-"""
-    )
-    config.chmod(0o600)
-
-    ran = terminal("server", "import-profiles", config)
-
-    assert ran.code == 0, ran.out
-    servers = {server.name: server for server in ServerRepository().active()}
-    assert set(servers) == {"shop", "blog"}
-    assert servers["shop"].python_path == "/srv/shop/.venv/bin/python"
-    assert servers["shop"].project_dir == "/srv/shop"
 
 
 @pytest.mark.django_db

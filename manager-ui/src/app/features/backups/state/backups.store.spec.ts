@@ -40,7 +40,7 @@ const THIRD_JOB = 11;
 const SETTINGS: PlanSettings = {
   name: 'django-dbs',
   interval_minutes: 1440,
-  keep: 7,
+  keep: 5,
   keep_remote: 1,
   enabled: true,
   paths: [],
@@ -333,16 +333,16 @@ describe('BackupsStore', () => {
     it("saves a plan's settings", async () => {
       await openWith();
 
-      const changed = { ...SETTINGS, keep: 14 };
+      const changed = { ...SETTINGS, keep: 4 };
       const updating = store.updatePlan(PLAN, changed);
       const request = http.expectOne(`/api/backups/plans/${PLAN.id}/`);
       expect(request.request.method).toBe('PATCH');
       expect(request.request.body).toEqual(changed);
-      request.flush({ ...PLAN, keep: 14 });
+      request.flush({ ...PLAN, keep: 4 });
 
-      await expect(updating).resolves.toEqual({ ...PLAN, keep: 14 });
+      await expect(updating).resolves.toEqual({ ...PLAN, keep: 4 });
       expect(lastToast()).toEqual({ severity: 'success', summary: 'Plan saved.', detail: `⁨${PLAN.name}⁩` });
-      await answerPlansReload([{ ...PLAN, keep: 14 }]);
+      await answerPlansReload([{ ...PLAN, keep: 4 }]);
     });
 
     it('deletes a plan, then reloads the plans and says so', async () => {
@@ -580,6 +580,40 @@ describe('BackupsStore', () => {
       expect(lastToast()).toEqual({ severity: 'success', summary: 'Backup finished.' });
       await answerReload([FILE]);
       expect(store.files()).toEqual([FILE]);
+    });
+
+    it('warns that a backup whose connection broke is kept on the server', async () => {
+      await openWith({ files: [] });
+
+      store.take();
+      http.expectOne('/api/backups/take/').flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
+      jobs.report(jobOf('backup.take', { detail: { outcome: 'kept_on_server', pulled: 0 } }));
+
+      expect(lastToast()).toEqual({
+        severity: 'warning',
+        summary:
+          'The connection broke before the backup arrived. The server keeps it, and the manager collects it at the next connection.',
+      });
+      await answerReload([]);
+    });
+
+    it("shows whether a running job's connection is alive, on its own server only", async () => {
+      await openWith({ files: [] });
+      store.take();
+      http.expectOne('/api/backups/take/').flush({ activity: JOB_ID });
+      expect(store.liveConnection()).toBeNull();
+
+      const connection = { state: 'alive', last_activity_at: '2026-09-30T12:00:30Z', bytes: 4096 } as const;
+      jobs.report(jobOf('backup.take', { status: 'running', finished_at: null, connection }));
+      expect(store.liveConnection()).toEqual(connection);
+
+      await openWith({ files: [], plans: [] }, OTHER_SERVER);
+      expect(store.liveConnection()).toBeNull();
+      await openWith();
+
+      jobs.report(jobOf('backup.take', { connection: null }));
+      expect(store.liveConnection()).toBeNull();
+      await answerReload();
     });
 
     it('takes one backup of a server at a time, and shows it only on that server', async () => {
@@ -866,7 +900,7 @@ describe('BackupsStore', () => {
       expect(store.restoring(FILE)).toBeNull();
       expect(lastToast()).toEqual({
         severity: 'danger',
-        summary: 'django-dbs on the server is too old for this. It needs version 0.2.2 or later.',
+        summary: 'django-dbs on the server is too old for this. Upgrade it to the version this manager runs.',
         detail: `⁨${FILE.name}⁩`,
       });
     });
@@ -1032,9 +1066,11 @@ describe('BackupsStore', () => {
     it('deletes it, reloads the list, and offers Undo on the server it was on', async () => {
       await openWith({ files: [FILE, VERIFIED] });
 
-      const removing = store.remove(FILE);
+      const removing = store.remove(FILE, 'hunter2');
       expect(store.deleting().has(FILE.id)).toBe(true);
-      http.expectOne(`/api/backups/${FILE.id}/`).flush(null, { status: 204, statusText: 'No Content' });
+      const request = http.expectOne(`/api/backups/${FILE.id}/`);
+      expect(request.request.body).toEqual({ account_password: 'hunter2' });
+      request.flush(null, { status: 204, statusText: 'No Content' });
 
       await expect(removing).resolves.toBe(true);
       expect(store.deleting().has(FILE.id)).toBe(false);
@@ -1057,7 +1093,7 @@ describe('BackupsStore', () => {
     it('lets the reader put the Undo offer away', async () => {
       await openWith({ files: [FILE] });
 
-      const removing = store.remove(FILE);
+      const removing = store.remove(FILE, 'hunter2');
       http.expectOne(`/api/backups/${FILE.id}/`).flush(null, { status: 204, statusText: 'No Content' });
       await removing;
       await answerReload([]);
@@ -1066,23 +1102,40 @@ describe('BackupsStore', () => {
       expect(store.deleted()).toBeNull();
     });
 
-    it('says why it could not be deleted, and keeps the row', async () => {
+    it('keeps why it could not be deleted for the password prompt, and keeps the row', async () => {
       await openWith({ files: [FILE] });
 
-      const removing = store.remove(FILE);
+      const removing = store.remove(FILE, 'wrong');
       http
         .expectOne(`/api/backups/${FILE.id}/`)
-        .flush({ error: { code: 'not_found', message: 'Server prose' } }, { status: 404, statusText: 'Not Found' });
+        .flush({ error: { code: 'invalid_password', message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' });
 
       await expect(removing).resolves.toBe(false);
       expect(store.deleting().has(FILE.id)).toBe(false);
-      expect(lastToast()).toEqual({ severity: 'danger', summary: 'This no longer exists.' });
+      expect(store.deleteError()?.code).toBe('invalid_password');
+      expect(toasts).not.toHaveBeenCalled();
       expect(store.files()).toEqual([FILE]);
     });
   });
 
   it('points a download at the file', () => {
     expect(store.downloadUrl(FILE)).toBe(`/api/backups/${FILE.id}/download/`);
+  });
+
+  it('trades the password for a link to a sealed file, and keeps a refusal for the prompt', async () => {
+    const refusing = store.downloadLink(ARCHIVE_FILE, 'wrong');
+    http
+      .expectOne(`/api/backups/${ARCHIVE_FILE.id}/download/`)
+      .flush({ error: { code: 'invalid_password', message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' });
+    await expect(refusing).resolves.toBeNull();
+    expect(store.downloadError()?.code).toBe('invalid_password');
+
+    const linking = store.downloadLink(ARCHIVE_FILE, 'hunter2');
+    expect(store.downloadError()).toBeNull();
+    const request = http.expectOne(`/api/backups/${ARCHIVE_FILE.id}/download/`);
+    expect(request.request.body).toEqual({ account_password: 'hunter2' });
+    request.flush({ url: '/api/backups/a/download/?ticket=t1' });
+    await expect(linking).resolves.toBe('/api/backups/a/download/?ticket=t1');
   });
 
   function answerPlansAndJobsExceptPlans(): void {

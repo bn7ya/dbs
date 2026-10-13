@@ -4,6 +4,10 @@ import type { RedeployBackup, RedeployEnvVersion, RedeployServer } from '../data
 
 export const SOURCE = 'source-0000-4000-8000-000000000001';
 
+export const MOVE_ID = 9;
+
+export const REVERT_ID = 10;
+
 export const SERVERS: readonly RedeployServer[] = [
   { id: SOURCE, name: 'Production web' },
   { id: 'target-0000-4000-8000-000000000002', name: 'New web' },
@@ -20,18 +24,67 @@ export const ENV_VERSIONS: readonly RedeployEnvVersion[] = [
 ];
 
 export const RUNNING: Job = {
-  id: 9,
+  id: MOVE_ID,
   action: 'redeploy.run',
   status: 'running',
   detail: {
     steps: [
       { step: 'check', status: 'succeeded' },
-      { step: 'env', status: 'running' },
-      { step: 'migrate', status: 'pending' },
+      { step: 'source_backup', status: 'running' },
+      { step: 'record_env', status: 'pending' },
     ],
   },
   error_code: '',
   finished_at: null,
+  connection: { state: 'alive', last_activity_at: '2026-10-09T09:00:00Z', bytes: 2_000_000 },
+};
+
+export const STOPPED: Job = {
+  id: MOVE_ID,
+  action: 'redeploy.run',
+  status: 'failed',
+  detail: {
+    rehearsal: false,
+    failed_step: 'migrate',
+    revertable: true,
+    steps: [
+      { step: 'check', status: 'succeeded' },
+      { step: 'env', status: 'succeeded' },
+      { step: 'migrate', status: 'failed' },
+      { step: 'restore', status: 'skipped' },
+    ],
+  },
+  error_code: 'remote_command_failed',
+  finished_at: '2026-10-09T09:05:00Z',
+  connection: null,
+};
+
+export const MOVED_FROM_CHOSEN: Job = {
+  ...STOPPED,
+  status: 'succeeded',
+  detail: { rehearsal: false, fresh_backup: false, steps: [{ step: 'restore', status: 'succeeded' }] },
+  error_code: '',
+};
+
+export const REHEARSED_WITHOUT_SOURCE: Job = {
+  ...MOVED_FROM_CHOSEN,
+  detail: { rehearsal: true, source_reachable: false, steps: [{ step: 'restore', status: 'succeeded' }] },
+};
+
+export const REVERTED: Job = {
+  id: REVERT_ID,
+  action: 'redeploy.revert',
+  status: 'succeeded',
+  detail: {
+    steps: [
+      { step: 'check', status: 'succeeded' },
+      { step: 'env', status: 'succeeded' },
+      { step: 'restore', status: 'succeeded' },
+    ],
+  },
+  error_code: '',
+  finished_at: '2026-10-09T09:09:00Z',
+  connection: null,
 };
 
 export function pageOf<T>(results: readonly T[]): Page<T> {

@@ -5,13 +5,15 @@ import struct
 import pytest
 from django.test import RequestFactory
 
-from dbs.container.format import HEADER_SIZE, read_container
+from dbs.container import read_format_version
+from dbs.container.format import HEADER_SIZE
 from dbs.crypto.kdf import KDFParams
 from dbs.engine import create_backup, restore_backup, validate_backup
 from dbs.exceptions import ContainerError, CorruptionError, CryptoError, RestoreError
 from dbs.files import FileEntry, _sha256, restore_file
 from dbs.serialize import load_records
 from tests.conftest import FAST_KDF
+from tests.format1 import as_format1
 from tests.testapp.models import Author, Book
 
 PASS = "hardening-pass-phrase"
@@ -113,10 +115,9 @@ def test_unencrypted_manifest_does_not_disclose_backup_metadata(tmp_path):
     missing = tmp_path / "confidential-customer-name.txt"
     Book.objects.create(title="Private title", author=author, sidecar_path=str(missing))
 
-    container = create_backup(PASS, kdf_params=FAST_KDF)
-    manifest, _copy_a, _copy_b = read_container(container)
+    container = create_backup(PASS, kdf_params=FAST_KDF, allow_missing_files=True)
 
-    assert "stats" not in manifest
+    assert read_format_version(container) == 2
     assert b"confidential-customer-name" not in container
     assert b"testapp.author" not in container
 
@@ -150,18 +151,29 @@ def test_missing_source_file_is_reported(tmp_path):
     Book.objects.create(
         title="Ghost", author=author, sidecar_path=str(tmp_path / "gone.dat")
     )
-    container = create_backup(PASS, kdf_params=FAST_KDF)
+    container = create_backup(PASS, kdf_params=FAST_KDF, allow_missing_files=True)
     result = validate_backup(container, PASS)
     assert any("gone.dat" in item for item in result.stats["skipped_files"])
 
 
 @pytest.mark.django_db
-def test_payload_size_limit_is_enforced(settings):
+def test_payload_size_limit_is_enforced_on_format_1(settings):
     Author.objects.create(name="Ada")
-    container = create_backup(PASS, kdf_params=FAST_KDF)
+    container = as_format1(create_backup(PASS, kdf_params=FAST_KDF), PASS)
     settings.DBS_MAX_PAYLOAD_BYTES = 8
     with pytest.raises(CorruptionError):
         restore_backup(container, PASS)
+
+
+@pytest.mark.django_db
+def test_format_2_streams_past_the_format_1_payload_limit(settings):
+    Author.objects.create(name="Ada")
+    container = create_backup(PASS, kdf_params=FAST_KDF)
+    settings.DBS_MAX_PAYLOAD_BYTES = 8
+
+    out = restore_backup(container, PASS)
+
+    assert out.records_loaded >= 1
 
 
 def test_admin_render_escapes_messages():

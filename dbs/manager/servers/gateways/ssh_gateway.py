@@ -1,47 +1,51 @@
 from __future__ import annotations
 
 import base64
-import os
+import json
+import math
 import posixpath
 import re
 import secrets
 import shlex
 import stat
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from io import BytesIO
-from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, cast
+from typing import TYPE_CHECKING, BinaryIO, Protocol, cast
 
 from django.conf import settings
+from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 from paramiko import Channel, PKey, SFTPAttributes, SFTPClient, SFTPFile, SSHException
 from paramiko.pkey import UnknownKeyType
 
-from dbs import validate_backup
-from dbs.client import BackupOptions, ServerProfile, backup_and_fetch
-from dbs.client.remote import available_local_name
-from dbs.exceptions import ConfigurationError, DBSError
+from dbs.exceptions import ConfigurationError, ConnectionLost, DBSError, RemoteTimeout
+from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import (
     ArchiveFailed,
-    BackupInvalid,
     DbsTooOld,
     FileExists,
     FileTooLarge,
     FolderNotEmpty,
     HostKeyChanged,
     RemoteCommandFailed,
+    RemoteCommandTimedOut,
     RemoteNotFound,
     RemotePermissionDenied,
     RestoreFailed,
+    ServerConnectionLost,
     SSHAuthFailed,
     SSHUnreachable,
+    StreamBroken,
 )
+from dbs.naming import is_backup_name, parse_backup_moment
+from dbs.tee import is_partial_name, is_stale
 from dbs.transports import HostKey, HostKeyError, RemoteResult, SSHSession, SSHTarget
 from dbs.transports import fetch_host_key as dbs_fetch_host_key
+from dbs.transports.ssh import StreamInterrupted
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRead
@@ -66,6 +70,7 @@ TAR_OK = 0
 TAR_FILES_CHANGED = 1
 FILES_CHANGED = "files_changed"
 SHA256SUM_LINE = re.compile(r"\\?([0-9a-f]{64}) ")
+SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 RESTORED = re.compile(r"Restored (\d+) records and (\d+) files")
 WOULD_RESTORE = re.compile(r"(\d+) records and (\d+) files would be restored")
 FLUSHED = re.compile(r"Flushed (\d+) existing rows")
@@ -74,8 +79,6 @@ HEALED = "Corruption detected and repaired"
 UNKNOWN_OPTION = "unrecognized arguments"
 RESTORE_FILE_PREFIX = ".dbs-restore-"
 RESTORE_FILE_MODE = 0o600
-EXTRACT_FILE_PREFIX = ".dbs-extract-"
-ARCHIVE_SUFFIX = ".tar.gz"
 REMOTE_DIRECTORY_MODE = 0o700
 PARTIAL_FILE_MODE = 0o600
 TRANSFER_WINDOW = 4 * 1024 * 1024
@@ -83,9 +86,18 @@ NAME_MAX_BYTES = 255
 PARTIAL_NAME_BYTES = NAME_MAX_BYTES - len(".") - len(".part-") - 16
 DOCKER = "docker"
 CONTAINER_TMP = "/tmp"
-CONTAINER_BACKUP_PREFIX = ".dbs-backup-"
 CONTAINER_ROOT = "0"
-LOCAL_FILE_MODE = 0o600
+LIST_FILES = (
+    "import json, os, sys; folder = sys.argv[1]; "
+    "entries = os.scandir(folder) if os.path.isdir(folder) else (); "
+    "print(json.dumps([[entry.name, entry.stat(follow_symlinks=False).st_size, "
+    "int(entry.stat(follow_symlinks=False).st_mtime)] for entry in entries "
+    "if entry.is_file(follow_symlinks=False)]))"
+)
+TIMEOUT = "timeout"
+TIMEOUT_PROBE = (TIMEOUT, "-k", "1", "5", "true")
+TIMED_OUT_STATUSES = frozenset({124, 128 + 9})
+DEADLINE_MARGIN = 5
 
 
 @dataclass(frozen=True)
@@ -98,6 +110,11 @@ class Credentials:
     key_passphrase: str | None = field(default=None, repr=False)
     password: str | None = field(default=None, repr=False)
     remote_dir: str = "."
+    timeout_on_host: bool = False
+    timeout_in_container: bool = False
+    on_activity: Callable[[int], None] | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass(frozen=True)
@@ -136,9 +153,19 @@ class DbsProfile:
 
 
 @dataclass(frozen=True)
-class FetchedBackup:
-    local_path: str
-    remote_path: str
+class ServerBackup:
+    name: str
+    path: str
+    size: int
+    mtime: datetime | None
+
+
+@dataclass(frozen=True)
+class StreamedBackup:
+    name: str
+    path: str
+    size: int
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -185,6 +212,10 @@ class RemoteEntry:
     gid: int | None = None
 
 
+class Writable(Protocol):
+    def write(self, data: bytes) -> object: ...
+
+
 class RemoteReader:
     def __init__(self, handle: SFTPFile) -> None:
         self._handle: SFTPFile = handle
@@ -197,14 +228,22 @@ class RemoteReader:
 
 
 class RemoteHost:
-    def __init__(self, session: SSHSession) -> None:
+    def __init__(
+        self,
+        session: SSHSession,
+        *,
+        timeout_on_host: bool = False,
+        timeout_in_container: bool = False,
+    ) -> None:
         self.session = session
+        self.timeout_on_host = timeout_on_host
+        self.timeout_in_container = timeout_in_container
 
     @property
     def sftp(self) -> SFTPClient:
         try:
             sftp: SFTPClient = self.session.sftp
-            cast(Channel, sftp.get_channel()).settimeout(settings.SSH_COMMAND_TIMEOUT)
+            cast(Channel, sftp.get_channel()).settimeout(settings.SSH_IO_TIMEOUT)
         except TRANSPORT_ERRORS as exc:
             raise RemoteCommandFailed() from exc
         return sftp
@@ -227,16 +266,36 @@ class RemoteHost:
         env: Mapping[str, str] | None = None,
         stdin_line: str | None = None,
         timeout: float | None = None,
+        limited: bool = False,
     ) -> RemoteResult:
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        if self.timeout_on_host and not limited:
+            argv, limited = bounded(argv, seconds), True
         script = build_script(argv, cwd=cwd, env=env)
+        settles_at = timezone.now() + timedelta(
+            seconds=seconds + settings.REMOTE_KILL_AFTER
+        )
         try:
-            return self.session.run(
-                script,
-                stdin_line=stdin_line,
-                timeout=timeout or settings.SSH_COMMAND_TIMEOUT,
+            result = self.session.run(
+                script, stdin_line=stdin_line, timeout=_waited(seconds, limited)
             )
         except TRANSPORT_ERRORS as exc:
-            raise RemoteCommandFailed() from exc
+            raise _interrupted(exc, settles_at) from exc
+        if limited and result.exit_status in TIMED_OUT_STATUSES:
+            raise RemoteCommandTimedOut(output=_tail(result.stderr or result.stdout))
+        return result
+
+    def has_timeout(self, profile: DbsProfile | None = None) -> bool:
+        if profile is None or profile.compose is None:
+            probe = list(TIMEOUT_PROBE)
+            cwd = None
+        else:
+            probe = profile.compose.exec_argv(TIMEOUT_PROBE)
+            cwd = profile.project_dir
+        try:
+            return bool(self.run(probe, cwd=cwd, limited=True).ok)
+        except RemoteCommandFailed:
+            return False
 
     def run_python(
         self,
@@ -260,11 +319,17 @@ class RemoteHost:
                 stdin_line=stdin_line,
                 timeout=timeout,
             )
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        inside = self.timeout_in_container
         return self.run(
-            profile.compose.exec_argv(command, settings_module=settings_module),
+            profile.compose.exec_argv(
+                bounded(command, seconds) if inside else command,
+                settings_module=settings_module,
+            ),
             cwd=profile.project_dir,
             stdin_line=stdin_line,
-            timeout=timeout,
+            timeout=seconds,
+            limited=inside,
         )
 
     def run_manage(
@@ -308,130 +373,224 @@ class RemoteHost:
     ) -> RemoteResult:
         if profile.compose is None:
             raise ValueError("This project does not run in Docker Compose.")
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        inside = self.timeout_in_container
         return self.run(
-            profile.compose.exec_argv(command, user=user),
+            profile.compose.exec_argv(
+                bounded(command, seconds) if inside else command, user=user
+            ),
             cwd=profile.project_dir,
-            timeout=timeout,
+            timeout=seconds,
+            limited=inside,
         )
 
-    def take_dbs_backup(
+    def stream(
         self,
+        argv: Sequence[str],
+        sink: Writable,
         *,
-        profile: DbsProfile,
-        passphrase: str,
-        dest_dir: str,
-        prefix: str,
-        keep_remote: int,
-        remote_dir: str | None = None,
-    ) -> FetchedBackup:
-        self.sftp
-        if profile.compose is not None:
-            return self._take_from_container(
-                profile=profile,
-                passphrase=passphrase,
-                dest_dir=dest_dir,
-                prefix=prefix,
-                keep_remote=keep_remote,
-                remote_dir=remote_dir or self.session.target.remote_dir,
-            )
-        target = self.session.target
-        name = available_local_name(dest_dir, prefix)
-        local_path = os.path.join(dest_dir, name)
-        server = ServerProfile(
-            name=prefix,
-            host=target.host,
-            port=target.port,
-            username=target.username,
-            use_agent=False,
-            remote_dir=target.remote_dir,
-            project_dir=profile.project_dir,
-            python=profile.python,
-            manage=profile.manage,
-            django_settings_module=profile.settings_module,
-            prefix=prefix,
-            passphrase_transport="stdin",
-            exec_timeout=settings.BACKUP_EXEC_TIMEOUT,
-        )
+        cwd: str | None = None,
+        env: Mapping[str, str] | None = None,
+        stdin_line: str | None = None,
+        timeout: float | None = None,
+        progress: Callable[[int], None] | None = None,
+        limited: bool = False,
+    ) -> RemoteResult:
+        seconds = timeout or settings.BACKUP_EXEC_TIMEOUT
+        if self.timeout_on_host and not limited:
+            argv, limited = bounded(argv, seconds), True
+        script = build_script(argv, cwd=cwd, env=env)
+        secret = stdin_line or ""
         try:
-            backup_and_fetch(
-                server,
-                passphrase,
-                dest_dir=dest_dir,
-                name=name,
-                session=self.session,
-                options=BackupOptions(),
-                delete_remote=keep_remote == 0,
-                keep_remote=keep_remote or None,
-                validate=False,
+            result = self.session.stream(
+                script,
+                sink,
+                stdin_line=stdin_line,
+                timeout=_waited(seconds, limited),
+                progress=progress,
             )
-        except TRANSPORT_ERRORS as exc:
-            Path(local_path).unlink(missing_ok=True)
-            raise RemoteCommandFailed(output=_tail(str(exc), passphrase)) from exc
+        except StreamInterrupted as exc:
+            raise StreamBroken(output=_tail(str(exc), secret)) from exc
+        except DBSError as exc:
+            raise RemoteCommandFailed(output=_tail(str(exc), secret)) from exc
+        if limited and result.exit_status in TIMED_OUT_STATUSES:
+            raise RemoteCommandTimedOut(output=_tail(result.stderr, secret))
+        return result
 
-        _require_backup(local_path, passphrase)
-        remote_path = self.session.path_for(name) if keep_remote else ""
-        return FetchedBackup(local_path=local_path, remote_path=remote_path)
+    def backup_folder(self, profile: DbsProfile, folder: str) -> str:
+        if profile.compose is None:
+            return folder
+        found = self.run_manage(profile, ["dbs_connection", "--json"])
+        details = _json_of(found.stdout) if found.ok else None
+        if not isinstance(details, dict):
+            raise RemoteCommandFailed(output=_tail(found.stderr or found.stdout))
+        chosen = details.get("remote_backup_dir")
+        return chosen if isinstance(chosen, str) else ""
+
+    def waiting_backups(
+        self, profile: DbsProfile, folder: str, prefix: str
+    ) -> list[ServerBackup]:
+        if not folder:
+            return []
+        listed = (
+            self._listed_on_host(folder)
+            if profile.compose is None
+            else self._listed_in_container(profile, folder)
+        )
+        found = [
+            ServerBackup(name, posixpath.join(folder, name), size, mtime)
+            for name, size, mtime in listed
+            if is_backup_name(name, prefix)
+        ]
+        return sorted(
+            found, key=lambda backup: (parse_backup_moment(backup.name), backup.name)
+        )
+
+    def backup_sha256(self, profile: DbsProfile, path: str) -> str:
+        if profile.compose is None:
+            return self._sha256(path, settings.BACKUP_EXEC_TIMEOUT)
+        result = self.run_in_container(
+            profile, ["sha256sum", "--", path], timeout=settings.BACKUP_EXEC_TIMEOUT
+        )
+        return _digest_in(result)
+
+    def pull_backup(
+        self,
+        profile: DbsProfile,
+        path: str,
+        sink: Writable,
+        progress: Callable[[int], None] | None = None,
+    ) -> None:
+        if profile.compose is None:
+            received = 0
+            with self.stream_file(path) as chunks:
+                for chunk in chunks:
+                    sink.write(chunk)
+                    received += len(chunk)
+                    if progress is not None:
+                        progress(received)
+            return
+        seconds = settings.BACKUP_EXEC_TIMEOUT
+        inside = self.timeout_in_container
+        command = ["cat", "--", path]
+        try:
+            result = self.stream(
+                profile.compose.exec_argv(
+                    bounded(command, seconds) if inside else command
+                ),
+                sink,
+                cwd=profile.project_dir,
+                timeout=seconds,
+                progress=progress,
+                limited=inside,
+            )
+        except StreamBroken as exc:
+            raise RemoteCommandFailed(output=exc.output) from exc
+        if not result.ok:
+            raise RemoteCommandFailed(output=_tail(result.stderr))
 
     @sensitive_variables("passphrase")
-    def _take_from_container(
+    def stream_dbs_backup(
         self,
-        *,
         profile: DbsProfile,
+        *,
         passphrase: str,
-        dest_dir: str,
         prefix: str,
-        keep_remote: int,
-        remote_dir: str,
-    ) -> FetchedBackup:
-        compose = cast(ComposeService, profile.compose)
-        name = available_local_name(dest_dir, prefix)
-        local_path = os.path.join(dest_dir, name)
-        host_path = posixpath.join(remote_dir, name)
-        inside = posixpath.join(
-            CONTAINER_TMP, f"{CONTAINER_BACKUP_PREFIX}{secrets.token_hex(8)}.dbs"
+        folder: str,
+        sink: Writable,
+        progress: Callable[[int], None] | None = None,
+    ) -> StreamedBackup:
+        arguments = ["dbs_backup", "--stream", "--prefix", prefix, "--passphrase-stdin"]
+        arguments += ["--output-dir", folder] if folder else []
+        command = [profile.python, profile.manage, *arguments]
+        seconds = settings.BACKUP_EXEC_TIMEOUT
+        inside = profile.compose is not None and self.timeout_in_container
+        if profile.compose is None:
+            argv = command
+            env = (
+                {"DJANGO_SETTINGS_MODULE": profile.settings_module}
+                if profile.settings_module
+                else None
+            )
+        else:
+            argv = profile.compose.exec_argv(
+                bounded(command, seconds) if inside else command,
+                settings_module=profile.settings_module,
+            )
+            env = None
+        result = self.stream(
+            argv,
+            sink,
+            cwd=profile.project_dir,
+            env=env,
+            stdin_line=passphrase,
+            timeout=seconds,
+            progress=progress,
+            limited=inside,
         )
-        self._make_dirs(remote_dir)
+        output = _tail(result.stderr, passphrase)
+        if not result.ok:
+            if UNKNOWN_OPTION in result.stderr:
+                raise DbsTooOld(versions.STREAM_FROM, output=output)
+            raise RemoteCommandFailed(output=output)
+        summary = _stream_summary(result.stderr, prefix)
+        if summary is None:
+            raise RemoteCommandFailed(output=output)
+        if summary.get("kept_on_server") is True:
+            raise StreamBroken(output=output)
+        name = summary["name"]
+        return StreamedBackup(
+            name=name,
+            path=posixpath.join(folder, name) if folder else "",
+            size=summary["size"],
+            sha256=summary["sha256"],
+        )
+
+    def remove_backup(self, profile: DbsProfile, path: str) -> None:
+        if profile.compose is None:
+            self.remove(path)
+            return
+        result = self.run_in_container(profile, ["rm", "-f", "--", path])
+        if not result.ok:
+            raise RemoteCommandFailed(output=_tail(result.stderr or result.stdout))
+
+    def sweep_partials(self, folder: str) -> list[str]:
         try:
-            made = self.run_manage(
-                profile,
-                ["dbs_backup", inside, "--passphrase-stdin"],
-                stdin_line=passphrase,
-                timeout=settings.BACKUP_EXEC_TIMEOUT,
-            )
-            if not made.ok:
-                raise RemoteCommandFailed(
-                    output=_tail(f"{made.stdout}\n{made.stderr}", passphrase)
-                )
-            copied = self.run_compose(
-                profile,
-                ["cp", f"{compose.service}:{inside}", host_path],
-                timeout=settings.BACKUP_EXEC_TIMEOUT,
-            )
-            if not copied.ok:
-                raise RemoteCommandFailed(output=_tail(copied.stderr or copied.stdout))
-        finally:
-            self._remove_in_container(profile, inside)
+            entries = self.sftp.listdir_attr(folder)
+        except (RemoteCommandFailed, *SFTP_ERRORS):
+            return []
+        removed = []
+        for entry in entries:
+            if (
+                is_partial_name(entry.filename)
+                and _is_file(entry.st_mode)
+                and entry.st_mtime is not None
+                and is_stale(entry.st_mtime)
+            ):
+                with suppress(RemoteCommandFailed):
+                    self.remove(posixpath.join(folder, entry.filename))
+                    removed.append(entry.filename)
+        return sorted(removed)
+
+    def _listed_on_host(self, folder: str) -> list[tuple[str, int, datetime | None]]:
         try:
-            with self.stream_file(host_path) as chunks:
-                with os.fdopen(
-                    os.open(
-                        local_path,
-                        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                        LOCAL_FILE_MODE,
-                    ),
-                    "wb",
-                ) as local:
-                    for chunk in chunks:
-                        local.write(chunk)
-        except BaseException:
-            Path(local_path).unlink(missing_ok=True)
-            raise
-        _require_backup(local_path, passphrase)
-        if keep_remote == 0:
-            self.remove(host_path)
-            return FetchedBackup(local_path=local_path, remote_path="")
-        self.prune(remote_dir, _backup_pattern(prefix), keep_remote)
-        return FetchedBackup(local_path=local_path, remote_path=host_path)
+            listed = self.list_files(folder)
+        except RemoteNotFound:
+            return []
+        return [(file.name, file.size or 0, file.mtime) for file in listed]
+
+    def _listed_in_container(
+        self, profile: DbsProfile, folder: str
+    ) -> list[tuple[str, int, datetime | None]]:
+        result = self.run_python(
+            profile, ["-c", LIST_FILES, folder], with_settings=False
+        )
+        rows = _json_of(result.stdout) if result.ok else None
+        if not isinstance(rows, list):
+            raise RemoteCommandFailed(output=_tail(result.stderr or result.stdout))
+        return [
+            (row[0], row[1], _listed_time(row[2])) for row in rows if _is_listed(row)
+        ]
 
     def _remove_in_container(
         self, profile: DbsProfile, path: str, *, user: str | None = None
@@ -487,7 +646,7 @@ class RemoteHost:
         if not result.ok:
             output = _tail(f"{result.stdout}\n{result.stderr}", passphrase)
             if UNKNOWN_OPTION in result.stderr:
-                raise DbsTooOld(output=output)
+                raise DbsTooOld(versions.COMPATIBLE_FROM, output=output)
             raise RestoreFailed(output=output)
         return _restore_report(
             result.stdout, flush=flush, dry_run=dry_run, copy_left=copy_left
@@ -503,36 +662,6 @@ class RemoteHost:
         if not copied.ok:
             raise RestoreFailed(output=_tail(copied.stderr or copied.stdout))
         self._hand_to_container_user(profile, inside)
-
-    def extract_archive(
-        self,
-        source: SupportsRead[bytes],
-        remote_dir: str,
-        timeout: float,
-        relocate: Mapping[str, str] | None = None,
-    ) -> str:
-        name = f"{EXTRACT_FILE_PREFIX}{secrets.token_hex(8)}{ARCHIVE_SUFFIX}"
-        path = posixpath.join(remote_dir, name)
-        self._make_dirs(remote_dir)
-        self.write_new(source, remote_dir, name, mode=RESTORE_FILE_MODE)
-        try:
-            result = self.run(
-                [
-                    "tar",
-                    "-xzf",
-                    path,
-                    "-C",
-                    "/",
-                    "--no-same-owner",
-                    *_transforms(relocate or {}),
-                ],
-                timeout=timeout,
-            )
-        finally:
-            copy_left = self._removed_or_left(path)
-        if not result.ok:
-            raise ArchiveFailed(output=_tail(result.stderr or result.stdout))
-        return copy_left
 
     def archive(
         self, paths: Sequence[str], remote_dir: str, name: str, timeout: float
@@ -826,22 +955,46 @@ class RemoteHost:
                 raise RemoteCommandFailed(output=_tail(f"{current}: {exc}")) from exc
 
     def _sha256(self, path: str, timeout: float) -> str:
-        result = self.run(["sha256sum", "--", path], timeout=timeout)
-        found = SHA256SUM_LINE.match(result.stdout) if result.ok else None
-        if found is None:
-            raise RemoteCommandFailed(output=_tail(result.stderr or result.stdout))
-        return found.group(1)
+        return _digest_in(self.run(["sha256sum", "--", path], timeout=timeout))
 
 
-def _backup_pattern(prefix: str) -> re.Pattern[str]:
-    return re.compile(re.escape(prefix) + r"-\d{8}-\d{6}Z(?:-\d+)?\.dbs")
+def _digest_in(result: RemoteResult) -> str:
+    found = SHA256SUM_LINE.match(result.stdout) if result.ok else None
+    if found is None:
+        raise RemoteCommandFailed(output=_tail(result.stderr or result.stdout))
+    return found.group(1)
 
 
-def _require_backup(local_path: str, passphrase: str) -> None:
-    structure = validate_backup(Path(local_path).read_bytes())
-    if not structure.ok:
-        Path(local_path).unlink(missing_ok=True)
-        raise BackupInvalid(output=_tail(structure.summary(), passphrase))
+def _json_of(text: str) -> object:
+    try:
+        return json.loads(text.strip() or "null")
+    except ValueError:
+        return None
+
+
+def _is_listed(row: object) -> bool:
+    return (
+        isinstance(row, list)
+        and len(row) == 3
+        and isinstance(row[0], str)
+        and "/" not in row[0]
+        and all(isinstance(value, int) and not isinstance(value, bool) for value in row[1:])
+    )
+
+
+def _stream_summary(stderr: str, prefix: str) -> dict | None:
+    lines = [line for line in stderr.splitlines() if line.strip()]
+    summary = _json_of(lines[-1]) if lines else None
+    if not isinstance(summary, dict):
+        return None
+    name, size, digest = summary.get("name"), summary.get("size"), summary.get("sha256")
+    if not isinstance(name, str) or "/" in name or not is_backup_name(name, prefix):
+        return None
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+        return None
+    if not isinstance(digest, str) or not SHA256_HEX.fullmatch(digest):
+        return None
+    return summary
 
 
 def _restore_report(
@@ -1023,8 +1176,10 @@ def connect(credentials: Credentials) -> Iterator[RemoteHost]:
             use_agent=False,
             auto_add_host_key=False,
             connect_timeout=settings.SSH_CONNECT_TIMEOUT,
+            keepalive_interval=settings.SSH_KEEPALIVE_INTERVAL,
+            io_timeout=settings.SSH_IO_TIMEOUT,
         )
-        session = SSHSession(target).__enter__()
+        session = SSHSession(target, on_activity=credentials.on_activity).__enter__()
     except HostKeyError as exc:
         raise HostKeyChanged() from exc
     except ConfigurationError as exc:
@@ -1032,24 +1187,40 @@ def connect(credentials: Credentials) -> Iterator[RemoteHost]:
     except DBSError as exc:
         raise SSHUnreachable() from exc
     try:
-        yield RemoteHost(session)
+        yield RemoteHost(
+            session,
+            timeout_on_host=credentials.timeout_on_host,
+            timeout_in_container=credentials.timeout_in_container,
+        )
+    except RemoteCommandFailed as exc:
+        if type(exc) is not RemoteCommandFailed or session.is_alive():
+            raise
+        raise ServerConnectionLost(
+            output=exc.output, settles_at=exc.settles_at
+        ) from exc
     finally:
         session.close()
 
 
-def _sed_literal(text: str) -> str:
-    return re.sub(r"([\\.\[\]*^$|])", r"\\\1", text)
+def bounded(argv: Sequence[str], seconds: float) -> list[str]:
+    return [
+        TIMEOUT,
+        "-k",
+        str(settings.REMOTE_KILL_AFTER),
+        str(math.ceil(seconds)),
+        *argv,
+    ]
 
 
-def _transforms(relocate: Mapping[str, str]) -> list[str]:
-    rules = []
-    for old, new in relocate.items():
-        old_member = posixpath.normpath(old).strip("/")
-        new_member = posixpath.normpath(new).strip("/")
-        if not old_member or not new_member or old_member == new_member:
-            continue
-        replacement = (
-            new_member.replace("\\", "\\\\").replace("|", "\\|").replace("&", "\\&")
-        )
-        rules.append(f"--transform=s|^{_sed_literal(old_member)}/|{replacement}/|")
-    return rules
+def _waited(seconds: float, limited: bool) -> float:
+    if not limited:
+        return seconds
+    return seconds + settings.REMOTE_KILL_AFTER + DEADLINE_MARGIN
+
+
+def _interrupted(exc: BaseException, settles_at: datetime) -> RemoteCommandFailed:
+    if isinstance(exc, ConnectionLost):
+        return ServerConnectionLost(settles_at=settles_at)
+    if isinstance(exc, RemoteTimeout):
+        return RemoteCommandTimedOut(settles_at=settles_at)
+    return RemoteCommandFailed(settles_at=settles_at)

@@ -1,0 +1,21 @@
+<form class="dialog-form" novalidate (ngSubmit)="submit()">
+  @if (failure(); as failed) {
+    <app-notice severity="danger">{{ failed | errorText }}</app-notice>
+  }
+
+  <p class="text-secondary">
+    {{ 'accounts.roleForm.body' | t: { name: name } }}
+  </p>
+
+  <app-role-choice [role]="role()" (roleChange)="role.set($event)" />
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+      @if (busy()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (busy() ? 'accounts.roleForm.working' : 'accounts.roleForm.submit') | t }}
+    </button>
+  </div>
+</form>

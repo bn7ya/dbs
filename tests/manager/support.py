@@ -1,6 +1,16 @@
+import pytest
+from django.db import connection
+
 from dbs.models import AuditEvent
 
 PASSWORD = "correct-horse-battery-staple"
+
+needs_partial_unique_constraints = pytest.mark.xfail(
+    not connection.features.supports_partial_indexes,
+    reason="This database ignores conditional unique constraints, so only the service's "
+    "own name check guards against a duplicate name.",
+    strict=True,
+)
 
 
 def logged(action=None):
@@ -45,3 +55,12 @@ class Logged:
 
 def logged_entries(action=None):
     return [Logged(event) for event in logged(action)]
+
+
+def downloaded(api, backup_id):
+    link = api.post(
+        f"/api/backups/{backup_id}/download/",
+        {"account_password": PASSWORD},
+        format="json",
+    )
+    return api.get(link.json()["url"])

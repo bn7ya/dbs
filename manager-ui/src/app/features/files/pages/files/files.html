@@ -15,6 +15,7 @@
             type="button"
             [disabled]="current() === null || uploading()"
             [attr.aria-busy]="uploading()"
+            *appCan="'files.change'"
             (click)="picker.click()"
           >
             @if (uploading()) {
@@ -22,7 +23,7 @@
             }
             {{ 'files.upload.action' | t }}
           </button>
-          <button matButton="outlined" type="button" [disabled]="current() === null" (click)="newFolder()">
+          <button *appCan="'files.change'" matButton="outlined" type="button" [disabled]="current() === null" (click)="newFolder()">
             {{ 'files.newFolder.action' | t }}
           </button>
         </div>
@@ -157,14 +158,20 @@
                 <td mat-cell *matCellDef="let row">
                   <div class="files__actions">
                     @if (row.kind === 'file') {
-                      <a
+                      <button
                         matButton
-                        [href]="downloadUrl(row)"
-                        [attr.download]="row.name"
+                        *appCan="'files.download'"
+                        type="button"
+                        [disabled]="isPreparing(row)"
+                        [attr.aria-busy]="isPreparing(row)"
                         [attr.aria-label]="'files.download.label' | t: { name: row.name }"
+                        (click)="download(row)"
                       >
-                        {{ 'files.download.action' | t }}
-                      </a>
+                        @if (isPreparing(row)) {
+                          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                        }
+                        {{ (isPreparing(row) ? 'files.download.working' : 'files.download.action') | t }}
+                      </button>
                     }
                     <button
                       matButton
@@ -173,6 +180,7 @@
                       [disabled]="isDeleting(row)"
                       [attr.aria-busy]="isDeleting(row)"
                       [attr.aria-label]="'files.delete.label' | t: { name: row.name }"
+                      *appCan="'files.change'"
                       (click)="remove(row)"
                     >
                       @if (isDeleting(row)) {

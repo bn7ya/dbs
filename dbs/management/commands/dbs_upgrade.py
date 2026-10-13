@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import shlex
 import subprocess
-import sys
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from dbs.container.format import FORMAT_VERSION
+from dbs import extras
+from dbs.container import FORMAT_VERSION
 from dbs.upgrade import (
     ACTION,
     FIXED,
@@ -14,12 +15,19 @@ from dbs.upgrade import (
     WARN,
     abandonment_phrase,
     confirm_abandonment,
+    confirm_install,
     convert_backup,
+    existing_conversion,
     installed_version,
     is_editable_install,
     is_newer,
+    is_system_interpreter,
+    is_version,
     latest_release,
+    pinned_install_command,
     read_backup_states,
+    release_exists,
+    requirement_files,
     run_steps,
 )
 
@@ -39,7 +47,21 @@ class Command(BaseCommand):
             "--self",
             action="store_true",
             dest="self_update",
-            help="Install a newer django-dbs from PyPI if one exists.",
+            help="Install one exact django-dbs release into this environment: the newest "
+            "on PyPI, or the one --to names. Shows the pinned pip command and asks first.",
+        )
+        parser.add_argument(
+            "--to",
+            default=None,
+            metavar="VERSION",
+            dest="target_version",
+            help="The django-dbs version --self installs, instead of the newest release.",
+        )
+        parser.add_argument(
+            "--system-python",
+            action="store_true",
+            dest="system_python",
+            help="Let --self change an interpreter outside a virtual environment.",
         )
         parser.add_argument(
             "--backups",
@@ -50,7 +72,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--yes",
             action="store_true",
-            help="Do not pause before applying a fix.",
+            help="Run the pip command --self shows without asking.",
         )
         parser.add_argument(
             "--offline",
@@ -60,6 +82,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         check_only = options["check"]
+        if options.get("target_version") and not options["self_update"]:
+            raise CommandError("--to names the version --self installs; add --self.")
         self.stdout.write(self.style.MIGRATE_HEADING(f"DBS {installed_version()}"))
 
         report = run_steps(apply_fixes=not check_only)
@@ -108,51 +132,89 @@ class Command(BaseCommand):
         if finding.remedy:
             self.stdout.write(f"         {' ' * 18} {finding.remedy}")
 
+    def _line(self, mark, message):
+        style = {
+            "ok": self.style.SUCCESS,
+            "done": self.style.SUCCESS,
+            "warn": self.style.WARNING,
+        }[mark]
+        self.stdout.write(f"{style('[' + mark + ']'):<8} {'release':<18} {message}")
+
+    def _detail(self, message):
+        self.stdout.write(f"         {' ' * 18} {message}")
+
     def _release(self, options, check_only):
+        if options["self_update"] and not check_only:
+            self._self_update(options)
+            return
         if options["offline"]:
             return
         current = installed_version()
         latest = latest_release()
         if latest is None:
-            self.stdout.write(
-                f"{self.style.WARNING('[warn]'):<8} {'release':<18} "
-                "could not reach PyPI to check for a newer version"
-            )
+            self._line("warn", "could not reach PyPI to check for a newer version")
             return
         if not is_newer(latest, current):
-            self.stdout.write(
-                f"{self.style.SUCCESS('[ok]'):<8} {'release':<18} "
-                f"{current} is the latest release"
-            )
+            self._line("ok", f"{current} is the latest release")
             return
-
-        self.stdout.write(
-            f"{self.style.WARNING('[warn]'):<8} {'release':<18} "
-            f"{latest} is available; you have {current}"
+        self._line("warn", f"{latest} is available; you have {current}")
+        self._detail(
+            f"pin django-dbs=={latest} in your requirements or lock file and reinstall"
+            "   (or --self)"
         )
-        if not options["self_update"] or check_only:
-            self.stdout.write(
-                f"         {' ' * 18} pip install --upgrade django-dbs   (or --self)"
+
+    def _target_version(self, options):
+        requested = options.get("target_version")
+        if requested:
+            if not is_version(requested):
+                raise CommandError(f"{requested!r} is not a django-dbs version number.")
+            if not options["offline"] and release_exists(requested) is False:
+                raise CommandError(f"django-dbs {requested} is not on PyPI.")
+            return requested
+        if options["offline"]:
+            raise CommandError("--self --offline needs the version to install: add --to VERSION.")
+        latest = latest_release()
+        if latest is None or not is_version(latest):
+            raise CommandError(
+                "Could not reach PyPI to find the newest release; name one with --to VERSION."
             )
+        return latest
+
+    def _self_update(self, options):
+        current = installed_version()
+        target = self._target_version(options)
+        if target == current:
+            self._line("ok", f"django-dbs {current} is already installed")
             return
         if is_editable_install():
-            self.stdout.write(
-                f"         {' ' * 18} refusing --self on a source checkout; "
-                "update it with git"
-            )
+            self._line("warn", f"django-dbs {target} is available; you have {current}")
+            self._detail("refusing --self on a source checkout; update it with git")
             return
-        self.stdout.write(f"         {' ' * 18} installing django-dbs {latest}")
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "django-dbs"],
-            capture_output=True,
-            text=True,
+        if is_system_interpreter() and not options["system_python"]:
+            raise CommandError(
+                "--self will not change an interpreter outside a virtual environment, "
+                "whose packages the operating system or other programs may share. Update "
+                "your project's requirements and reinstall, or add --system-python if this "
+                "interpreter is yours to change."
+            )
+        command = pinned_install_command(target, extras.installed())
+        self._line("warn", f"django-dbs {target} replaces {current} with:")
+        self._detail(shlex.join(command))
+        files = [path.name for path in requirement_files(Path.cwd())]
+        where = " and ".join(files) if files else "your project's requirements or lock file"
+        self._detail(
+            f"Pin django-dbs=={target} in {where} too, so every deploy installs the "
+            "version you tested here."
         )
+        if not options["yes"] and not confirm_install():
+            raise CommandError(
+                "Nothing was installed. Answer the question at a terminal, or add --yes "
+                "to run the command above."
+            )
+        result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode != 0:
             raise CommandError(f"pip failed: {result.stderr.strip().splitlines()[-1:]}")
-        self.stdout.write(
-            f"         {' ' * 18} "
-            + self.style.SUCCESS("installed; re-run this command to finish the upgrade")
-        )
+        self._line("done", f"installed django-dbs {target}; re-run this command to finish")
 
     def _backups(self, directory, check_only):
         if not directory.is_dir():
@@ -167,11 +229,21 @@ class Command(BaseCommand):
 
         stale = [s for s in states if not s.current and not s.unreadable]
         broken = [s for s in states if s.unreadable]
+        for state in stale:
+            state.converted_to = existing_conversion(state.path)
+            state.converted_earlier = state.converted_to is not None
+            if state.converted_earlier:
+                self.stdout.write(
+                    f"{self.style.SUCCESS('[ok]'):<8} {'backups':<18} "
+                    f"{state.path.name} was converted earlier to {state.converted_to.name}"
+                )
+        stale = [s for s in stale if not s.converted_earlier]
 
         if not stale and not broken:
             self.stdout.write(
                 f"{self.style.SUCCESS('[ok]'):<8} {'backups':<18} "
-                f"{len(states)} backup(s), all at format version {FORMAT_VERSION}"
+                f"{len(states)} backup(s), all at format version {FORMAT_VERSION} "
+                "or converted to it"
             )
             return []
 

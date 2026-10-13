@@ -1,5 +1,5 @@
 import type { Page } from '@core/http/api.types';
-import type { Server, ServerCreate, ServerSummary } from '../data/servers.types';
+import type { HostKeyConfirmation, Server, ServerCreate, ServerSummary } from '../data/servers.types';
 
 export const SUMMARY: ServerSummary = {
   id: '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001',
@@ -9,6 +9,9 @@ export const SUMMARY: ServerSummary = {
   username: 'deploy',
   last_check_status: 'ok',
   last_checked_at: '2026-09-30T12:00:00Z',
+  connection_state: 'online',
+  last_seen_at: '2026-09-30T12:00:00Z',
+  last_connection_error: '',
 };
 
 export const SERVER: Server = {
@@ -31,6 +34,8 @@ export const SERVER: Server = {
   env_path: '',
   last_check_error: '',
   last_check_report: { system: 'Linux', dbs_version: '0.4.0', backup_command: true },
+  timeout_on_host: true,
+  timeout_in_container: null,
   created_at: '2026-09-01T00:00:00Z',
   updated_at: '2026-09-30T12:00:00Z',
 };
@@ -53,6 +58,17 @@ export const CREATE: ServerCreate = {
   remote_backup_dir: '/var/backups/dbs',
   file_roots: [],
   env_path: '',
+};
+
+export const HOST_KEY_CONFIRMATION: HostKeyConfirmation = {
+  id: '9f3a1c2e',
+  host: '10.0.0.5',
+  port: 2222,
+  key_type: 'ssh-ed25519',
+  fingerprint: 'SHA256:offered',
+  status: 'pending',
+  requested_at: '2026-09-30T12:00:00Z',
+  expires_at: '2026-09-30T12:10:00Z',
 };
 
 export function pageOf<T>(results: readonly T[], count = results.length): Page<T> {

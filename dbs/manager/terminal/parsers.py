@@ -7,6 +7,8 @@ RESTORE_MODES = ("merge", "replace")
 PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
 ACTIVITY_LIMIT = 20
+KEEP_CHOICES = range(1, 6)
+KEEP_REMOTE_CHOICES = range(0, 6)
 
 Location = Callable[[argparse.ArgumentParser], None]
 
@@ -186,12 +188,17 @@ def servers(commands, location: Location) -> None:
     edit.add_argument(
         "--backup-passphrase",
         action="store_true",
-        help="Ask for the passphrase its backups use.",
+        help="Ask for the passphrase its backups use. Never change it once there are "
+        "backups: they would no longer open.",
     )
     _server_settings(edit)
 
     remove = _verb(
-        verbs, "remove", "Remove a server.", "terminal.servers:remove", location
+        verbs,
+        "remove",
+        "Remove a server. It asks for its name and your password.",
+        "terminal.servers:remove",
+        location,
     )
     remove.add_argument("server", help="The server's name or id.")
     _yes(remove)
@@ -249,10 +256,23 @@ def servers(commands, location: Location) -> None:
     repin.add_argument("--host-key", help="The host key to pin.")
     _yes(repin)
 
+    confirm_key = _verb(
+        verbs,
+        "confirm-host-key",
+        "Confirm or reject a host key Claude read with fingerprint_host. It shows the "
+        "fingerprint and asks; only a confirmed key can be pinned by Claude.",
+        "terminal.servers:confirm_host_key",
+        location,
+    )
+    confirm_key.add_argument(
+        "confirmation", help="The confirmation id Claude was given."
+    )
+
     passphrase = _verb(
         verbs,
         "passphrase",
-        "Show the passphrase a server's backups use.",
+        "Show the passphrase a server's backups use. Never change it: older backups "
+        "would no longer open.",
         "terminal.servers:passphrase",
         location,
     )
@@ -261,25 +281,13 @@ def servers(commands, location: Location) -> None:
     capture = _verb(
         verbs,
         "capture-passphrase",
-        "Read the backup passphrase from the server itself.",
+        "Read the backup passphrase from the server itself. Do it only while adding "
+        "a server, before its first backup: a server's backup passphrase must never "
+        "change, because older backups would no longer open.",
         "terminal.servers:capture_passphrase",
         location,
     )
     capture.add_argument("server", help="The server's name or id.")
-
-    profiles = _verb(
-        verbs,
-        "import-profiles",
-        "Add the servers of a dbs-client config file.",
-        "terminal.servers:import_profiles",
-        location,
-    )
-    profiles.add_argument(
-        "file",
-        nargs="?",
-        help="The dbs-client.toml. Defaults to where dbs-client looks.",
-    )
-    _yes(profiles)
 
 
 def backups(commands, location: Location) -> None:
@@ -329,7 +337,8 @@ def backups(commands, location: Location) -> None:
     download = _verb(
         verbs,
         "download",
-        "Save a backup to this computer.",
+        "Save a backup to this computer, readable by you alone. A backup the "
+        "manager keeps encrypted asks for your password.",
         "terminal.backups:download",
         location,
     )
@@ -347,7 +356,11 @@ def backups(commands, location: Location) -> None:
     upload.add_argument("file", help="The file to keep.")
 
     delete = _verb(
-        verbs, "delete", "Delete a backup.", "terminal.backups:delete", location
+        verbs,
+        "delete",
+        "Delete a backup. It asks for your password.",
+        "terminal.backups:delete",
+        location,
     )
     delete.add_argument("backup", help="The backup's id.")
 
@@ -378,9 +391,20 @@ def _plan_fields(parser) -> None:
         help="Run every this many minutes.",
     )
     parser.add_argument("--manual", action="store_true", help="Run only when asked.")
-    parser.add_argument("--keep", type=int, help="How many to keep here.")
     parser.add_argument(
-        "--keep-remote", type=int, help="How many to keep on the server."
+        "--keep",
+        type=int,
+        choices=KEEP_CHOICES,
+        metavar="N",
+        help="How many to keep here, 1 to 5. Keeping fewer asks for your password.",
+    )
+    parser.add_argument(
+        "--keep-remote",
+        type=int,
+        choices=KEEP_REMOTE_CHOICES,
+        metavar="N",
+        help="How many to keep on the server, 0 to 5. Keeping fewer asks for your "
+        "password.",
     )
 
 
@@ -496,7 +520,11 @@ def files(commands, location: Location) -> None:
     )
 
     download = _verb(
-        verbs, "download", "Save a file here.", "terminal.files:download", location
+        verbs,
+        "download",
+        "Save a file here, readable by you alone. A .env file asks for your password.",
+        "terminal.files:download",
+        location,
     )
     download.add_argument("server", help="The server's name or id.")
     download.add_argument("path", help="The file on the server.")
@@ -527,27 +555,40 @@ def redeploy(commands, location: Location) -> None:
     start = _verb(
         verbs,
         "start",
-        "Restore a server's backup onto another server. Rehearses unless --real.",
+        "Move a project onto a new server with the same environment: back up the "
+        "old one now, record the new one, push the .env, migrate, restore and "
+        "check. Rehearses unless --real.",
         "terminal.redeploy:start",
         location,
     )
     start.add_argument(
-        "--from", dest="source", required=True, help="The source server."
+        "--from", dest="source", required=True, help="The old server."
     )
-    start.add_argument("--to", dest="target", required=True, help="The target server.")
-    start.add_argument("--backup", required=True, help="The source backup's id.")
-    start.add_argument("--env", dest="env_version", help="A .env version to write.")
+    start.add_argument("--to", dest="target", required=True, help="The new server.")
     start.add_argument(
-        "--archive",
-        dest="archives",
-        action="append",
-        default=[],
-        metavar="ID",
-        help="An archive to unpack. Repeat for more.",
+        "--backup",
+        help="The old server's backup to restore when it cannot be reached. "
+        "Defaults to its newest.",
     )
-    start.add_argument("--migrate", action="store_true", help="Run migrate first.")
-    start.add_argument("--flush", action="store_true", help="Empty the database first.")
-    start.add_argument("--real", action="store_true", help="Redeploy for real.")
+    start.add_argument("--env", dest="env_version", help="A .env version to push.")
     start.add_argument(
-        "--confirm-name", help="The target server's name, instead of typing it."
+        "--flush", action="store_true", help="Replace the new server's data."
+    )
+    start.add_argument("--real", action="store_true", help="Move for real.")
+    start.add_argument(
+        "--confirm-name", help="The new server's name, instead of typing it."
+    )
+
+    revert = _verb(
+        verbs,
+        "revert",
+        "Put the new server back as it was before a move that stopped: push its "
+        "recorded .env back and restore its safety backup. Rehearses unless --real.",
+        "terminal.redeploy:revert",
+        location,
+    )
+    revert.add_argument("move", metavar="MOVE_ID", help="The move's activity number.")
+    revert.add_argument("--real", action="store_true", help="Revert for real.")
+    revert.add_argument(
+        "--confirm-name", help="The new server's name, instead of typing it."
     )

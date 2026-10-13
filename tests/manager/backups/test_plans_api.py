@@ -11,6 +11,7 @@ from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.backups.repositories import BackupPlanRepository
 from dbs.manager.servers.services import ServerService
 from tests.manager.servers.support import PASSWORD
+from tests.manager.support import needs_partial_unique_constraints
 
 PLANS = "/api/backups/plans/"
 
@@ -122,7 +123,7 @@ def test_a_new_plan_has_the_documented_shape_and_runs_one_interval_from_now(
     api, admin, server
 ):
     response = api.post(
-        PLANS, body(server, interval_minutes=360, keep=14, keep_remote=0, enabled=True)
+        PLANS, body(server, interval_minutes=360, keep=4, keep_remote=0, enabled=True)
     )
 
     assert response.status_code == 201
@@ -134,7 +135,7 @@ def test_a_new_plan_has_the_documented_shape_and_runs_one_interval_from_now(
         "dbs",
         360,
     )
-    assert (plan["keep"], plan["keep_remote"], plan["enabled"]) == (14, 0, True)
+    assert (plan["keep"], plan["keep_remote"], plan["enabled"]) == (4, 0, True)
     assert about(plan["next_run_at"], timezone.now() + timedelta(hours=6))
     assert (plan["last_run_at"], plan["last_status"], plan["last_error_code"]) == (
         None,
@@ -156,7 +157,7 @@ def test_left_out_fields_take_the_models_defaults(api, server):
     plan = api.post(PLANS, body(server)).json()
 
     assert (plan["interval_minutes"], plan["next_run_at"]) == (None, None)
-    assert (plan["keep"], plan["keep_remote"], plan["enabled"]) == (7, 1, True)
+    assert (plan["keep"], plan["keep_remote"], plan["enabled"]) == (5, 0, True)
 
 
 @pytest.mark.django_db
@@ -174,9 +175,9 @@ def test_a_disabled_plan_has_no_next_run(api, server):
         ({"interval_minutes": 0}, {"interval_minutes": ["invalid_interval"]}),
         ({"interval_minutes": -60}, {"interval_minutes": ["invalid_interval"]}),
         ({"keep": 0}, {"keep": ["min_value"]}),
-        ({"keep": 366}, {"keep": ["max_value"]}),
+        ({"keep": 6}, {"keep": ["max_value"]}),
         ({"keep_remote": -1}, {"keep_remote": ["min_value"]}),
-        ({"keep_remote": 366}, {"keep_remote": ["max_value"]}),
+        ({"keep_remote": 6}, {"keep_remote": ["max_value"]}),
         ({"kind": "zip"}, {"kind": ["invalid_choice"]}),
         ({"name": ""}, {"name": ["blank"]}),
         ({"name": "x" * 101}, {"name": ["max_length"]}),
@@ -222,6 +223,7 @@ def test_a_name_is_unique_among_a_servers_plans_that_are_not_deleted(
 
 
 @pytest.mark.django_db
+@needs_partial_unique_constraints
 def test_a_name_taken_between_the_check_and_the_write_is_still_name_taken(
     api, monkeypatch, make_plan
 ):
@@ -230,6 +232,11 @@ def test_a_name_taken_between_the_check_and_the_write_is_still_name_taken(
         BackupPlanRepository,
         "name_in_use",
         lambda self, server_id, name, excluding=None: False,
+    )
+    monkeypatch.setattr(
+        BackupPlanRepository,
+        "names_for_server",
+        lambda self, server_id, excluding=None: [],
     )
 
     response = api.post(PLANS, body(taken.server))
@@ -255,7 +262,7 @@ def test_both_service_errors_are_reported_together(api, make_plan):
 
 @pytest.mark.django_db
 def test_a_plan_for_an_unknown_or_deleted_server_is_not_found(api, admin, server):
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     for server_id in (server.pk, uuid4()):
         response = api.post(
@@ -299,7 +306,7 @@ def test_a_change_touches_only_what_was_sent_and_logs_what_changed(
         url(plan),
         {
             "name": "nightly",
-            "keep": 7,
+            "keep": 5,
             "keep_remote": 3,
             "server": str(other_server.pk),
         },
@@ -309,7 +316,7 @@ def test_a_change_touches_only_what_was_sent_and_logs_what_changed(
     changed = response.json()
     assert (changed["name"], changed["keep"], changed["keep_remote"]) == (
         "nightly",
-        7,
+        5,
         3,
     )
     assert changed["server"] == str(server.pk)
@@ -506,7 +513,9 @@ def test_an_archive_plans_paths_change_and_are_logged(api, admin, server, make_p
         {"paths": ["/etc/", "/srv/app/media"], "account_password": PASSWORD},
         format="json",
     )
-    kept = api.patch(url(plan), {"keep": 3}, format="json")
+    kept = api.patch(
+        url(plan), {"keep": 3, "account_password": PASSWORD}, format="json"
+    )
 
     assert response.status_code == 200
     assert response.json()["paths"] == ["/etc", "/srv/app/media"]
@@ -778,8 +787,8 @@ def test_the_rest_of_a_plan_that_reads_the_server_changes_without_one(api, make_
             "name": "nightly",
             "paths": ["/srv/app"],
             "interval_minutes": 60,
-            "keep": 3,
-            "keep_remote": 0,
+            "keep": 5,
+            "keep_remote": 2,
             "enabled": False,
         },
         format="json",

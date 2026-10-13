@@ -5,9 +5,13 @@ from dataclasses import dataclass, field
 
 from reedsolo import RSCodec, ReedSolomonError
 
+from . import rs
+
 DEFAULT_BLOCK_SIZE = 65536
 
 DEFAULT_NSYM = 16
+
+ENCODE_GROUP_BLOCKS = 16
 
 
 def _hash(data: bytes) -> str:
@@ -107,20 +111,25 @@ def encode_copy(
     block_size: int = DEFAULT_BLOCK_SIZE,
     nsym: int = DEFAULT_NSYM,
 ) -> tuple[bytes, BlockPlan]:
-    rsc = RSCodec(nsym)
+    rs.check_nsym(nsym)
     plan = BlockPlan(block_size=block_size, nsym=nsym, ciphertext_len=len(ciphertext))
     parts: list[bytes] = []
-    for offset in range(0, len(ciphertext), block_size):
-        block = ciphertext[offset : offset + block_size]
-        encoded = bytes(rsc.encode(block))
-        parts.append(encoded)
-        plan.enc_lens.append(len(encoded))
-        plan.enc_hashes.append(_hash(encoded))
-        plan.data_hashes.append(_hash(block))
+    group_span = block_size * ENCODE_GROUP_BLOCKS
+    for group_start in range(0, len(ciphertext), group_span):
+        group_end = min(group_start + group_span, len(ciphertext))
+        group = [
+            ciphertext[offset : offset + block_size]
+            for offset in range(group_start, group_end, block_size)
+        ]
+        for block, encoded in zip(group, rs.encode_many(group, nsym)):
+            parts.append(encoded)
+            plan.enc_lens.append(len(encoded))
+            plan.enc_hashes.append(_hash(encoded))
+            plan.data_hashes.append(_hash(block))
     return b"".join(parts), plan
 
 
-def _decode_block(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:
+def _decode_with_reedsolo(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:
     try:
         decoded = rsc.decode(encoded)
     except ReedSolomonError:
@@ -170,6 +179,16 @@ def _rebuild_from_both(rsc: RSCodec, encoded: list[bytes], data_hash: str) -> by
         pieces.append(piece)
     data = b"".join(pieces)
     return data if _hash(data) == data_hash else None
+
+
+def _decode_block(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:
+    if rsc.nsize != rs.CODEWORD_SIZE or not rs.MIN_NSYM <= rsc.nsym <= rs.MAX_NSYM:
+        return _decode_with_reedsolo(rsc, encoded, data_hash)
+    stripped = rs.strip_parity(encoded, rsc.nsym)
+    if stripped is not None and _hash(stripped) == data_hash:
+        return stripped
+    data = rs.decode(encoded, rsc.nsym)
+    return data if data is not None and _hash(data) == data_hash else None
 
 
 def repair_copies(

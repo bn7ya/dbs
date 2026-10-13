@@ -23,6 +23,7 @@ class DashboardSerializer(serializers.BaseSerializer):
                 {
                     **server,
                     "checked_at": moment(server["checked_at"]),
+                    "last_seen_at": moment(server["last_seen_at"]),
                     "next_plan_run": moment(server["next_plan_run"]),
                     "last_backup": last,
                 }
@@ -37,4 +38,5 @@ class DashboardSerializer(serializers.BaseSerializer):
             "storage_bytes": instance["storage_bytes"],
             "last_export_at": moment(instance["last_export_at"]),
             "recent_failures": failures,
+            "key_store": instance["key_store"],
         }

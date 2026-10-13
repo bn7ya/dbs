@@ -19,6 +19,7 @@ SHAPE = {
     "actor",
     "server",
     "server_name",
+    "connection",
     "created_at",
     "started_at",
     "finished_at",

@@ -16,11 +16,16 @@ export interface BackupFile {
   readonly sha256: string;
   readonly validation: BackupValidation;
   readonly validated_at: string | null;
+  readonly failure: string;
   readonly remote_path: string;
   readonly taken_by: string | null;
   readonly plan: string | null;
   readonly plan_name: string | null;
   readonly created_at: string;
+}
+
+export interface DownloadLink {
+  readonly url: string;
 }
 
 export type UploadEvent =

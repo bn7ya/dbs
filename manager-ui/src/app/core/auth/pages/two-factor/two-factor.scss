@@ -1,0 +1,42 @@
+@use "layout" as *;
+
+.two-factor {
+  display: grid;
+  place-items: center;
+  min-block-size: 100dvh;
+  padding-block: var(--app-space-7);
+  padding-inline: var(--app-space-4);
+
+  @include from($screen-md) {
+    padding-inline: var(--app-space-6);
+  }
+}
+
+.two-factor__card {
+  inline-size: 100%;
+  max-inline-size: $card-max;
+}
+
+.two-factor__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+}
+
+.two-factor__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.two-factor__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.two-factor__other {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}

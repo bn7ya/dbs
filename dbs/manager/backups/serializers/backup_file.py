@@ -7,6 +7,7 @@ from dbs.manager.backups.restore_modes import RestoreMode
 
 ACCOUNT_PASSWORD_MAX_LENGTH = 128
 SERVER_NAME_MAX_LENGTH = 200
+TICKET_MAX_LENGTH = 64
 
 
 class BackupFileSerializer(serializers.ModelSerializer):
@@ -43,6 +44,7 @@ class BackupFileSerializer(serializers.ModelSerializer):
             "sha256",
             "validation",
             "validated_at",
+            "failure",
             "remote_path",
             "taken_by",
             "plan",
@@ -83,3 +85,23 @@ class RestoreSerializer(serializers.Serializer):
         max_length=SERVER_NAME_MAX_LENGTH,
     )
     target_server = serializers.UUIDField(required=False, allow_null=True)
+
+
+class AccountPasswordSerializer(serializers.Serializer):
+    account_password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+        max_length=ACCOUNT_PASSWORD_MAX_LENGTH,
+    )
+
+
+class DownloadQuerySerializer(serializers.Serializer):
+    ticket = serializers.CharField(
+        required=False, allow_blank=True, max_length=TICKET_MAX_LENGTH
+    )
+
+
+class DownloadLinkSerializer(serializers.Serializer):
+    url = serializers.CharField(read_only=True)

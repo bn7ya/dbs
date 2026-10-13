@@ -34,7 +34,7 @@ const FIELD_OF: Readonly<Record<keyof Draft, DraftField>> = {
   enabled: 'enabled',
 };
 
-const KEEP_MAX = 365;
+const KEEP_MAX = 5;
 const KEEP_MIN = 1;
 const KEEP_REMOTE_MIN = 0;
 
@@ -45,8 +45,8 @@ const NEW_PLAN: Draft = {
   pattern: '*',
   name: '',
   schedule: 'daily',
-  keep: 7,
-  keep_remote: 1,
+  keep: KEEP_MAX,
+  keep_remote: 0,
   enabled: true,
 };
 
@@ -139,10 +139,18 @@ export class PlanForm {
 
   private readonly passwordEdited = signal(false);
 
-  readonly needsPassword = computed(() => {
+  private readonly choosesWhatIsRead = computed(() => {
     const draft = this.draft();
     return draft.kind !== 'dbs' && (this.editing === null || readsElsewhere(draftOf(this.editing), draft));
   });
+
+  private readonly keepsFewer = computed(() => this.editing !== null && keepsFewer(draftOf(this.editing), this.draft()));
+
+  readonly needsPassword = computed(() => this.choosesWhatIsRead() || this.keepsFewer());
+
+  readonly passwordHint = computed(() =>
+    this.choosesWhatIsRead() ? 'backups.plans.form.passwordHint' : 'backups.plans.form.passwordHintFewer',
+  );
 
   private readonly passwordAsked = computed(() => (this.saveError()?.fields?.['account_password'] ?? []).length > 0);
 
@@ -332,6 +340,11 @@ function readsElsewhere(before: Draft, after: Draft): boolean {
   return (
     JSON.stringify(pathsOf(before)) !== JSON.stringify(pathsOf(after)) || patternOf(before) !== patternOf(after)
   );
+}
+
+function keepsFewer(before: Draft, after: Draft): boolean {
+  const fewer = (was: number | null, now: number | null) => was !== null && now !== null && now < was;
+  return fewer(before.keep, after.keep) || (after.kind !== 'collect' && fewer(before.keep_remote, after.keep_remote));
 }
 
 function patternOf(draft: Draft): string {

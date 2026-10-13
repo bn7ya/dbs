@@ -10,6 +10,7 @@ SUBCOMMANDS = {
     "schedule": ("dbs_schedule", "Run backups on a repeating interval."),
     "connection": ("dbs_connection", "Show what a DBS manager needs to reach this project."),
     "health": ("dbs_health", "Report the health of this project's backups."),
+    "audit": ("dbs_audit", "Verify that the audit trail was not changed."),
     "key": ("dbs_key", "Show the passphrase DBS derives from SECRET_KEY."),
     "security": ("dbs_security", "Inspect and unlock the admin session guard."),
     "ai": ("dbs_ai", "Install the DBS instructions for AI coding assistants."),
@@ -32,7 +33,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if self.alias_tip:
-            self.stdout.write(self.style.WARNING(self.alias_tip))
+            told = self.stderr if options.get("stream") else self.stdout
+            told.write(self.style.WARNING(self.alias_tip))
         name = options.get("subcommand")
         if not name:
             self.overview()

@@ -15,6 +15,7 @@
       "never": "No export yet. Keep a copy of the DBS data with this command:",
       "stale": "Last export: {age}. Keep a fresh copy of the DBS data with this command:"
     },
+    "keyInFile": "No system keychain works on this computer, so the key that seals the DBS data sits in a file in the same folder. Keep that folder readable by your account alone, and keep exports somewhere else.",
     "servers": {
       "title": "Servers",
       "check": "Check: {status}",

@@ -216,7 +216,7 @@ def test_a_server_that_does_not_answer_is_ssh_unreachable(api, server, network, 
 def test_an_unknown_or_deleted_server_is_not_found_and_not_recorded(
     admin, api, server, network, logged
 ):
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     for server_id in (uuid4(), server.pk):
         response = api.post(f"{LIST}pull/", {"server": server_id})

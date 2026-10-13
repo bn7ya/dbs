@@ -17,7 +17,7 @@ class DbsConfig(AppConfig):
 
         autodiscover_modules("dbs")
         install_hyphen_aliases()
-        from .security import signals  # noqa: F401
+        from .security import checks, signals  # noqa: F401
 
         request_started.connect(ensure_started, dispatch_uid="dbs.schedule_runner")
 

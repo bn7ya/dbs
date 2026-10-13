@@ -1,5 +1,6 @@
 """End-to-end backup/restore, corruption healing, and security checks."""
 
+import io
 import logging
 import os
 
@@ -8,7 +9,9 @@ from django.contrib.sessions.models import Session
 from django.core.files.base import ContentFile
 from django.db import connections
 
+from dbs.container import StreamReader, read_format_version
 from dbs.container.format import copy_offsets
+from dbs.container.stream import HEADER_SIZE, schedule
 from dbs.engine import backup as backup_engine
 from dbs.engine import restore as restore_engine
 from dbs.engine import create_backup, restore_backup, validate_backup
@@ -16,6 +19,7 @@ from dbs.exceptions import CorruptionError, InvalidPassphrase
 from dbs.introspect import DEFAULT_EXCLUDES, _excluded_labels, discover_models
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF
+from tests.format1 import as_format1
 from tests.testapp.models import Author, Book, Tag
 
 PASS = "test-pass-phrase"
@@ -51,7 +55,7 @@ def _wipe(book, sidecar):
 
 
 @pytest.mark.django_db
-def test_backup_restore_roundtrip(tmp_path, settings):
+def test_backup_restore_roundtrip(tmp_path, settings, committed):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     cover_name = book.cover.name
@@ -64,7 +68,8 @@ def test_backup_restore_roundtrip(tmp_path, settings):
     _wipe(book, sidecar)
     assert not Book.objects.exists()
 
-    out = restore_backup(container, PASS)
+    with committed():
+        out = restore_backup(container, PASS)
     assert out.records_loaded >= 4  # author + 2 tags + book
     assert out.files_written == 2   # cover + sidecar
 
@@ -77,33 +82,76 @@ def test_backup_restore_roundtrip(tmp_path, settings):
     assert sidecar.read_bytes() == SIDECAR_BYTES
 
 
+def _backup(form):
+    container = create_backup(PASS, kdf_params=FAST_KDF)
+    return as_format1(container, PASS) if form == 1 else container
+
+
+def _first_copies(container):
+    reader = StreamReader(io.BytesIO(container))
+    slot = reader.layout.slot_size
+    offsets = {}
+    for position, index, first in schedule(reader.blocks, reader.layout.interleave):
+        offsets.setdefault(index, []).append(HEADER_SIZE + position * slot)
+    return offsets, slot
+
+
+def _wipe_first_copy(container):
+    damaged = bytearray(container)
+    if read_format_version(container) == 1:
+        a_off, _b_off, copy_len = copy_offsets(container)
+        wipe = min(copy_len, 4000)
+        damaged[a_off : a_off + wipe] = b"\x00" * wipe
+        return bytes(damaged)
+    offsets, slot = _first_copies(container)
+    first, _second = offsets[0]
+    damaged[first : first + slot] = b"\x00" * slot
+    return bytes(damaged)
+
+
+def _cut_second_copy(container):
+    if read_format_version(container) == 1:
+        _a_off, b_off, _copy_len = copy_offsets(container)
+        return container[:b_off]
+    offsets, _slot = _first_copies(container)
+    return container[: min(second for _first, second in offsets.values())]
+
+
+def _destroy_both_copies(container):
+    damaged = bytearray(container)
+    if read_format_version(container) == 1:
+        a_off, b_off, copy_len = copy_offsets(container)
+        damaged[a_off : a_off + copy_len] = b"\x00" * copy_len
+        damaged[b_off : b_off + copy_len] = b"\x01" * copy_len
+        return bytes(damaged)
+    offsets, slot = _first_copies(container)
+    for start, fill in zip(offsets[0], (b"\x00", b"\x01")):
+        damaged[start : start + slot] = fill * slot
+    return bytes(damaged)
+
+
+@pytest.mark.parametrize("form", [2, 1])
 @pytest.mark.django_db
-def test_restore_heals_corruption_in_one_copy(tmp_path, settings):
+def test_restore_heals_corruption_in_one_copy(tmp_path, settings, committed, form):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
-    container = create_backup(PASS, kdf_params=FAST_KDF)
-
-    a_off, _b_off, copy_len = copy_offsets(container)
-    damaged = bytearray(container)
-    # Obliterate the start of copy A so Reed-Solomon alone can't save it; the
-    # engine must fall back to copy B.
-    wipe = min(copy_len, 4000)
-    damaged[a_off : a_off + wipe] = b"\x00" * wipe
+    container = _backup(form)
+    damaged = _wipe_first_copy(container)
 
     _wipe(book, sidecar)
-    out = restore_backup(bytes(damaged), PASS)
+    with committed():
+        out = restore_backup(damaged, PASS)
     assert out.healed
     assert Book.objects.filter(title="Resilient Data").exists()
     assert sidecar.read_bytes() == SIDECAR_BYTES
 
 
+@pytest.mark.parametrize("form", [2, 1])
 @pytest.mark.django_db
-def test_restore_survives_truncation_that_destroys_copy_b(tmp_path, settings):
+def test_restore_survives_truncation_that_destroys_copy_b(tmp_path, settings, committed, form):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
-    container = create_backup(PASS, kdf_params=FAST_KDF)
-    _a_off, b_off, _copy_len = copy_offsets(container)
-    truncated = container[:b_off]
+    truncated = _cut_second_copy(_backup(form))
 
     result = validate_backup(truncated)
     assert result.ok
@@ -111,26 +159,23 @@ def test_restore_survives_truncation_that_destroys_copy_b(tmp_path, settings):
     assert result.repair_report.healed
 
     _wipe(book, sidecar)
-    out = restore_backup(truncated, PASS)
+    with committed():
+        out = restore_backup(truncated, PASS)
     assert out.healed
     assert Book.objects.filter(title="Resilient Data").exists()
     assert sidecar.read_bytes() == SIDECAR_BYTES
 
 
+@pytest.mark.parametrize("form", [2, 1])
 @pytest.mark.django_db
-def test_unrecoverable_corruption_raises_and_loads_nothing(tmp_path):
+def test_unrecoverable_corruption_raises_and_loads_nothing(tmp_path, form):
     book, sidecar = _make_sample(tmp_path)
-    container = create_backup(PASS, kdf_params=FAST_KDF)
-    a_off, b_off, copy_len = copy_offsets(container)
-
-    damaged = bytearray(container)
-    damaged[a_off : a_off + copy_len] = b"\x00" * copy_len  # destroy copy A
-    damaged[b_off : b_off + copy_len] = b"\x01" * copy_len  # destroy copy B
+    damaged = _destroy_both_copies(_backup(form))
 
     _wipe(book, sidecar)
     with pytest.raises(CorruptionError):
-        restore_backup(bytes(damaged), PASS)
-    assert not Book.objects.exists()  # nothing partially restored
+        restore_backup(damaged, PASS)
+    assert not Book.objects.exists()
 
 
 @pytest.mark.django_db
@@ -148,15 +193,12 @@ def test_passphrase_never_appears_in_container(tmp_path):
     assert PASS.encode() not in container
 
 
+@pytest.mark.parametrize("form", [2, 1])
 @pytest.mark.django_db
-def test_validate_reports_corruption_without_passphrase(tmp_path):
+def test_validate_reports_corruption_without_passphrase(tmp_path, form):
     _make_sample(tmp_path)
-    container = create_backup(PASS, kdf_params=FAST_KDF)
-    a_off, b_off, copy_len = copy_offsets(container)
-    damaged = bytearray(container)
-    damaged[a_off : a_off + copy_len] = b"\x00" * copy_len
-    damaged[b_off : b_off + copy_len] = b"\x01" * copy_len
-    result = validate_backup(bytes(damaged))  # no passphrase needed
+    damaged = _destroy_both_copies(_backup(form))
+    result = validate_backup(damaged)
     assert not result.ok
 
 
@@ -325,20 +367,18 @@ def test_target_ahead_migration_state_warns(tmp_path, monkeypatch, caplog):
 
 
 @pytest.mark.django_db
-def test_backup_without_migration_state_restores_without_warning(tmp_path, settings, monkeypatch, caplog):
+def test_backup_without_migration_state_restores_without_warning(tmp_path, settings, caplog):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
-    container = create_backup(PASS, kdf_params=FAST_KDF)
+
+    def before_migrations_were_recorded(document, records, files):
+        document = {key: value for key, value in document.items() if key != "migrations"}
+        return document, records, files
+
+    container = as_format1(
+        create_backup(PASS, kdf_params=FAST_KDF), PASS, edit=before_migrations_were_recorded
+    )
     _wipe(book, sidecar)
-
-    real_read = restore_engine.read_payload
-
-    def read_pre_migration_metadata(data, passphrase):
-        result = real_read(data, passphrase)
-        result.document.pop("migrations", None)
-        return result
-
-    monkeypatch.setattr(restore_engine, "read_payload", read_pre_migration_metadata)
 
     with caplog.at_level(logging.WARNING, logger="dbs"):
         out = restore_backup(container, PASS)

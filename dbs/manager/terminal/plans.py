@@ -12,6 +12,7 @@ from dbs.manager.servers.services import ServerService
 from dbs.manager.adapters import jobs, references
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.adapters.forms import validated
+from dbs.manager.terminal.progress import reported
 from dbs.manager.terminal.session import TerminalSession
 
 LIST_COLUMNS = (
@@ -116,7 +117,9 @@ def run(session: TerminalSession) -> int:
     plan = service.get(_plan_id(session))
     if not session.out.as_json:
         print(f"Running {plan.name}...", flush=True)
-    entry = jobs.finished(session.user, service.run(plan.pk))
+    with reported(session):
+        job = service.run(plan.pk)
+    entry = jobs.finished(session.user, job)
     return session.outcome(entry, f"Ran the plan {plan.name}.")
 
 

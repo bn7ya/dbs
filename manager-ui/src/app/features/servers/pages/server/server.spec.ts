@@ -51,6 +51,9 @@ describe('ServerPage', () => {
     await TestBed.inject(ApplicationRef).whenStable();
     harness.detectChanges();
 
+    expect((harness.routeNativeElement as HTMLElement).querySelector('app-connection-dot')?.textContent).toContain(
+      'Online',
+    );
     const tabs = Array.from((harness.routeNativeElement as HTMLElement).querySelectorAll('nav a'));
     const base = `/servers/${SERVER.id}`;
     expect(tabs.map((tab) => tab.getAttribute('href'))).toEqual([

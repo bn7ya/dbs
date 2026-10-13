@@ -1,0 +1,19 @@
+<fieldset class="role-choice">
+  <legend class="text-label" [id]="legendId">{{ 'accounts.form.role' | t }}</legend>
+  <mat-radio-group
+    class="role-choice__options"
+    name="role"
+    [attr.aria-labelledby]="legendId"
+    [value]="role()"
+    (change)="choose($event.value)"
+  >
+    @for (each of roles; track each) {
+      <mat-radio-button [value]="each">
+        <span class="role-choice__label">
+          <strong>{{ 'roles.' + each | t }}</strong>
+          <span class="text-sm text-secondary">{{ 'accounts.roles.' + each | t }}</span>
+        </span>
+      </mat-radio-button>
+    }
+  </mat-radio-group>
+</fieldset>

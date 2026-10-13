@@ -3,9 +3,15 @@ from .browse import (
     BrowseQuerySerializer,
     DiscoverRequestSerializer,
 )
-from .host_key import FingerprintRequestSerializer, HostKeySerializer, RepinSerializer
+from .host_key import (
+    FingerprintRequestSerializer,
+    HostKeyConfirmationSerializer,
+    HostKeySerializer,
+    RepinSerializer,
+)
 from .passphrase import PassphraseSerializer, PasswordSerializer
 from .server import (
+    AccountPasswordSerializer,
     AddedServerSerializer,
     CheckedServerSerializer,
     ServerCreateSerializer,
@@ -15,12 +21,14 @@ from .server import (
 )
 
 __all__ = [
+    "AccountPasswordSerializer",
     "AddedServerSerializer",
     "CheckedServerSerializer",
     "BrowseListingSerializer",
     "BrowseQuerySerializer",
     "DiscoverRequestSerializer",
     "FingerprintRequestSerializer",
+    "HostKeyConfirmationSerializer",
     "HostKeySerializer",
     "PassphraseSerializer",
     "PasswordSerializer",

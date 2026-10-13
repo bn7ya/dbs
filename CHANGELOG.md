@@ -6,6 +6,284 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Backups now stream: a multi-threaded engine writes container format 2 with flat memory
+however large the project, and restores read it the same way. The server keeps its backups
+and the DBS manager pulls them, so the panel's SFTP targets and console are gone, and so is
+`dbs-client`. The server keeps at most five backups and never prunes the newest good one.
+`pip install django-dbs` is the backup library alone; the guard, the manager and the SSH API
+are extras. The manager gains roles, a master account, two-factor sign-in and a sealing key
+in the system keychain, moves a project with a fresh backup of the old server and can revert
+the move, and asks for a person before Claude pins a host key. A long list of restore and
+retention fixes closes ways a backup or a restore could lose data.
+
+### Added
+
+- **Container format 2 and a streaming engine.** `write_backup(output, passphrase, ...)`
+  streams a backup to a path that does not exist yet or to any binary file object and
+  returns a `BackupSummary` (size, SHA-256, records, files, skipped files, models and the
+  repair margins). Rows are read in batches from one snapshot in the calling thread while a
+  compression pool, an encoding thread and a writer thread work behind bounded queues; a
+  failure in any stage stops them all and never leaves a partial file. `workers` spreads
+  parity and encryption over more threads. `restore_backup` and `validate_backup` take
+  bytes, a path or a seekable file object, and read format 2 as a stream. `write_backup` and
+  `BackupSummary` are exported from `dbs`.
+- **`dbs backup --stream`** writes the backup to standard output and keeps the same bytes in
+  `DBS_BACKUP_DIR` (or `--output-dir`) under the usual name for `--prefix`, written through a
+  private partial file and linked into place. Messages go to standard error, whose last line
+  is a JSON summary `{name, size, sha256}`. When standard output breaks the backup still
+  finishes, the command exits 0 and the summary adds `kept_on_server: true`. The server keeps
+  at most five streamed backups per prefix, and partial files older than an hour are swept.
+- `dbs backup --allow-missing-files` and `allow_missing_files=True` back up without the
+  source files that are missing or unreadable, list them in the backup and append them to
+  `skipped_files`.
+- `DBS_RESTORE_PATH_MAP` maps old absolute roots to new ones, for a restore onto a server
+  whose paths differ; `FILE_PATH` rows are pointed at the moved files. A dry run lists the
+  files a restore would refuse in `RestoreResult.files_refused`, and `dbs restore --dry-run`
+  names them and exits non-zero. `restore_backup(registry=...)` restores with a given
+  configuration.
+- New exceptions: `BackupError` and `MissingSourceFiles`; `ConnectionLost` and
+  `RemoteTimeout` for SSH sessions.
+- **A tamper-evident audit trail.** Each finished row is sealed with the SHA-256 of the row
+  before it and its own content. `manage.py dbs audit verify` (also `dbs_audit`) prints the
+  first broken link, or the head of the chain to keep elsewhere.
+- **Panel jobs.** *Take a backup*, restoring a stored backup and restoring an upload run in a
+  background thread, one at a time, on a job page at `/admin/dbs/backuprecord/jobs/<id>/`
+  that refreshes until the job ends.
+- System checks `dbs.security.W001` (`X-Forwarded-For` trusted with no proxy network),
+  `W002` (`DBSSecurityMiddleware` above `AuthenticationMiddleware`) and `W003` (scikit-learn
+  missing). `dbs security status` shows the idle timeout and the anomaly model's state.
+- `dbs upgrade --self --to X.Y.Z` installs exactly that release; `--system-python` lets
+  `--self` change an interpreter outside a virtual environment.
+- `dbs upgrade` steps for this release: dependencies, guard extra, manager extra, manager
+  keychain, off-site copies, dbs-client, retention, audit chain, backup format, forwarded
+  addresses, unmanaged models, missing source files, backup paths, restore path map and
+  remote command limits. The session guard step also reports a misplaced middleware.
+- `SSHTarget` takes `keepalive_interval` (15 seconds), `io_timeout` (30 seconds) and
+  `command_timeout` (6 hours). `SSHSession.stream()` runs a command and writes its standard
+  output to a file as it arrives; `is_alive()`, `answers()` and an `on_activity` hook report
+  the connection.
+- **The manager collects and streams.** A DBS backup run first collects the backups waiting
+  on the server under its server's or plan's name, then streams a fresh one with
+  `dbs backup --stream`, checks its size and SHA-256 and decrypts it end to end, and only
+  then removes the server's copies it recorded, keeping `keep_remote`. A broken stream ends
+  as `kept_on_server`, not failed, and the next run collects it. `backup take --json`, the
+  MCP `take_backups` tool and job details report `kept_on_server`, `pulled`, `released`,
+  `quarantined` and `outcome`.
+- **Quarantine.** A backup that fails verification in the manager is kept as
+  `NAME.quarantined` with the reason in `failure` (migration `0004_backupfile_failure`),
+  never restored (`backup_quarantined`) and never counted; the five newest per server and
+  plan are kept.
+- **Manager roles.** Every account is a master, an admin, an operator or a viewer
+  (`dbs/manager/permissions.py`), checked in every service, so the interface, the REST API,
+  the terminal and the MCP server share one rule; a refusal is `403 role_required`.
+  Rehearsals need an operator, real restores and moves an admin. `/api/auth/me/` reports the
+  role and its capabilities, and the interface hides what the role cannot do.
+- **The master account** is the one made at setup (on upgrade, the oldest account; every
+  other becomes an admin). Only it manages accounts, on the **Accounts** page,
+  `/api/accounts/`, or `django_dbs createuser NAME --role ROLE` and
+  `django_dbs account list|role|disable|enable|reset-2fa`. It hands the role over with its
+  password and a code, or with `django_dbs account role NAME master`.
+- **Two-factor sign-in.** Every web sign-in takes the password, then a TOTP code or one of
+  ten single-use recovery codes. An account enrolls at its next sign-in with a QR code; *Your
+  account* makes new recovery codes behind the password. Endpoints:
+  `/api/auth/two-factor/`, `/api/auth/two-factor/enrollment/` (and `confirm/`),
+  `/api/auth/password/` and `/api/auth/recovery-codes/`; `/api/auth/login/` answers the next
+  step.
+- **Passwords last 30 days** for web sign-in. An expired one, or one the master asked to
+  replace, leaves the session able only to change it; the terminal and the MCP server say so.
+  `django_dbs password NAME` resets the clock. New accounts choose their own password at
+  their first sign-in.
+- **The sealing key in the system keychain**, through keyring, wherever one works;
+  `DBS_MANAGER_KEY_STORE=file|keychain` chooses. The manager warns when the key sits in a
+  file next to the data and refuses to start when the keychain and a key file disagree.
+- `django_dbs run --trusted-proxy CIDR` (also `DBS_MANAGER_TRUSTED_PROXY`) believes the
+  forwarded scheme and client only from a TLS proxy's range, with `Secure`, `HttpOnly`
+  cookies and HSTS; `--allow-insecure-http` accepts plain HTTP beyond loopback.
+- **Connection liveness.** Each server records `connection_state`, `last_seen_at` and
+  `last_connection_error` (migration `0007_server_connection_state`); a probe reaches every
+  server not seen for five minutes. The interface shows a connection dot per server and a
+  running job's connection; `/api/activity/` entries carry `connection`, `server list` and
+  `server check` a CONNECTION column, and long terminal jobs a progress line every 30
+  seconds.
+- **Remote deadlines.** Where a server has `timeout`, every remote command runs under it
+  and an overrun reads `remote_command_timed_out`. A server whose last command ended unseen
+  refuses new backups, restores and moves until its deadline passes (`server_settling`).
+  Starting the manager frees the locks of jobs whose process is gone.
+- **Moving to a new server** backs up the old server now when it answers, records the new
+  server's `.env`, takes a safety backup of the new server's data, then pushes the `.env`,
+  migrates, restores and checks. A move that stops after changing the new server names the
+  step and can be reverted: the recorded `.env` goes back and the safety backup is restored.
+  `POST /api/redeploy/{id}/revert/`, `django_dbs redeploy revert MOVE_ID [--real]`, and the
+  MCP tool `rehearse_revert`, which only rehearses.
+- **Person-confirmed host keys.** The MCP `fingerprint_host` tool holds the key it read for
+  ten minutes and returns a confirmation id; `add_server` pins it only after a person
+  confirms it on the Servers page (`/api/servers/host-keys/`, `…/{id}/confirm/`,
+  `…/{id}/reject/`) or with `django_dbs server confirm-host-key ID` at a real terminal.
+- One-time download links: `POST /api/backups/{id}/download/` and
+  `POST /api/files/{server}/download/` trade the account password for a link that works
+  once, for a minute.
+- `django_dbs import` builds the new installation in a staging folder and swaps it in; the
+  one it replaces is moved to `<data-dir>.before-import-<stamp>`, never deleted, and a start
+  after an interrupted swap finishes it. `--yes` accepts an export sealed with another key.
+- CI runs both suites on Python 3.9 to 3.13 with Django 4.2, 5.2 and 6.x, on SQLite,
+  PostgreSQL 17 and MySQL 8.4, on every dependency's lowest version, against a real OpenSSH
+  server, and under a corruption stress test; a release publishes only after it passes.
+  `SECURITY.md` names supported versions, reporting, timelines, scope and the threat model.
+
+### Changed
+
+- **`pip install django-dbs` installs the backup library alone**: Django, cryptography,
+  argon2-cffi, reedsolo and numpy. Extras add the rest: `guard` (scikit-learn, for the
+  session guard's detector), `ssh` (paramiko, for `dbs.transports`), `manager`
+  (djangorestframework, waitress, paramiko, keyring, for `django_dbs`) and `all`. Every
+  dependency is capped below its next major version. `django_dbs` without the manager extra
+  prints the one `pip install` line it needs and exits 1.
+- **New backups are container format 2.** Both copies of every block are written, the second
+  64 blocks after the first, so a burst of damage never reaches both; each block is one
+  AES-256-GCM chunk authenticated together with the header, with Reed-Solomon parity and a
+  keyed BLAKE2b tag; the header and trailer are each written twice with a checksum; no plain
+  hash of the data is stored. Format 1 backups still validate and restore.
+  `DBS_MAX_PAYLOAD_BYTES` now applies to format 1 only.
+- A backup refuses Argon2id costs above `DBS_KDF_TIME_COST = 10` and
+  `DBS_KDF_MEMORY_COST = 262144` KiB, the limits every reader enforces.
+- Reed-Solomon parity is computed with numpy, and an intact block is read without decoding:
+  format 1 encoding goes from about 0.4 to 53 MB/s and a clean validation from 0.3 to
+  112 MB/s. Many-to-many members are fetched once per batch of rows.
+- **Backups.** `dbs backup PATH` and `create_backup(output=PATH)` refuse a path that exists,
+  write beside it, verify and only then link the file into place. A missing or unreadable
+  source file stops the backup. Only regular files are read; FIFOs, sockets, devices and
+  links that leave their root are skipped and reported. Unmanaged models are left out unless
+  registered or listed as `-app.model`. A multi-table child brings its parent rows. Every
+  model, file and lookup is read from `--database`. Backups record their model order.
+- **Restores.** Rows load in the recorded order, parents first. A merge updates only the
+  fields a backup carries. `--flush` deletes only the rows the backup covers. Every file
+  target is checked before any row loads, and a `ModelBackup`'s `file_roots` are restore
+  roots; files are staged beside their targets and moved into place when the rows commit.
+  A real restore only ever raises a sequence.
+- **Retention.** The server keeps at most five backups: the schedule keeps 1 to 5 (default
+  5; `DBS_SCHEDULE_KEEP` defaults to 5 and refuses more, as does `dbs schedule --keep`), and
+  the migration lowers larger values. Backups are ordered by recorded time, then the time in
+  the file, then the name; only this project's prefix and database alias are touched
+  (`backup-ALIAS-YYYYMMDD-HHMMSSZ.dbs` for a database other than `default`); the newest
+  verified backup is always kept; a failed one never takes a place; two backups in one
+  second are named `-2`, `-3`.
+- The scheduler holds a two-minute lease renewed every 30 seconds, records a run as running
+  before it starts, moves the next run only after it finishes, and retries a killed run once.
+- *Take a backup* writes to `DBS_BACKUP_DIR` and needs it; downloads stream a finished file.
+- Every write through the DBS admin is audited, and so are panel downloads and the contrib
+  views' export and restore. Panel rows keep the acting username after the user is deleted.
+  A failure that is not a DBS error is recorded as `unexpected`.
+  `dbs security purge` removes telemetry only and records a `security.purge` row.
+- **The session guard.** `DBS_TRUSTED_PROXIES` lists proxy networks instead of counting
+  hops. Learning mutes only the model; the rules and both thresholds stay active. The personal
+  forest is refit in the background from the newest 2000 rows, at most every 15 minutes or
+  200 requests. Changes to users, groups, permissions and passwords count as high-risk.
+- `dbs upgrade --backups` writes a conversion to `<name>.v2.dbs` (then `-2`, `-3`), readable
+  by its owner alone, validated before it takes the name, and reports one converted earlier.
+- `dbs upgrade --self` installs one exact version with the extras installed here, prints the
+  pinned command and asks first (`--yes`), names the requirement files to pin it in, and
+  refuses a source checkout. Without `--self`, `dbs upgrade` recommends pinning the newest
+  release.
+- **Manager retention.** A plan keeps 1 to 5 backups here (5 by default) and 0 to 5 on the
+  server (0 by default), clamped by migration `0006_plan_retention_limits` and on import; a
+  one-off take keeps the five newest and leaves none on the server. Keeping fewer asks for
+  the account password, and the MCP `update_plan` tool refuses it. Two plans of one server
+  cannot share a name that differs only in case or punctuation.
+- The manager asks for the account password before every download that decrypts (folder
+  archives, collected and uploaded files, a `.env` through the Files tab), before deleting a
+  backup and before deleting a server. The terminal saves downloads readable by their owner
+  alone.
+- The MCP `add_server` tool takes `confirmation` instead of `host_key`; `download_backup`
+  refuses files the manager keeps encrypted, writes them readable by their owner alone and
+  never overwrites. The MCP instructions, the terminal help and the interface say a server's
+  backup passphrase must never change.
+- `django_dbs redeploy start` takes `--backup` only as the backup to restore when the old
+  server does not answer (its newest by default), and `POST /api/redeploy/` accepts a null
+  `backup`.
+- `django_dbs run` refuses a non-loopback `--host` without `--trusted-proxy` or
+  `--allow-insecure-http`. Sign-in failures count per address and per username, with a
+  slow-down from 2 to 60 seconds that an address the account used in the last 30 days skips.
+- The manager's SSH sessions send keepalives every 15 seconds and bound SFTP reads to 30
+  seconds; on Linux the kernel drops a connection that stops answering.
+
+### Removed
+
+- **`dbs-client`**, `python -m dbs.client`, the `dbs.client` API, the `client` extra and
+  `django_dbs server import-profiles`. The manager and its terminal do the same work;
+  `dbs upgrade` points at them when a `dbs-client` config is left.
+- **SFTP targets and the console.** The `BackupTarget` model and admin,
+  `BackupRecord.target`, the schedule's push target and remote retention, the panel's push
+  option, the console with its fixed actions and free-form shell, the dashboard's SFTP card,
+  the wiki's targets page, and `dbs schedule --push` / `--keep-remote`. The settings
+  `DBS_SSH_TARGETS`, `DBS_SCHEDULE_PUSH_TARGET`, `DBS_SCHEDULE_KEEP_REMOTE` and
+  `DBS_ADMIN_CONSOLE_SHELL` no longer do anything. Migration `0005_pull_only_retention_chain`
+  records each dropped target, without credentials, in the audit trail.
+- The panel's *download to my browser* option, which built a backup inside the request.
+- The move's folder-archive step, with `redeploy start --archive` and `--migrate` and the
+  `archives` and `migrate` request fields.
+- tomli from the runtime dependencies, and the unused `backup_invalid` error code.
+
+### Fixed
+
+- **A dry run could change sequences.** It now never touches one, and a real restore only
+  raises a PostgreSQL sequence, never below its current value.
+- **A merge restore overwrote fields the backup did not carry**, so `FieldType.EXCLUDE`
+  fields lost their values and a NOT NULL excluded field without a default broke the
+  restore.
+- **`--flush` deleted every row of a model**, even when `ModelBackup.get_queryset` backed up
+  only some of them, and dropped the links of excluded many-to-many fields.
+- **`--database` was not honoured**: a backup read rows, files and lookups from the default
+  database.
+- **A backup could replace an existing file**, and was written in place before it was
+  verified.
+- **A missing source file was skipped without a word**, and a FIFO in a file tree could hang
+  a backup.
+- **Files were written before the rows committed**, and stayed when the load failed.
+- Restores loaded models in an order that could break foreign keys; a multi-table child was
+  backed up without its parent rows.
+- **One damaged byte in a header could hide a backup**, or make it look like an unknown future
+  format. Only a header copy that verifies is used, so every byte of the front header is
+  survivable while the back copy is intact.
+- Retention ordered backups by name alone, counted future-stamped files, links and failed
+  backups, could prune the newest good backup, and let two backups in one second overwrite
+  each other.
+- A scheduled backup took a six-hour lease and moved its next run before it started, so a
+  killed run blocked the schedule for hours.
+- Panel backups and restores ran inside the web request, so a worker timeout killed
+  anything past a few megabytes.
+- `dbs upgrade --backups` wrote `<name>.converted` with the umask's mode and could replace an
+  existing file. `dbs upgrade --self` ran `pip install --upgrade` with no version and
+  mistook a Debian `dist-packages` install for a source checkout.
+- SFTP transfers were readable by other users while in flight; a push deleted a backup of
+  the same name before uploading, and a pull replaced a local file.
+- The schedule's page created the schedule row for staff without superuser who visited it.
+- The manager hung on a dropped SSH connection, and a remote command had no deadline. On
+  Windows every process looked alive, so a crashed job kept its lock.
+
+### Security
+
+- `X-Forwarded-For` is read only from a request whose peer is in `DBS_TRUSTED_PROXIES`;
+  before, any client could choose its own address and land inside a trusted network. An
+  address the guard cannot read counts as a new network.
+- A flagged session could still create a superuser, change groups and permissions, or
+  download a backup. It is now refused every change anywhere in the admin, and every download
+  or export, the contrib views included.
+- Learning mode switched enforcement off, and a purge put dormant accounts back into it. The
+  session count survives purges, and the rules apply from the first request.
+- The policy's idle timeout is enforced server-side. Telemetry stores the network and a keyed
+  hash of the address instead of the address, and is purged automatically after
+  `DBS_SECURITY_RETENTION_DAYS`; a purge no longer deletes the audit trail.
+- The console, which could run free-form commands on remote servers from a browser, is gone.
+- Format 2 bounds every header field and Argon2id cost before any work, and detects a
+  reordered, swapped or truncated block through its authenticated position.
+- Every local backup file and every temporary file it is written through is readable by its
+  owner alone from the first byte; an SFTP upload is too, before its bytes arrive.
+- The manager's secrets are sealed under a key kept in the system keychain where one works;
+  a new data folder on Windows is limited to its owner; an import never deletes the
+  installation it replaces.
+- Claude can no longer pin a host key no person confirmed, make a plan keep fewer backups,
+  or save a file the manager keeps encrypted.
+
 ## [0.6.0] - 2026-10-11
 
 Everything the DBS manager does in its interface can now be done from a terminal with

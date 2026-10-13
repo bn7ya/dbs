@@ -1,0 +1,13 @@
+@use "layout" as *;
+
+:host {
+  display: block;
+}
+
+.qr-code {
+  display: block;
+  inline-size: $qr-size;
+  block-size: $qr-size;
+  border-radius: var(--app-radius-md);
+  image-rendering: pixelated;
+}

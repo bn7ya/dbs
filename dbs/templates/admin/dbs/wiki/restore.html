@@ -2,13 +2,31 @@
 
 {% block wiki %}
 <h1>Restoring</h1>
+<h2>From the panel</h2>
+<p>Restore a backup kept in <code>DBS_BACKUP_DIR</code> from its row under
+<a href="{% url 'admin:dbs_backuprecord_changelist' %}">Backups</a>, or upload a
+<code>.dbs</code> file under <a href="{% url 'admin:dbs_backup_restore' %}">Restore</a>. The
+restore runs in the background, outside the web request, on a page that refreshes until it
+ends; only one backup or restore runs at a time. Taking a backup works the same way, and its
+download is served from the finished file in <code>DBS_BACKUP_DIR</code>.</p>
 <h2>Rehearse first</h2>
-<p><em>Dry run</em> performs the real load inside a transaction it rolls back, and writes no
-files. It reports what would be restored and changes nothing.</p>
+<p><em>Dry run</em> performs the real load inside a transaction it rolls back, writes no
+files and never touches a sequence. It reports what would be restored, names every file a
+real restore would refuse, and changes nothing. From a shell,
+<code>python manage.py dbs restore FILE --dry-run</code> exits non-zero when a file would be
+refused.</p>
 <h2>Merge or replace</h2>
-<p>By default a restore merges into existing rows. <em>Replace instead of merge</em> clears
-the backed-up models first — children before parents, in the same transaction as the load —
-so a failure leaves the database untouched.</p>
+<p>By default a restore merges into existing rows: rows created since the backup stay, and
+an existing row only takes the fields the backup carries. <em>Replace instead of merge</em>
+first deletes the rows the backup covers — children before parents, in the same transaction
+as the load — so a failure leaves the database untouched.</p>
+<h2>Files</h2>
+<p>Every file's target is checked before any row loads. Files are written beside their
+targets and moved into place only when the rows commit, and removed again if the load fails.
+They may land inside <code>DBS_RESTORE_ROOTS</code> (or <code>DBS_FILE_ROOTS</code>), a
+registered model's <code>file_roots</code>, or a file field's storage, under the storage
+name. Restoring onto a server whose paths differ, map the old roots to the new ones:</p>
+<pre><code>DBS_RESTORE_PATH_MAP = {"/srv/old/media": "/srv/new/media"}</code></pre>
 <h2>Migration drift</h2>
 <p>Backups record the applied migration per app. If the target has drifted, the restore warns
 and names the apps. Rows for models and fields the target does not know are discarded.</p>
@@ -18,4 +36,7 @@ the order it migrated, so a backup refers to them by name rather than by number:
 permissions, a user's permissions and a generic relation all land on the right rows of a
 server migrated in another order. A permission the server no longer has is left out with a
 warning; a foreign key it cannot find stops the restore and names the row.</p>
+<h2>Older backups</h2>
+<p>Backups written in format 1 by earlier releases restore as before. See
+<a href="{% url 'admin:dbs_wiki' 'upgrading' %}">Upgrading</a> to convert them.</p>
 {% endblock %}

@@ -2,8 +2,10 @@
 
 {% block wiki %}
 <h1>What the guard collects</h1>
-<p>For each request through the admin, DBS stores the IP address, the network prefix, a hash
-of the user agent, the numeric feature vector, and the resulting score.</p>
+<p>For each request through the admin, DBS stores the network the address belongs to (a /24 for
+IPv4, a /48 for IPv6), a hash of the full address keyed to this project's
+<code>SECRET_KEY</code>, a hash of the user agent, the numeric feature vector, and the
+resulting score. The address itself is not stored. Anomalies record only the network.</p>
 <h2>Browser location</h2>
 <p>Off unless <code>DBS_GEOLOCATION = True</code> and the person opted in during setup. When
 on, the browser is asked for a fix and the coordinates are rounded to about a kilometre before
@@ -12,6 +14,9 @@ being stored. Declining costs nothing: an absent location is neutral, never an a
 client and can be forged. Its real value is impossible travel — two fixes that cannot both be
 genuine.</p>
 <h2>Retention</h2>
-<p>Telemetry older than <code>DBS_SECURITY_RETENTION_DAYS</code> (default 90) is removed by
-<code>python manage.py dbs security purge</code>.</p>
+<p>Telemetry older than <code>DBS_SECURITY_RETENTION_DAYS</code> (default 90) is removed
+automatically, at most once a day, and on demand by
+<code>python manage.py dbs security purge</code>. The audit trail is never purged with it.
+For each account the guard keeps one count of the sessions it has seen, so a purge does not
+put a long-standing account back into its learning period.</p>
 {% endblock %}

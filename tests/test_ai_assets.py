@@ -38,7 +38,21 @@ def test_the_skill_covers_what_loses_data():
     assert "SECRET_KEY_FALLBACKS" in text
     assert "--dry-run" in text
     assert "--flush" in text
-    assert "DBS_ADMIN_CONSOLE_SHELL" in text
+    assert "--allow-missing-files" in text
+    assert "keep fewer backups" in text
+
+
+def test_every_assistant_facing_file_says_the_passphrase_never_changes():
+    for name in ("SKILL.md", "AGENTS.md", "llms.txt"):
+        text = " ".join((ASSETS / name).read_text().split())
+        assert "must never change" in text, name
+
+
+def test_the_skill_names_the_install_extras():
+    text = (ASSETS / "SKILL.md").read_text()
+
+    for extra in ("guard", "manager", "ssh", "all"):
+        assert f"django-dbs[{extra}]" in text, extra
 
 
 def test_the_skill_tells_assistants_to_keep_projects_current():

@@ -8,6 +8,7 @@ from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupService
+from dbs.manager.servers.exceptions import DbsTooOld
 from tests.manager.backups.support import BackupHost, server_tree
 from tests.manager.servers.support import PASSWORD, connecting_to
 
@@ -50,6 +51,25 @@ def test_take_all_backs_up_every_server_and_waits_for_each(
 
 
 @RUNS_JOBS
+def test_a_take_whose_connection_breaks_is_kept_on_the_server_not_failed(
+    terminal, admin, monkeypatch, tmp_path, make_server
+):
+    monkeypatch.setattr(
+        CONNECT, connecting_to(BackupHost(root=tmp_path / "server", breaks=True))
+    )
+    make_server(name="shop")
+
+    ran = terminal("backup", "take", "shop")
+    shown = terminal("backup", "take", "shop", "--json")
+
+    assert ran.code == 0, ran.out + ran.err
+    assert "kept on the server; collected at the next connection" in ran.out
+    assert shown.json()[0]["kept_on_server"] is True
+    [collected] = BackupFile.objects.all()
+    assert collected.validation == BackupFile.Validation.VERIFIED
+
+
+@RUNS_JOBS
 def test_take_reports_a_server_already_backing_up_and_fails(
     terminal, admin, host, two_servers
 ):
@@ -62,6 +82,21 @@ def test_take_reports_a_server_already_backing_up_and_fails(
     assert len(host.takes) == 1
     blog_row = next(line for line in ran.out.splitlines() if line.startswith("blog"))
     assert "failed" in blog_row
+
+
+@RUNS_JOBS
+def test_a_server_whose_django_dbs_cannot_stream_names_the_version_it_needs(
+    terminal, admin, monkeypatch, make_server
+):
+    too_old = DbsTooOld("0.7.0", output="error: unrecognized arguments: --stream")
+    monkeypatch.setattr(CONNECT, connecting_to(BackupHost(failure=too_old)))
+    make_server(name="shop")
+
+    ran = terminal("backup", "take", "shop")
+
+    assert ran.code == 1
+    assert "Upgrade it to 0.7.0 or later." in ran.out
+    assert "0.2.2" not in ran.out
 
 
 @pytest.mark.django_db
@@ -156,7 +191,12 @@ def test_download_upload_delete_and_undo(terminal, admin, host, two_servers, tmp
     uploaded = terminal("backup", "upload", "blog", saved, "--json").json()
     assert uploaded["server_name"] == "blog" and uploaded["kind"] == "uploaded"
 
-    assert terminal("backup", "delete", backup.pk).code == 0
+    assert terminal("backup", "delete", backup.pk).code == 1
+    assert BackupService(admin).list(two_servers[0].pk).exists()
+    deleted = terminal(
+        "backup", "delete", backup.pk, "--password-stdin", stdin=f"{PASSWORD}\n"
+    )
+    assert deleted.code == 0, deleted.err
     assert not BackupService(admin).list(two_servers[0].pk).exists()
     assert terminal("backup", "undo-delete", backup.pk).code == 0
     assert BackupService(admin).list(two_servers[0].pk).exists()

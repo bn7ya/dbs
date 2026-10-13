@@ -1,0 +1,57 @@
+<form class="dialog-form" novalidate (ngSubmit)="submit()">
+  @if (formFailure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <p class="text-secondary">{{ 'accounts.form.body' | t }}</p>
+
+  <mat-form-field>
+    <mat-label>{{ 'accounts.form.username' | t }}</mat-label>
+    <input
+      matInput
+      name="username"
+      dir="auto"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      [appFieldError]="usernameError()"
+      [ngModel]="username()"
+      (ngModelChange)="username.set($event)"
+    />
+    <mat-hint>{{ 'accounts.form.usernameHint' | t }}</mat-hint>
+    @if (usernameError(); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <app-role-choice [role]="role()" (roleChange)="role.set($event)" />
+
+  <app-password-input
+    [label]="'accounts.form.password' | t"
+    [hint]="'accounts.form.passwordHint' | t"
+    [error]="passwordError()"
+    name="password"
+    autocomplete="new-password"
+    [ngModel]="password()"
+    (ngModelChange)="password.set($event)"
+  />
+
+  <app-password-input
+    [label]="'accounts.form.confirm' | t"
+    [error]="confirmError()"
+    name="confirm"
+    autocomplete="new-password"
+    [ngModel]="confirm()"
+    (ngModelChange)="confirm.set($event)"
+  />
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+      @if (busy()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (busy() ? 'accounts.form.working' : 'accounts.form.submit') | t }}
+    </button>
+  </div>
+</form>

@@ -10,15 +10,38 @@ import os
 import posixpath
 import socket
 import threading
+import time
+from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from ..conf import setting
-from ..exceptions import ConfigurationError, DBSError, HostKeyError
+from ..exceptions import (
+    ConfigurationError,
+    ConnectionLost,
+    DBSError,
+    HostKeyError,
+    RemoteTimeout,
+)
 from ..naming import is_backup_name
+from ..tee import (
+    is_partial_name,
+    is_stale,
+    partial_name,
+    place_without_replacing,
+    sweep_partials,
+)
 
 logger = logging.getLogger("dbs")
 
 MAX_CAPTURED_OUTPUT = 64 * 1024
+STREAM_CHUNK = 256 * 1024
+STDERR_WAIT = 5.0
+DEFAULT_KEEPALIVE_INTERVAL = 15.0
+DEFAULT_IO_TIMEOUT = 30.0
+DEFAULT_COMMAND_TIMEOUT = 6 * 60 * 60.0
+KEEPALIVE_REQUEST = "keepalive@openssh.com"
+CLOSED_WITHOUT_STATUS = -1
+PRIVATE_MODE = 0o600
 
 _TARGET_KEYS = {
     "host",
@@ -38,6 +61,9 @@ _TARGET_KEYS = {
     "use_agent",
     "connect_timeout",
     "private_key",
+    "keepalive_interval",
+    "io_timeout",
+    "command_timeout",
 }
 
 
@@ -46,7 +72,7 @@ def _paramiko():
         import paramiko
     except ImportError as exc:
         raise ConfigurationError(
-            'SSH transport requires paramiko: pip install "django-dbs[client]"'
+            'SSH transport requires paramiko: pip install "django-dbs[ssh]"'
         ) from exc
     return paramiko
 
@@ -62,6 +88,10 @@ def _from_env(name: str | None) -> str | None:
 
 def _expand(path: str | None) -> str | None:
     return os.path.expanduser(path) if path else path
+
+
+class StreamInterrupted(DBSError):
+    pass
 
 
 @dataclass
@@ -145,10 +175,18 @@ class SSHTarget:
     auto_add_host_key: bool = False
     use_agent: bool = True
     connect_timeout: float = 30.0
+    keepalive_interval: float = DEFAULT_KEEPALIVE_INTERVAL
+    io_timeout: float = DEFAULT_IO_TIMEOUT
+    command_timeout: float = DEFAULT_COMMAND_TIMEOUT
 
     def __post_init__(self):
         self.key_filename = _expand(self.key_filename)
         self.known_hosts = _expand(self.known_hosts)
+        if self.keepalive_interval < 0 or self.io_timeout <= 0 or self.command_timeout <= 0:
+            raise ConfigurationError(
+                f"SSH target {self.host!r} needs a keepalive_interval of 0 or more, and "
+                "an io_timeout and a command_timeout above 0 seconds."
+            )
         if self.host_key:
             if self.auto_add_host_key:
                 raise ConfigurationError(
@@ -198,14 +236,12 @@ class SSHTarget:
             auto_add_host_key=bool(data.get("auto_add_host_key", False)),
             use_agent=bool(data.get("use_agent", True)),
             connect_timeout=float(data.get("connect_timeout", 30.0)),
+            keepalive_interval=float(
+                data.get("keepalive_interval", DEFAULT_KEEPALIVE_INTERVAL)
+            ),
+            io_timeout=float(data.get("io_timeout", DEFAULT_IO_TIMEOUT)),
+            command_timeout=float(data.get("command_timeout", DEFAULT_COMMAND_TIMEOUT)),
         )
-
-    @classmethod
-    def from_settings(cls, name: str) -> "SSHTarget":
-        targets = setting("DBS_SSH_TARGETS", {}) or {}
-        if name not in targets:
-            raise ConfigurationError(f"No DBS_SSH_TARGETS entry named {name!r}.")
-        return cls.from_dict(targets[name])
 
     @property
     def host_key_policy(self) -> str:
@@ -324,14 +360,48 @@ def _connect(target: SSHTarget):
         raise DBSError(f"SSH connection to {target.host} failed: {exc}") from exc
     except (OSError, socket.error) as exc:
         raise DBSError(f"Cannot reach {target.host}:{target.port}: {exc}") from exc
+    _keep_alive(client, target)
     return client
 
 
-def _as_bytes(data_or_path: bytes | str) -> bytes:
+def _keep_alive(client, target: SSHTarget) -> None:
+    transport = client.get_transport()
+    if transport is None:
+        return
+    if target.keepalive_interval > 0:
+        transport.set_keepalive(max(1, round(target.keepalive_interval)))
+    _drop_when_unanswered(transport.sock, target.io_timeout)
+
+
+def _drop_when_unanswered(sock, seconds: float) -> None:
+    setsockopt = getattr(sock, "setsockopt", None)
+    if setsockopt is None:
+        return
+    options = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+    if hasattr(socket, "TCP_USER_TIMEOUT"):
+        options.append(
+            (socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, int(seconds * 1000))
+        )
+    for level, option, value in options:
+        try:
+            setsockopt(level, option, value)
+        except OSError:
+            return
+
+
+@contextmanager
+def _upload_source(data_or_path):
     if isinstance(data_or_path, (bytes, bytearray)):
-        return bytes(data_or_path)
-    with open(data_or_path, "rb") as fh:
-        return fh.read()
+        yield io.BytesIO(data_or_path), len(data_or_path)
+        return
+    if isinstance(data_or_path, (str, os.PathLike)):
+        with open(data_or_path, "rb") as fh:
+            yield fh, os.fstat(fh.fileno()).st_size
+        return
+    data_or_path.seek(0)
+    size = data_or_path.seek(0, io.SEEK_END)
+    data_or_path.seek(0)
+    yield data_or_path, size
 
 
 def _decode(stream) -> str:
@@ -345,26 +415,54 @@ class SSHSession:
     target: SSHTarget
     _client: object = field(default=None, repr=False)
     _sftp: object = field(default=None, repr=False)
+    on_activity: Callable[[int], None] | None = field(default=None, repr=False)
+    _ticker: object = field(default=None, repr=False)
 
     def __enter__(self) -> "SSHSession":
         if self._client is None:
             self._client = _connect(self.target)
+            if self.on_activity is not None and self.target.keepalive_interval > 0:
+                self._ticker = _Ticker(self)
         return self
 
     def __exit__(self, *exc) -> None:
         self.close()
 
     def close(self) -> None:
+        if self._ticker is not None:
+            self._ticker.stop()
         if self._client is not None:
             self._client.close()
         self._client = None
         self._sftp = None
+        self._ticker = None
 
     @property
     def sftp(self):
         if self._sftp is None:
-            self._sftp = self._client.open_sftp()
+            sftp = self._client.open_sftp()
+            sftp.get_channel().settimeout(self.target.io_timeout)
+            self._sftp = (
+                sftp if self.on_activity is None else _MeteredSFTP(sftp, self.on_activity)
+            )
         return self._sftp
+
+    def is_alive(self) -> bool:
+        transport = self._transport()
+        return transport is not None and transport.is_active()
+
+    def answers(self) -> bool:
+        transport = self._transport()
+        if transport is None or not transport.is_active():
+            return False
+        try:
+            transport.global_request(KEEPALIVE_REQUEST, wait=True)
+        except _connection_gone():
+            return False
+        return transport.is_active()
+
+    def _transport(self):
+        return None if self._client is None else self._client.get_transport()
 
     def ensure_dir(self) -> str:
         _ensure_remote_dir(self.sftp, self.target.remote_dir)
@@ -373,19 +471,24 @@ class SSHSession:
     def path_for(self, remote_name: str) -> str:
         return posixpath.join(self.target.remote_dir, remote_name)
 
-    def push(self, data_or_path: bytes | str, remote_name: str) -> str:
-        data = _as_bytes(data_or_path)
+    def push(self, data_or_path, remote_name: str) -> str:
         remote_path = self.path_for(remote_name)
-        partial = f"{remote_path}.part"
+        partial = self.path_for(partial_name(remote_name))
         try:
             self.ensure_dir()
-            self.sftp.putfo(io.BytesIO(data), partial)
-            self.sftp.chmod(partial, 0o600)
-            _replace_remote(self.sftp, partial, remote_path)
+            self.sweep_partials()
+            _create_private_remote(self.sftp, partial)
+            with _upload_source(data_or_path) as (source, size):
+                self.sftp.putfo(source, partial)
+            _install_remote(self.sftp, partial, remote_path)
         except OSError as exc:
+            self._discard_remote(partial)
             raise DBSError(f"SFTP upload failed: {exc}") from exc
+        except DBSError:
+            self._discard_remote(partial)
+            raise
         logger.info(
-            "pushed %d bytes to %s:%s", len(data), self.target.host, remote_path
+            "pushed %d bytes to %s:%s", size, self.target.host, remote_path
         )
         return remote_path
 
@@ -404,16 +507,22 @@ class SSHSession:
 
     def pull_to(self, remote_name: str, local_path: str) -> int:
         remote_path = self.path_for(remote_name)
-        partial = f"{local_path}.part"
+        if os.path.lexists(local_path):
+            raise DBSError(f"{local_path} already exists; nothing was overwritten.")
+        directory = os.path.dirname(os.path.abspath(local_path))
+        sweep_partials(directory)
+        partial = os.path.join(directory, partial_name(os.path.basename(local_path)))
         try:
-            self.sftp.get(remote_path, partial)
+            with _private_local_file(partial) as handle:
+                self.sftp.getfo(remote_path, handle)
+            _require_backup(partial, remote_name)
+            if not place_without_replacing(partial, local_path):
+                raise DBSError(f"{local_path} already exists; nothing was overwritten.")
         except OSError as exc:
-            _discard(partial)
             raise DBSError(f"SFTP download failed: {exc}") from exc
-        size = os.path.getsize(partial)
-        os.chmod(partial, 0o600)
-        os.replace(partial, local_path)
-        os.chmod(local_path, 0o600)
+        finally:
+            _discard(partial)
+        size = os.path.getsize(local_path)
         logger.info(
             "pulled %d bytes from %s:%s to %s",
             size,
@@ -458,6 +567,71 @@ class SSHSession:
             raise DBSError(f"SFTP delete failed: {exc}") from exc
         logger.info("deleted %s:%s", self.target.host, self.path_for(remote_name))
 
+    def sweep_partials(self, now: float | None = None) -> list[str]:
+        try:
+            entries = self.sftp.listdir_attr(self.target.remote_dir)
+        except OSError:
+            return []
+        removed = []
+        for entry in entries:
+            if not is_partial_name(entry.filename) or not entry.st_mtime:
+                continue
+            if not is_stale(entry.st_mtime, now):
+                continue
+            if self._discard_remote(self.path_for(entry.filename)):
+                removed.append(entry.filename)
+        return sorted(removed)
+
+    def stream(
+        self,
+        command: str,
+        sink,
+        *,
+        stdin_line: str | None = None,
+        timeout: float | None = None,
+        progress=None,
+    ) -> RemoteResult:
+        guarded = _Guarded(self.target.command_timeout if timeout is None else timeout)
+        stdin, stdout, stderr = guarded(
+            lambda: self._client.exec_command(command, get_pty=False)
+        )
+        channel = stdout.channel
+        tail = _StderrTail(stderr)
+        finished = False
+        try:
+            guarded(lambda: _send_line(stdin, stdin_line))
+            tail.start()
+            received = 0
+            while True:
+                data = guarded(lambda: guarded.receive(channel))
+                if not data:
+                    break
+                sink.write(data)
+                received += len(data)
+                self._moved(len(data))
+                if progress is not None:
+                    progress(received)
+            status = guarded(lambda: guarded.exit_status(channel))
+            if status == CLOSED_WITHOUT_STATUS:
+                raise StreamInterrupted("The connection closed before the command finished.")
+            finished = True
+        finally:
+            if not finished:
+                _close_quietly(channel)
+        tail.join(STDERR_WAIT)
+        return RemoteResult(status, "", tail.text())
+
+    def _moved(self, count: int) -> None:
+        if self.on_activity is not None:
+            self.on_activity(count)
+
+    def _discard_remote(self, remote_path: str) -> bool:
+        try:
+            self.sftp.remove(remote_path)
+        except (OSError, IOError):
+            return False
+        return True
+
     def run(
         self,
         command: str,
@@ -465,15 +639,16 @@ class SSHSession:
         stdin_line: str | None = None,
         timeout: float | None = None,
     ) -> RemoteResult:
+        limit = self.target.command_timeout if timeout is None else timeout
         try:
             stdin, stdout, stderr = self._client.exec_command(
-                command, timeout=timeout, get_pty=False
+                command, timeout=limit, get_pty=False
             )
         except socket.timeout as exc:
-            raise DBSError(f"Remote command timed out after {timeout}s.") from exc
-        except OSError as exc:
-            raise DBSError(f"Remote command failed: {exc}") from exc
-        deadline = _Deadline(stdout.channel, timeout)
+            raise RemoteTimeout(f"Remote command timed out after {limit}s.") from exc
+        except (_paramiko().SSHException, OSError) as exc:
+            raise self._failure(exc) from exc
+        deadline = _Deadline(stdout.channel, limit)
         try:
             if stdin_line is not None:
                 stdin.write(stdin_line + "\n")
@@ -484,13 +659,109 @@ class SSHSession:
             status = stdout.channel.recv_exit_status()
         except (socket.timeout, OSError) as exc:
             if deadline.passed or isinstance(exc, socket.timeout):
-                raise DBSError(f"Remote command timed out after {timeout}s.") from exc
-            raise DBSError(f"Remote command failed: {exc}") from exc
+                raise RemoteTimeout(f"Remote command timed out after {limit}s.") from exc
+            raise self._failure(exc) from exc
         finally:
             deadline.cancel()
         if deadline.passed:
-            raise DBSError(f"Remote command timed out after {timeout}s.")
+            raise RemoteTimeout(f"Remote command timed out after {limit}s.")
+        if status == CLOSED_WITHOUT_STATUS and not self.is_alive():
+            raise self._lost()
         return RemoteResult(status, out, err)
+
+    def _failure(self, exc: BaseException) -> DBSError:
+        if not self.is_alive():
+            return self._lost()
+        return DBSError(f"Remote command failed: {exc}")
+
+    def _lost(self) -> ConnectionLost:
+        return ConnectionLost(
+            f"The connection to {self.target.host} was lost while a command ran."
+        )
+
+
+class _Ticker:
+    def __init__(self, session: SSHSession):
+        self._session = session
+        self._stopped = threading.Event()
+        self._thread = threading.Thread(
+            target=self._beat, name="dbs-ssh-liveness", daemon=True
+        )
+        self._thread.start()
+
+    def _beat(self) -> None:
+        while not self._stopped.wait(self._session.target.keepalive_interval):
+            if not self._session.answers() or self._stopped.is_set():
+                return
+            self._session.on_activity(0)
+
+    def stop(self) -> None:
+        self._stopped.set()
+
+
+class _MeteredSFTP:
+    def __init__(self, sftp, moved: Callable[[int], None]):
+        self._sftp = sftp
+        self._moved = moved
+
+    def __getattr__(self, name):
+        return getattr(self._sftp, name)
+
+    def open(self, *args, **kwargs):
+        return _MeteredFile(self._sftp.open(*args, **kwargs), self._moved)
+
+    def get(self, *args, callback=None, **kwargs):
+        return self._sftp.get(*args, callback=self._counted(callback), **kwargs)
+
+    def getfo(self, *args, callback=None, **kwargs):
+        return self._sftp.getfo(*args, callback=self._counted(callback), **kwargs)
+
+    def put(self, *args, callback=None, **kwargs):
+        return self._sftp.put(*args, callback=self._counted(callback), **kwargs)
+
+    def putfo(self, *args, callback=None, **kwargs):
+        return self._sftp.putfo(*args, callback=self._counted(callback), **kwargs)
+
+    def _counted(self, callback):
+        reached = [0]
+
+        def counted(done, total):
+            self._moved(max(done - reached[0], 0))
+            reached[0] = done
+            if callback is not None:
+                callback(done, total)
+
+        return counted
+
+
+class _MeteredFile:
+    def __init__(self, handle, moved: Callable[[int], None]):
+        self._handle = handle
+        self._moved = moved
+
+    def __getattr__(self, name):
+        return getattr(self._handle, name)
+
+    def __enter__(self):
+        self._handle.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._handle.__exit__(*exc)
+
+    def read(self, *args):
+        data = self._handle.read(*args)
+        self._moved(len(data))
+        return data
+
+    def readv(self, *args, **kwargs):
+        for piece in self._handle.readv(*args, **kwargs):
+            self._moved(len(piece))
+            yield piece
+
+    def write(self, data):
+        self._handle.write(data)
+        self._moved(len(data))
 
 
 class _Deadline:
@@ -504,7 +775,7 @@ class _Deadline:
 
     def _expire(self, channel) -> None:
         self._expired.set()
-        channel.close()
+        _close_quietly(channel)
 
     @property
     def passed(self) -> bool:
@@ -539,8 +810,8 @@ def open_session(target: SSHTarget) -> SSHSession:
     return SSHSession(target)
 
 
-def push_backup(data_or_path: bytes | str, remote_name: str, target: SSHTarget) -> str:
-    """Upload backup bytes (or a local file) to ``target``; return the remote path."""
+def push_backup(data_or_path, remote_name: str, target: SSHTarget) -> str:
+    """Upload backup bytes, a local file or an open binary file to ``target``; return the remote path."""
     with SSHSession(target) as session:
         return session.push(data_or_path, remote_name)
 
@@ -598,12 +869,120 @@ def _discard(path: str) -> None:
         pass
 
 
-def _replace_remote(sftp, partial: str, remote_path: str) -> None:
+def _private_local_file(path: str):
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, PRIVATE_MODE)
     try:
-        sftp.remove(remote_path)
-    except (OSError, IOError):
+        os.fchmod(descriptor, PRIVATE_MODE)
+    except OSError:
+        os.close(descriptor)
+        raise
+    return os.fdopen(descriptor, "wb")
+
+
+def _create_private_remote(sftp, path: str) -> None:
+    sftp.putfo(io.BytesIO(b""), path)
+    sftp.chmod(path, PRIVATE_MODE)
+
+
+def _install_remote(sftp, partial: str, remote_path: str) -> None:
+    try:
+        sftp.stat(remote_path)
+    except FileNotFoundError:
+        sftp.rename(partial, remote_path)
+        return
+    raise DBSError(f"{remote_path} already exists on the server; nothing was overwritten.")
+
+
+def _require_backup(path: str, name: str) -> None:
+    from ..engine.validate import validate_backup
+
+    result = validate_backup(path)
+    if not result.ok:
+        raise DBSError(f"{name} is not a valid DBS backup: {result.summary()}")
+
+
+class _Guarded:
+    def __init__(self, timeout: float | None):
+        self.timeout = timeout
+        self.deadline = None if not timeout else time.monotonic() + timeout
+        self.lost = _connection_gone()
+
+    def __call__(self, action):
+        try:
+            return action()
+        except socket.timeout as exc:
+            raise StreamInterrupted(
+                f"Remote command timed out after {self.timeout}s."
+            ) from exc
+        except self.lost as exc:
+            raise StreamInterrupted(f"The connection was lost: {exc}") from exc
+
+    def remaining(self) -> float | None:
+        if self.deadline is None:
+            return None
+        left = self.deadline - time.monotonic()
+        if left <= 0:
+            raise socket.timeout()
+        return left
+
+    def receive(self, channel) -> bytes:
+        channel.settimeout(self.remaining())
+        return channel.recv(STREAM_CHUNK)
+
+    def exit_status(self, channel) -> int:
+        if self.deadline is not None and not channel.status_event.wait(
+            self.remaining()
+        ):
+            raise socket.timeout()
+        return channel.recv_exit_status()
+
+
+def _send_line(stdin, line: str | None) -> None:
+    if line is not None:
+        stdin.write(line + "\n")
+        stdin.flush()
+    stdin.channel.shutdown_write()
+
+
+def _connection_gone() -> tuple[type[BaseException], ...]:
+    return (EOFError, OSError, _paramiko().SSHException)
+
+
+def _close_quietly(channel) -> None:
+    try:
+        channel.close()
+    except _connection_gone():
         pass
-    sftp.rename(partial, remote_path)
+
+
+class _StderrTail:
+    def __init__(self, stream, limit: int = MAX_CAPTURED_OUTPUT):
+        self._stream = stream
+        self._limit = limit
+        self._kept = bytearray()
+        self._thread = threading.Thread(target=self._read, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def join(self, timeout: float) -> None:
+        if self._thread.is_alive():
+            self._thread.join(timeout)
+
+    def text(self) -> str:
+        return bytes(self._kept).decode("utf-8", "replace")
+
+    def _read(self) -> None:
+        try:
+            while True:
+                chunk = self._stream.read(STREAM_CHUNK)
+                if not chunk:
+                    return
+                self._kept += chunk
+                del self._kept[: max(len(self._kept) - self._limit, 0)]
+        except Exception:
+            return
 
 
 def _ensure_remote_dir(sftp, remote_dir: str) -> None:

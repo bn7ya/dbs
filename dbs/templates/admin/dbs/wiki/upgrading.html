@@ -9,27 +9,65 @@ do automatically:</p>
 Anything that means editing your own code it prints, with the exact line and where it goes.
 It never rewrites your settings.</p>
 
+<h2>Installing a new release</h2>
+<p>Pin the release in your requirements or lock file and reinstall, the same way every
+deploy does, with the extras you use:</p>
+<pre><code>pip install "django-dbs[guard]==X.Y.Z"</code></pre>
+<p>Inside a virtual environment DBS can run that step for you:</p>
+<pre><code>python manage.py dbs upgrade --self              # the newest release on PyPI
+python manage.py dbs upgrade --self --to X.Y.Z   # exactly this one</code></pre>
+<p>It prints the exact pinned <code>pip install</code> command, with the extras installed here,
+and asks before running it; <code>--yes</code> answers for a script. It leaves a source
+checkout alone, and an interpreter outside a virtual environment too unless you add
+<code>--system-python</code>. Pin the same version in your requirements afterwards.</p>
+
 <h2>In CI</h2>
 <pre><code>python manage.py dbs upgrade --check</code></pre>
 <p>Changes nothing, exits non-zero when something is outstanding.</p>
 
 <h2>Old backups</h2>
 <pre><code>python manage.py dbs upgrade --backups /var/backups/myproject</code></pre>
-<p>Every backup written by any released DBS is at container format version 1, which this
-version reads, so today this reports nothing to convert. It exists so that a future format
-change cannot strand files that already exist.</p>
+<p>New backups are written in container format 2, which streams with flat memory. Backups
+written in format 1 by earlier releases still validate and restore; this command converts
+them, using the passphrase this project derives or sets.</p>
 <p>When a backup cannot be read forward, the command stops and changes nothing. It never
-deletes, moves or overwrites a backup: a conversion writes a new <code>.converted</code>
-file beside the original and validates it end to end before counting it. The message names
+deletes, moves or overwrites a backup: a conversion writes a new backup beside the
+original, named <code>&lt;name&gt;.v2.dbs</code> (with <code>-2</code>,
+<code>-3</code> and on when that name is taken), readable by its owner alone, and validates it
+end to end before it takes that name. A backup converted on an earlier run is reported, not
+converted again. The message names
 the safe option first &mdash; install the version that wrote the file in a separate
 environment and restore from there.</p>
 <p>Accepting that a backup is unreadable is deliberately hard to do by accident: there is no
 flag for it, it needs an interactive terminal, and it needs an exact typed phrase naming how
 many backups you are giving up. Even then nothing is deleted.</p>
 
+<h2>From 0.6.x</h2>
+<p><code>pip install django-dbs</code> is now the backup library alone. Install the extras you
+use &mdash; <code>[guard]</code> for the session guard's detector, <code>[manager]</code> for
+<code>django_dbs</code>, <code>[ssh]</code> for <code>dbs.transports</code> &mdash; then run
+<code>python manage.py dbs upgrade</code>. It applies the migration that seals the audit trail
+and drops the SFTP targets, and tells you about each of these:</p>
+<ul>
+  <li>This server no longer pushes backups. <code>DBS_SSH_TARGETS</code>,
+      <code>DBS_SCHEDULE_PUSH_TARGET</code>, <code>DBS_SCHEDULE_KEEP_REMOTE</code> and
+      <code>DBS_ADMIN_CONSOLE_SHELL</code> do nothing; delete them and let the
+      <a href="{% url 'admin:dbs_wiki' 'manager' %}">DBS manager</a> pull the backups.
+      <code>dbs-client</code> is gone too.</li>
+  <li>The server keeps at most five backups; a schedule keeping more is lowered to five, and
+      <code>DBS_SCHEDULE_KEEP</code> above five is refused.</li>
+  <li><code>DBS_TRUSTED_PROXIES</code> lists the proxies' networks, for example
+      <code>["10.0.0.0/24"]</code>, instead of a count.</li>
+  <li><code>DBS_KDF_TIME_COST</code> above 10 or <code>DBS_KDF_MEMORY_COST</code> above
+      262144 makes every new backup fail.</li>
+  <li>Models with <code>managed = False</code> are left out unless registered or listed as
+      <code>-app.model</code> in <code>DBS_EXCLUDE_MODELS</code>.</li>
+  <li>A missing source file stops a backup, and <code>dbs backup PATH</code> refuses a path
+      that exists.</li>
+</ul>
 <h2>From 0.2.x</h2>
 <ol>
-  <li><code>pip install --upgrade django-dbs</code></li>
+  <li><code>pip install "django-dbs[guard]==X.Y.Z"</code>, pinned in your requirements</li>
   <li><code>python manage.py dbs upgrade</code></li>
 </ol>
 <p>That applies the migrations 0.3.0 added and reports anything else. Existing backups

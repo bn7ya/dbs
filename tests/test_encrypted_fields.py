@@ -4,7 +4,6 @@ import pytest
 
 from dbs.crypto.secrets import decrypt_secret, encrypt_secret, is_encrypted, read_secret
 from dbs.exceptions import ConfigurationError, InvalidPassphrase
-from dbs.models import AuthMethod, BackupTarget
 
 
 def test_round_trip():
@@ -60,79 +59,3 @@ def test_encrypting_without_a_secret_key_is_refused(settings):
     settings.SECRET_KEY_FALLBACKS = []
     with pytest.raises(ConfigurationError):
         encrypt_secret("hunter2")
-
-
-@pytest.mark.django_db
-def test_a_target_stores_its_password_encrypted():
-    target = BackupTarget.objects.create(
-        name="offsite",
-        host="backups.example.com",
-        username="deploy",
-        auth_method=AuthMethod.PASSWORD,
-        known_hosts="/home/deploy/.ssh/known_hosts",
-        secret_password="hunter2",
-    )
-    target.refresh_from_db()
-
-    assert target.secret_password.startswith("dbs1:")
-    assert "hunter2" not in target.secret_password
-    assert target.secret("secret_password") == "hunter2"
-    assert not target.has_unreadable_secret()
-
-
-@pytest.mark.django_db
-def test_resaving_does_not_encrypt_twice():
-    target = BackupTarget.objects.create(
-        name="offsite",
-        host="backups.example.com",
-        username="deploy",
-        auth_method=AuthMethod.PASSWORD,
-        known_hosts="/known_hosts",
-        secret_password="hunter2",
-    )
-    target.refresh_from_db()
-    target.notes = "touched"
-    target.save()
-    target.refresh_from_db()
-
-    assert target.secret("secret_password") == "hunter2"
-
-
-@pytest.mark.django_db
-def test_an_unreadable_credential_is_reported_rather_than_raised(settings):
-    settings.SECRET_KEY_FALLBACKS = []
-    target = BackupTarget.objects.create(
-        name="offsite",
-        host="backups.example.com",
-        username="deploy",
-        auth_method=AuthMethod.PASSWORD,
-        known_hosts="/known_hosts",
-        secret_password="hunter2",
-    )
-    target.refresh_from_db()
-
-    settings.SECRET_KEY = "a-completely-different-key"
-    assert target.secret("secret_password") is None
-    assert target.has_unreadable_secret()
-
-
-@pytest.mark.django_db
-def test_ssh_target_carries_the_decrypted_password():
-    target = BackupTarget.objects.create(
-        name="offsite",
-        host="backups.example.com",
-        username="deploy",
-        port=2222,
-        remote_dir="/var/backups",
-        auth_method=AuthMethod.PASSWORD,
-        known_hosts="/known_hosts",
-        secret_password="hunter2",
-    )
-    target.refresh_from_db()
-
-    ssh = target.ssh_target()
-    assert ssh.host == "backups.example.com"
-    assert ssh.port == 2222
-    assert ssh.password == "hunter2"
-    assert ssh.use_agent is False
-    assert ssh.host_key_policy == "reject-unknown"

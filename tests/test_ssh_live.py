@@ -10,8 +10,6 @@ import pytest
 
 paramiko = pytest.importorskip("paramiko")
 
-from dbs.client.config import ServerProfile  # noqa: E402
-from dbs.client.remote import trigger_remote_backup  # noqa: E402
 from dbs.exceptions import ConfigurationError, DBSError, HostKeyError  # noqa: E402
 from dbs.transports.ssh import (  # noqa: E402
     HostKey,
@@ -297,8 +295,7 @@ def test_a_different_pinned_key_is_refused_over_a_real_handshake(host_key):
 
 def test_the_passphrase_reaches_the_server_on_stdin_not_in_argv(tmp_path, host_key):
     server = LoopbackServer(host_key, authorized_key=None)
-    profile = ServerProfile(
-        name="live",
+    target = SSHTarget(
         host="127.0.0.1",
         port=server.port,
         username="deploy",
@@ -306,17 +303,20 @@ def test_the_passphrase_reaches_the_server_on_stdin_not_in_argv(tmp_path, host_k
         use_agent=False,
         known_hosts=known_hosts_file(tmp_path, server.port, host_key),
         connect_timeout=10,
-        remote_dir="/tmp/dbs-live",
-        project_dir="/srv/app",
-        python="/srv/app/.venv/bin/python",
     )
+    received = io.BytesIO()
     try:
-        with open_session(profile.ssh_target()) as session:
-            session.ensure_dir = lambda: profile.remote_dir
-            trigger_remote_backup(session, profile, PASSPHRASE, "live.dbs")
+        with open_session(target) as session:
+            result = session.stream(
+                "python manage.py dbs backup --stream --passphrase-stdin",
+                received,
+                stdin_line=PASSPHRASE,
+            )
     finally:
         server.close()
 
+    assert result.exit_status == 0
+    assert received.getvalue() == b"served\n"
     assert server.record["stdin"] == PASSPHRASE + "\n"
     assert PASSPHRASE not in server.record["command"]
     assert "--passphrase-stdin" in server.record["command"]

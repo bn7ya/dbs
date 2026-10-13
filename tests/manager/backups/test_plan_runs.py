@@ -18,7 +18,7 @@ from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.servers.exceptions import RemoteCommandFailed, SSHUnreachable
 from dbs.manager.servers.services import ServerService
 from tests.manager.backups.support import BackupHost
-from tests.manager.servers.support import connecting_to
+from tests.manager.servers.support import BACKUP_DIR, PASSWORD, connecting_to
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 
@@ -75,7 +75,7 @@ def test_a_plan_or_server_that_is_gone_is_not_run(api, admin, server, make_plan)
     deleted = make_plan(name="deleted")
     BackupPlanService(admin).delete(deleted.pk)
     orphan = make_plan(name="orphan")
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     for path in (
         run_url(deleted),
@@ -121,11 +121,15 @@ def test_a_run_stores_a_backup_that_names_its_plan(admin, server, host, make_pla
         "plan": str(plan.pk),
         "backup": str(backup.pk),
         "size": backup.size,
+        "pulled": 0,
+        "released": 0,
     }
     assert (backup.plan, backup.server, backup.created_by) == (plan, server, admin)
     assert backup.name.startswith("web-1-nightly-db-")
+    assert backup.remote_path == f"{BACKUP_DIR}/{backup.name}"
+    assert host.remote_names() == [backup.name]
     [take] = host.takes
-    assert (take.prefix, take.keep_remote) == ("web-1-nightly-db", 3)
+    assert take.prefix == "web-1-nightly-db"
 
 
 @pytest.mark.django_db
@@ -143,8 +147,8 @@ def test_a_plan_named_with_nothing_a_file_name_can_carry_falls_back_to_its_id(
 def test_keeping_no_copy_on_the_server_leaves_no_remote_path(host, make_plan, ran):
     job = ran(make_plan(keep_remote=0))
 
-    assert host.takes[0].keep_remote == 0
     assert BackupFileRepository().get(job.data["backup"]).remote_path == ""
+    assert host.remote_names() == []
 
 
 @pytest.mark.django_db
@@ -283,7 +287,11 @@ def test_a_run_keeps_the_plans_newest_files_and_deletes_the_rest(
 def test_retention_counts_only_files_still_listed(api, make_plan, ran):
     plan = make_plan(keep=2)
     first = ran(plan)
-    api.delete(f"/api/backups/{first.data['backup']}/")
+    api.delete(
+        f"/api/backups/{first.data['backup']}/",
+        {"account_password": PASSWORD},
+        format="json",
+    )
 
     ran(plan)
     ran(plan)

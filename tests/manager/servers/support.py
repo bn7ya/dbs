@@ -77,6 +77,9 @@ class Result:
 
 
 class FakeRemote:
+    timeout_on_host = False
+    timeout_in_container = False
+
     def __init__(
         self,
         *,
@@ -98,6 +101,7 @@ class FakeRemote:
         env: Mapping[str, str] | None = None,
         stdin_line: str | None = None,
         timeout: float | None = None,
+        limited: bool = False,
     ) -> Result:
         self.runs.append({"argv": list(argv), "cwd": cwd, "env": env})
         answer = self.answers.get(tuple(argv), Result(127, "", "not found"))
@@ -110,6 +114,7 @@ class FakeRemote:
     run_compose = RemoteHost.run_compose
     run_in_container = RemoteHost.run_in_container
     compose_version = RemoteHost.compose_version
+    has_timeout = RemoteHost.has_timeout
 
     def exists(self, path: str) -> bool:
         if path in self.unreadable:
@@ -319,6 +324,10 @@ class LocalSftpSession:
     def __init__(self) -> None:
         self.sftp = LocalSftp()
         self.closed = False
+        self.dropped = False
+
+    def is_alive(self) -> bool:
+        return not self.closed and not self.dropped
 
     def close(self) -> None:
         self.closed = True

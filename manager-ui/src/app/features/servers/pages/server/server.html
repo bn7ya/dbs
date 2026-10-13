@@ -5,6 +5,7 @@
       <div class="server__title">
         <h1><bdi dir="auto">{{ current.name }}</bdi></h1>
         <app-check-status-tag [status]="current.last_check_status" />
+        <app-connection-dot [state]="current.connection_state" [lastSeenAt]="current.last_seen_at" />
       </div>
       <p class="text-secondary">
         <bdi class="server__address" dir="ltr">{{ current.username }}&#64;{{ current.host }}:{{ current.port }}</bdi>

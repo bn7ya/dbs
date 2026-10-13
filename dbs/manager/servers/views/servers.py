@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
+    AccountPasswordSerializer,
     AddedServerSerializer,
     ServerCreateSerializer,
     ServerListSerializer,
@@ -53,5 +54,7 @@ class ServerDetailView(APIView):
         return Response(ServerSerializer(server).data)
 
     def delete(self, request: Request, pk: UUID) -> Response:
-        ServerService(request.user).delete(pk)
+        payload = AccountPasswordSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        ServerService(request.user).delete(pk, **payload.validated_data)
         return Response(status=status.HTTP_204_NO_CONTENT)

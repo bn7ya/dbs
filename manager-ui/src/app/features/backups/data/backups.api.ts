@@ -8,6 +8,7 @@ import type {
   BackupFile,
   BackupListQuery,
   BackupPlan,
+  DownloadLink,
   PlanCreate,
   PlanListQuery,
   PlanUpdate,
@@ -42,6 +43,10 @@ export class BackupsApi {
     return `${this.base}/${id}/download/`;
   }
 
+  downloadLink(id: string, accountPassword: string): Observable<DownloadLink> {
+    return this.http.post<DownloadLink>(`${this.base}/${id}/download/`, { account_password: accountPassword });
+  }
+
   verify(id: string): Observable<JobStarted> {
     return this.http.post<JobStarted>(`${this.base}/${id}/verify/`, {});
   }
@@ -55,8 +60,8 @@ export class BackupsApi {
     return this.http.get<Page<TargetServer>>('/api/servers/', { params });
   }
 
-  remove(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.base}/${id}/`);
+  remove(id: string, accountPassword: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}/`, { body: { account_password: accountPassword } });
   }
 
   undoDelete(id: string): Observable<BackupFile> {

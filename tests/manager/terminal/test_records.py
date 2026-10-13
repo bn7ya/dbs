@@ -2,9 +2,15 @@ import os
 
 import pytest
 
+from dbs.manager.activity.services import ActivityService
 from dbs.manager.envfiles.models import EnvVersion
 from tests.manager.servers.support import PASSWORD
-from tests.manager.test_redeploy import world  # noqa: F401
+from tests.manager.support import logged
+from tests.manager.test_redeploy import (  # noqa: F401
+    TARGET_ENV,
+    failing_migration,
+    world,
+)
 
 ENV = b"SECRET_KEY=first\nDEBUG=0\n"
 
@@ -103,10 +109,61 @@ def test_redeploy_rehearses_and_prints_each_step(terminal, admin, world):  # noq
     )
 
     assert ran.code == 0, ran.out + ran.err
-    assert "check" in ran.out and "Rehearsed redeploying web-1 onto web-2." in ran.out
+    assert "check" in ran.out and "Rehearsed moving web-1 onto web-2." in ran.out
     assert [
         "--dry-run" in restore["argv"] for restore in world["sent"]["restores"]
     ] == [True]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_move_that_stops_names_the_step_and_the_revert(terminal, admin, world):  # noqa: F811
+    failing_migration(world)
+
+    ran = terminal(
+        "redeploy",
+        "start",
+        "--from",
+        "web-1",
+        "--to",
+        "web-2",
+        "--env",
+        world["version"].pk,
+        "--real",
+        "--confirm-name",
+        "web-2",
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
+    )
+
+    assert ran.code == 1
+    assert "Stopped at migrate." in ran.out
+    move = logged("redeploy.run")[0].pk
+    assert f"django_dbs redeploy revert {move} --real" in ran.out
+
+    reverted = terminal(
+        "redeploy",
+        "revert",
+        move,
+        "--real",
+        "--confirm-name",
+        "web-2",
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
+    )
+
+    assert reverted.code == 0, reverted.out + reverted.err
+    assert "Reverted web-2." in reverted.out
+    assert world["env"].read_bytes() == TARGET_ENV
+
+
+@pytest.mark.django_db
+def test_only_a_move_can_be_reverted(terminal, admin, world):  # noqa: F811
+    ran = terminal("redeploy", "revert", "nope")
+    assert ran.code == 1 and "'nope' is not a move number." in ran.err
+
+    entry = ActivityService(admin).record("auth.sign_in", target="sara")
+    ran = terminal("redeploy", "revert", entry.pk)
+    assert ran.code == 1 and f"{entry.pk} is not a move." in ran.err
 
 
 @pytest.mark.django_db

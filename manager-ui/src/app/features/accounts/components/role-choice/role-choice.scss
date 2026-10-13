@@ -1,0 +1,18 @@
+.role-choice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.role-choice__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-2);
+}
+
+.role-choice__label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}

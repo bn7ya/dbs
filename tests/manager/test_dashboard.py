@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 import pytest
+from django.db import connection
 from django.utils import timezone
 
 import dbs
@@ -27,6 +28,8 @@ SERVER_KEYS = {
     "host",
     "check_status",
     "checked_at",
+    "connection_state",
+    "last_seen_at",
     "last_backup",
     "next_plan_run",
     "failures_7d",
@@ -44,6 +47,7 @@ ACTIVITY_KEYS = {
     "actor",
     "server",
     "server_name",
+    "connection",
     "created_at",
     "started_at",
     "finished_at",
@@ -87,6 +91,7 @@ def test_an_empty_manager_has_an_empty_dashboard(api):
         "storage_bytes": 0,
         "last_export_at": None,
         "recent_failures": [],
+        "key_store": "file",
     }
 
 
@@ -153,6 +158,8 @@ def test_each_server_shows_its_backups_plans_failures_storage_and_health(api, ad
         "host": "10.0.0.6",
         "check_status": "unknown",
         "checked_at": None,
+        "connection_state": "unknown",
+        "last_seen_at": None,
         "last_backup": None,
         "next_plan_run": None,
         "failures_7d": 0,
@@ -188,5 +195,14 @@ def test_about_names_the_version_and_where_the_data_lives(api, data_dir, setting
         "database": body["database"],
         "backups_dir": settings.BACKUP_STORAGE_DIR,
         "last_export_at": None,
+        "key_store": "file",
     }
-    assert body["database"].startswith("sqlite:")
+    assert body["database"].startswith(f"{connection.vendor}:")
+
+
+@pytest.mark.django_db
+def test_a_key_kept_in_the_keychain_is_named_on_the_dashboard(api, settings):
+    settings.DBS_MANAGER_KEY_STORE = "keychain"
+
+    assert api.get(DASHBOARD).json()["key_store"] == "keychain"
+    assert api.get("/api/about/").json()["key_store"] == "keychain"

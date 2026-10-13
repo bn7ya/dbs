@@ -4,6 +4,7 @@ import errno
 import io
 import os
 import posixpath
+import threading
 import types
 
 
@@ -73,6 +74,7 @@ class FakeTransport:
         self.sock = sock
         self.banner_timeout = None
         self.start_timeout = None
+        self.keepalive = None
         self.closed = False
 
     def start_client(self, timeout=None):
@@ -83,8 +85,39 @@ class FakeTransport:
     def get_remote_server_key(self):
         return FakeServerKey(self._registry.presented_key)
 
+    def set_keepalive(self, interval):
+        self.keepalive = interval
+
+    def is_active(self):
+        return not self.closed and not self._registry.dropped
+
+    def global_request(self, kind, data=None, wait=True):
+        self._registry.global_requests.append((kind, wait))
+        return None
+
     def close(self):
         self.closed = True
+
+
+class FakeSocket:
+    def __init__(self):
+        self.options = {}
+
+    def setsockopt(self, level, option, value):
+        self.options[(level, option)] = value
+
+
+class FakeSFTPChannel:
+    def __init__(self):
+        self.timeout = None
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+
+def _report(callback, moved):
+    if callback is not None:
+        callback(moved, moved)
 
 
 class FakeAttr:
@@ -97,6 +130,10 @@ class FakeAttr:
 class FakeSFTP:
     def __init__(self, root):
         self.root = root
+        self.channel = FakeSFTPChannel()
+
+    def get_channel(self):
+        return self.channel
 
     def _local(self, remote_path):
         return os.path.join(self.root, remote_path.lstrip("/"))
@@ -106,26 +143,29 @@ class FakeSFTP:
             errno.ENOENT, "No such file", remote_path
         )
 
-    def putfo(self, handle, remote_path):
+    def putfo(self, handle, remote_path, callback=None):
         local = self._local(remote_path)
         if not os.path.isdir(os.path.dirname(local)):
             raise self._missing(remote_path)
         with open(local, "wb") as fh:
-            fh.write(handle.read())
+            moved = fh.write(handle.read())
+        _report(callback, moved)
 
-    def getfo(self, remote_path, handle):
+    def getfo(self, remote_path, handle, callback=None):
         local = self._local(remote_path)
         if not os.path.exists(local):
             raise self._missing(remote_path)
         with open(local, "rb") as fh:
-            handle.write(fh.read())
+            moved = handle.write(fh.read())
+        _report(callback, moved)
 
-    def get(self, remote_path, local_path):
+    def get(self, remote_path, local_path, callback=None):
         local = self._local(remote_path)
         if not os.path.exists(local):
             raise self._missing(remote_path)
         with open(local, "rb") as source, open(local_path, "wb") as target:
-            target.write(source.read())
+            moved = target.write(source.read())
+        _report(callback, moved)
 
     def listdir(self, remote_dir):
         local = self._local(remote_dir)
@@ -168,9 +208,20 @@ class FakeSFTP:
 class FakeChannel:
     def __init__(self, session):
         self._session = session
+        self.status_event = threading.Event()
+        self.status_event.set()
 
     def shutdown_write(self):
         self._session.stdin_closed = True
+
+    def settimeout(self, timeout):
+        self._session.timeouts.append(timeout)
+
+    def recv(self, size):
+        return self._session.take(1, size)
+
+    def close(self):
+        self._session.channel_closed = True
 
     def recv_exit_status(self):
         return self._session.resolve()[0]
@@ -197,7 +248,7 @@ class FakeStdout:
         self.channel = FakeChannel(session)
 
     def read(self, size=-1):
-        return self._session.resolve()[self._index].encode()
+        return self._session.take(self._index, size)
 
 
 class FakeExec:
@@ -207,11 +258,22 @@ class FakeExec:
         self.command = command
         self.stdin = ""
         self.stdin_closed = False
+        self.channel_closed = False
+        self.timeouts = []
+        self._offsets = {1: 0, 2: 0}
 
     def resolve(self):
         if self._outcome is None:
             self._outcome = self._registry.handle(self.command, self)
         return self._outcome
+
+    def take(self, index, size=-1):
+        produced = self.resolve()[index]
+        data = produced.encode() if isinstance(produced, str) else produced
+        start = self._offsets[index]
+        end = len(data) if size is None or size < 0 else min(len(data), start + size)
+        self._offsets[index] = end
+        return data[start:end]
 
     @property
     def exit_status(self):
@@ -229,9 +291,13 @@ class FakeSSHClient:
         self.system_host_keys_loaded = False
         self.host_keys = FakeHostKeys()
         self.closed = False
+        self.transport = FakeTransport(registry, FakeSocket())
 
     def get_host_keys(self):
         return self.host_keys
+
+    def get_transport(self):
+        return self.transport
 
     def load_host_keys(self, path):
         self.host_keys_loaded = path
@@ -272,6 +338,7 @@ class FakeSSHClient:
 
     def close(self):
         self.closed = True
+        self.transport.close()
 
 
 class FakeParamiko:
@@ -295,6 +362,8 @@ class FakeParamiko:
         self.connect_error = None
         self.handshake_error = None
         self.presented_key = None
+        self.dropped = False
+        self.global_requests = []
         self._handler = None
 
     def SSHClient(self):

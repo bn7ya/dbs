@@ -7,8 +7,10 @@ import pytest
 from dbs.naming import (
     backup_filename,
     backup_prefix,
+    backup_stem,
     is_backup_name,
     parse_backup_moment,
+    reserve_backup_name,
     sorted_backups,
 )
 
@@ -78,3 +80,55 @@ def test_sorted_backups_filters_and_orders():
 
     assert sorted_backups(names, "prod") == [older, newer]
     assert sorted_backups(names) == [older, other, newer]
+
+
+def test_the_default_database_keeps_the_old_name_and_others_carry_their_alias():
+    assert backup_stem("backup", "default") == "backup"
+    assert backup_stem("backup", "replica") == "backup-replica"
+    assert backup_stem("prod", "eu west/1") == "prod-eu-west-1"
+
+    replica = backup_filename(backup_stem("backup", "replica"), moment=MOMENT)
+
+    assert replica == "backup-replica-20260728-020000Z.dbs"
+    assert backup_prefix(replica) == "backup-replica"
+    assert parse_backup_moment(replica) == MOMENT
+    assert not is_backup_name(replica, "backup")
+    assert not is_backup_name(backup_filename("backup", moment=MOMENT), "backup-replica")
+
+
+def test_names_reserved_in_the_same_second_never_collide(tmp_path):
+    first = reserve_backup_name(str(tmp_path), "backup", MOMENT)
+    second = reserve_backup_name(str(tmp_path), "backup", MOMENT)
+
+    assert first == "backup-20260728-020000Z.dbs"
+    assert second == "backup-20260728-020000Z-2.dbs"
+    assert sorted(path.name for path in tmp_path.iterdir()) == sorted([first, second])
+    assert (tmp_path / first).stat().st_size == 0
+
+
+def test_a_reservation_never_takes_over_an_existing_file(tmp_path):
+    taken = tmp_path / backup_filename("backup", moment=MOMENT)
+    taken.write_bytes(b"an earlier backup")
+
+    name = reserve_backup_name(str(tmp_path), "backup", MOMENT)
+
+    assert name != taken.name
+    assert taken.read_bytes() == b"an earlier backup"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["backup-20260728-020000Z.v2.dbs", "backup-20260728-020000Z-3.v2-2.dbs"],
+)
+def test_a_converted_backup_keeps_its_prefix_and_moment(name):
+    assert is_backup_name(name, "backup")
+    assert backup_prefix(name) == "backup"
+    assert parse_backup_moment(name) == MOMENT
+
+
+def test_a_conversion_sorts_after_the_backup_it_came_from():
+    original = backup_filename(moment=MOMENT)
+    converted = original.replace(".dbs", ".v2.dbs")
+
+    assert sorted_backups([converted, original]) == [original, converted]
+    assert not is_backup_name(original + ".converted")

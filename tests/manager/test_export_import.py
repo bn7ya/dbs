@@ -68,9 +68,11 @@ print(json.dumps({
 )
 
 
-def python(script, home, *args):
+def python(script, home, *args, **extra):
     env = clean_env(
-        DBS_MANAGER_HOME=str(home), DJANGO_SETTINGS_MODULE="dbs.manager.settings"
+        DBS_MANAGER_HOME=str(home),
+        DJANGO_SETTINGS_MODULE="dbs.manager.settings",
+        **extra,
     )
     result = subprocess.run(
         [sys.executable, "-c", script, *args],
@@ -84,11 +86,11 @@ def python(script, home, *args):
     return result.stdout
 
 
-def manager(*args, passphrase=EXPORT_PASSPHRASE):
+def manager(*args, passphrase=EXPORT_PASSPHRASE, **extra):
     return subprocess.run(
         [sys.executable, "-m", "dbs.manager.cli", *args, "--passphrase-stdin"],
         cwd=ROOT,
-        env=clean_env(),
+        env=clean_env(**extra),
         input=f"{passphrase}\n",
         capture_output=True,
         text=True,
@@ -104,8 +106,8 @@ def source(tmp_path):
     return {"home": home, "key": private_key}
 
 
-def checked(home):
-    return json.loads(python(CHECK, home).strip().splitlines()[-1])
+def checked(home, **extra):
+    return json.loads(python(CHECK, home, **extra).strip().splitlines()[-1])
 
 
 def test_an_export_moves_the_manager_to_another_data_directory(source, tmp_path):
@@ -155,7 +157,7 @@ def test_the_imported_account_signs_in_over_http(source, tmp_path):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(request, timeout=10) as response:
             assert response.status == 200
-            assert json.loads(response.read())["username"] == "sara"
+            assert json.loads(response.read()) == {"step": "enroll"}
     finally:
         running.stop()
 
@@ -187,6 +189,90 @@ def test_an_import_refuses_a_directory_that_already_manages_servers(source, tmp_
     assert refused.returncode == 1 and "--replace" in refused.stderr
     assert replaced.returncode == 0, replaced.stderr
     assert checked(source["home"])["signs_in"] is True
+
+
+def test_replacing_moves_the_old_installation_aside_intact(source, tmp_path):
+    export = tmp_path / "manager.dbs"
+    other = tmp_path / "other"
+    python(SEED, other, PASSWORD, private_key_text(), host_key_line())
+    assert manager("export", str(export), "--data-dir", str(other)).returncode == 0
+    old_key = (source["home"] / "keys" / "secret.key").read_text()
+
+    replaced = manager(
+        "import",
+        str(export),
+        "--data-dir",
+        str(source["home"]),
+        "--replace",
+        "--yes",
+    )
+
+    assert replaced.returncode == 0, replaced.stderr
+    [aside] = tmp_path.glob("first.before-import-*")
+    assert str(aside) in replaced.stdout
+    assert (aside / "keys" / "secret.key").read_text() == old_key
+    assert checked(aside)["key"] == source["key"]
+    assert checked(source["home"])["key"] != source["key"]
+    assert (source["home"] / "keys" / "secret.key").read_text() == (
+        other / "keys" / "secret.key"
+    ).read_text()
+    assert not list(tmp_path.glob("first.import-*"))
+    assert not (source["home"] / "import.complete").exists()
+
+
+def test_replacing_an_installation_sealed_with_another_key_needs_a_yes(
+    source, tmp_path
+):
+    export = tmp_path / "manager.dbs"
+    other = tmp_path / "other"
+    python(SEED, other, PASSWORD, private_key_text(), host_key_line())
+    assert manager("export", str(export), "--data-dir", str(other)).returncode == 0
+
+    refused = manager(
+        "import", str(export), "--data-dir", str(source["home"]), "--replace"
+    )
+
+    assert refused.returncode == 1 and "--yes" in refused.stderr
+    assert checked(source["home"])["key"] == source["key"]
+    assert not list(tmp_path.glob("first.*"))
+
+
+def test_an_installation_whose_key_is_in_the_keychain_exports_and_moves(
+    source, tmp_path
+):
+    ring = {
+        "DBS_MANAGER_KEY_STORE": "keychain",
+        "PYTHON_KEYRING_BACKEND": "tests.manager.fake_keyring.FileKeyring",
+        "DBS_TEST_KEYRING_FILE": str(tmp_path / "ring.json"),
+    }
+    held = (source["home"] / "keys" / "secret.key").read_text().strip()
+    export = tmp_path / "manager.dbs"
+    second = tmp_path / "second"
+
+    assert checked(source["home"], **ring)["key"] == source["key"]
+    assert not (source["home"] / "keys" / "secret.key").exists()
+    exported = manager("export", str(export), "--data-dir", str(source["home"]), **ring)
+    imported = manager("import", str(export), "--data-dir", str(second))
+    replaced = manager(
+        "import",
+        str(export),
+        "--data-dir",
+        str(source["home"]),
+        "--replace",
+        **ring,
+    )
+
+    assert exported.returncode == 0, exported.stderr
+    assert imported.returncode == 0, imported.stderr
+    assert (second / "keys" / "secret.key").read_text().strip() == held
+    assert checked(second)["key"] == source["key"]
+    assert replaced.returncode == 0, replaced.stderr
+    [aside] = tmp_path.glob("first.before-import-*")
+    assert checked(aside, **ring)["key"] == source["key"]
+    assert checked(source["home"], **ring)["key"] == source["key"]
+    assert not (source["home"] / "keys" / "secret.key").exists()
+    entries = json.loads((tmp_path / "ring.json").read_text())
+    assert sorted(entries.values()) == [held, held]
 
 
 def test_an_import_refuses_while_the_manager_runs(source, tmp_path):
@@ -223,7 +309,8 @@ def test_a_wrong_passphrase_imports_nothing(source, tmp_path):
     )
 
     assert refused.returncode == 1
-    assert not (second / "backups").exists()
+    assert not second.exists()
+    assert not list(tmp_path.glob("second.*"))
 
 
 def test_an_export_never_overwrites_a_file_and_needs_a_long_passphrase(
@@ -245,3 +332,22 @@ def test_an_export_never_overwrites_a_file_and_needs_a_long_passphrase(
     assert export.read_bytes() == b"keep me"
     assert short.returncode == 1 and "12 characters" in short.stderr
     assert not (tmp_path / "other.dbs").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_an_export_row_carries_its_size_and_digest_and_keeps_the_chain_intact(tmp_path):
+    from dbs import audit
+    from dbs.io import file_digest
+    from dbs.manager import transfer
+    from dbs.models import AuditEvent
+
+    output = tmp_path / "manager.dbs"
+
+    summary = transfer.export_manager(output, EXPORT_PASSPHRASE)
+
+    event = AuditEvent.objects.get(action=transfer.EXPORT)
+    size, digest = file_digest(output)
+    assert event.data["size"] == summary.bytes_written == size
+    assert event.data["sha256"] == summary.sha256 == digest
+    assert event.chain_index is not None
+    assert audit.verify_chain().intact

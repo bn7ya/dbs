@@ -3,11 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from rest_framework.exceptions import APIException
-
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
     AddedServerSerializer,
+    HostKeyConfirmationSerializer,
     HostKeySerializer,
     ServerCreateSerializer,
     ServerListSerializer,
@@ -15,12 +14,16 @@ from dbs.manager.servers.serializers import (
     ServerUpdateSerializer,
 )
 from dbs.manager.servers.serializers.browse import BrowseEntrySerializer
-from dbs.manager.servers.services import BrowseService, DiscoveryService, ServerService
+from dbs.manager.servers.services import (
+    BrowseService,
+    DiscoveryService,
+    HostKeyConfirmationService,
+    ServerService,
+)
 from dbs.manager.servers.services.discovery_service import discovered_settings
 from dbs.manager.adapters import references, servers
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.adapters.forms import validated
-from dbs.manager.adapters.problems import problem
 from dbs.manager.terminal.session import TerminalSession
 
 SETTING_FIELDS = (
@@ -56,16 +59,28 @@ SHOWN_FIELDS = (
     "last_check_status",
     "last_check_error",
     "last_checked_at",
+    "connection_state",
+    "last_seen_at",
+    "last_connection_error",
+    "timeout_on_host",
+    "timeout_in_container",
 )
 LIST_COLUMNS = (
     ("NAME", "name"),
     ("HOST", lambda row: f"{row['username']}@{row['host']}:{row['port']}"),
+    (
+        "CONNECTION",
+        lambda row: servers.connection_label(
+            row["connection_state"], row["last_connection_error"]
+        ),
+    ),
     ("STATUS", "last_check_status"),
     ("CHECKED", "last_checked_at"),
     ("ID", "id"),
 )
 CHECK_COLUMNS = (
     ("SERVER", "name"),
+    ("CONNECTION", "connection"),
     ("STATUS", "status"),
     ("DJANGO-DBS", "remote_version"),
     ("PROBLEM", "problem"),
@@ -167,7 +182,10 @@ def remove(session: TerminalSession) -> int:
     session.confirm(
         f"Type the server's name ({server.name}) to remove it:", expected=server.name
     )
-    ServerService(session.user).delete(server.pk)
+    service = ServerService(session.user)
+    session.guarded(
+        lambda password: service.delete(server.pk, account_password=password)
+    )
     session.out.say(f"Removed {server.name}.", {"removed": str(server.pk)})
     return 0
 
@@ -266,6 +284,28 @@ def host_key(session: TerminalSession) -> int:
     return 0
 
 
+def confirm_host_key(session: TerminalSession) -> int:
+    confirmations = HostKeyConfirmationService(session.user)
+    held = confirmations.to_decide(session.args.confirmation)
+    print(f"Claude asks to pin the host key {held.address} offers:")
+    print(f"  {held.key_type} {held.fingerprint}")
+    print("On the server, ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub prints the")
+    print("fingerprints to compare it with.")
+    if session.agrees("Is this the server's key? [y/N]"):
+        decided = confirmations.confirm(held.id)
+        session.out.say(
+            f"Confirmed; Claude can add {held.address} now.",
+            HostKeyConfirmationSerializer(decided).data,
+        )
+        return 0
+    decided = confirmations.reject(held.id)
+    session.out.say(
+        f"Rejected; Claude cannot pin this key for {held.address}.",
+        HostKeyConfirmationSerializer(decided).data,
+    )
+    return 1
+
+
 def passphrase(session: TerminalSession) -> int:
     server = references.server(session.user, session.args.server)
     shown = ServerService(session.user).reveal_passphrase(server.pk, session.password())
@@ -280,61 +320,6 @@ def capture_passphrase(session: TerminalSession) -> int:
         f"Read the backup passphrase from {server.name}.", {"captured": True}
     )
     return 0
-
-
-def import_profiles(session: TerminalSession) -> int:
-    from dbs.client.config import load_client_config
-    from dbs.exceptions import DBSError
-
-    try:
-        config = load_client_config(session.args.file)
-    except DBSError as exc:
-        raise CommandFailed(str(exc)) from exc
-    service = ServerService(session.user)
-    failed = 0
-    for profile in config.servers.values():
-        try:
-            server = _imported(session, service, profile)
-        except (APIException, CommandFailed) as exc:
-            failed += 1
-            message = problem(exc) if isinstance(exc, APIException) else str(exc)
-            print(f"{profile.name}: not added: {message}")
-            continue
-        print(f"{profile.name}: added as {server.name}.")
-    return 1 if failed else 0
-
-
-def _imported(session: TerminalSession, service: ServerService, profile: Any) -> Server:
-    body: dict[str, Any] = {
-        "name": profile.name,
-        "host": profile.host,
-        "port": profile.port,
-        "username": profile.username,
-        "host_key": profile.host_key
-        or _offered_key(session, service, profile.host, profile.port),
-        "python_path": profile.python,
-        "manage_path": profile.manage,
-    }
-    if profile.remote_dir.startswith("/"):
-        body["remote_backup_dir"] = profile.remote_dir
-    if profile.project_dir:
-        body["project_dir"] = profile.project_dir
-    if profile.django_settings_module:
-        body["settings_module"] = profile.django_settings_module
-    if profile.key_filename:
-        body.update(
-            auth_method=Server.AuthMethod.KEY,
-            private_key=_read_key(profile.key_filename),
-        )
-        if profile.key_passphrase:
-            body["key_passphrase"] = profile.key_passphrase
-    elif profile.password:
-        body.update(auth_method=Server.AuthMethod.PASSWORD, password=profile.password)
-    else:
-        raise CommandFailed("it names no key file or password the manager can keep.")
-    if profile.passphrase:
-        body["backup_passphrase"] = profile.passphrase
-    return service.add(**validated(ServerCreateSerializer, body)).server
 
 
 def _offered_key(
@@ -423,6 +408,7 @@ def _checked(
     rows = [
         {
             "name": item.name,
+            "connection": item.connection,
             "status": item.status,
             "remote_version": item.remote_version,
             "problem": item.problem,

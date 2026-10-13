@@ -72,13 +72,14 @@
         "schedule": "Schedule",
         "scheduleHint": "The first scheduled run is one interval after saving.",
         "keep": "Keep here",
-        "keepHint": "The newest backups of this plan stay here. Older ones are deleted after each run.",
+        "keepHint": "Up to 5 of this plan's newest backups stay here. Older ones are deleted after each run.",
         "keepRemote": "Keep on the server",
         "keepRemoteHint": "0 removes the server's copy once it is fetched.",
         "enabled": "Enabled",
         "enabledHint": "A disabled plan runs only from Run now.",
         "submit": "Add plan",
         "passwordHint": "Choosing the folders and files this plan copies from the server needs your password.",
+        "passwordHintFewer": "Keeping fewer backups deletes the oldest ones on the next run, so it needs your password.",
         "removePath": "Remove {path}"
       }
     },
@@ -98,10 +99,11 @@
     },
     "take": {
       "action": "Back up now",
-      "body": "A one-off backup belongs to no plan and stays until someone deletes it.",
+      "body": "A one-off backup belongs to no plan. The manager keeps the five newest.",
       "working": "Backing up…",
       "running": "A backup is running. It continues if you leave this page.",
       "done": "Backup finished.",
+      "keptOnServer": "The connection broke before the backup arrived. The server keeps it, and the manager collects it at the next connection.",
       "warning": {
         "files_changed": "Backup finished. Some files changed while they were archived."
       }
@@ -128,7 +130,9 @@
     "validation": {
       "structure_ok": "Structure checked",
       "verified": "Verified",
-      "failed": "Failed verification"
+      "failed": "Failed verification",
+      "quarantined": "Quarantined",
+      "quarantinedBody": "Failed verification when it arrived. It is kept aside, never restored, and never counted toward how many are kept."
     },
     "sealedValidation": {
       "structure_ok": "Stored",
@@ -137,7 +141,11 @@
     },
     "download": {
       "action": "Download",
-      "label": "Download {name}"
+      "label": "Download {name}",
+      "prompt": {
+        "title": "Download backup",
+        "body": "DBS keeps {name} encrypted. Enter your password to download it decrypted."
+      }
     },
     "verify": {
       "action": "Verify",
@@ -182,8 +190,10 @@
     },
     "delete": {
       "label": "Delete {name}",
-      "confirmTitle": "Delete {name}?",
-      "confirmBody": "Undo is offered right after it is deleted.",
+      "prompt": {
+        "title": "Delete backup",
+        "body": "Enter your password to delete {name}. Undo is offered right after it is deleted."
+      },
       "done": "Backup deleted.",
       "undo": "Undo",
       "undone": "Deletion undone."
@@ -195,8 +205,8 @@
   },
   "errors": {
     "invalid_interval": "Choose a schedule from the list.",
-    "keep_range": "Enter a number from 1 to 365.",
-    "keep_remote_range": "Enter a number from 0 to 365.",
+    "keep_range": "Enter a number from 1 to 5.",
+    "keep_remote_range": "Enter a number from 0 to 5.",
     "paths_required": "Add at least one folder.",
     "paths_not_allowed": "A django-dbs plan takes no folders.",
     "one_folder_required": "Enter one folder.",

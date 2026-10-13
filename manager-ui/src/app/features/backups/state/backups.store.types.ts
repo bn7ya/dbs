@@ -1,3 +1,4 @@
+import type { Job } from '@core/jobs/job.types';
 import type { CollectResult } from '../data/backups.types';
 
 export type CollectCounts = Pick<CollectResult, 'collected' | 'skipped'>;
@@ -25,3 +26,8 @@ export interface PlanRun {
 }
 
 export type RestoreProgress = 'rehearse' | 'restore';
+
+export interface LiveJob {
+  readonly server: string;
+  readonly job: Job;
+}

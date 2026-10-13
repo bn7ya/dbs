@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from rest_framework import status
 from rest_framework.exceptions import APIException
 
@@ -30,16 +32,34 @@ class RemoteCommandFailed(APIException):
     default_detail = "A command on the server failed."
 
     def __init__(
-        self, detail: str | None = None, code: str | None = None, *, output: str = ""
+        self,
+        detail: str | None = None,
+        code: str | None = None,
+        *,
+        output: str = "",
+        settles_at: datetime | None = None,
     ) -> None:
         super().__init__(detail, code)
         self.output: str = output
+        self.settles_at: datetime | None = settles_at
 
 
-class BackupInvalid(RemoteCommandFailed):
-    default_code = "backup_invalid"
+class RemoteCommandTimedOut(RemoteCommandFailed):
+    status_code = status.HTTP_504_GATEWAY_TIMEOUT
+    default_code = "remote_command_timed_out"
+    default_detail = "A command on the server ran out of time and was stopped."
+
+
+class ServerConnectionLost(RemoteCommandFailed):
+    default_code = "connection_lost"
+    default_detail = "The connection to the server was lost while it worked."
+
+
+class StreamBroken(RemoteCommandFailed):
+    default_code = "stream_broken"
     default_detail = (
-        "The server made a backup file that is not a valid django-dbs backup."
+        "The connection broke while the backup was arriving. The server keeps it, "
+        "and the manager collects it at the next connection."
     )
 
 
@@ -55,9 +75,24 @@ class RestoreFailed(RemoteCommandFailed):
 
 class DbsTooOld(RemoteCommandFailed):
     default_code = "dbs_too_old"
-    default_detail = (
-        "The server's django-dbs is too old for this. Upgrade it to 0.2.2 or later."
-    )
+    default_detail = "The server's django-dbs is too old for this."
+
+    def __init__(self, needs: str, *, output: str = "") -> None:
+        super().__init__(self.needing(needs), output=output)
+        self.needs = needs
+
+    @classmethod
+    def needing(cls, version: str) -> str:
+        return f"{cls.default_detail} Upgrade it to {version} or later."
+
+
+def failure_facts(exc: Exception) -> dict[str, str]:
+    facts = {}
+    if isinstance(exc, RemoteCommandFailed) and exc.output:
+        facts["output"] = exc.output
+    if isinstance(exc, DbsTooOld):
+        facts["needs"] = exc.needs
+    return facts
 
 
 class RemoteNotFound(APIException):
@@ -100,3 +135,39 @@ class NoPrivateKey(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "no_private_key"
     default_detail = "This server signs in with a password, so it has no key."
+
+
+class HostKeyConfirmationMissing(APIException):
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = "host_key_confirmation_missing"
+    default_detail = (
+        "There is no such host key confirmation, or its 10 minutes are over. "
+        "Read the host key again."
+    )
+
+
+class HostKeyConfirmationMismatch(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_confirmation_mismatch"
+    default_detail = "This host key confirmation is for another address or port."
+
+
+class HostKeyNotConfirmed(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_not_confirmed"
+    default_detail = (
+        "Nobody has confirmed this host key yet. A person confirms it in the "
+        "manager's Servers page or with django_dbs server confirm-host-key."
+    )
+
+
+class HostKeyRejected(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_rejected"
+    default_detail = "A person rejected this host key, so it cannot be pinned."
+
+
+class HostKeyDecided(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_decided"
+    default_detail = "This host key was already confirmed or rejected."

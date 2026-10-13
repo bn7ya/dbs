@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import os
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
+from django.conf import settings
 from django.db import transaction
 from django.test.utils import override_settings
 from django.utils import timezone
@@ -13,17 +16,15 @@ from dbs.exceptions import DBSError
 from dbs.models import AuditEvent
 
 from . import conf, paths
+from .staging import TransferError
 
 EXPORT = "manager.export"
 IMPORT = "manager.import"
 KEYS = "keys"
+KEY_NAME = paths.KEY_FILE.name
 BACKUPS = paths.BACKUPS_DIRECTORY
 ROOTS = (KEYS, BACKUPS)
 MINIMUM_PASSPHRASE = 12
-
-
-class TransferError(Exception):
-    pass
 
 
 def default_export_name():
@@ -38,23 +39,40 @@ def checked_passphrase(passphrase):
     return passphrase
 
 
+@contextmanager
+def key_folder(data_dir) -> Iterator[Path]:
+    keys = Path(data_dir) / KEYS
+    if (keys / KEY_NAME).exists():
+        yield keys
+        return
+    with tempfile.TemporaryDirectory(prefix=".export-", dir=data_dir) as holder:
+        folder = paths.private_directory(Path(holder) / KEYS)
+        paths.write_private(folder / KEY_NAME, settings.SECRET_KEY)
+        yield folder
+
+
 def export_manager(output, passphrase, *, with_backups=False):
-    from dbs import create_backup
+    from dbs import write_backup
 
     output = str(output)
     if os.path.exists(output):
         raise TransferError(f"{output} already exists; choose another name.")
     passphrase = checked_passphrase(passphrase)
     data_dir = conf.data_dir()
-    roots = [str(data_dir / KEYS)]
-    if with_backups:
-        roots.append(str(paths.backups_path(data_dir)))
     data = {"with_backups": with_backups}
     target = os.path.basename(output)
     try:
-        with transaction.atomic(), override_settings(DBS_FILE_ROOTS=roots):
-            entry = audit.record(EXPORT, target=target, data=data)
-            container = create_backup(passphrase, output=output)
+        with key_folder(data_dir) as keys:
+            roots = [str(keys)]
+            if with_backups:
+                roots.append(str(paths.backups_path(data_dir)))
+            with transaction.atomic(), override_settings(DBS_FILE_ROOTS=roots):
+                entry = audit.record(EXPORT, target=target, data=data)
+                summary = write_backup(output, passphrase)
+                data.update(size=summary.bytes_written, sha256=summary.sha256)
+                AuditEvent.objects.filter(pk=entry.pk, chain_index__isnull=True).update(
+                    data=data
+                )
     except Exception as exc:
         audit.safe_record(
             EXPORT,
@@ -65,31 +83,57 @@ def export_manager(output, passphrase, *, with_backups=False):
             error_code=audit.error_code_for(exc),
         )
         raise
-    data.update(size=len(container), sha256=hashlib.sha256(container).hexdigest())
-    AuditEvent.objects.filter(pk=entry.pk).update(data=data)
-    return container
+    return summary
+
+
+@contextmanager
+def opened_export(source) -> Iterator:
+    try:
+        handle = Path(source).open("rb")
+    except OSError as exc:
+        raise TransferError(f"cannot read {source}: {exc}") from exc
+    with handle:
+        yield handle
+
+
+def exported_key(source, passphrase):
+    from dbs.engine.restore import backup_files
+
+    found = None
+    with opened_export(source) as handle:
+        try:
+            for entry, content in backup_files(handle, passphrase):
+                root = os.path.basename((entry.root or "").rstrip("/\\"))
+                if entry.kind == "root" and root == KEYS and entry.name == KEY_NAME:
+                    found = b"".join(content).decode("ascii").strip()
+        except DBSError as exc:
+            raise TransferError(str(exc)) from exc
+    return found
+
+
+def manages_servers():
+    from .servers.models import Server
+
+    return Server.all_objects.exists()
 
 
 def import_manager(source, passphrase, *, replace=False):
-    from dbs.engine.restore import read_payload, restore_backup
+    from dbs.engine.restore import backup_files, restore_backup
 
-    from .servers.models import Server
+    from .backups.repositories import BackupPlanRepository
 
-    if Server.all_objects.exists() and not replace:
+    if manages_servers() and not replace:
         raise TransferError(
             "this data directory already manages servers; pass --replace to replace them."
         )
-    try:
-        data = Path(source).read_bytes()
-    except OSError as exc:
-        raise TransferError(f"cannot read {source}: {exc}") from exc
-    try:
-        result = restore_backup(data, passphrase, flush=True, write_files=False)
-        payload = read_payload(data, passphrase)
-    except DBSError as exc:
-        raise TransferError(str(exc)) from exc
-    written = write_roots(payload.files, conf.data_dir())
+    with opened_export(source) as handle:
+        try:
+            result = restore_backup(handle, passphrase, flush=True, write_files=False)
+            written = write_roots(backup_files(handle, passphrase), conf.data_dir())
+        except DBSError as exc:
+            raise TransferError(str(exc)) from exc
     removed = mark_missing_backups()
+    BackupPlanRepository().keep_within_limits()
     audit.record(
         IMPORT,
         target=os.path.basename(str(source)),
@@ -124,7 +168,8 @@ def write_roots(files, data_dir):
             target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, paths.FILE_MODE
         )
         with os.fdopen(descriptor, "wb") as handle:
-            handle.write(content)
+            for piece in content:
+                handle.write(piece)
         written += 1
     return written
 

@@ -2,24 +2,42 @@
 
 {% block wiki %}
 <h1>Command reference</h1>
-<pre><code>python manage.py dbs backup OUTPUT
+<pre><code>python manage.py dbs backup OUTPUT [--allow-missing-files] [--database ALIAS]
+python manage.py dbs backup --stream [--prefix PREFIX] [--output-dir DIR]
 python manage.py dbs restore INPUT [--dry-run] [--flush]
 python manage.py dbs validate INPUT [--passphrase]
-python manage.py dbs schedule [--interval 6h] [--once]
+python manage.py dbs schedule [--interval 6h] [--keep 1-5] [--once]
+python manage.py dbs health [--json]
+python manage.py dbs audit verify
+python manage.py dbs connection [--json]
 python manage.py dbs key --show
 python manage.py dbs security status|unlock USER|retrain|purge
-python manage.py dbs ai [--agents] [--check]</code></pre>
-<p>The standalone manager, outside any project:</p>
-<pre><code>django_dbs run [--port] [--host] [--no-browser]
-django_dbs server list|show|add|edit|remove|check|discover|browse
+python manage.py dbs ai [--agents] [--check]
+python manage.py dbs upgrade [--check] [--self [--to X.Y.Z]] [--backups DIR]</code></pre>
+<p><code>dbs backup OUTPUT</code> refuses a path that already exists. A missing or unreadable
+source file stops it; <code>--allow-missing-files</code> backs up without the file and lists
+what was left out.</p>
+<p><code>dbs audit verify</code> walks the audit trail's hash chain: each finished row is sealed
+with the SHA-256 of the row before it and its own content, so a row changed or deleted after
+it was written breaks the chain there. It prints the first broken link, or the head of the
+chain to keep somewhere else. No DBS command deletes audit rows.</p>
+<p>The standalone manager, outside any project (<code>pip install "django-dbs[manager]"</code>):</p>
+<pre><code>django_dbs run [--port] [--host] [--trusted-proxy CIDR] [--no-browser]
+django_dbs createuser NAME --role admin|operator|viewer
+django_dbs account list|role|disable|enable|reset-2fa
+django_dbs password NAME
+django_dbs server list|show|add|edit|remove|check|discover|browse|confirm-host-key
 django_dbs backup list|take|verify|restore|download|upload|delete|undo-delete
 django_dbs plan list|show|add|edit|remove|run
 django_dbs activity list|show
 django_dbs env list|pull|compare|reveal|push
 django_dbs files list|download|upload|mkdir|delete
-django_dbs redeploy start --from SERVER --to SERVER --backup ID</code></pre>
-<p><code>dbs-client</code> is deprecated; <code>django_dbs server import-profiles</code> moves
-its servers into the manager.</p>
+django_dbs redeploy start --from SERVER --to SERVER [--real]
+django_dbs redeploy revert MOVE_ID [--real]</code></pre>
+<p><code>dbs backup --stream</code> is how the manager takes a backup: the file goes to standard
+output and a copy stays in <code>DBS_BACKUP_DIR</code>, so a backup whose connection breaks is
+collected the next time the manager connects. The last line it prints on standard error is a
+JSON summary of the name, size and SHA-256.</p>
 <p><code>python manage.py django-dbs</code> is the same command under its old name.
 The original <code>dbs_backup</code>, <code>dbs_restore</code>, <code>dbs_validate</code> and
 <code>dbs_schedule</code> commands still work unchanged.</p>

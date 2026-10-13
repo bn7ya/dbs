@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from typing import cast
+from urllib.parse import urlencode
 from uuid import UUID
 
 from django.db.models import QuerySet
 from django.http import FileResponse
+from django.urls import reverse
 from django.utils.http import content_disposition_header
 from rest_framework import status
 from rest_framework.generics import ListAPIView
@@ -14,7 +16,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from dbs.manager.backups.models import BackupFile
-from dbs.manager.backups.serializers import BackupFileSerializer, BackupFilterSerializer
+from dbs.manager.backups.serializers import (
+    AccountPasswordSerializer,
+    BackupFileSerializer,
+    BackupFilterSerializer,
+    DownloadLinkSerializer,
+    DownloadQuerySerializer,
+)
 from dbs.manager.backups.services import BackupService
 
 
@@ -32,7 +40,9 @@ class BackupDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request: Request, pk: UUID) -> Response:
-        BackupService(request.user).delete(pk)
+        payload = AccountPasswordSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        BackupService(request.user).delete(pk, **payload.validated_data)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -48,7 +58,9 @@ class DownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, pk: UUID) -> FileResponse:
-        download = BackupService(request.user).download(pk)
+        query = DownloadQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        download = BackupService(request.user).download(pk, **query.validated_data)
         response = FileResponse(
             download.content, content_type="application/octet-stream"
         )
@@ -58,3 +70,16 @@ class DownloadView(APIView):
         )
         response["Cache-Control"] = "no-store"
         return response
+
+    def post(self, request: Request, pk: UUID) -> Response:
+        payload = AccountPasswordSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        ticket = BackupService(request.user).download_ticket(
+            pk, **payload.validated_data
+        )
+        url = reverse("backups:download", args=[pk])
+        link = f"{url}?{urlencode({'ticket': ticket})}" if ticket else url
+        return Response(
+            DownloadLinkSerializer({"url": link}).data,
+            headers={"Cache-Control": "no-store"},
+        )

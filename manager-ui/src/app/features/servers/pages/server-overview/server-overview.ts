@@ -6,11 +6,11 @@ import { MatCard, MatCardContent } from '@angular/material/card';
 import { MatFormField, MatLabel, MatSuffix } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 
-import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
+import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
-import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { Notice } from '@shared/notice/notice';
 import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
@@ -38,6 +38,7 @@ const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
 @Component({
   selector: 'app-server-overview-page',
   imports: [
+    Can,
     RouterLink,
     MatButton,
     MatIconButton,
@@ -62,7 +63,6 @@ const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
 export class ServerOverviewPage {
   private readonly store = inject(ServersStore);
   private readonly dialogs = inject(Dialogs);
-  private readonly confirmation = inject(Confirmation);
   private readonly toaster = inject(Toaster);
   private readonly clipboard = inject(DOCUMENT).defaultView?.navigator.clipboard;
   private readonly locale = inject(LocaleStore);
@@ -97,6 +97,10 @@ export class ServerOverviewPage {
         ? presenceRow('servers.check.report.envFile', report.env_file)
         : { labelKey: 'servers.check.report.envFile', value: null, presence: 'notSet' },
       presenceRow('servers.check.report.remoteBackupDir', report.remote_backup_dir),
+      presenceRow(
+        'servers.check.report.timeout',
+        server.runtime === 'compose' ? server.timeout_in_container : server.timeout_on_host,
+      ),
     ];
     const roots = server.file_roots.map((path) => ({ path, presence: presenceOf(report.roots?.[path]) }));
     return { rows, roots, dockerSaid: compose?.error ?? '' };
@@ -177,22 +181,22 @@ export class ServerOverviewPage {
     if (!server) {
       return;
     }
-    const accepted = await this.confirmation.ask({
-      // FSI and PDI keep the name in its own direction inside a title in either language.
-      title: this.locale.translate('servers.delete.confirmTitle', { name: `\u2068${server.name}\u2069` }),
-      message: this.locale.translate('servers.delete.confirmBody'),
-      acceptLabel: this.locale.translate('servers.delete.action'),
-      rejectLabel: this.locale.translate('actions.cancel'),
-      acceptSeverity: 'danger',
-    });
-    if (!accepted) {
-      return;
-    }
-    if (await this.store.remove()) {
+    const data: PasswordPromptData = {
+      titleKey: 'servers.delete.title',
+      bodyKey: 'servers.delete.prompt',
+      // FSI and PDI keep the name in its own direction inside a sentence in either language.
+      bodyValues: { name: `\u2068${server.name}\u2069` },
+      submitKey: 'servers.delete.action',
+      destructive: true,
+      submit: (password) => this.store.remove(password),
+      error: this.store.deleteError,
+    };
+    const deleted = await this.dialogs
+      .open<boolean, PasswordPromptData>(PasswordPrompt, { titleKey: data.titleKey, data, size: 'sm' })
+      .whenClosed();
+    if (deleted) {
       this.notify('success', 'servers.delete.done');
       await this.router.navigate(['/servers']);
-    } else {
-      this.toaster.add({ severity: 'danger', summary: errorText(this.locale, this.store.deleteError()) });
     }
   }
 

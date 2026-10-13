@@ -11,7 +11,10 @@ from dbs.manager.mcp.server import NEEDS_PASSWORD
 from dbs.manager.servers.gateways import parse_host_key
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.repositories import ServerRepository
-from dbs.manager.servers.services import ServerConnectionService
+from dbs.manager.servers.services import (
+    HostKeyConfirmationService,
+    ServerConnectionService,
+)
 from tests.manager.backups.support import BackupHost, server_tree
 from tests.manager.servers.support import (
     BACKUP_PASSPHRASE,
@@ -23,13 +26,23 @@ from tests.manager.servers.support import (
     private_key_text,
 )
 from tests.manager.terminal.test_servers import ready_remote
-from tests.manager.test_redeploy import world  # noqa: F401
+from tests.manager.test_redeploy import failing_migration, for_real, world  # noqa: F401
 from tests.manager.support import logged
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 FETCH_HOST_KEY = "dbs.manager.servers.services.server_service.fetch_host_key"
 RUNS_JOBS = pytest.mark.django_db(transaction=True)
-FORBIDDEN = ("reveal", "push", "remove", "delete", "repin", "host_key_change", "real")
+FORBIDDEN = (
+    "reveal",
+    "push",
+    "remove",
+    "delete",
+    "repin",
+    "host_key_change",
+    "real",
+    "confirm",
+    "reject",
+)
 ENV = b"SECRET_KEY=sk_live_very_secret\nDEBUG=0\n"
 
 
@@ -54,6 +67,12 @@ def host(monkeypatch, tmp_path):
     found = BackupHost(root=root)
     monkeypatch.setattr(CONNECT, connecting_to(found))
     return found
+
+
+def confirmed(mcp, admin, host="10.0.0.5", port=22):
+    held = mcp("fingerprint_host", host=host, port=port).data
+    HostKeyConfirmationService(admin).confirm(held["id"])
+    return held["id"]
 
 
 def tool_list(mcp):
@@ -83,7 +102,13 @@ def test_no_tool_reveals_restores_for_real_removes_or_deletes(mcp):
     assert not [name for name in names if any(word in name for word in FORBIDDEN)]
     for tool in tools:
         properties = set(tool["inputSchema"]["properties"])
-        assert not properties & {"account_password", "rehearse", "rehearsal", "real"}
+        assert not properties & {
+            "account_password",
+            "rehearse",
+            "rehearsal",
+            "real",
+            "host_key",
+        }
         if tool["name"] != "add_server":
             assert not properties & {"password", "key_passphrase"}
 
@@ -104,14 +129,14 @@ def test_reading_tools_return_what_the_api_returns(mcp, api, make_server):
 def test_adding_a_server_with_a_password_finds_its_project_and_checks_it(
     mcp, admin, offered, remote
 ):
-    key = mcp("fingerprint_host", host="10.0.0.5", port=2222).data
+    confirmation = confirmed(mcp, admin, port=2222)
     added = mcp(
         "add_server",
         name="web-1",
         host="10.0.0.5",
         port=2222,
         username="deploy",
-        host_key=key["line"],
+        confirmation=confirmation,
         auth_method="password",
         password=SSH_PASSWORD,
         project_dir=PROJECT_DIR,
@@ -139,7 +164,7 @@ def test_adding_with_a_key_file_reads_the_file_and_never_returns_it(
         name="web-1",
         host="10.0.0.5",
         username="deploy",
-        host_key=offered,
+        confirmation=confirmed(mcp, admin),
         auth_method="key_file",
         key_file=str(key),
         discover=False,
@@ -155,13 +180,13 @@ def test_adding_with_a_key_file_reads_the_file_and_never_returns_it(
 
 
 @pytest.mark.django_db
-def test_adding_with_a_new_key_returns_the_authorized_keys_line(mcp, offered):
+def test_adding_with_a_new_key_returns_the_authorized_keys_line(mcp, admin, offered):
     added = mcp(
         "add_server",
         name="web-1",
         host="10.0.0.5",
         username="deploy",
-        host_key=offered,
+        confirmation=confirmed(mcp, admin),
         auth_method="generate_key",
     )
 
@@ -170,7 +195,7 @@ def test_adding_with_a_new_key_returns_the_authorized_keys_line(mcp, offered):
 
 
 @pytest.mark.django_db
-def test_adding_reports_the_apis_validation(mcp, make_server, offered):
+def test_adding_reports_the_apis_validation(mcp, admin, make_server, offered):
     make_server(name="web-1")
 
     added = mcp(
@@ -178,7 +203,7 @@ def test_adding_reports_the_apis_validation(mcp, make_server, offered):
         name="web-1",
         host="10.0.0.6",
         username="deploy",
-        host_key=offered,
+        confirmation=confirmed(mcp, admin, host="10.0.0.6"),
         auth_method="generate_key",
     )
 
@@ -243,7 +268,8 @@ def test_plans_and_backups_through_tools(mcp, admin, host, make_server, tmp_path
         "add_plan", server="shop", name="nightly", kind="dbs", interval_minutes=1440
     )
     assert plan.ok, plan.text
-    assert mcp("update_plan", plan=plan.data["id"], keep=3).data["keep"] == 3
+    assert plan.data["keep"] == 5
+    assert mcp("update_plan", plan=plan.data["id"], interval_minutes=60).ok
     assert mcp("run_plan", plan=plan.data["id"]).data["ok"]
 
     backup = mcp("list_backups").data["results"][0]
@@ -309,6 +335,22 @@ def test_redeploys_are_always_rehearsals(mcp, world):  # noqa: F811
     assert [
         "--dry-run" in restore["argv"] for restore in world["sent"]["restores"]
     ] == [True]
+    assert world["sent"]["taken"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_putting_a_new_server_back_is_only_ever_rehearsed(mcp, api, world):  # noqa: F811
+    failing_migration(world)
+    response = api.post("/api/redeploy/", for_real(world), format="json")
+    moved = response.json()["activity"]
+    pushed = world["env"].read_bytes()
+
+    ran = mcp("rehearse_revert", move=moved)
+
+    assert ran.ok and ran.data["ok"], ran.raw
+    [revert] = world["sent"]["restores"]
+    assert "--dry-run" in revert["argv"] and "--flush" in revert["argv"]
+    assert world["env"].read_bytes() == pushed
 
 
 @pytest.mark.django_db
@@ -326,14 +368,14 @@ def test_a_compose_server_is_added_with_its_service(
     backups = tmp_path / "host" / "backups"
     backups.mkdir(parents=True)
     connected_to(monkeypatch, ComposeHost(tmp_path / "container"))
-    key = mcp("fingerprint_host", host="10.0.0.7", port=22).data
+    confirmation = confirmed(mcp, admin, host="10.0.0.7")
 
     added = mcp(
         "add_server",
         name="shop",
         host="10.0.0.7",
         username="deploy",
-        host_key=key["line"],
+        confirmation=confirmation,
         auth_method="password",
         password=SSH_PASSWORD,
         runtime="compose",

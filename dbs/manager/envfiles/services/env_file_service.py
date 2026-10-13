@@ -24,6 +24,7 @@ from dbs.manager.servers.exceptions import FileTooLarge, RemoteNotFound
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerConnectionService, ServerService
 from dbs.manager.vault import fingerprint, seal, unseal
+from dbs.manager.permissions import Capability, requires
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
@@ -86,6 +87,7 @@ class EnvFileService:
             changed=found.changed,
         )
 
+    @requires(Capability.ENV_PULL)
     def pull(self, server_id: UUID) -> Pulled:
         return self._pull(self.servers.get(server_id), EnvVersion.Source.PULLED)
 
@@ -93,6 +95,7 @@ class EnvFileService:
         return self._pull(server, EnvVersion.Source.SCHEDULED)
 
     @sensitive_variables()
+    @requires(Capability.ENV_REVEAL)
     def reveal(self, version_id: UUID, password: str) -> str:
         version = self.get(version_id)
         with self.activity.track(
@@ -104,6 +107,7 @@ class EnvFileService:
         return content.decode("utf-8", errors="replace")
 
     @sensitive_variables()
+    @requires(Capability.ENV_PUSH)
     def push(self, version_id: UUID, password: str) -> EnvVersion:
         version = self.get(version_id)
         server = self.servers.get(version.server_id)

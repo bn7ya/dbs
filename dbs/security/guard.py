@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ipaddress
 from dataclasses import dataclass, field
 
 import logging
@@ -9,7 +8,7 @@ from django.utils import timezone
 
 from ..conf import setting
 from ..models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
-from . import detector, features, geo, sessions
+from . import detector, features, geo, networks, sessions, telemetry
 
 logger = logging.getLogger("dbs")
 
@@ -35,67 +34,45 @@ def enforcement_enabled() -> bool:
     return bool(setting("DBS_ANOMALY_ENFORCE", True))
 
 
-MINIMUM_PREFIX = {4: 8, 6: 16}
-
-
-def _networks(raw):
-    for line in (raw or "").replace(",", "\n").split("\n"):
-        candidate = line.strip()
-        if not candidate:
-            continue
-        try:
-            network = ipaddress.ip_network(candidate, strict=False)
-        except ValueError:
-            continue
-        if network.prefixlen < MINIMUM_PREFIX[network.version]:
-            continue
-        yield network
+MINIMUM_PREFIX = networks.MINIMUM_PREFIX
 
 
 def _within(address: str, raw: str) -> bool:
-    try:
-        parsed = ipaddress.ip_address(address)
-    except ValueError:
-        return True
-    networks = list(_networks(raw))
-    return not networks or any(parsed in network for network in networks)
+    expected = networks.parse_networks(raw)
+    return not expected or networks.contains(expected, address)
 
 
 def is_trusted(address: str, policy) -> bool:
-    if not address:
-        return False
-    try:
-        parsed = ipaddress.ip_address(address)
-    except ValueError:
-        return False
-    configured = setting("DBS_TRUSTED_NETWORKS", ()) or ()
-    raw = "\n".join(list(configured) + [policy.trusted_networks or ""])
-    return any(parsed in network for network in _networks(raw))
+    trusted = networks.parse_networks(setting("DBS_TRUSTED_NETWORKS", ()) or ())
+    trusted += networks.parse_networks(policy.trusted_networks or "")
+    return networks.contains(trusted, address)
 
 
 def is_locked_out(user) -> bool:
     return Lockout.objects.filter(user=user).exists()
 
 
-def evaluate(request, action="view", location=None) -> Verdict:
+def evaluate(request, action="view", location=None, policy=None) -> Verdict:
     user = request.user
-    policy = SecurityPolicy.load()
+    policy = policy or SecurityPolicy.load()
     location = geo.clean(location)
     observation, address, prefix, agent = features.observe_request(
         user, request, action, location
     )
     values = features.build(observation)
 
-    model_score = detector.get_detector().score(user, values)
+    learning = _still_learning(user, policy)
+    model_score = detector.model_score(user, values, learning=learning)
     rules, reasons = detector.rule_score(values)
+    if not address:
+        reasons.append("the client address could not be determined")
     if policy.expected_networks and not _within(address, policy.expected_networks):
         rules = min(1.0, rules + 0.2)
         reasons.append("outside the networks this project expects logins from")
     score = max(model_score, rules)
 
     trusted = is_trusted(address, policy)
-    learning = _still_learning(user, policy)
-    level = _level(score, policy, trusted, learning)
+    level = _level(score, policy, trusted)
 
     _record(user, request, values, address, prefix, agent, location, score, level)
     return Verdict(level=level, score=round(score, 4), reasons=reasons)
@@ -104,17 +81,11 @@ def evaluate(request, action="view", location=None) -> Verdict:
 def _still_learning(user, policy) -> bool:
     if not policy.learning_logins:
         return False
-    seen = (
-        SessionEvent.objects.filter(user=user)
-        .values("session_key_hash")
-        .distinct()
-        .count()
-    )
-    return seen < policy.learning_logins
+    return telemetry.sessions_seen(user) < policy.learning_logins
 
 
-def _level(score, policy, trusted, learning) -> str:
-    if trusted or learning:
+def _level(score, policy, trusted) -> str:
+    if trusted:
         return OK
     if not enforcement_enabled():
         return OK if score < policy.warn_threshold else WARN
@@ -130,7 +101,7 @@ def _record(user, request, values, address, prefix, agent, location, score, leve
         user=user,
         session_key_hash=features.digest(request.session.session_key or ""),
         kind="request",
-        remote_addr=address,
+        remote_addr=networks.address_digest(address),
         ip_prefix=prefix,
         ua_hash=agent,
         latitude=location["latitude"] if location else None,
@@ -144,13 +115,14 @@ def _record(user, request, values, address, prefix, agent, location, score, leve
 
 def apply(verdict, request) -> None:
     user = request.user
+    network = networks.stored_prefix(features.client_address(request))
     if verdict.level == BLOCK:
         AnomalyEvent.objects.create(
             user=user,
             score=verdict.score,
             reasons=verdict.reasons,
             action_taken="logout",
-            remote_addr=features.client_address(request),
+            remote_addr=network,
         )
         Lockout.objects.get_or_create(
             user=user, defaults={"reason": "; ".join(verdict.reasons)}
@@ -163,7 +135,7 @@ def apply(verdict, request) -> None:
             score=verdict.score,
             reasons=verdict.reasons,
             action_taken="warn",
-            remote_addr=features.client_address(request),
+            remote_addr=network,
         )
         sessions.mark_for_reauthentication(request)
 

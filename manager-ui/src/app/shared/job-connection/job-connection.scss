@@ -1,0 +1,11 @@
+:host {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  align-items: center;
+}
+
+.job-connection__progress {
+  font-size: var(--app-text--1);
+  color: var(--app-color-on-surface-variant);
+}

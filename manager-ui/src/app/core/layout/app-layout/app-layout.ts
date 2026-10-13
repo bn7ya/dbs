@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatButton } from '@angular/material/button';
 import { MatListItem, MatListItemIcon, MatListItemTitle, MatNavList } from '@angular/material/list';
 import { MatMenu, MatMenuItem, MatMenuTrigger } from '@angular/material/menu';
@@ -40,7 +40,9 @@ export class AppLayout {
   readonly displayName = this.auth.displayName;
   readonly signingOut = this.auth.busy;
 
-  readonly sections = SECTIONS;
+  readonly sections = computed(() =>
+    SECTIONS.filter((section) => section.capability === undefined || this.auth.can(section.capability)),
+  );
 
   signOut(): void {
     void this.auth.signOut();

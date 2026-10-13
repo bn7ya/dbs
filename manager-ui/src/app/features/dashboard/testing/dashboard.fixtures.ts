@@ -8,6 +8,8 @@ export const WEB: DashboardServer = {
   host: 'web-1.example.com',
   check_status: 'ok',
   checked_at: '2026-10-09T11:00:00Z',
+  connection_state: 'online',
+  last_seen_at: '2026-10-09T11:58:00Z',
   last_backup: {
     id: 'b1',
     name: 'production-web-20261009-090000.dbs',
@@ -27,6 +29,8 @@ export const STAGING: DashboardServer = {
   name: 'Staging',
   host: 'staging.example.com',
   check_status: 'unknown',
+  connection_state: 'offline',
+  last_seen_at: '2026-10-09T09:00:00Z',
   last_backup: null,
   next_plan_run: null,
   failures_7d: 1,
@@ -38,6 +42,7 @@ export const DASHBOARD: Dashboard = {
   servers: [WEB, STAGING],
   storage_bytes: 5_000_000,
   last_export_at: '2026-10-08T12:00:00Z',
+  key_store: 'keychain',
   recent_failures: [
     {
       id: 41,

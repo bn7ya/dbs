@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 
 from django.core.management.base import BaseCommand, CommandError
@@ -9,6 +8,7 @@ from dbs import audit
 from dbs._cli import resolve_read_passphrase
 from dbs.engine import restore_backup
 from dbs.exceptions import DBSError
+from dbs.io import file_digest
 from dbs.keys import with_passphrase
 
 
@@ -41,15 +41,14 @@ class Command(BaseCommand):
             },
         ) as entry:
             try:
-                with open(options["input"], "rb") as fh:
-                    data = fh.read()
+                size, digest = file_digest(options["input"])
             except OSError as exc:
                 raise CommandError(f"Cannot read {options['input']}: {exc}") from exc
-            entry.data.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
+            entry.data.update(size=size, sha256=digest)
             try:
                 result = with_passphrase(
                     lambda secret: restore_backup(
-                        data,
+                        options["input"],
                         secret,
                         using=options["database"],
                         load_data=not options["no_data"],
@@ -79,6 +78,15 @@ class Command(BaseCommand):
                     "nothing was written."
                 )
             )
+            if result.files_refused:
+                for problem in result.files_refused:
+                    self.stdout.write(self.style.ERROR(f"Would refuse {problem}"))
+                raise CommandError(
+                    f"Dry run: the restore would stop before loading any row, because "
+                    f"{len(result.files_refused)} file(s) cannot be written. Allow their "
+                    "directories in DBS_RESTORE_ROOTS, or map old roots with "
+                    "DBS_RESTORE_PATH_MAP."
+                )
             return
         if options["flush"]:
             self.stdout.write(
@@ -104,6 +112,7 @@ def restore_summary(result, dry_run):
         return {
             "records": result.records_would_load,
             "files": result.files_would_write,
+            "files_refused": len(result.files_refused),
             "healed": bool(result.healed),
         }
     return {

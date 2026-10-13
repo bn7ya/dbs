@@ -126,6 +126,7 @@ def test_the_check_runs_argv_lists_in_the_project(api, monkeypatch, configured_s
             "cwd": PROJECT_DIR,
             "env": {"DJANGO_SETTINGS_MODULE": SETTINGS_MODULE},
         },
+        {"argv": ["timeout", "-k", "1", "5", "true"], "cwd": None, "env": None},
     ]
 
 
@@ -271,7 +272,11 @@ def test_a_connection_that_fails_is_stored_and_reported(
 @pytest.mark.django_db
 def test_checking_a_deleted_server_is_not_found(api, monkeypatch, configured_server):
     monkeypatch.setattr(CONNECT, connecting_to(healthy_remote()))
-    api.delete(f"/api/servers/{configured_server.pk}/")
+    api.delete(
+        f"/api/servers/{configured_server.pk}/",
+        {"account_password": PASSWORD},
+        format="json",
+    )
 
     assert api.post(check(configured_server.pk)).status_code == 404
 

@@ -14,6 +14,7 @@ from tests.manager.servers.support import (
     host_key_line,
     private_key_text,
 )
+from tests.manager.support import needs_partial_unique_constraints
 
 LIST = "/api/servers/"
 
@@ -209,7 +210,9 @@ def test_a_name_in_use_is_refused(api, configured_server, host_key, private_key)
 def test_a_deleted_servers_name_is_free_again(
     api, configured_server, host_key, private_key
 ):
-    api.delete(detail(configured_server.pk))
+    api.delete(
+        detail(configured_server.pk), {"account_password": PASSWORD}, format="json"
+    )
 
     response = api.post(
         LIST, new_server(host_key, private_key, name=configured_server.name)
@@ -253,6 +256,9 @@ def test_the_list_is_paginated_searchable_and_free_of_secrets(
         "username",
         "last_check_status",
         "last_checked_at",
+        "connection_state",
+        "last_seen_at",
+        "last_connection_error",
     }
     assert [row["name"] for row in searched.json()["results"]] == ["web-1"]
     assert [row["name"] for row in by_host.json()["results"]] == ["db-1"]
@@ -406,6 +412,7 @@ def test_an_optional_path_can_be_cleared(api, configured_server):
 
 
 @pytest.mark.django_db
+@needs_partial_unique_constraints
 def test_a_name_taken_between_the_check_and_the_write_is_still_name_taken(
     api, monkeypatch, configured_server, host_key, private_key
 ):
@@ -547,7 +554,9 @@ def test_a_wrong_field_is_reported_before_the_password_is_asked_for(
 
 @pytest.mark.django_db
 def test_deleting_hides_the_server_and_keeps_the_row(api, configured_server):
-    response = api.delete(detail(configured_server.pk))
+    response = api.delete(
+        detail(configured_server.pk), {"account_password": PASSWORD}, format="json"
+    )
 
     assert response.status_code == 204
     assert api.get(LIST).json()["count"] == 0

@@ -12,6 +12,7 @@ from django.conf import settings
 
 SEED = 20260724
 PASSPHRASE = "stress-roundtrip-passphrase"
+FLIPS = int(os.environ.get("DBS_STRESS_FLIPS", "0"))
 
 
 def configure(db_path):
@@ -29,6 +30,15 @@ def configure(db_path):
         USE_TZ=True,
     )
     django.setup()
+
+
+def damaged(container, rng, flips):
+    from dbs.container.format import HEADER_SIZE
+
+    data = bytearray(container)
+    for position in rng.sample(range(HEADER_SIZE, len(data) - HEADER_SIZE), flips):
+        data[position] ^= 0xFF
+    return bytes(data)
 
 
 def main():
@@ -73,6 +83,15 @@ def main():
     if not (result.ok and result.decrypted_ok):
         return 1
 
+    if FLIPS:
+        container = damaged(container, random.Random(SEED), FLIPS)
+        print(f"flipped {FLIPS:,} bytes across the container")
+        result = timed("validate damaged", lambda: validate_backup(container, PASSPHRASE))
+        print(result.summary())
+        if not (result.ok and result.decrypted_ok and result.repair_report.healed):
+            print("the damaged container did not validate as repaired")
+            return 1
+
     connections.close_all()
     os.remove(db_path)
     if os.path.exists(db_path):
@@ -88,8 +107,8 @@ def main():
 
     out = timed("restore", lambda: restore_backup(container, PASSPHRASE))
     print(f"records restored: {out.records_loaded:,}")
-    if out.healed:
-        print("container needed healing on a clean roundtrip")
+    if out.healed != bool(FLIPS):
+        print("healing did not match the damage done to the container")
         return 1
     if out.records_loaded != sum(dataset.COUNTS.values()):
         print(f"expected {sum(dataset.COUNTS.values()):,} records")

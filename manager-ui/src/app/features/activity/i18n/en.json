@@ -36,8 +36,10 @@
       "queued": "Queued",
       "running": "Running",
       "succeeded": "Succeeded",
-      "failed": "Failed"
+      "failed": "Failed",
+      "keptOnServer": "Kept on the server"
     },
+    "keptOnServer": "Collected at the next connection",
     "actions": {
       "server": {
         "create": "Add server",
@@ -47,6 +49,8 @@
         "repin": "Pin host key",
         "passphrase_reveal": "Show backup passphrase",
         "fingerprint": "Get host key",
+        "host_key_confirm": "Confirm host key for Claude",
+        "host_key_reject": "Reject host key for Claude",
         "keypair": "Create SSH key",
         "discover": "Find django-dbs settings",
         "passphrase_capture": "Save backup passphrase"
@@ -82,19 +86,37 @@
       "auth": {
         "sign_in": "Sign in",
         "sign_in_failed": "Failed sign-in",
-        "sign_out": "Sign out"
+        "sign_out": "Sign out",
+        "recovery_code_used": "Sign in with a recovery code"
       },
       "account": {
-        "setup": "First account created"
+        "setup": "First account created",
+        "create": "Add account",
+        "role": "Change account role",
+        "disable": "Disable account",
+        "enable": "Enable account",
+        "master": "Make master account",
+        "two_factor_enrolled": "Set up two-factor sign-in",
+        "two_factor_reset": "Reset two-factor sign-in",
+        "recovery_codes": "Create new recovery codes",
+        "password": "Change password",
+        "password_expire": "Ask for a new password"
       },
       "redeploy": {
         "run": "Move to another server",
-        "check": "Move: check the other server",
+        "check": "Move: check the new server",
+        "source_backup": "Move: back up the old server",
+        "record_env": "Move: record the new server's .env file",
+        "safety_backup": "Move: back up the new server's data",
         "env": "Move: push the .env file",
         "migrate": "Move: run the migrations",
         "restore": "Move: restore the backup",
         "archives": "Move: unpack the folder archives",
-        "final_check": "Move: check again"
+        "final_check": "Move: check again",
+        "revert": "Revert the new server after a move",
+        "revert_check": "Revert: check the new server",
+        "revert_env": "Revert: push the recorded .env file back",
+        "revert_restore": "Revert: restore the data from before the move"
       },
       "manager": {
         "export": "Export DBS data",

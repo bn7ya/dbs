@@ -1,6 +1,7 @@
 import { expect, request, type APIRequestContext } from '@playwright/test';
 import type { ActivityRecord, BackupRecord, JobStarted, Page, PlanRecord, ServerRecord } from './api.types';
 import { ADMIN, ALLOWED_FOLDERS, SSH } from './config';
+import { freshCode } from './totp';
 
 
 export class Api {
@@ -19,6 +20,13 @@ export class Api {
     });
     if (!login.ok()) {
       throw new Error(`API sign-in failed: ${login.status()} ${await login.text()}`);
+    }
+    const second = await http.post('/api/auth/two-factor/', {
+      headers: { 'X-CSRFToken': csrf },
+      data: { code: await freshCode() },
+    });
+    if (!second.ok()) {
+      throw new Error(`API two-factor sign-in failed: ${second.status()} ${await second.text()}`);
     }
     return new Api(http, await csrfToken(http, baseURL));
   }
@@ -67,9 +75,9 @@ export class Api {
       await this.delete(`/api/backups/plans/${plan.id}/`);
     }
     for (const file of await this.backups(id)) {
-      await this.delete(`/api/backups/${file.id}/`);
+      await this.delete(`/api/backups/${file.id}/`, { account_password: ADMIN.password });
     }
-    await this.delete(`/api/servers/${id}/`);
+    await this.delete(`/api/servers/${id}/`, { account_password: ADMIN.password });
   }
 
   async capturePassphrase(server: string): Promise<void> {
@@ -113,8 +121,8 @@ export class Api {
     return (await response.json()) as T;
   }
 
-  private async delete(path: string): Promise<void> {
-    const response = await this.http.delete(path, { headers: { 'X-CSRFToken': this.csrf } });
+  private async delete(path: string, data?: Record<string, string>): Promise<void> {
+    const response = await this.http.delete(path, { headers: { 'X-CSRFToken': this.csrf }, data });
     if (!response.ok() && response.status() !== 404) {
       throw new Error(`DELETE ${path}: ${response.status()} ${await response.text()}`);
     }

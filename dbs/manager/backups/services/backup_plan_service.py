@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
@@ -8,6 +8,7 @@ from uuid import UUID
 from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
 from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
 from dbs.manager.accounts.services import AccountService
@@ -21,6 +22,7 @@ from dbs.manager.backups.services.plan_runs import run_detail
 from dbs.manager.common.paths import absolute_path
 from dbs.manager.runner import get_runner
 from dbs.manager.servers.services import ServerService
+from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
 if TYPE_CHECKING:
@@ -38,10 +40,15 @@ EDITABLE_FIELDS = (
 )
 SCHEDULE_FIELDS = ("interval_minutes", "enabled")
 READ_FIELDS = ("paths", "pattern")
+RETENTION_FIELDS = ("keep", "keep_remote")
 ENABLED_BY_DEFAULT = BackupPlan._meta.get_field("enabled").get_default()
 DEFAULT_PATTERN = "*"
 
 NAME_TAKEN = "Another plan for this server already has this name."
+SIMILAR_NAME_TAKEN = (
+    "Another plan for this server has a name that differs only in case or "
+    "punctuation, so their backups would share file names on the server."
+)
 INVALID_INTERVAL = "Choose hourly, every 3, 6 or 12 hours, daily, weekly, or none."
 PATHS_REQUIRED = "Add at least one folder or file to archive."
 ABSOLUTE_PATH_REQUIRED = (
@@ -52,6 +59,9 @@ ONE_FOLDER_REQUIRED = "Choose one folder to collect files from."
 INVALID_PATTERN = "Use a file name pattern of 1 to 200 characters with no '/' in it, such as *.sql.gz."
 ACCOUNT_PASSWORD_REQUIRED = (
     "Enter your own password to choose what is read from the server."
+)
+RETENTION_PASSWORD_REQUIRED = (
+    "Enter your own password to keep fewer backups: the next run deletes the oldest."
 )
 
 Errors = dict[str, list[ErrorDetail]]
@@ -67,15 +77,20 @@ def _add(errors: Errors, field: str, message: str, code: str) -> None:
     errors.setdefault(field, []).append(ErrorDetail(message, code=code))
 
 
-def _require_password(account_password: str, guarded: bool) -> None:
+def _require_password(
+    account_password: str, guarded: bool, message: str = ACCOUNT_PASSWORD_REQUIRED
+) -> None:
     if guarded and not account_password:
         raise ValidationError(
-            {
-                "account_password": [
-                    ErrorDetail(ACCOUNT_PASSWORD_REQUIRED, code="required")
-                ]
-            }
+            {"account_password": [ErrorDetail(message, code="required")]}
         )
+
+
+def _keeps_fewer(plan: BackupPlan, changes: Mapping[str, Any]) -> bool:
+    return any(
+        changes.get(name) is not None and changes[name] < getattr(plan, name)
+        for name in RETENTION_FIELDS
+    )
 
 
 def _is_pattern(pattern: str) -> bool:
@@ -103,6 +118,7 @@ class BackupPlanService:
             raise NotFound()
         return plan
 
+    @requires(Capability.PLANS_MANAGE)
     def create(
         self, *, server: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
@@ -127,6 +143,7 @@ class BackupPlanService:
                 )
             )
 
+    @requires(Capability.PLANS_MANAGE)
     def update(
         self, plan_id: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
@@ -143,8 +160,15 @@ class BackupPlanService:
                 changes.get("enabled", plan.enabled),
             )
         changed = sorted(name for name in changes if name in EDITABLE_FIELDS)
-        guarded = any(name in changes for name in READ_FIELDS)
-        _require_password(account_password, guarded)
+        reads_elsewhere = any(name in changes for name in READ_FIELDS)
+        guarded = reads_elsewhere or _keeps_fewer(plan, changes)
+        _require_password(
+            account_password,
+            guarded,
+            ACCOUNT_PASSWORD_REQUIRED
+            if reads_elsewhere
+            else RETENTION_PASSWORD_REQUIRED,
+        )
         name = changes.get("name", plan.name)
         with self.activity.track(
             Action.PLAN_UPDATE, server=plan.server, target=name
@@ -154,6 +178,10 @@ class BackupPlanService:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(lambda: self.plans.update(plan, **changes))
 
+    def keeps_fewer(self, plan_id: UUID, changes: Mapping[str, Any]) -> bool:
+        return _keeps_fewer(self.get(plan_id), changes)
+
+    @requires(Capability.PLANS_MANAGE)
     def delete(self, plan_id: UUID) -> None:
         plan = self.get(plan_id)
         with transaction.atomic():
@@ -162,6 +190,7 @@ class BackupPlanService:
                 Action.PLAN_DELETE, server=plan.server, target=plan.name
             )
 
+    @requires(Capability.PLANS_RUN)
     def run(self, plan_id: UUID) -> AuditEvent:
         plan = self.get(plan_id)
         server = self.servers.get(plan.server_id)
@@ -185,10 +214,8 @@ class BackupPlanService:
     ) -> dict[str, Any]:
         errors: Errors = {}
         excluding = None if plan is None else plan.pk
-        if "name" in data and self.plans.name_in_use(
-            server_id, data["name"], excluding=excluding
-        ):
-            _add(errors, "name", NAME_TAKEN, "name_taken")
+        if "name" in data:
+            self._check_name(server_id, data["name"], excluding, errors)
         interval = data.get("interval_minutes")
         if interval is not None and interval not in INTERVALS:
             _add(errors, "interval_minutes", INVALID_INTERVAL, "invalid_interval")
@@ -221,6 +248,17 @@ class BackupPlanService:
         if errors:
             raise ValidationError(errors)
         return validated
+
+    def _check_name(
+        self, server_id: UUID, name: str, excluding: UUID | None, errors: Errors
+    ) -> None:
+        if self.plans.name_in_use(server_id, name, excluding=excluding):
+            _add(errors, "name", NAME_TAKEN, "name_taken")
+            return
+        slug = slugify(name)
+        others = self.plans.names_for_server(server_id, excluding=excluding)
+        if slug and any(slugify(other) == slug for other in others):
+            _add(errors, "name", SIMILAR_NAME_TAKEN, "name_taken")
 
     def _saved(self, write: Callable[[], BackupPlan]) -> BackupPlan:
         try:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from django.db.models import Q, QuerySet
@@ -31,6 +32,24 @@ class ServerRepository(BaseRepository):
                 continue
         found = self.all_including_deleted().filter(pk__in=ids)
         return {str(server.pk): server for server in found}
+
+    def record_connection(
+        self,
+        server: Server,
+        *,
+        state: str,
+        error: str,
+        seen_at: datetime | None = None,
+    ) -> None:
+        fields: dict[str, object] = {
+            "connection_state": state,
+            "last_connection_error": error,
+        }
+        if seen_at is not None:
+            fields["last_seen_at"] = seen_at
+        self.all_including_deleted().filter(pk=server.pk).update(**fields)
+        for name, value in fields.items():
+            setattr(server, name, value)
 
     def name_in_use(self, name: str, *, excluding: UUID | None = None) -> bool:
         servers = self.active().filter(name=name)

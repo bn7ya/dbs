@@ -6,7 +6,7 @@ from typing import Any
 from rest_framework.exceptions import APIException, ValidationError
 
 from dbs import __version__
-from dbs.manager.adapters import AdapterError
+from dbs.manager.adapters import AdapterError, accounts
 from dbs.manager.adapters.problems import problem
 from dbs.manager.mcp import tools
 from dbs.manager.mcp.protocol import Server
@@ -34,7 +34,7 @@ def build(user: Any) -> Server:
         tools.build(user),
         name=NAME,
         version=__version__,
-        instructions=tools.INSTRUCTIONS,
+        instructions=accounts.with_expiry_warning(tools.INSTRUCTIONS, user),
         describe=describe,
     )
 

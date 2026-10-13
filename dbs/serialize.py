@@ -5,14 +5,21 @@ import logging
 
 from django.apps import apps
 from django.core import serializers
-from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist, ValidationError
 from django.core.management.color import no_style
 from django.core.serializers.json import Serializer as JSONSerializer
 from django.db import connections, transaction
+from django.db.models import AutoField, Model
 
-from .exceptions import RestoreError
+from .exceptions import BackupError, RestoreError
 
 logger = logging.getLogger("dbs")
+
+EXISTENCE_BATCH = 500
+
+RECORD_BATCH_ROWS = 500
+
+NATURAL_KEY_CACHE = 10000
 
 
 def has_natural_key(model) -> bool:
@@ -22,10 +29,61 @@ def has_natural_key(model) -> bool:
 
 
 class AllRowsSerializer(JSONSerializer):
-    def __init__(self, carried=frozenset()):
+    def __init__(self, carried=frozenset(), excluded=frozenset()):
         super().__init__()
         self.carried = carried
+        self.excluded = excluded
         self.natural_keys: dict = {}
+        self.members: dict = {}
+
+    def prepare(self, objects: list) -> None:
+        self.members = {}
+        if not objects:
+            return
+        database = objects[0]._state.db
+        keys = [obj.pk for obj in objects]
+        for field in objects[0]._meta.concrete_model._meta.local_many_to_many:
+            if (
+                field.serialize
+                and field.remote_field.through._meta.auto_created
+                and field.name not in self.excluded
+            ):
+                self.members[field.name] = self._members_of(field, keys, database)
+
+    def _members_of(self, field, keys: list, database) -> dict:
+        source, target = field.m2m_field_name(), field.m2m_reverse_field_name()
+        links = field.remote_field.through._base_manager.using(database).filter(
+            **{f"{source}__in": keys}
+        )
+        related = (
+            field.related_model._base_manager.using(database)
+            .filter(pk__in=links.values(target))
+            .order_by("pk")
+            .only("pk")
+        )
+        natural = self.by_natural_key(field.related_model)
+        values = {
+            item.pk: (
+                self.natural_key_of(field.related_model, "pk", item.pk, database)
+                if natural
+                else self._value_from_field(item, item._meta.pk)
+            )
+            for item in related
+        }
+        rank = {key: position for position, key in enumerate(values)}
+        grouped: dict = {}
+        for owner, member in links.values_list(source, target):
+            if member in rank:
+                grouped.setdefault(owner, set()).add(member)
+        return {
+            owner: [values[member] for member in sorted(members, key=rank.__getitem__)]
+            for owner, members in grouped.items()
+        }
+
+    def get_dump_object(self, obj):
+        for name in self.excluded:
+            self._current.pop(name, None)
+        return super().get_dump_object(obj)
 
     def by_natural_key(self, model) -> bool:
         return model not in self.carried and has_natural_key(model)
@@ -33,11 +91,19 @@ class AllRowsSerializer(JSONSerializer):
     def natural_key_of(self, model, column, value, database):
         key = (model, column, value)
         if key not in self.natural_keys:
+            if len(self.natural_keys) >= NATURAL_KEY_CACHE:
+                self.natural_keys.clear()
             row = model._base_manager.using(database).get(**{column: value})
             self.natural_keys[key] = list(row.natural_key())
         return self.natural_keys[key]
 
+    def handle_field(self, obj, field):
+        if field.name not in self.excluded:
+            super().handle_field(obj, field)
+
     def handle_fk_field(self, obj, field):
+        if field.name in self.excluded:
+            return
         target = field.remote_field.model
         if not self.by_natural_key(target):
             return super().handle_fk_field(obj, field)
@@ -50,7 +116,11 @@ class AllRowsSerializer(JSONSerializer):
 
     def handle_m2m_field(self, obj, field):
         through = field.remote_field.through
-        if not through._meta.auto_created:
+        if not through._meta.auto_created or field.name in self.excluded:
+            return
+        prefetched = self.members.get(field.name)
+        if prefetched is not None:
+            self._current[field.name] = prefetched.get(obj.pk, [])
             return
         target_ids = through._base_manager.using(obj._state.db).filter(
             **{field.m2m_field_name(): obj.pk}
@@ -72,23 +142,48 @@ class AllRowsSerializer(JSONSerializer):
         ]
 
 
-def serialize_model(model, config, excluded: set[str], carried=frozenset()) -> list[dict]:
-    queryset = config.get_queryset(model).order_by("pk")
-    payload = AllRowsSerializer(carried).serialize(
-        queryset.iterator(), use_natural_foreign_keys=False
-    )
-    records = json.loads(payload)
-    if excluded:
-        for record in records:
-            for name in excluded:
-                record.get("fields", {}).pop(name, None)
-    return records
+def serialize_batches(
+    model, config, excluded: set[str], carried=frozenset(), using: str | None = None,
+    *, rows: int = RECORD_BATCH_ROWS, limit: int | None = None,
+):
+    queryset = config.get_queryset(model)
+    if using is not None:
+        queryset = queryset.using(using)
+    serializer = AllRowsSerializer(carried, frozenset(excluded))
+    batch: list = []
+    for instance in queryset.order_by("pk").iterator(chunk_size=rows):
+        batch.append(instance)
+        if len(batch) >= rows:
+            yield from _serialized(serializer, batch, limit)
+            batch = []
+    if batch:
+        yield from _serialized(serializer, batch, limit)
 
 
-def reset_sequences(connection, models) -> None:
+def _serialized(serializer, batch: list, limit: int | None):
+    serializer.prepare(batch)
+    text = serializer.serialize(batch, use_natural_foreign_keys=False).encode("utf-8")
+    if limit is None or len(text) <= limit:
+        yield text, len(batch)
+        return
+    if len(batch) == 1:
+        instance = batch[0]
+        raise BackupError(
+            f"{instance._meta.label_lower} {instance.pk!r} serializes to {len(text)} bytes, "
+            f"above the {limit} byte limit for one row."
+        )
+    middle = len(batch) // 2
+    yield from _serialized(serializer, batch[:middle], limit)
+    yield from _serialized(serializer, batch[middle:], limit)
+
+
+def raise_sequences(connection, models) -> None:
     if not models:
         return
     ordered = sorted(models, key=lambda model: model._meta.label)
+    if connection.vendor == "postgresql":
+        _raise_postgresql_sequences(connection, ordered)
+        return
     statements = connection.ops.sequence_reset_sql(no_style(), ordered)
     if not statements:
         return
@@ -97,10 +192,43 @@ def reset_sequences(connection, models) -> None:
             cursor.execute(statement)
 
 
+def _auto_field(model):
+    return next(
+        (field for field in model._meta.local_fields if isinstance(field, AutoField)),
+        None,
+    )
+
+
+def _raise_postgresql_sequences(connection, models) -> None:
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        for model in models:
+            field = _auto_field(model)
+            if field is None:
+                continue
+            table = quote(model._meta.db_table)
+            cursor.execute("SELECT pg_get_serial_sequence(%s, %s)", [table, field.column])
+            sequence = cursor.fetchone()[0]
+            if sequence is None:
+                continue
+            cursor.execute(
+                "SELECT setval(%s::regclass, highest.value) "
+                f"FROM (SELECT max({quote(field.column)}) AS value FROM {table}) AS highest, "
+                f"{sequence.replace('%', '%%')} AS counter "
+                "WHERE highest.value >= CASE WHEN counter.is_called "
+                "THEN counter.last_value + 1 ELSE counter.last_value END",
+                [sequence],
+            )
+
+
 class NaturalKeyResolver:
-    def __init__(self, records: list[dict], using: str):
+    def __init__(self, records: list[dict], using: str, carried=None):
         self.using = using
-        self.carried = {record.get("model") for record in records}
+        self.carried = (
+            set(carried)
+            if carried is not None
+            else {record.get("model") for record in records}
+        )
         self.resolved: dict = {}
         self.dropped: dict[str, list[str]] = {}
         self.by_id: set[str] = set()
@@ -196,21 +324,104 @@ def resolve_natural_keys(records: list[dict], using: str) -> list[dict]:
     return resolved
 
 
-def load_records(records: list[dict], *, using: str = "default") -> int:
+def existing_rows(records: list[dict], using: str) -> dict:
+    wanted: dict = {}
+    for record in records:
+        try:
+            model = apps.get_model(record["model"])
+            wanted.setdefault(model, []).append(model._meta.pk.to_python(record["pk"]))
+        except (KeyError, LookupError, ValidationError):
+            continue
+    found: dict = {}
+    for model, keys in wanted.items():
+        manager = model._base_manager.using(using)
+        present = found.setdefault(model, set())
+        for start in range(0, len(keys), EXISTENCE_BATCH):
+            batch = keys[start : start + EXISTENCE_BATCH]
+            present.update(manager.filter(pk__in=batch).values_list("pk", flat=True))
+    return found
+
+
+def _deserialized(record: dict, using: str):
+    try:
+        restored = serializers.deserialize(
+            "python", [record], using=using, ignorenonexistent=True
+        )
+        return next(iter(restored), None)
+    except Exception as exc:
+        raise RestoreError(
+            f"{record.get('model')} {record.get('pk')!r} could not be read: {exc}"
+        ) from exc
+
+
+def _carried_columns(model, names) -> list[str]:
+    columns = []
+    for name in names:
+        try:
+            field = model._meta.get_field(name)
+        except FieldDoesNotExist:
+            continue
+        if field.concrete and not field.many_to_many and not field.primary_key:
+            columns.append(field.name)
+    return columns
+
+
+def _update_carried_fields(restored, record: dict, using: str) -> None:
+    instance = restored.object
+    columns = _carried_columns(type(instance), record.get("fields", {}))
+    if columns:
+        Model.save_base(instance, using=using, raw=True, update_fields=columns)
+    for accessor, members in (restored.m2m_data or {}).items():
+        getattr(instance, accessor).set(members)
+
+
+class RowLoader:
+    def __init__(self, using: str):
+        self.using = using
+        self.connection = connections[using]
+        self.saved = 0
+        self.seen = 0
+        self.models: set = set()
+
+    def save(self, records: list[dict]) -> int:
+        self.seen += len(records)
+        existing = existing_rows(records, self.using)
+        saved = 0
+        for record in records:
+            restored = _deserialized(record, self.using)
+            if restored is None:
+                continue
+            model = type(restored.object)
+            if restored.object.pk in existing.get(model, ()):
+                _update_carried_fields(restored, record, self.using)
+            else:
+                restored.save(using=self.using)
+            self.models.add(model)
+            saved += 1
+        self.saved += saved
+        return saved
+
+    def finish(self, *, adjust_sequences: bool = True) -> int:
+        if not self.seen:
+            return 0
+        self.connection.check_constraints()
+        if adjust_sequences:
+            raise_sequences(self.connection, self.models)
+        return self.saved
+
+
+def save_records(records: list[dict], *, using: str, adjust_sequences: bool = True) -> int:
+    loader = RowLoader(using)
+    with loader.connection.constraint_checks_disabled():
+        loader.save(records)
+    return loader.finish(adjust_sequences=adjust_sequences)
+
+
+def load_records(
+    records: list[dict], *, using: str = "default", adjust_sequences: bool = True
+) -> int:
     if not records:
         return 0
-    connection = connections[using]
-    saved = 0
-    restored_models = set()
+    records = resolve_natural_keys(records, using)
     with transaction.atomic(using=using):
-        records = resolve_natural_keys(records, using)
-        with connection.constraint_checks_disabled():
-            for obj in serializers.deserialize(
-                "json", json.dumps(records), using=using, ignorenonexistent=True
-            ):
-                obj.save(using=using)
-                restored_models.add(type(obj.object))
-                saved += 1
-        connection.check_constraints()
-        reset_sequences(connection, restored_models)
-    return saved
+        return save_records(records, using=using, adjust_sequences=adjust_sequences)

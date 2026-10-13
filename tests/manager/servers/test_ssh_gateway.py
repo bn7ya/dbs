@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import io
+import json
 import os
 import re
 import shlex
@@ -15,22 +17,21 @@ from pathlib import Path
 import pytest
 from paramiko import SFTPAttributes, SSHException
 
-from dbs.client import BackupOptions
 from dbs.exceptions import ConfigurationError, DBSError, HostKeyError
 from dbs.manager.servers.exceptions import (
     ArchiveFailed,
-    BackupInvalid,
+    DbsTooOld,
     HostKeyChanged,
     RemoteCommandFailed,
     RemoteNotFound,
     RemotePermissionDenied,
     SSHAuthFailed,
     SSHUnreachable,
+    StreamBroken,
 )
 from dbs.manager.servers.gateways import (
     Credentials,
     DbsProfile,
-    FetchedBackup,
     RemoteFile,
     RemoteHost,
     build_script,
@@ -38,8 +39,10 @@ from dbs.manager.servers.gateways import (
     fetch_host_key,
     parse_host_key,
 )
-from dbs.naming import is_backup_name
-from dbs.transports import RemoteResult, SSHSession, SSHTarget
+from dbs.naming import backup_filename
+from dbs.tee import partial_name
+from dbs.transports import RemoteResult
+from dbs.transports.ssh import StreamInterrupted
 from tests.manager.servers.support import (
     BACKUP_DIR,
     BACKUP_PASSPHRASE,
@@ -47,7 +50,6 @@ from tests.manager.servers.support import (
     PYTHON,
     SETTINGS_MODULE,
     LocalSftp,
-    dbs_backup,
     host_key_line,
 )
 
@@ -263,13 +265,13 @@ def test_an_sftp_channel_that_will_not_open_is_remote_command_failed(failure):
         RemoteHost(FakeSession(failure=failure)).exists("/srv")
 
 
-def test_sftp_reads_are_bounded_by_the_command_timeout(settings):
+def test_sftp_reads_are_bounded_by_the_io_timeout(settings):
     sftp = FakeSftp({"/srv"})
 
     opened = RemoteHost(FakeSession(sftp=sftp)).sftp
 
     assert opened is sftp
-    assert sftp.channel.timeout == settings.SSH_COMMAND_TIMEOUT
+    assert sftp.channel.timeout == settings.SSH_IO_TIMEOUT
 
 
 def test_a_path_exists_or_does_not():
@@ -310,7 +312,7 @@ def credentials() -> Credentials:
 )
 def test_a_connection_that_fails_is_translated(monkeypatch, failure, translated):
     class Refusing:
-        def __init__(self, target) -> None:
+        def __init__(self, target, on_activity=None) -> None:
             pass
 
         def __enter__(self):
@@ -328,7 +330,7 @@ def test_a_connection_trusts_only_the_pinned_key_and_is_closed_after(
     opened = []
 
     class Recording(FakeSession):
-        def __init__(self, target) -> None:
+        def __init__(self, target, on_activity=None) -> None:
             super().__init__()
             self.target = target
             opened.append(self)
@@ -351,6 +353,8 @@ def test_a_connection_trusts_only_the_pinned_key_and_is_closed_after(
     assert (target.use_agent, target.auto_add_host_key) == (False, False)
     assert target.known_hosts is None
     assert target.connect_timeout == settings.SSH_CONNECT_TIMEOUT
+    assert target.keepalive_interval == settings.SSH_KEEPALIVE_INTERVAL
+    assert target.io_timeout == settings.SSH_IO_TIMEOUT
     assert target.remote_dir == given.remote_dir
 
 
@@ -370,158 +374,261 @@ def test_a_host_that_does_not_answer_has_no_host_key(monkeypatch, settings):
     assert asked == [("10.0.0.9", 22, settings.SSH_CONNECT_TIMEOUT)]
 
 
-BACKUP_AND_FETCH = "dbs.manager.servers.gateways.ssh_gateway.backup_and_fetch"
 PROFILE = DbsProfile(
     python=PYTHON,
     manage="manage.py",
     project_dir=PROJECT_DIR,
     settings_module=SETTINGS_MODULE,
 )
+CONTENT = b"DBS container bytes" * 1000
+DIGEST = hashlib.sha256(CONTENT).hexdigest()
 
 
-def backup_session() -> SSHSession:
-    target = SSHTarget(
-        host="10.0.0.5",
-        port=2222,
-        username="deploy",
-        password="SSH-PASSWORD",
-        host_key=host_key_line(),
-        use_agent=False,
-        remote_dir=BACKUP_DIR,
-    )
-    return SSHSession(target, _client=object(), _sftp=FakeSftp(set()))
+def summary_line(name: str, **extra) -> str:
+    return json.dumps({"name": name, "size": len(CONTENT), "sha256": DIGEST, **extra})
 
 
-def fetching(
-    monkeypatch, content: bytes, failure: Exception | None = None
-) -> list[tuple]:
-    calls = []
+class StreamingSession(FakeSession):
+    def __init__(self, *, sent=CONTENT, result=None, failure=None) -> None:
+        super().__init__(sftp=LocalSftp())
+        self.sent = sent
+        self.answer = result
+        self.raised = failure
+        self.streams: list[dict] = []
 
-    def backup_and_fetch(profile, passphrase, **options):
-        calls.append((profile, passphrase, options))
-        (Path(options["dest_dir"]) / options["name"]).write_bytes(content)
-        if failure is not None:
-            raise failure
+    def stream(self, command, sink, *, stdin_line=None, timeout=None, progress=None):
+        self.streams.append(
+            {"command": command, "stdin": stdin_line, "timeout": timeout}
+        )
+        sink.write(self.sent)
+        if progress is not None:
+            progress(len(self.sent))
+        if self.raised is not None:
+            raise self.raised
+        return self.answer
 
-    monkeypatch.setattr(BACKUP_AND_FETCH, backup_and_fetch)
-    return calls
 
-
-def take(session: SSHSession, dest_dir: Path, keep_remote: int = 1) -> FetchedBackup:
-    return RemoteHost(session).take_dbs_backup(
-        profile=PROFILE,
+def streamed(session, folder=BACKUP_DIR, prefix="web-1"):
+    sink = io.BytesIO()
+    seen = []
+    found = RemoteHost(session).stream_dbs_backup(
+        PROFILE,
         passphrase=BACKUP_PASSPHRASE,
-        dest_dir=str(dest_dir),
-        prefix="web-1",
-        keep_remote=keep_remote,
+        prefix=prefix,
+        folder=folder,
+        sink=sink,
+        progress=seen.append,
     )
+    return found, sink.getvalue(), seen
 
 
-@pytest.mark.django_db
-def test_a_dbs_backup_is_taken_over_the_open_connection_and_checked(
-    monkeypatch, settings, tmp_path
-):
+def test_a_backup_is_streamed_with_its_passphrase_on_stdin(settings):
     settings.BACKUP_EXEC_TIMEOUT = 1234
-    calls = fetching(monkeypatch, dbs_backup(BACKUP_PASSPHRASE))
-    session = backup_session()
-
-    fetched = take(session, tmp_path)
-
-    [(profile, passphrase, options)] = calls
-    name = options["name"]
-    assert is_backup_name(name, "web-1")
-    assert fetched == FetchedBackup(
-        local_path=str(tmp_path / name), remote_path=f"{BACKUP_DIR}/{name}"
-    )
-    assert passphrase == BACKUP_PASSPHRASE
-    assert options == {
-        "dest_dir": str(tmp_path),
-        "name": name,
-        "session": session,
-        "options": BackupOptions(),
-        "delete_remote": False,
-        "keep_remote": 1,
-        "validate": False,
-    }
-    assert (profile.host, profile.port, profile.username) == (
-        "10.0.0.5",
-        2222,
-        "deploy",
-    )
-    assert profile.remote_dir == BACKUP_DIR
-    assert (profile.python, profile.manage) == (PYTHON, "manage.py")
-    assert (profile.project_dir, profile.django_settings_module) == (
-        PROJECT_DIR,
-        SETTINGS_MODULE,
-    )
-    assert profile.prefix == "web-1"
-    assert profile.passphrase_transport == "stdin"
-    assert profile.exec_timeout == 1234
-    assert profile.use_agent is False
-    assert (profile.password, profile.key_filename, profile.passphrase) == (
-        None,
-        None,
-        None,
-    )
-    assert session.sftp.channel.timeout == settings.SSH_COMMAND_TIMEOUT
-
-
-@pytest.mark.django_db
-def test_keeping_no_copy_on_the_server_removes_it_once_fetched(monkeypatch, tmp_path):
-    calls = fetching(monkeypatch, dbs_backup(BACKUP_PASSPHRASE))
-
-    fetched = take(backup_session(), tmp_path, keep_remote=0)
-
-    [(_, _, options)] = calls
-    assert (options["delete_remote"], options["keep_remote"]) == (True, None)
-    assert fetched == FetchedBackup(
-        local_path=str(tmp_path / options["name"]), remote_path=""
+    name = backup_filename("web-1")
+    session = StreamingSession(
+        result=RemoteResult(0, "", f"Streamed it.\n{summary_line(name)}\n")
     )
 
+    found, received, seen = streamed(session)
 
-def test_a_file_that_is_not_a_backup_is_removed_and_refused(monkeypatch, tmp_path):
-    fetching(monkeypatch, b"DBS but not really")
+    assert (found.name, found.size, found.sha256) == (name, len(CONTENT), DIGEST)
+    assert found.path == f"{BACKUP_DIR}/{name}"
+    assert received == CONTENT
+    assert seen == [len(CONTENT)]
+    [sent] = session.streams
+    assert sent["stdin"] == BACKUP_PASSPHRASE
+    assert sent["timeout"] == 1234
+    argv, setup = argv_and_setup(sent["command"])
+    assert argv == [
+        PYTHON,
+        "manage.py",
+        "dbs_backup",
+        "--stream",
+        "--prefix",
+        "web-1",
+        "--passphrase-stdin",
+        "--output-dir",
+        BACKUP_DIR,
+    ]
+    assert setup == [
+        f"cd {PROJECT_DIR} || exit 1",
+        f"export DJANGO_SETTINGS_MODULE={SETTINGS_MODULE}",
+    ]
+    assert BACKUP_PASSPHRASE not in sent["command"]
 
-    with pytest.raises(BackupInvalid) as refused:
-        take(backup_session(), tmp_path)
 
-    assert refused.value.output.startswith("[INVALID]")
-    assert list(tmp_path.iterdir()) == []
+def test_without_a_folder_the_server_keeps_its_copy_in_dbs_backup_dir():
+    name = backup_filename("web-1")
+    session = StreamingSession(result=RemoteResult(0, "", summary_line(name)))
+
+    found, _, _ = streamed(session, folder="")
+
+    assert "--output-dir" not in session.streams[0]["command"]
+    assert found.path == ""
 
 
-def test_a_failed_take_keeps_the_end_of_its_output_and_never_the_passphrase(
-    monkeypatch, tmp_path
-):
-    printed = (
-        "Remote dbs_backup failed on 10.0.0.5 (exit 1): "
-        + "x" * 2000
-        + f" read {BACKUP_PASSPHRASE} from stdin"
-        + "\nCommandError: the database is not reachable"
+def test_a_stream_the_server_could_not_send_whole_is_kept_on_the_server():
+    name = backup_filename("web-1")
+    session = StreamingSession(
+        result=RemoteResult(0, "", summary_line(name, kept_on_server=True))
     )
-    fetching(monkeypatch, b"partial", DBSError(printed))
+
+    with pytest.raises(StreamBroken):
+        streamed(session)
+
+
+def test_a_connection_lost_mid_stream_is_a_broken_stream():
+    session = StreamingSession(
+        failure=StreamInterrupted(f"The connection was lost: {BACKUP_PASSPHRASE}")
+    )
+
+    with pytest.raises(StreamBroken) as broken:
+        streamed(session)
+
+    assert BACKUP_PASSPHRASE not in broken.value.output
+
+
+def test_a_failed_stream_keeps_the_end_of_stderr_and_never_the_passphrase():
+    printed = "x" * 2000 + f" read {BACKUP_PASSPHRASE}\nCommandError: no database"
+    session = StreamingSession(result=RemoteResult(1, "", printed))
 
     with pytest.raises(RemoteCommandFailed) as failed:
-        take(backup_session(), tmp_path)
-
-    output = failed.value.output
-    assert len(output) == 500
-    assert output.endswith("CommandError: the database is not reachable")
-    assert BACKUP_PASSPHRASE not in output
-    assert "read [passphrase] from stdin" in output
-    assert list(tmp_path.iterdir()) == []
-
-
-@pytest.mark.parametrize("failure", TRANSPORT_FAILURES)
-def test_a_transport_failure_during_a_take_is_remote_command_failed(
-    monkeypatch, tmp_path, failure
-):
-    fetching(monkeypatch, b"partial", failure)
-
-    with pytest.raises(RemoteCommandFailed) as failed:
-        take(backup_session(), tmp_path)
+        streamed(session)
 
     assert type(failed.value) is RemoteCommandFailed
-    assert list(tmp_path.iterdir()) == []
+    assert len(failed.value.output) == 500
+    assert failed.value.output.endswith("CommandError: no database")
+    assert BACKUP_PASSPHRASE not in failed.value.output
+
+
+def test_a_server_whose_django_dbs_cannot_stream_is_too_old():
+    session = StreamingSession(
+        result=RemoteResult(2, "", "manage.py dbs_backup: error: unrecognized arguments: --stream")
+    )
+
+    with pytest.raises(DbsTooOld) as raised:
+        streamed(session)
+
+    assert raised.value.needs == "0.7.0"
+    assert "Upgrade it to 0.7.0 or later." in str(raised.value.detail)
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "",
+        "Streamed it.",
+        "[1, 2]",
+        json.dumps({"name": backup_filename("other"), "size": 1, "sha256": DIGEST}),
+        json.dumps({"name": "../web-1-20261013-000000Z.dbs", "size": 1, "sha256": DIGEST}),
+        json.dumps({"name": backup_filename("web-1"), "size": "1", "sha256": DIGEST}),
+        json.dumps({"name": backup_filename("web-1"), "size": True, "sha256": DIGEST}),
+        json.dumps({"name": backup_filename("web-1"), "size": 1, "sha256": "abc"}),
+    ],
+)
+def test_a_summary_line_that_does_not_describe_one_backup_fails_the_stream(stderr):
+    session = StreamingSession(result=RemoteResult(0, "", stderr))
+
+    with pytest.raises(RemoteCommandFailed) as failed:
+        streamed(session)
+
+    assert type(failed.value) is RemoteCommandFailed
+
+
+def argv_and_setup(script: str):
+    body = shlex.split(script)[2]
+    lines = body.splitlines()
+    return shlex.split(lines[-1][len("exec ") :]), lines[:-1]
+
+
+def server_folder(tmp_path: Path) -> Path:
+    folder = tmp_path / "backups"
+    folder.mkdir()
+    return folder
+
+
+def test_the_backups_waiting_on_the_server_are_its_prefix_names_oldest_first(tmp_path):
+    folder = server_folder(tmp_path)
+    newer = "web-1-20261013-120000Z.dbs"
+    older = "web-1-20261012-120000Z.dbs"
+    for name in (newer, older, "web-1-plan-20261013-120000Z.dbs", "web-1.dbs", "notes.txt"):
+        (folder / name).write_bytes(b"x" * 3)
+    (folder / "web-1-20261013-130000Z.dbs").mkdir()
+
+    found = RemoteHost(FakeSession(sftp=LocalSftp())).waiting_backups(
+        PROFILE, str(folder), "web-1"
+    )
+
+    assert [(item.name, item.size) for item in found] == [(older, 3), (newer, 3)]
+    assert found[0].path == f"{folder}/{older}"
+    assert found[0].mtime is not None
+
+
+def test_a_backup_folder_that_is_not_there_has_nothing_waiting(tmp_path):
+    remote = RemoteHost(FakeSession(sftp=LocalSftp()))
+
+    assert remote.waiting_backups(PROFILE, str(tmp_path / "missing"), "web-1") == []
+    assert remote.waiting_backups(PROFILE, "", "web-1") == []
+    assert remote.backup_folder(PROFILE, str(tmp_path)) == str(tmp_path)
+
+
+def test_a_waiting_backup_is_pulled_whole_and_its_digest_read(tmp_path):
+    folder = server_folder(tmp_path)
+    path = folder / backup_filename("web-1")
+    path.write_bytes(CONTENT)
+    remote = RemoteHost(LocalSession())
+    sink = io.BytesIO()
+    seen = []
+
+    remote.pull_backup(PROFILE, str(path), sink, seen.append)
+
+    assert sink.getvalue() == CONTENT
+    assert seen[-1] == len(CONTENT)
+    assert remote.backup_sha256(PROFILE, str(path)) == DIGEST
+
+
+def test_a_backup_gone_before_it_is_pulled_is_not_found(tmp_path):
+    remote = RemoteHost(FakeSession(sftp=LocalSftp()))
+
+    with pytest.raises(RemoteNotFound):
+        remote.pull_backup(PROFILE, str(tmp_path / "gone.dbs"), io.BytesIO())
+
+
+def test_a_server_copy_is_removed_and_one_already_gone_is_fine(tmp_path):
+    folder = server_folder(tmp_path)
+    path = folder / backup_filename("web-1")
+    path.write_bytes(CONTENT)
+    remote = RemoteHost(FakeSession(sftp=LocalSftp()))
+
+    remote.remove_backup(PROFILE, str(path))
+    remote.remove_backup(PROFILE, str(path))
+
+    assert list(folder.iterdir()) == []
+
+
+def test_only_partials_left_for_an_hour_are_swept_from_the_backup_folder(tmp_path):
+    folder = server_folder(tmp_path)
+    stale = folder / partial_name(backup_filename("web-1"))
+    legacy = folder / f"{backup_filename('web-1', ordinal=2)}.part"
+    fresh = folder / partial_name(backup_filename("web-1", ordinal=3))
+    unrelated = folder / "notes.part"
+    for path in (stale, legacy, fresh, unrelated):
+        path.write_bytes(b"x")
+    for path in (stale, legacy, unrelated):
+        os.utime(path, (1_000_000_000, 1_000_000_000))
+
+    removed = RemoteHost(FakeSession(sftp=LocalSftp())).sweep_partials(str(folder))
+
+    assert removed == sorted([stale.name, legacy.name])
+    assert sorted(path.name for path in folder.iterdir()) == sorted(
+        [fresh.name, unrelated.name]
+    )
+
+
+def test_sweeping_a_folder_that_cannot_be_listed_removes_nothing(tmp_path):
+    remote = RemoteHost(FakeSession(sftp=LocalSftp()))
+
+    assert remote.sweep_partials(str(tmp_path / "missing")) == []
 
 
 class LocalSession(FakeSession):

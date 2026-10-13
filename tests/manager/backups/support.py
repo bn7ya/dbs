@@ -7,6 +7,7 @@ import posixpath
 import re
 import stat
 import tarfile
+import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -15,15 +16,16 @@ from datetime import timezone as dt_timezone
 from pathlib import Path
 from typing import BinaryIO
 
-from dbs.manager.servers.exceptions import ArchiveFailed, RemoteNotFound
+from dbs.manager.servers.exceptions import ArchiveFailed, RemoteNotFound, StreamBroken
 from dbs.manager.servers.gateways import (
     DbsProfile,
-    FetchedBackup,
     RemoteArchive,
     RemoteFile,
     RestoreReport,
+    ServerBackup,
+    StreamedBackup,
 )
-from dbs.naming import backup_filename
+from dbs.naming import backup_filename, is_backup_name, parse_backup_moment
 from tests.manager.servers.support import BACKUP_DIR, dbs_backup
 
 SERVER_FILES = {
@@ -39,9 +41,8 @@ TAR_FAILURE = "tar: srv/app/missing: Cannot stat: No such file or directory"
 class Take:
     profile: DbsProfile
     passphrase: str
-    dest_dir: str
     prefix: str
-    keep_remote: int
+    folder: str
 
 
 @dataclass
@@ -83,8 +84,21 @@ class BackupHost:
         tar_status: int = 0,
         reported_sha256: str | None = None,
         restored: RestoreReport = RESTORED,
+        breaks: bool = False,
+        sent: bytes | None = None,
+        reported: dict | None = None,
     ):
+        if root is None:
+            self.scratch = tempfile.TemporaryDirectory(prefix="backup-host-")
+            root = Path(self.scratch.name)
         self.content = content
+        self.breaks = breaks
+        self.sent = sent
+        self.reported = reported or {}
+        self.pulls: list[str] = []
+        self.removed: list[str] = []
+        self.digests: list[str] = []
+        self.progress: list[int] = []
         self.failure = failure
         self.root = root
         self.tar_status = tar_status
@@ -96,26 +110,90 @@ class BackupHost:
         self.prunes: list[Prune] = []
         self.credentials = None
 
-    def take_dbs_backup(
-        self,
-        *,
-        profile: DbsProfile,
-        passphrase: str,
-        dest_dir: str,
-        prefix: str,
-        keep_remote: int,
-        remote_dir: str | None = None,
-    ) -> FetchedBackup:
-        self.takes.append(Take(profile, passphrase, dest_dir, prefix, keep_remote))
+    def backup_folder(self, profile: DbsProfile, folder: str) -> str:
+        return folder
+
+    def sweep_partials(self, folder: str) -> list[str]:
+        return []
+
+    def waiting_backups(
+        self, profile: DbsProfile, folder: str, prefix: str
+    ) -> list[ServerBackup]:
         if self.failure is not None:
             raise self.failure
-        name = backup_filename(prefix, ordinal=len(self.takes))
-        path = Path(dest_dir) / name
-        path.write_bytes(
-            self.content if self.content is not None else dbs_backup(passphrase)
+        directory = self.on_server(folder)
+        if not directory.is_dir():
+            return []
+        found = [
+            ServerBackup(
+                entry.name,
+                posixpath.join(folder, entry.name),
+                entry.stat().st_size,
+                datetime.fromtimestamp(int(entry.stat().st_mtime), dt_timezone.utc),
+            )
+            for entry in os.scandir(directory)
+            if entry.is_file() and is_backup_name(entry.name, prefix)
+        ]
+        return sorted(found, key=lambda b: (parse_backup_moment(b.name), b.name))
+
+    def backup_sha256(self, profile: DbsProfile, path: str) -> str:
+        self.digests.append(path)
+        return hashlib.sha256(self.on_server(path).read_bytes()).hexdigest()
+
+    def pull_backup(self, profile: DbsProfile, path: str, sink, progress=None) -> None:
+        self.pulls.append(path)
+        if not self.on_server(path).is_file():
+            raise RemoteNotFound()
+        data = self.on_server(path).read_bytes()
+        sink.write(data)
+        if progress is not None:
+            progress(len(data))
+
+    def stream_dbs_backup(
+        self,
+        profile: DbsProfile,
+        *,
+        passphrase: str,
+        prefix: str,
+        folder: str,
+        sink,
+        progress=None,
+    ) -> StreamedBackup:
+        self.takes.append(Take(profile, passphrase, prefix, folder))
+        if self.failure is not None:
+            raise self.failure
+        content = self.content if self.content is not None else dbs_backup(passphrase)
+        directory = self.on_server(folder)
+        directory.mkdir(parents=True, exist_ok=True)
+        name = next(
+            backup_filename(prefix, ordinal=ordinal)
+            for ordinal in range(1, 1000)
+            if not (directory / backup_filename(prefix, ordinal=ordinal)).exists()
         )
-        remote_path = f"{BACKUP_DIR}/{name}" if keep_remote else ""
-        return FetchedBackup(local_path=str(path), remote_path=remote_path)
+        (directory / name).write_bytes(content)
+        sent = self.sent if self.sent is not None else content
+        if self.breaks:
+            sink.write(sent[: len(sent) // 2])
+            raise StreamBroken(output="The connection was lost.")
+        sink.write(sent)
+        if progress is not None:
+            progress(len(sent))
+        return StreamedBackup(
+            name=self.reported.get("name", name),
+            path=posixpath.join(folder, name),
+            size=self.reported.get("size", len(content)),
+            sha256=self.reported.get("sha256", hashlib.sha256(content).hexdigest()),
+        )
+
+    def remove_backup(self, profile: DbsProfile, path: str) -> None:
+        self.removed.append(path)
+        self.on_server(path).unlink(missing_ok=True)
+
+    def keep_on_server(self, name: str, content: bytes) -> str:
+        directory = self.on_server(BACKUP_DIR)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / name).write_bytes(content)
+        return posixpath.join(BACKUP_DIR, name)
 
     def restore_dbs_backup(
         self,

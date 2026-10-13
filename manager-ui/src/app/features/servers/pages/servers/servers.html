@@ -4,11 +4,59 @@
       <h1>{{ 'servers.title' | t }}</h1>
       <p class="text-secondary">{{ 'servers.subtitle' | t }}</p>
     </div>
-    <a matButton="filled" routerLink="new">
+    <a *appCan="'servers.manage'" matButton="filled" routerLink="new">
       <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
       {{ 'servers.add' | t }}
     </a>
   </header>
+
+  @if (pendingHostKeys().length > 0) {
+    <mat-card *appCan="'servers.manage'" appearance="outlined">
+      <mat-card-content class="servers__body">
+        <div class="servers__title">
+          <h2>{{ 'servers.pendingKeys.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.pendingKeys.body' | t }}</p>
+        </div>
+        <ul class="servers__pending" role="list">
+          @for (key of pendingHostKeys(); track key.id) {
+            <li class="servers__pending-key">
+              <h3><bdi class="servers__address" dir="ltr">{{ addressOf(key) }}</bdi></h3>
+              <app-host-key-facts [keyType]="key.key_type" [fingerprint]="key.fingerprint" compare />
+              <p class="text-sm text-secondary">
+                {{ 'servers.pendingKeys.waits' | t }}
+                <time [attr.datetime]="key.expires_at">{{ key.expires_at | appDate }}</time>
+              </p>
+              <div class="servers__pending-actions">
+                <button
+                  matButton="outlined"
+                  class="app-danger"
+                  type="button"
+                  [disabled]="isDeciding(key)"
+                  [attr.aria-label]="'servers.pendingKeys.rejectLabel' | t: { address: addressOf(key) }"
+                  (click)="rejectHostKey(key)"
+                >
+                  {{ 'servers.pendingKeys.reject' | t }}
+                </button>
+                <button
+                  matButton="filled"
+                  type="button"
+                  [disabled]="isDeciding(key)"
+                  [attr.aria-busy]="isDeciding(key)"
+                  [attr.aria-label]="'servers.pendingKeys.confirmLabel' | t: { address: addressOf(key) }"
+                  (click)="confirmHostKey(key)"
+                >
+                  @if (isDeciding(key)) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ 'servers.pendingKeys.confirm' | t }}
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </mat-card-content>
+    </mat-card>
+  }
 
   <mat-card appearance="outlined">
     <mat-card-content class="servers__body">
@@ -52,7 +100,7 @@
             [title]="'servers.empty.title' | t"
             [description]="'servers.empty.body' | t"
           >
-            <a matButton="filled" routerLink="new">{{ 'servers.add' | t }}</a>
+            <a *appCan="'servers.manage'" matButton="filled" routerLink="new">{{ 'servers.add' | t }}</a>
           </app-empty-state>
         }
       } @else {
@@ -74,6 +122,13 @@
               <th mat-header-cell *matHeaderCellDef scope="col">{{ 'servers.list.address' | t }}</th>
               <td mat-cell *matCellDef="let row">
                 <bdi class="servers__address" dir="ltr">{{ row.username }}&#64;{{ row.host }}:{{ row.port }}</bdi>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="connection">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'servers.list.connection' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                <app-connection-dot [state]="row.connection_state" [lastSeenAt]="row.last_seen_at" />
               </td>
             </ng-container>
 

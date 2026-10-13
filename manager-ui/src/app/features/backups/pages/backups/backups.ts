@@ -24,12 +24,17 @@ import { map } from 'rxjs';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
+import { Downloader } from '@shared/downloader/downloader';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
+import { JobConnection } from '@shared/job-connection/job-connection';
 import { Notice } from '@shared/notice/notice';
+import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
+import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { Skeleton } from '@shared/skeleton/skeleton';
 import { StatusTag } from '@shared/status-tag/status-tag';
 import { uniqueId } from '@shared/unique-id';
@@ -64,12 +69,14 @@ const FIRST_PLAN_NAME = 'django-dbs';
 @Component({
   selector: 'app-backups-page',
   imports: [
+    Can,
     MatButton,
     MatCard,
     MatCardContent,
     MatPaginator,
     MatProgressBar,
     MatTableModule,
+    JobConnection,
     Notice,
     Skeleton,
     StatusTag,
@@ -90,6 +97,7 @@ export class BackupsPage {
   private readonly confirmation = inject(Confirmation);
   private readonly locale = inject(LocaleStore);
   private readonly injector = inject(Injector);
+  private readonly downloader = inject(Downloader);
 
   readonly serverId = serverIdOf(inject(ActivatedRoute));
 
@@ -113,6 +121,7 @@ export class BackupsPage {
   readonly empty = this.store.empty;
   readonly taking = this.store.taking;
   readonly backingUp = this.store.backingUp;
+  readonly liveConnection = this.store.liveConnection;
   readonly upload = this.store.upload;
   readonly uploading = this.store.uploading;
   readonly uploadProgress = this.store.uploadProgress;
@@ -221,6 +230,9 @@ export class BackupsPage {
   }
 
   validationKey(file: BackupFile): string {
+    if (file.failure !== '') {
+      return 'backups.validation.quarantined';
+    }
     return `backups.${file.kind === 'dbs' ? 'validation' : 'sealedValidation'}.${file.validation}`;
   }
 
@@ -230,6 +242,32 @@ export class BackupsPage {
 
   downloadUrl(file: BackupFile): string {
     return this.store.downloadUrl(file);
+  }
+
+  // Everything but a django-dbs backup is kept sealed here, and downloading it decrypts it.
+  sealed(file: BackupFile): boolean {
+    return file.kind !== 'dbs';
+  }
+
+  async download(file: BackupFile): Promise<void> {
+    const data: PasswordPromptData = {
+      titleKey: 'backups.download.prompt.title',
+      bodyKey: 'backups.download.prompt.body',
+      bodyValues: { name: `⁨${file.name}⁩` },
+      submitKey: 'backups.download.action',
+      submit: async (password) => {
+        const url = await this.store.downloadLink(file, password);
+        if (url === null) {
+          return false;
+        }
+        this.downloader.start(url);
+        return true;
+      },
+      error: this.store.downloadError,
+    };
+    await this.dialogs
+      .open<boolean, PasswordPromptData>(PasswordPrompt, { titleKey: data.titleKey, data, size: 'sm' })
+      .whenClosed();
   }
 
   isVerifying(file: BackupFile): boolean {
@@ -264,7 +302,7 @@ export class BackupsPage {
   }
 
   canRestore(file: BackupFile): boolean {
-    return file.kind === 'dbs';
+    return file.kind === 'dbs' && file.failure === '';
   }
 
   restore(file: BackupFile): void {
@@ -293,16 +331,18 @@ export class BackupsPage {
   }
 
   async remove(file: BackupFile): Promise<void> {
-    const accepted = await this.confirmation.ask({
-      title: this.locale.translate('backups.delete.confirmTitle', { name: `⁨${file.name}⁩` }),
-      message: this.locale.translate('backups.delete.confirmBody'),
-      acceptLabel: this.locale.translate('actions.delete'),
-      rejectLabel: this.locale.translate('actions.cancel'),
-      acceptSeverity: 'danger',
-    });
-    if (accepted) {
-      await this.store.remove(file);
-    }
+    const data: PasswordPromptData = {
+      titleKey: 'backups.delete.prompt.title',
+      bodyKey: 'backups.delete.prompt.body',
+      bodyValues: { name: `⁨${file.name}⁩` },
+      submitKey: 'actions.delete',
+      destructive: true,
+      submit: (password) => this.store.remove(file, password),
+      error: this.store.deleteError,
+    };
+    await this.dialogs
+      .open<boolean, PasswordPromptData>(PasswordPrompt, { titleKey: data.titleKey, data, size: 'sm' })
+      .whenClosed();
   }
 
   undoDelete(): void {

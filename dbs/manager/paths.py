@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +16,9 @@ LOG_FILE = "manager.log"
 INSTANCE_FILE = "manager.json"
 SETUP_TOKEN_FILE = "setup.token"
 BACKUPS_DIRECTORY = "backups"
+IMPORT_MARKER = "import.complete"
+STAGING_SUFFIX = ".import-"
+ASIDE_SUFFIX = ".before-import-"
 KEY_BYTES = 48
 
 
@@ -49,14 +53,56 @@ def private_directory(path):
     return path
 
 
+def owner_principal(environ=None):
+    environ = os.environ if environ is None else environ
+    user = environ.get("USERNAME", "")
+    domain = environ.get("USERDOMAIN", "")
+    return f"{domain}\\{user}" if domain and user else user
+
+
+def restrict_to_owner(path, platform=None, environ=None, run=subprocess.run):
+    if not (platform or sys.platform).startswith("win"):
+        return True
+    principal = owner_principal(environ)
+    if not principal:
+        return False
+    try:
+        done = run(
+            [
+                "icacls",
+                str(path),
+                "/inheritance:r",
+                "/grant:r",
+                f"{principal}:(OI)(CI)F",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return done.returncode == 0
+
+
 def ensure_data_dir(data_dir):
+    data_dir = Path(data_dir)
+    created = not data_dir.exists()
     data_dir = private_directory(data_dir)
+    if created and not restrict_to_owner(data_dir):
+        print(
+            f"Warning: could not limit {data_dir} to your account; check who can read it.",
+            file=sys.stderr,
+        )
     private_directory(data_dir / KEY_FILE.parent)
     return data_dir
 
 
 def key_path(data_dir):
     return Path(data_dir) / KEY_FILE
+
+
+def new_key():
+    return secrets.token_urlsafe(KEY_BYTES)
 
 
 def ensure_key(data_dir):
@@ -67,12 +113,20 @@ def ensure_key(data_dir):
     except FileExistsError:
         return path
     with os.fdopen(descriptor, "w", encoding="ascii") as handle:
-        handle.write(secrets.token_urlsafe(KEY_BYTES))
+        handle.write(new_key())
     return path
 
 
 def read_key(data_dir):
     return ensure_key(data_dir).read_text(encoding="ascii").strip()
+
+
+def stored_key(data_dir):
+    try:
+        held = key_path(data_dir).read_text(encoding="ascii").strip()
+    except FileNotFoundError:
+        return None
+    return held or None
 
 
 def write_private(path, text):
@@ -103,3 +157,48 @@ def setup_token_path(data_dir):
 
 def backups_path(data_dir):
     return Path(data_dir) / BACKUPS_DIRECTORY
+
+
+def import_marker_path(data_dir):
+    return Path(data_dir) / IMPORT_MARKER
+
+
+def clear_import_marker(data_dir):
+    try:
+        import_marker_path(data_dir).unlink()
+    except FileNotFoundError:
+        pass
+
+
+def staging_path(data_dir, stamp):
+    data_dir = Path(data_dir)
+    return data_dir.with_name(f"{data_dir.name}{STAGING_SUFFIX}{stamp}")
+
+
+def aside_path(data_dir, stamp):
+    data_dir = Path(data_dir)
+    return data_dir.with_name(f"{data_dir.name}{ASIDE_SUFFIX}{stamp}")
+
+
+def finished_stage(data_dir):
+    data_dir = Path(data_dir)
+    prefix = f"{data_dir.name}{STAGING_SUFFIX}"
+    if not data_dir.parent.is_dir():
+        return None
+    stages = sorted(
+        candidate
+        for candidate in data_dir.parent.iterdir()
+        if candidate.name.startswith(prefix) and import_marker_path(candidate).exists()
+    )
+    return stages[-1] if stages else None
+
+
+def finish_interrupted_import(data_dir):
+    data_dir = Path(data_dir)
+    if data_dir.exists():
+        return None
+    stage = finished_stage(data_dir)
+    if stage is None:
+        return None
+    os.replace(stage, data_dir)
+    return stage

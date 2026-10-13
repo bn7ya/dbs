@@ -7,6 +7,7 @@ from django.test.utils import CaptureQueriesContext
 from dbs import audit
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.middleware import request_origin
+from tests.manager.support import PASSWORD
 
 LIST = "/api/activity/"
 
@@ -60,7 +61,9 @@ def test_actors_and_servers_cost_no_query_per_entry(api, admin, server):
 
 @pytest.mark.django_db
 def test_a_deleted_server_keeps_its_name_but_loses_its_link(api, server):
-    api.delete(f"/api/servers/{server.pk}/")
+    api.delete(
+        f"/api/servers/{server.pk}/", {"account_password": PASSWORD}, format="json"
+    )
 
     results = api.get(LIST, {"server": server.pk}).json()["results"]
 
