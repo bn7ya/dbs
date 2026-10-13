@@ -765,8 +765,9 @@ class InvoiceBackup(ModelBackup):
 ```
 
 `DBS_EXCLUDE_MODELS` skips models in addition to the built-in exclusions (content types,
-permissions, admin log, sessions, and DBS's own tables). Prefix a label with `-` to back up
-one the defaults skip, an unmanaged model included:
+permissions, admin log, sessions, and DBS's own records apart from the session guard's
+policy and known locations). Prefix a label with `-` to back up one the defaults skip, an
+unmanaged model included:
 `DBS_EXCLUDE_MODELS = ["myapp.AuditRow", "-sessions.Session", "-legacy.Customer"]`.
 
 Only regular files are read. A FIFO, socket or device, or a link that leaves its root, is
@@ -1091,8 +1092,8 @@ restore would refuse.
 **`django_dbs` says it needs `django-dbs[manager]`.** Install it:
 `pip install "django-dbs[manager]"`.
 
-**`django_dbs run` shows "the interface was not built".** You installed from a source
-checkout. Install from PyPI, or build it once with `scripts/build_manager_ui.sh`.
+**`django_dbs run` shows "The manager's interface is not built".** You installed from a
+source checkout. Install from PyPI, or build it once with `scripts/build_manager_ui.sh`.
 
 **`django_dbs` is not recognized / command not found.** pip installed the script into a
 folder that is not on your `PATH`, common with Windows user installs and
@@ -1139,12 +1140,13 @@ python manage.py dbs upgrade
 ```
 
 It applies pending DBS migrations itself, and prints, with the exact line to add, anything
-that means editing your own code. `--check` changes nothing and exits non-zero when
-something needs doing, for CI. Inside a virtual environment, `dbs upgrade --self` installs
-the newest release (or `--to X.Y.Z`) with the extras installed there: it prints the pinned
-`pip install` command and asks first (`--yes` answers for a script), names the requirement
-files to pin it in too, leaves a source checkout alone, and an interpreter outside a virtual
-environment unless you add `--system-python`.
+that means editing your own code. `--check` changes nothing and exits non-zero when an item
+needs you to act, for CI; warnings are printed and leave it passing. Inside a virtual
+environment, `dbs upgrade --self` installs the newest release (or `--to X.Y.Z`) with the
+extras installed there: it prints the pinned `pip install` command and asks first (`--yes`
+answers for a script), names the requirement files to pin it in too, leaves a source
+checkout alone, and an interpreter outside a virtual environment unless you add
+`--system-python`.
 
 `--backups DIR` reads old backups and converts any written in an older format into a new
 file beside the original. Nothing in DBS ever deletes or overwrites a backup.
@@ -1154,10 +1156,11 @@ file beside the original. Nothing in DBS ever deletes or overwrites a backup.
 `dbs schedule --interval …` as before. Projects behind uWSGI without threads should set
 `DBS_SCHEDULER = "command"`.
 
-**From 0.5.x:** `dbs schedule` with no flags now always follows the panel. If its schedule is
-off, the command waits for it instead of backing up every 24 hours; turn the schedule on, or
-pass `--interval`. `dbs upgrade` says so when it applies. The manager applies its own new
-migrations the next time any `django_dbs` command starts.
+**From 0.5.x:** `dbs schedule` with no flags now follows the panel unless
+`DBS_SCHEDULE_INTERVAL` is still set. If its schedule is off, the command waits for it
+instead of backing up every 24 hours; turn the schedule on, or pass `--interval`.
+`dbs upgrade` says so when it applies. The manager applies its own new migrations the next
+time any `django_dbs` command starts.
 
 **From 0.6.x:** `pip install django-dbs` is now the backup library alone. Add the extras you
 use — `[guard]` for the session guard's detector, `[manager]` for `django_dbs`, `[ssh]` for
@@ -1171,7 +1174,7 @@ the audit trail and drops the SFTP targets, and reports each of these:
 | manager extra · manager keychain | Whether `django_dbs` can run here, and that its sealing key moves to the system keychain |
 | off-site copies | The panel no longer pushes backups. `DBS_SSH_TARGETS`, `DBS_SCHEDULE_PUSH_TARGET`, `DBS_SCHEDULE_KEEP_REMOTE` and `DBS_ADMIN_CONSOLE_SHELL` do nothing; delete them, and add this server to a DBS manager, which pulls its backups. The SFTP targets the panel held are named in the audit trail |
 | dbs-client | `dbs-client` is gone. Install the manager on your own machine and add each server from its config with `django_dbs server add` |
-| retention | The server keeps at most five backups: a schedule keeping more is lowered to 5, and `DBS_SCHEDULE_KEEP` above 5 is refused |
+| retention | The server keeps at most five backups: a schedule keeping more is lowered to 5, and `dbs schedule` refuses a `DBS_SCHEDULE_KEEP` above 5, which the panel reads as 5 |
 | audit chain | The audit trail is sealed in a hash chain; `manage.py dbs audit verify` checks it |
 | backup format | New backups are format 2. A `DBS_KDF_TIME_COST` above 10 or `DBS_KDF_MEMORY_COST` above 262144 would make every backup fail; lower them. Convert format 1 backups with `dbs upgrade --backups DIR` |
 | forwarded addresses | `DBS_TRUSTED_PROXIES` now lists proxy networks, not a count: `DBS_TRUSTED_PROXIES = ["10.0.0.0/24"]` |

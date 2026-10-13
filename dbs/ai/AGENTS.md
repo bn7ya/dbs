@@ -9,7 +9,7 @@ This project uses django-dbs for backups.
   `dbs.security.middleware.DBSSecurityMiddleware` in `MIDDLEWARE` below
   `AuthenticationMiddleware` for the guard, `DBS_BACKUP_DIR`, then `manage.py migrate`.
   Upgrading from 0.2.x requires that migrate.
-- Commands: `python manage.py dbs backup|restore|validate|schedule|health|audit|key|security|ai|upgrade`.
+- Commands: `python manage.py dbs backup|restore|validate|schedule|connection|health|audit|key|security|ai|upgrade`.
   `manage.py django-dbs` and the older `dbs_backup`/`dbs_restore`/`dbs_validate`/
   `dbs_schedule` names also work. `dbs backup PATH` refuses a path that exists.
 - The backup passphrase is derived from `settings.SECRET_KEY` and **must never change**:

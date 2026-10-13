@@ -146,9 +146,10 @@ passphrase they lose, and did not keep in `SECRET_KEY_FALLBACKS`, cannot be open
 
 DBS backs up every model it finds, minus the defaults it always skips
 (`contenttypes.contenttype`, `auth.permission`, `admin.logentry`, `sessions.session`, and
-DBS's own tables) and models with `managed = False`. A multi-table child brings its parent
-rows. To configure a model, register it in an app's `dbs.py`; once anything is registered,
-only registered models are backed up:
+DBS's own records apart from the session guard's policy and known locations) and models
+with `managed = False`. A multi-table child brings its parent rows. To configure a model,
+register it in an app's `dbs.py`; once anything is registered, only registered models are
+backed up:
 
 ```python
 from dbs import backup_registry, FieldType, ModelBackup
@@ -190,11 +191,13 @@ picks where it runs: `"thread"` (default, a thread each web worker starts on its
 request, with a database lease so one backup is taken per interval), `"command"` (run
 `manage.py dbs schedule` under systemd; with no plan flags it follows the panel) or `"off"`.
 Recommend `"command"` behind uWSGI without `--enable-threads`, or when several hosts each
-keep their own `DBS_BACKUP_DIR`. `DBS_SCHEDULE_INTERVAL` and `DBS_SCHEDULE_KEEP` only seed
-the first schedule row.
+keep their own `DBS_BACKUP_DIR`. `DBS_SCHEDULE_INTERVAL` and `DBS_SCHEDULE_KEEP` seed the
+first schedule row; while that schedule is off, a set `DBS_SCHEDULE_INTERVAL` makes
+`dbs schedule` run that fixed plan instead.
 
-The server keeps **at most five** backups: the schedule keeps 1 to 5, and
-`DBS_SCHEDULE_KEEP` and `dbs schedule --keep` refuse more. Retention only touches this
+The server keeps **at most five** backups: the schedule keeps 1 to 5, `dbs schedule`
+refuses a larger `DBS_SCHEDULE_KEEP` or `--keep`, and the panel reads a larger
+`DBS_SCHEDULE_KEEP` as 5. Retention only touches this
 project's `PREFIX-YYYYMMDD-HHMMSSZ.dbs` files (`PREFIX-ALIAS-…` for a database other than
 `default`), orders them by recorded time, never counts links, future-stamped or non-DBS
 files, and always keeps the newest backup that passed verification.

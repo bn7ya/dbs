@@ -4,10 +4,10 @@
 
 | Version | Security fixes |
 |---|---|
-| 0.6.x | Yes |
-| 0.5.x and older | No |
+| 0.7.x | Yes |
+| 0.6.x and older | No |
 
-Fixes ship as a new 0.6.x release on PyPI. Pin the fixed version in your requirements or lock
+Fixes ship as a new 0.7.x release on PyPI. Pin the fixed version in your requirements or lock
 file and reinstall; inside a virtual environment `python manage.py dbs upgrade --self --to
 VERSION` installs exactly that version and then `python manage.py dbs upgrade` finishes the
 upgrade. Older lines receive no fixes, so the first step for any report against them is to
@@ -183,19 +183,21 @@ The manager (`pip install "django-dbs[manager]"`, then `django_dbs run`) is a se
 project that reaches each server over SSH. It is never added to a host project's
 `INSTALLED_APPS`, and the host project stores nothing about it.
 
-- It holds the SSH keys and passwords of every server it manages, sealed with AES-256-GCM under
-  a key derived from the manager's sealing key, and the backups it fetches, sealed the same
-  way. The sealing key lives in the system keychain where one works and otherwise in a file in
-  the data directory (`DBS_MANAGER_KEY_STORE` chooses); `django_dbs paths` shows where each is
-  kept. Anyone who can read both the data directory and that key can use those credentials, so
-  keep the machine and the account that runs the manager to yourself. An export
-  (`django_dbs export`) carries the credentials too, encrypted under the passphrase you give
-  it; keep the file and that passphrase apart.
+- It holds the SSH keys and passwords of every server it manages, sealed with AES-256-GCM
+  under a key derived from the manager's sealing key, and the folder archives, collected
+  files and uploads it keeps, sealed the same way. The DBS backups it pulls stay encrypted
+  under each server's own backup passphrase, which the manager holds sealed. The sealing key
+  lives in the system keychain where one works and otherwise in a file in the data directory
+  (`DBS_MANAGER_KEY_STORE` chooses); `django_dbs paths` shows where each is kept. Anyone who
+  can read both the data directory and that key can use those credentials, so keep the
+  machine and the account that runs the manager to yourself. An export (`django_dbs export`)
+  carries the credentials too, encrypted under the passphrase you give it; keep the file and
+  that passphrase apart.
 - Every account has a role: the master account, then admins, operators and viewers, each
   allowed less than the one before. Sign-in takes the password and a code from an
   authenticator app, set up at the first sign-in, with single-use recovery codes. Passwords
-  expire after 30 days. Downloading or deleting a backup, and other sensitive actions, ask for
-  the password again.
+  expire after 30 days. Deleting a backup, downloading a file the manager keeps sealed, and
+  other sensitive actions ask for the password again.
 - It listens on `127.0.0.1` by default. It refuses to listen anywhere else over plain HTTP
   unless it is behind a TLS reverse proxy named with `--trusted-proxy`, or
   `--allow-insecure-http` accepts the risk; prefer an SSH tunnel. Sign-in is rate-limited per

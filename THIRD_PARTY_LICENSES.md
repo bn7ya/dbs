@@ -128,8 +128,8 @@ test jobs install `mysqlclient`, under GPL-2.0-or-later. Neither is a dependency
 | @playwright/test | Apache-2.0 |
 | @types/node | MIT |
 
-Across all 587 packages locked in `manager-ui/package-lock.json`, counting platform-specific
-optional builds: MIT (485), Apache-2.0 (29), ISC (27), BSD-2-Clause (18), MPL-2.0 (12, the
+Across all 588 packages locked in `manager-ui/package-lock.json`, counting platform-specific
+optional builds: MIT (486), Apache-2.0 (29), ISC (27), BSD-2-Clause (18), MPL-2.0 (12, the
 lightningcss CSS compiler and its platform builds), BSD-3-Clause (7), MIT-0 (2),
 BlueOak-1.0.0 (2), and one each of CC-BY-4.0 (caniuse-lite's browser data), CC0-1.0
 (mdn-data), 0BSD (tslib), OFL-1.1 (Tajawal) and Font Awesome Free's combined license. Only the

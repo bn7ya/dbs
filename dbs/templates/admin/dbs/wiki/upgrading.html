@@ -23,7 +23,8 @@ checkout alone, and an interpreter outside a virtual environment too unless you 
 
 <h2>In CI</h2>
 <pre><code>python manage.py dbs upgrade --check</code></pre>
-<p>Changes nothing, exits non-zero when something is outstanding.</p>
+<p>Changes nothing, and exits non-zero when an item needs you to act; warnings leave it
+passing.</p>
 
 <h2>Old backups</h2>
 <pre><code>python manage.py dbs upgrade --backups /var/backups/myproject</code></pre>
@@ -55,7 +56,8 @@ and drops the SFTP targets, and tells you about each of these:</p>
       <a href="{% url 'admin:dbs_wiki' 'manager' %}">DBS manager</a> pull the backups.
       <code>dbs-client</code> is gone too.</li>
   <li>The server keeps at most five backups; a schedule keeping more is lowered to five, and
-      <code>DBS_SCHEDULE_KEEP</code> above five is refused.</li>
+      <code>dbs schedule</code> refuses a <code>DBS_SCHEDULE_KEEP</code> above five, which the
+      panel reads as five.</li>
   <li><code>DBS_TRUSTED_PROXIES</code> lists the proxies' networks, for example
       <code>["10.0.0.0/24"]</code>, instead of a count.</li>
   <li><code>DBS_KDF_TIME_COST</code> above 10 or <code>DBS_KDF_MEMORY_COST</code> above

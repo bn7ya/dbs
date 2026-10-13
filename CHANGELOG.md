@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-13
+
 Backups now stream: a multi-threaded engine writes container format 2 with flat memory
 however large the project, and restores read it the same way. The server keeps its backups
 and the DBS manager pulls them, so the panel's SFTP targets and console are gone, and so is
@@ -161,9 +163,10 @@ retention fixes closes ways a backup or a restore could lose data.
   roots; files are staged beside their targets and moved into place when the rows commit.
   A real restore only ever raises a sequence.
 - **Retention.** The server keeps at most five backups: the schedule keeps 1 to 5 (default
-  5; `DBS_SCHEDULE_KEEP` defaults to 5 and refuses more, as does `dbs schedule --keep`), and
-  the migration lowers larger values. Backups are ordered by recorded time, then the time in
-  the file, then the name; only this project's prefix and database alias are touched
+  5; `DBS_SCHEDULE_KEEP` defaults to 5, `dbs schedule` refuses more, as it does for
+  `--keep`, and the panel reads a larger value as 5), and the migration lowers larger
+  values. Backups are ordered by recorded time, then the time in the file, then the name;
+  only this project's prefix and database alias are touched
   (`backup-ALIAS-YYYYMMDD-HHMMSSZ.dbs` for a database other than `default`); the newest
   verified backup is always kept; a failed one never takes a place; two backups in one
   second are named `-2`, `-3`.
@@ -232,6 +235,10 @@ retention fixes closes ways a backup or a restore could lose data.
   restore.
 - **`--flush` deleted every row of a model**, even when `ModelBackup.get_queryset` backed up
   only some of them, and dropped the links of excluded many-to-many fields.
+- **On MySQL, `--flush` stopped with a foreign key error** whenever a row the backup does not
+  cover pointed at one it replaces. As on PostgreSQL and SQLite, a replaced row may now be
+  missing until the load puts it back, and a restore that would leave a link to a row it
+  removed is refused, even one that loads no rows.
 - **`--database` was not honoured**: a backup read rows, files and lookups from the default
   database.
 - **A backup could replace an existing file**, and was written in place before it was
