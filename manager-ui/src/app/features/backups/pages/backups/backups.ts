@@ -221,6 +221,9 @@ export class BackupsPage {
   }
 
   validationKey(file: BackupFile): string {
+    if (file.failure !== '') {
+      return 'backups.validation.quarantined';
+    }
     return `backups.${file.kind === 'dbs' ? 'validation' : 'sealedValidation'}.${file.validation}`;
   }
 
@@ -264,7 +267,7 @@ export class BackupsPage {
   }
 
   canRestore(file: BackupFile): boolean {
-    return file.kind === 'dbs';
+    return file.kind === 'dbs' && file.failure === '';
   }
 
   restore(file: BackupFile): void {

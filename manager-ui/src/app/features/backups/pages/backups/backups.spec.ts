@@ -28,6 +28,7 @@ import {
   JOB_ID,
   MANUAL_PLAN,
   PLAN,
+  QUARANTINED,
   SERVER_ID,
   UPLOADED_FILE,
   VERIFIED,
@@ -400,6 +401,16 @@ describe('BackupsPage', () => {
       plansRequest().flush(pageOf([]));
       await settle();
     });
+  });
+
+  it('shows a quarantined file as failed with its reason, and never offers to restore it', async () => {
+    const page = await showWith([QUARANTINED]);
+
+    expect(page.canRestore(QUARANTINED)).toBe(false);
+    expect(page.validationKey(QUARANTINED)).toBe('backups.validation.quarantined');
+    expect(element().querySelector('button[aria-label^="Restore "]')).toBeNull();
+    expect(text()).toContain('Quarantined');
+    expect(text()).toContain(QUARANTINED.failure);
   });
 
   it('offers Restore on a django-dbs file only, and opens its form', async () => {

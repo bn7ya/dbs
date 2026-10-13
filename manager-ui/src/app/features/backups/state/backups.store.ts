@@ -540,6 +540,14 @@ export class BackupsStore {
   }
 
   private notifyBackedUp(job: Job, name?: string): void {
+    if (keptOnServer(job)) {
+      this.notify(
+        'warning',
+        this.locale.translate('backups.take.keptOnServer'),
+        name === undefined ? undefined : isolated(name),
+      );
+      return;
+    }
     const warning = warningOf(job);
     const collected = collectResultOf(job);
     let summary: string;
@@ -609,6 +617,10 @@ function restoreResultOf(job: Job): RestoreResult | null {
 
 function countOf(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
+}
+
+function keptOnServer(job: Job): boolean {
+  return job.detail['outcome'] === 'kept_on_server';
 }
 
 function warningOf(job: Job): BackupWarning | null {

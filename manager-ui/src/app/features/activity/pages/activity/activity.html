@@ -81,11 +81,20 @@
               <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.status' | t }}</th>
               <td mat-cell *matCellDef="let row">
                 <div class="activity__status">
-                  <app-status-tag
-                    [severity]="look(row.status).severity"
-                    [icon]="look(row.status).icon"
-                    [label]="'activity.status.' + row.status | t"
-                  />
+                  @if (keptOnServer(row)) {
+                    <app-status-tag
+                      severity="warning"
+                      icon="fa-solid fa-server"
+                      [label]="'activity.status.keptOnServer' | t"
+                    />
+                    <span class="text-sm text-secondary">{{ 'activity.keptOnServer' | t }}</span>
+                  } @else {
+                    <app-status-tag
+                      [severity]="look(row.status).severity"
+                      [icon]="look(row.status).icon"
+                      [label]="'activity.status.' + row.status | t"
+                    />
+                  }
                   @if (row.status === 'failed' && row.error_code) {
                     <span class="text-sm text-secondary">{{ row.error_code | errorText }}</span>
                   }

@@ -47,6 +47,8 @@ const STATUS_LOOKS: Readonly<Record<ActivityStatus, StatusLook>> = {
 
 const ACCOUNT_ACTION_PREFIXES: readonly string[] = ['account.', 'auth.', 'manager.'];
 
+const KEPT_ON_SERVER = 'kept_on_server';
+
 const isAccountAction = (code: string): boolean => ACCOUNT_ACTION_PREFIXES.some((prefix) => code.startsWith(prefix));
 
 @Component({
@@ -136,6 +138,10 @@ export class ActivityPage {
 
   scheduled(entry: ActivityEntry): boolean {
     return !isAccountAction(entry.action);
+  }
+
+  keptOnServer(entry: ActivityEntry): boolean {
+    return entry.status === 'succeeded' && entry.detail['outcome'] === KEPT_ON_SERVER;
   }
 
   onStatus(value: ActivityStatusFilter | null): void {
