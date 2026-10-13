@@ -426,6 +426,82 @@ class AiInstructions(Step):
         return self.fixed(f"refreshed {len(stale)} AI instruction file(s)")
 
 
+class PulledBackups(Step):
+    name = "off-site copies"
+    since = "0.7.0"
+    removed_settings = (
+        "DBS_SSH_TARGETS",
+        "DBS_SCHEDULE_PUSH_TARGET",
+        "DBS_SCHEDULE_KEEP_REMOTE",
+        "DBS_ADMIN_CONSOLE_SHELL",
+    )
+    remedy = (
+        "the DBS manager pulls backups from this server now: on your own machine run "
+        "`django_dbs server add NAME --host HOST --user USER` for this server, then "
+        "delete the settings listed here"
+    )
+
+    def check(self):
+        from django.conf import settings
+
+        left = [name for name in self.removed_settings if hasattr(settings, name)]
+        stored = self._stored_targets()
+        if stored is None:
+            stored = []
+            removed = self._removed_targets()
+        else:
+            removed = []
+        problems = []
+        if stored:
+            problems.append("the panel still holds the SFTP targets " + ", ".join(stored))
+        if left:
+            problems.append(", ".join(left) + " no longer do anything")
+        if problems:
+            return self.warn(
+                "this server no longer pushes backups anywhere, but " + "; ".join(problems),
+                self.remedy,
+            )
+        if removed:
+            return self.ok(
+                "0.7.0 removed the SFTP targets "
+                + ", ".join(removed)
+                + "; the DBS manager pulls backups now (`django_dbs server add`)"
+            )
+        return self.ok("backups stay on this server and the DBS manager pulls them")
+
+    @staticmethod
+    def _stored_targets():
+        from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
+
+        connection = connections[DEFAULT_DB_ALIAS]
+        try:
+            if "dbs_backuptarget" not in connection.introspection.table_names():
+                return None
+            table = connection.ops.quote_name("dbs_backuptarget")
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT name, username, host, port FROM {table} ORDER BY name")
+                rows = cursor.fetchall()
+        except DatabaseError:
+            return None
+        return [f"{name} ({username}@{host}:{port})" for name, username, host, port in rows]
+
+    @staticmethod
+    def _removed_targets():
+        from django.db import DatabaseError
+
+        from .models import AuditEvent
+
+        try:
+            events = AuditEvent.objects.filter(action="target.remove").order_by("target_name")
+            return [
+                f"{event.target_name} ({event.data.get('username')}@{event.data.get('host')}"
+                f":{event.data.get('port')})"
+                for event in events
+            ]
+        except DatabaseError:
+            return []
+
+
 STEPS = (
     InstalledApp,
     Migrations,
@@ -441,6 +517,7 @@ STEPS = (
     RestoreRoots,
     HiddenRows,
     AiInstructions,
+    PulledBackups,
 )
 
 

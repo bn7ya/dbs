@@ -5,8 +5,7 @@ import os
 from django.conf import settings
 from django.db import models
 
-from .crypto.secrets import encrypt_secret, is_encrypted, looks_sealed, read_secret
-from .exceptions import InvalidPassphrase
+from .crypto.secrets import encrypt_secret, is_encrypted, looks_sealed
 from .naming import DEFAULT_PREFIX
 
 SECRET_PLACEHOLDER = "<unreadable>"
@@ -24,13 +23,6 @@ class SecretField(models.TextField):
         if is_encrypted(value) and looks_sealed(value):
             return value
         return encrypt_secret(str(value))
-
-
-class AuthMethod(models.TextChoices):
-    AGENT = "agent", "SSH agent"
-    KEY_FILE = "key_file", "Private key file on the server"
-    KEY_MATERIAL = "key_material", "Private key pasted here"
-    PASSWORD = "password", "Password"
 
 
 class SecurityLevel(models.TextChoices):
@@ -68,78 +60,10 @@ LEVEL_PRESETS = {
 }
 
 
-class BackupTarget(models.Model):
-    name = models.SlugField(max_length=64, unique=True)
-    host = models.CharField(max_length=255)
-    port = models.PositiveIntegerField(default=22)
-    username = models.CharField(max_length=128)
-    remote_dir = models.CharField(max_length=512, default=".")
-    auth_method = models.CharField(
-        max_length=16, choices=AuthMethod.choices, default=AuthMethod.AGENT
-    )
-    key_filename = models.CharField(max_length=512, blank=True, default="")
-    known_hosts = models.CharField(max_length=512, blank=True, default="")
-    auto_add_host_key = models.BooleanField(default=False)
-    connect_timeout = models.FloatField(default=30.0)
-    is_default = models.BooleanField(default=False)
-    notes = models.TextField(blank=True, default="")
-    secret_password = SecretField()
-    secret_key_material = SecretField()
-    secret_key_passphrase = SecretField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ("name",)
-        verbose_name = "SFTP target"
-        verbose_name_plural = "SFTP targets"
-
-    def __str__(self):
-        return f"{self.name} ({self.username}@{self.host}:{self.port})"
-
-    def secret(self, field):
-        try:
-            return read_secret(getattr(self, field))
-        except InvalidPassphrase:
-            return None
-
-    def has_unreadable_secret(self):
-        fields = ("secret_password", "secret_key_material", "secret_key_passphrase")
-        return any(getattr(self, name) and self.secret(name) is None for name in fields)
-
-    def ssh_target(self):
-        from .transports.ssh import SSHTarget
-
-        data = {
-            "host": self.host,
-            "username": self.username,
-            "port": self.port,
-            "remote_dir": self.remote_dir,
-            "auto_add_host_key": self.auto_add_host_key,
-            "connect_timeout": self.connect_timeout,
-            "use_agent": self.auth_method == AuthMethod.AGENT,
-        }
-        if self.known_hosts:
-            data["known_hosts"] = self.known_hosts
-        if self.auth_method == AuthMethod.KEY_FILE and self.key_filename:
-            data["key_filename"] = self.key_filename
-        if self.auth_method == AuthMethod.KEY_MATERIAL:
-            data["private_key"] = self.secret("secret_key_material")
-        if self.auth_method == AuthMethod.PASSWORD:
-            data["password"] = self.secret("secret_password")
-        passphrase = self.secret("secret_key_passphrase")
-        if passphrase:
-            data["key_passphrase"] = passphrase
-        return SSHTarget.from_dict({k: v for k, v in data.items() if v is not None})
-
-
 class BackupRecord(models.Model):
     filename = models.CharField(max_length=255)
     size_bytes = models.BigIntegerField(default=0)
     sha256 = models.CharField(max_length=64, blank=True, default="")
-    target = models.ForeignKey(
-        BackupTarget, null=True, blank=True, on_delete=models.SET_NULL
-    )
     location = models.CharField(max_length=1024, blank=True, default="")
     prefix = models.CharField(max_length=64, default=DEFAULT_PREFIX)
     database = models.CharField(max_length=64, default="default")
@@ -159,7 +83,7 @@ class BackupRecord(models.Model):
 
     @property
     def stored_locally(self):
-        return self.target_id is None and bool(self.location)
+        return bool(self.location)
 
     def local_path(self):
         from .conf import setting
@@ -234,10 +158,6 @@ class BackupSchedule(models.Model):
     interval = models.CharField(max_length=16, default="24h")
     keep = models.PositiveIntegerField(default=7)
     database = models.CharField(max_length=64, default="default")
-    push_target = models.ForeignKey(
-        BackupTarget, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    keep_remote = models.PositiveIntegerField(null=True, blank=True)
     next_run_at = models.DateTimeField(null=True, blank=True)
     last_run_at = models.DateTimeField(null=True, blank=True)
     last_status = models.CharField(max_length=16, blank=True, default="")
@@ -263,13 +183,11 @@ class BackupSchedule(models.Model):
         schedule = cls.objects.order_by("pk").first()
         if schedule is not None:
             return schedule
-        keep_remote = setting("DBS_SCHEDULE_KEEP_REMOTE", None)
         schedule, _ = cls.objects.get_or_create(
             pk=1,
             defaults={
                 "interval": str(setting("DBS_SCHEDULE_INTERVAL", "24h")),
                 "keep": int(setting("DBS_SCHEDULE_KEEP", 7)),
-                "keep_remote": None if keep_remote is None else int(keep_remote),
             },
         )
         return schedule

@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
 from . import views
-from .forms import BackupScheduleForm, BackupTargetForm
+from .forms import BackupScheduleForm
 from .models import (
     AnomalyEvent,
     AuditEvent,
     BackupRecord,
     BackupSchedule,
-    BackupTarget,
     KnownLocation,
     Panel,
     SecurityPolicy,
@@ -40,35 +40,14 @@ class SuperuserOnlyAdmin(admin.ModelAdmin):
         return bool(user and user.is_active and user.is_superuser)
 
 
-@admin.register(BackupTarget)
-class BackupTargetAdmin(SuperuserOnlyAdmin):
-    form = BackupTargetForm
-    list_display = ("name", "host", "username", "auth_method", "is_default", "console_link")
-    search_fields = ("name", "host", "username")
-
-    def get_urls(self):
-        return [
-            path(
-                "<int:pk>/console/",
-                self.admin_site.admin_view(views.console),
-                name="dbs_console",
-            ),
-        ] + super().get_urls()
-
-    @admin.display(description="console")
-    def console_link(self, obj):
-        return format_html('<a href="{}/console/">open</a>', obj.pk)
-
-
 @admin.register(BackupRecord)
 class BackupRecordAdmin(SuperuserOnlyAdmin):
-    list_display = ("filename", "created_at", "size_bytes", "target", "created_by", "restore_link")
-    list_filter = ("target", "database")
+    list_display = ("filename", "created_at", "size_bytes", "database", "created_by", "restore_link")
+    list_filter = ("database",)
     search_fields = ("filename", "sha256")
     readonly_fields = (
         "filename",
         "location",
-        "target",
         "database",
         "created_by",
         "sha256",
@@ -116,11 +95,12 @@ class BackupScheduleAdmin(SuperuserOnlyAdmin):
     readonly_fields = ("next_run_at", "last_run_at", "last_status", "last_error", "updated_by")
     fieldsets = (
         (None, {"fields": ("enabled", "interval", "keep", "database")}),
-        ("Off-site copy", {"fields": ("push_target", "keep_remote")}),
         ("Last run", {"fields": readonly_fields}),
     )
 
     def changelist_view(self, request, extra_context=None):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
         schedule = BackupSchedule.load()
         return redirect(reverse("admin:dbs_backupschedule_change", args=[schedule.pk]))
 
@@ -143,7 +123,6 @@ class BackupScheduleAdmin(SuperuserOnlyAdmin):
                 "enabled": obj.enabled,
                 "interval": obj.interval,
                 "keep": obj.keep,
-                "keep_remote": obj.keep_remote,
             },
         )
 

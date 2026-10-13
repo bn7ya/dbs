@@ -10,7 +10,6 @@ from dbs.crypto.secrets import looks_sealed
 from dbs.models import (
     AuditEvent,
     BackupRecord,
-    BackupTarget,
     Lockout,
     SecurityPolicy,
     SessionEvent,
@@ -202,38 +201,6 @@ def test_a_lockout_stops_requests_outside_the_admin_too(panel, root):
 
 
 @pytest.mark.django_db
-def test_the_console_action_label_comes_from_us(panel, fake_ssh, settings):
-    settings.DBS_ADMIN_CONSOLE_SHELL = True
-    target = BackupTarget.objects.create(
-        name="offsite", host="h.example.com", username="deploy", known_hosts="/kh"
-    )
-
-    panel.post(
-        f"/admin/dbs/backuptarget/{target.pk}/console/",
-        {"action": "check", "command": "echo hi"},
-    )
-
-    assert AuditEvent.objects.filter(action="console.shell").exists()
-    assert not AuditEvent.objects.filter(action="console.check").exists()
-
-
-@pytest.mark.django_db
-def test_an_over_long_action_cannot_break_the_audit_row(panel, fake_ssh):
-    target = BackupTarget.objects.create(
-        name="offsite", host="h.example.com", username="deploy", known_hosts="/kh"
-    )
-
-    response = panel.post(
-        f"/admin/dbs/backuptarget/{target.pk}/console/", {"action": "x" * 300}
-    )
-
-    assert response.status_code == 400
-    for event in AuditEvent.objects.all():
-        assert len(event.action) <= 64
-        assert len(event.target_name) <= 128
-
-
-@pytest.mark.django_db
 def test_a_form_encoded_guard_post_does_not_crash(panel):
     response = panel.post(GUARD, {"anything": "here"})
 
@@ -275,68 +242,13 @@ def test_a_plaintext_that_looks_encrypted_is_not_mistaken_for_ciphertext():
     assert not looks_sealed("dbs1:")
 
 
-@pytest.mark.django_db
 def test_a_password_beginning_with_the_prefix_still_round_trips():
-    target = BackupTarget.objects.create(
-        name="odd",
-        host="h.example.com",
-        username="deploy",
-        known_hosts="/kh",
-        secret_password="dbs1:not actually sealed",
-    )
-    target.refresh_from_db()
+    from dbs.crypto.secrets import read_secret
+    from dbs.models import SecretField
 
-    assert target.secret("secret_password") == "dbs1:not actually sealed"
+    stored = SecretField().get_prep_value("dbs1:not actually sealed")
 
-
-@pytest.mark.django_db
-def test_a_pasted_private_key_reaches_the_ssh_target():
-    target = BackupTarget.objects.create(
-        name="keyed",
-        host="h.example.com",
-        username="deploy",
-        known_hosts="/kh",
-        auth_method="key_material",
-        secret_key_material="-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n",
-    )
-    target.refresh_from_db()
-
-    assert target.ssh_target().private_key.startswith("-----BEGIN")
-
-
-@pytest.mark.django_db
-def test_stored_credentials_can_be_cleared(panel):
-    target = BackupTarget.objects.create(
-        name="offsite",
-        host="h.example.com",
-        username="deploy",
-        known_hosts="/kh",
-        auth_method="agent",
-        secret_password="hunter2",
-    )
-
-    panel.post(
-        f"/admin/dbs/backuptarget/{target.pk}/change/",
-        {
-            "name": "offsite",
-            "host": "h.example.com",
-            "port": 22,
-            "username": "deploy",
-            "remote_dir": ".",
-            "auth_method": "agent",
-            "key_filename": "",
-            "known_hosts": "/kh",
-            "connect_timeout": 30.0,
-            "notes": "",
-            "password": "",
-            "key_material": "",
-            "key_passphrase": "",
-            "clear_secrets": "on",
-        },
-    )
-
-    target.refresh_from_db()
-    assert target.secret_password == ""
+    assert read_secret(stored) == "dbs1:not actually sealed"
 
 
 @pytest.mark.django_db

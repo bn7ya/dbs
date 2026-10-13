@@ -21,7 +21,6 @@ from .models import (
     AnomalyEvent,
     AuditEvent,
     BackupRecord,
-    BackupTarget,
     KnownLocation,
     SecurityPolicy,
 )
@@ -30,14 +29,6 @@ from .security import geo, guard
 from .security.decorators import superuser_required
 
 DEFAULT_MAX_UPLOAD_BYTES = 1024 ** 3
-
-CONSOLE_ACTIONS = {
-    "check": "Check the connection",
-    "version": "Show the DBS version on the server",
-    "ensure_dir": "Create the remote backup directory",
-    "remote_backup": "Run manage.py dbs backup on the server",
-    "list": "List remote backups",
-}
 
 
 def _audit(request, action, target="", detail="", succeeded=True, data=None):
@@ -149,9 +140,6 @@ def create_backup_view(request):
 
         name = backup_filename()
         digest = hashlib.sha256(container).hexdigest()
-        if data["destination"]:
-            target = BackupTarget.objects.get(pk=data["destination"])
-            return _push(request, container, name, digest, target, data)
         BackupRecord.objects.create(
             filename=name,
             size_bytes=len(container),
@@ -181,31 +169,6 @@ def create_backup_view(request):
         "admin/dbs/create_backup.html",
         {"title": "Take a backup", "form": form},
     )
-
-
-def _push(request, container, name, digest, target, data):
-    from .transports.ssh import open_session
-
-    try:
-        with open_session(target.ssh_target()) as session:
-            remote = session.push(container, name)
-    except DBSError as exc:
-        _audit(request, "backup.push", target=target.name, detail=str(exc), succeeded=False)
-        messages.error(request, f"Push failed: {exc}")
-        return redirect("admin:dbs_backup_create")
-    BackupRecord.objects.create(
-        filename=name,
-        size_bytes=len(container),
-        sha256=digest,
-        target=target,
-        database=data["database"],
-        created_by=request.user,
-        location=remote,
-        note=data["note"],
-    )
-    _audit(request, "backup.push", target=target.name, detail=remote)
-    messages.success(request, f"Backup pushed to {target.name} as {remote}.")
-    return redirect("admin:dbs_backuprecord_changelist")
 
 
 def _default_passphrase():
@@ -368,95 +331,11 @@ def download(request, pk):
 
 @superuser_required
 @never_cache
-@require_http_methods(["GET", "POST"])
-def console(request, pk):
-    target = BackupTarget.objects.filter(pk=pk).first()
-    if target is None:
-        raise Http404
-    shell_enabled = bool(setting("DBS_ADMIN_CONSOLE_SHELL", False))
-    if request.method == "POST":
-        return _run_console(request, target, shell_enabled)
-    return _page(
-        request,
-        "admin/dbs/console.html",
-        {
-            "title": f"Console — {target.name}",
-            "target": target,
-            "actions": CONSOLE_ACTIONS,
-            "shell_enabled": shell_enabled,
-        },
-    )
-
-
-def _run_console(request, target, shell_enabled):
-    from .transports.ssh import open_session
-
-    command = request.POST.get("command", "").strip()
-    action = "" if command else request.POST.get("action", "")
-    label = "console.shell" if command else f"console.{action}"
-    if command and not shell_enabled:
-        _audit(request, "console.shell", target=target.name, detail="refused", succeeded=False)
-        return JsonResponse(
-            {
-                "ok": False,
-                "output": (
-                    "Free-form commands are disabled. Set DBS_ADMIN_CONSOLE_SHELL = True "
-                    "to allow them."
-                ),
-            },
-            status=403,
-        )
-    if not command and action not in CONSOLE_ACTIONS:
-        return JsonResponse({"ok": False, "output": "Unknown action."}, status=400)
-
-    try:
-        with open_session(target.ssh_target()) as session:
-            output, ok = _console_output(session, target, action, command)
-    except Exception as exc:
-        _audit(request, label, target=target.name, detail=str(exc), succeeded=False)
-        return JsonResponse({"ok": False, "output": str(exc)}, status=200)
-
-    _audit(request, label, target=target.name, detail=command or action, succeeded=ok)
-    return JsonResponse({"ok": ok, "output": output})
-
-
-def _console_output(session, target, action, command):
-    if command:
-        result = session.run(command)
-        return _render_result(result), result.ok
-    if action == "check":
-        from .transports.ssh import check_connection
-
-        report = check_connection(target.ssh_target())
-        return "\n".join(f"{key}: {value}" for key, value in report.items()), True
-    if action == "version":
-        result = session.run("python -c 'import dbs; print(dbs.__version__)'")
-        return _render_result(result), result.ok
-    if action == "ensure_dir":
-        return f"remote directory ready: {session.ensure_dir()}", True
-    if action == "remote_backup":
-        result = session.run("python manage.py dbs backup --help")
-        return _render_result(result), result.ok
-    if action == "list":
-        names = session.names()
-        return "\n".join(names) or "no backups found", True
-    return "Unknown action.", False
-
-
-def _render_result(result):
-    parts = [result.stdout or "", result.stderr or ""]
-    body = "\n".join(part for part in parts if part).strip()
-    return body or f"exit status {result.exit_status}"
-
-
-@superuser_required
-@never_cache
 def wiki(request, page="index"):
     pages = {
         "index": "Overview",
         "getting-started": "Getting started",
         "passphrases": "Passphrases and SECRET_KEY",
-        "targets": "SFTP targets and the console",
         "scheduling": "Scheduled backups",
         "manager": "The DBS manager",
         "restore": "Restoring",

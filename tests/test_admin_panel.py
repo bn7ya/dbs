@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.test import Client
 
-from dbs.models import AuditEvent, BackupRecord, BackupTarget
+from dbs.models import AuditEvent, BackupRecord
 from tests.testapp.models import Author, Book
 
 PANEL = "/admin/dbs/"
@@ -22,23 +22,6 @@ CONFIGURE = {
     "trusted_networks": "127.0.0.0/8",
     "notify_emails": "",
 }
-
-TARGET = {
-    "name": "offsite",
-    "host": "backups.example.com",
-    "port": 22,
-    "username": "deploy",
-    "remote_dir": "/var/backups",
-    "auth_method": "password",
-    "key_filename": "",
-    "known_hosts": "/home/deploy/.ssh/known_hosts",
-    "connect_timeout": 30.0,
-    "notes": "",
-    "password": "hunter2",
-    "key_material": "",
-    "key_passphrase": "",
-}
-
 
 @pytest.fixture
 def panel(db):
@@ -71,8 +54,8 @@ def test_every_wiki_page_renders(panel):
     for page in (
         "getting-started",
         "passphrases",
-        "targets",
         "scheduling",
+        "manager",
         "restore",
         "commands",
         "upgrading",
@@ -90,45 +73,21 @@ def test_an_unknown_wiki_page_is_a_404(panel):
 
 
 @pytest.mark.django_db
-def test_a_target_is_created_through_the_admin_with_its_password_encrypted(panel):
-    response = panel.post("/admin/dbs/backuptarget/add/", TARGET)
-
-    assert response.status_code == 302
-    target = BackupTarget.objects.get(name="offsite")
-    assert target.secret_password.startswith("dbs1:")
-    assert target.secret("secret_password") == "hunter2"
-
-
-@pytest.mark.django_db
-def test_editing_a_target_without_retyping_keeps_the_password(panel):
-    panel.post("/admin/dbs/backuptarget/add/", TARGET)
-    target = BackupTarget.objects.get(name="offsite")
-
-    panel.post(
-        f"/admin/dbs/backuptarget/{target.pk}/change/",
-        dict(TARGET, password="", notes="edited"),
-    )
-
-    target.refresh_from_db()
-    assert target.notes == "edited"
-    assert target.secret("secret_password") == "hunter2"
+def test_the_panel_has_no_sftp_targets_or_console(panel):
+    assert panel.get("/admin/dbs/backuptarget/").status_code == 404
+    assert panel.get("/admin/dbs/backuptarget/1/console/").status_code == 404
+    assert panel.get(f"{WIKI}targets/").status_code == 404
+    page = panel.get(PANEL).content
+    assert b"SFTP" not in page and b"console" not in page.lower()
+    assert b"pulls them" in page
 
 
 @pytest.mark.django_db
-def test_a_target_needs_a_host_key_policy(panel):
-    response = panel.post("/admin/dbs/backuptarget/add/", dict(TARGET, known_hosts=""))
+def test_taking_a_backup_offers_no_push(panel):
+    response = panel.get(CREATE)
 
-    assert response.status_code == 200
-    assert not BackupTarget.objects.exists()
-    assert b"known_hosts" in response.content
-
-
-@pytest.mark.django_db
-def test_password_auth_needs_a_password(panel):
-    response = panel.post("/admin/dbs/backuptarget/add/", dict(TARGET, password=""))
-
-    assert response.status_code == 200
-    assert not BackupTarget.objects.exists()
+    assert b'name="destination"' not in response.content
+    assert b"Push to" not in response.content
 
 
 @pytest.mark.django_db
@@ -221,5 +180,5 @@ def test_staff_without_superuser_see_nothing(db):
     client = Client()
     client.force_login(staff)
 
-    for path in (PANEL, CREATE, RESTORE, WIKI, "/admin/dbs/backuptarget/"):
+    for path in (PANEL, CREATE, RESTORE, WIKI, "/admin/dbs/backupschedule/"):
         assert client.get(path).status_code in (403, 404), path

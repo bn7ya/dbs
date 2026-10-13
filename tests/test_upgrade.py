@@ -525,3 +525,63 @@ def test_a_missing_manager_dependency_is_reported(monkeypatch):
     assert finding.level == ACTION
     assert "waitress" in finding.message and "paramiko" not in finding.message
     assert "django-dbs>=0.5" in finding.remedy
+
+
+REMOVED_PUSH_SETTINGS = (
+    "DBS_SSH_TARGETS",
+    "DBS_SCHEDULE_PUSH_TARGET",
+    "DBS_SCHEDULE_KEEP_REMOTE",
+    "DBS_ADMIN_CONSOLE_SHELL",
+)
+
+
+@pytest.mark.django_db
+def test_a_project_that_pushes_nowhere_needs_nothing():
+    assert upgrade.PulledBackups().check().level == OK
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("name", REMOVED_PUSH_SETTINGS)
+def test_a_removed_push_setting_points_at_the_manager(settings, name):
+    setattr(settings, name, {"offsite": {"host": "h"}})
+
+    finding = upgrade.PulledBackups().check()
+
+    assert finding.level == WARN
+    assert name in finding.message
+    assert "django_dbs server add" in finding.remedy
+
+
+@pytest.mark.django_db(transaction=True)
+def test_sftp_targets_are_reported_before_and_after_the_migration_drops_them():
+    from django.db import connection
+
+    call_command("migrate", "dbs", "0004", verbosity=0)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO dbs_backuptarget (name, host, port, username, remote_dir, "
+                "auth_method, key_filename, known_hosts, auto_add_host_key, connect_timeout, "
+                "is_default, notes, secret_password, secret_key_material, "
+                "secret_key_passphrase, created_at, updated_at) VALUES ('offsite', "
+                "'backups.example.com', 22, 'deploy', '/var/backups', 'agent', '', '', "
+                "%s, 30.0, %s, '', '', '', '', %s, %s)",
+                [False, False, "2026-01-01 00:00:00", "2026-01-01 00:00:00"],
+            )
+
+        before = upgrade.PulledBackups().check()
+        call_command("migrate", "dbs", verbosity=0)
+        after = upgrade.PulledBackups().check()
+    finally:
+        call_command("migrate", "dbs", verbosity=0)
+
+    assert before.level == WARN
+    assert "offsite (deploy@backups.example.com:22)" in before.message
+    assert after.level == OK
+    assert "offsite (deploy@backups.example.com:22)" in after.message
+    from dbs.models import AuditEvent
+
+    removed = AuditEvent.objects.get(action="target.remove")
+    assert removed.target_name == "offsite"
+    assert removed.data["host"] == "backups.example.com"
+    assert "django_dbs server add" in removed.detail

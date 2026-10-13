@@ -14,7 +14,7 @@ from . import audit, leases
 from .conf import setting
 from .exceptions import DBSError
 from .naming import DEFAULT_PREFIX, backup_filename
-from .retention import prune_directory, prune_remote
+from .retention import prune_directory
 
 logger = logging.getLogger("dbs")
 
@@ -106,31 +106,7 @@ def run_cycle(passphrase, plan):
             target=plan["output_dir"],
             data={"removed": removed, "keep": plan["keep"]},
         )
-    if plan.get("push") is not None:
-        push(name, output, plan)
     return output
-
-
-def push(name, output, plan):
-    from .transports.ssh import open_session
-
-    with audit.track("backup.push", target=name, data={"file": name}) as entry:
-        with open_session(plan["push"]) as session:
-            entry.data["remote"] = session.push(output, name)
-            if plan.get("keep_remote") is not None:
-                removed = prune_remote(session, plan["keep_remote"], plan["prefix"])
-                entry.data["removed"] = removed
-
-
-def push_target(schedule):
-    if schedule.push_target_id:
-        return schedule.push_target.ssh_target()
-    name = setting("DBS_SCHEDULE_PUSH_TARGET", None)
-    if not name:
-        return None
-    from .transports.ssh import SSHTarget
-
-    return SSHTarget.from_settings(name)
 
 
 def schedule_plan(schedule):
@@ -142,8 +118,6 @@ def schedule_plan(schedule):
         "output_dir": directory,
         "prefix": setting("DBS_BACKUP_PREFIX", DEFAULT_PREFIX),
         "keep": schedule.keep,
-        "keep_remote": schedule.keep_remote,
-        "push": push_target(schedule),
         "database": schedule.database,
         "compress": True,
         "verify": True,

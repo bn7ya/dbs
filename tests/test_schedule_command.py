@@ -1,6 +1,5 @@
 """The unattended server-side scheduler."""
 
-import os
 from io import StringIO
 
 import pytest
@@ -13,7 +12,6 @@ from dbs.naming import backup_filename, is_backup_name
 from tests.testapp.models import Author
 
 PASS = "schedule-pass-phrase"
-REMOTE_DIR = "/var/backups/app"
 
 FAST = {"kdf_time": 1, "kdf_memory": 8192}
 
@@ -118,34 +116,13 @@ def test_prefix_scopes_both_naming_and_retention(tmp_path, passphrase_env):
     assert any(name.startswith("prod-") for name in names)
 
 
-@pytest.mark.django_db
-def test_push_sends_the_backup_and_prunes_the_remote(
-    tmp_path, passphrase_env, settings, fake_ssh
-):
-    settings.DBS_SSH_TARGETS = {
-        "offsite": {
-            "host": "backups.example.com",
-            "username": "deploy",
-            "remote_dir": REMOTE_DIR,
-        }
-    }
-    local_dir = tmp_path / "local"
-    for hour in range(3):
-        fake_ssh.write_remote(REMOTE_DIR, backup_filename(moment=_moment(hour)), b"old")
+@pytest.mark.parametrize("flag", ["--push", "--keep-remote"])
+def test_the_server_pushes_nowhere(flag, tmp_path, passphrase_env):
+    with pytest.raises(CommandError) as excinfo:
+        call_command("dbs_schedule", "--once", f"--output-dir={tmp_path}", flag, "1")
 
-    call_command(
-        "dbs_schedule",
-        "--once",
-        output_dir=str(local_dir),
-        push="offsite",
-        keep_remote=2,
-        **FAST,
-    )
-
-    remote = sorted(os.listdir(fake_ssh.remote_path(REMOTE_DIR)))
-    assert len(remote) == 2
-    local = next(path for path in local_dir.iterdir())
-    assert local.name in remote
+    assert "unrecognized arguments" in str(excinfo.value)
+    assert not list(tmp_path.iterdir())
 
 
 def _moment(hour):
