@@ -332,3 +332,22 @@ def test_an_export_never_overwrites_a_file_and_needs_a_long_passphrase(
     assert export.read_bytes() == b"keep me"
     assert short.returncode == 1 and "12 characters" in short.stderr
     assert not (tmp_path / "other.dbs").exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_an_export_row_carries_its_size_and_digest_and_keeps_the_chain_intact(tmp_path):
+    from dbs import audit
+    from dbs.io import file_digest
+    from dbs.manager import transfer
+    from dbs.models import AuditEvent
+
+    output = tmp_path / "manager.dbs"
+
+    summary = transfer.export_manager(output, EXPORT_PASSPHRASE)
+
+    event = AuditEvent.objects.get(action=transfer.EXPORT)
+    size, digest = file_digest(output)
+    assert event.data["size"] == summary.bytes_written == size
+    assert event.data["sha256"] == summary.sha256 == digest
+    assert event.chain_index is not None
+    assert audit.verify_chain().intact

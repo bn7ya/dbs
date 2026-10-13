@@ -63,9 +63,6 @@ class Incoming:
             os.fsync(self._handle.fileno())
             self._handle.close()
 
-    def read(self) -> bytes:
-        return self.path.read_bytes()
-
 
 class BackupStorage:
     def __init__(self) -> None:

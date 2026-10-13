@@ -102,9 +102,7 @@ def test_an_import_keeps_what_an_older_export_kept_in_range(
         return SimpleNamespace(records_loaded=1, healed=False)
 
     monkeypatch.setattr(restore, "restore_backup", restored)
-    monkeypatch.setattr(
-        restore, "read_payload", lambda data, passphrase: SimpleNamespace(files=[])
-    )
+    monkeypatch.setattr(restore, "backup_files", lambda data, passphrase: iter(()))
 
     transfer.import_manager(exported, "a-long-export-passphrase", replace=True)
 

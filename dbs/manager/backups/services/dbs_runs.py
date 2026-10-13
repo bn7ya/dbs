@@ -190,7 +190,7 @@ class DbsRun:
             return SHORT_ARRIVAL.format(received=incoming.size, expected=remote_size)
         if expected and incoming.sha256 != expected:
             return CHANGED_ARRIVAL
-        result = validate_backup(incoming.read(), self.passphrase)
+        result = validate_backup(incoming.path, self.passphrase)
         if result.ok and result.decrypted_ok:
             return ""
         return result.summary()

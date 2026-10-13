@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import signal
@@ -14,9 +13,12 @@ from dbs import audit
 from dbs._cli import passphrase_source, resolve_passphrase
 from dbs.conf import setting
 from dbs.crypto.kdf import KDFParams
-from dbs.engine import create_backup
+from dbs.engine import write_backup
+from dbs.engine.backup import verify_written
 from dbs.exceptions import DBSError
 from dbs.naming import DEFAULT_PREFIX, backup_filename, is_backup_name
+from dbs.retention import MAXIMUM_KEEP
+from dbs.schedule_runner import keep_at_most
 from dbs.tee import TeeSink, sweep_partials
 
 HANGUP_SIGNALS = ("SIGHUP", "SIGPIPE")
@@ -108,13 +110,13 @@ class Command(BaseCommand):
             data={"file": os.path.basename(output), "database": options["database"]},
         ) as entry:
             try:
-                container = create_backup(
+                summary = write_backup(
+                    output,
                     passphrase,
                     using=options["database"],
                     compress=not options["no_compress"],
                     verify=not options["no_verify"],
                     kdf_params=kdf_params,
-                    output=output,
                     allow_missing_files=options.get("allow_missing_files", False),
                     skipped_files=skipped_files,
                     **extra,
@@ -123,21 +125,20 @@ class Command(BaseCommand):
                 raise CommandError(f"Backup failed: {exc}") from exc
             except OSError as exc:
                 raise CommandError(f"Cannot write {output}: {exc.strerror or exc}.") from exc
-            digest = hashlib.sha256(container).hexdigest()
             entry.data.update(
-                size=len(container),
-                sha256=digest,
+                size=summary.bytes_written,
+                sha256=summary.sha256,
                 verified=not options["no_verify"],
                 compressed=not options["no_compress"],
             )
-            audit.record_backup(output, container, digest, options["database"])
+            audit.record_backup(output, summary.bytes_written, summary.sha256, options["database"])
 
         source = passphrase_source(
             options.get("passphrase"), from_stdin=options["passphrase_stdin"]
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"Wrote {options['output']} ({len(container):,} bytes), "
+                f"Wrote {options['output']} ({summary.bytes_written:,} bytes), "
                 "verified, two redundant copies + Reed-Solomon parity."
             )
         )
@@ -173,17 +174,21 @@ class Command(BaseCommand):
         ) as entry, surviving_a_lost_connection(), redirect_stdout(sys.stderr):
             try:
                 with TeeSink(output, directory, prefix) as sink:
-                    container = create_backup(
+                    summary = write_backup(
+                        sink,
                         passphrase,
                         using=options["database"],
                         compress=not options["no_compress"],
-                        verify=not options["no_verify"],
+                        verify=False,
                         kdf_params=kdf_params,
                         allow_missing_files=options.get("allow_missing_files", False),
                         **extra,
                     )
-                    sink.write_all(container)
-                    kept = sink.finish()
+                    kept = sink.finish(
+                        None
+                        if options["no_verify"]
+                        else lambda partial: verify_written(partial, passphrase, summary)
+                    )
             except DBSError as exc:
                 raise CommandError(f"Backup failed: {exc}") from exc
             except OSError as exc:
@@ -198,7 +203,8 @@ class Command(BaseCommand):
             )
             if kept.stream_lost:
                 entry.data["kept_on_server"] = True
-            audit.record_backup(kept.path, container, kept.sha256, options["database"])
+            audit.record_backup(kept.path, kept.size, kept.sha256, options["database"])
+        keep_at_most(directory, prefix, MAXIMUM_KEEP, kept.name)
 
         if kept.stream_lost:
             silence(output)

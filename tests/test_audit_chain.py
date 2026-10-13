@@ -1,5 +1,6 @@
 """The audit trail: every DBS write recorded, the actor's name kept, and rows chained by hash."""
 
+import hashlib
 import io
 from io import StringIO
 
@@ -222,14 +223,17 @@ def test_a_full_export_from_the_original_views_is_audited(panel):
     Author.objects.create(name="Ada")
 
     response = panel.post("/dbs/backup/", {"passphrase": PASS, "passphrase2": PASS})
+    container = b"".join(response.streaming_content)
 
     event = AuditEvent.objects.get(action="backup.export")
     assert event.status == audit.SUCCEEDED
-    assert event.data["size"] == len(response.content)
+    assert event.data["size"] == len(container)
+    assert event.data["sha256"] == hashlib.sha256(container).hexdigest()
+    assert event.data["verified"] is True
     assert event.data["actor_username"] == "root"
     assert event.target_name in response["Content-Disposition"]
 
-    upload = io.BytesIO(response.content)
+    upload = io.BytesIO(container)
     upload.name = "export.dbs"
     panel.post("/dbs/restore/", {"backup": upload, "passphrase": "wrong"})
     upload.seek(0)
@@ -238,6 +242,7 @@ def test_a_full_export_from_the_original_views_is_audited(panel):
     failed, restored = AuditEvent.objects.filter(action="backup.restore").order_by("pk")
     assert (failed.status, failed.error_code) == (audit.FAILED, "InvalidPassphrase")
     assert restored.status == audit.SUCCEEDED and restored.data["records"] >= 1
+    assert restored.data["sha256"] == hashlib.sha256(container).hexdigest()
     assert restored.target_name == "export.dbs"
 
 
@@ -246,7 +251,7 @@ def test_an_unexpected_failure_is_audited_as_unexpected(panel, monkeypatch):
     def explode(*args, **kwargs):
         raise RuntimeError("bug")
 
-    monkeypatch.setattr("dbs.contrib.admin.create_backup", explode)
+    monkeypatch.setattr("dbs.contrib.admin.write_backup", explode)
 
     with pytest.raises(RuntimeError):
         panel.post("/dbs/backup/", {"passphrase": PASS, "passphrase2": PASS})
@@ -266,7 +271,7 @@ def test_an_unexpected_failure_in_a_panel_job_is_audited_as_unexpected(
     def explode(*args, **kwargs):
         raise ValueError("bug")
 
-    monkeypatch.setattr(backup, "create_backup", explode)
+    monkeypatch.setattr(backup, "write_backup", explode)
 
     with pytest.raises(ValueError):
         jobs.start_backup(database="default")

@@ -12,7 +12,7 @@ from django.core.management.base import CommandError
 from dbs.engine import create_backup
 from dbs.engine.restore import read_payload
 from dbs.exceptions import MissingSourceFiles
-from dbs.files import collect_root_files
+from dbs.files import list_root_files, read_chunks
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF
 from tests.testapp.dbs import BookBackup
@@ -58,8 +58,11 @@ def deadline(seconds=5):
 def _collect(root):
     skipped = []
     with deadline():
-        collected = list(collect_root_files(str(root), skipped))
-    return {entry.name: data for entry, data in collected}, skipped
+        collected = {
+            source.entry.name: b"".join(read_chunks(source, 4096))
+            for source in list_root_files(str(root), skipped)
+        }
+    return collected, skipped
 
 
 def test_a_missing_file_stops_the_backup_and_names_it(ghost, tmp_path):

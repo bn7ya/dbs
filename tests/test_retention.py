@@ -17,6 +17,7 @@ from dbs.retention import (
     read_created,
     server_keep,
     stale_backups,
+    stale_beyond_limit,
     stale_stored_backups,
     sweep_leftovers,
 )
@@ -159,6 +160,23 @@ def test_the_newest_verified_backup_is_never_pruned():
     assert stale == [unverified[0].name]
 
 
+def test_a_hard_limit_also_counts_failed_backups():
+    good = [stored(hour, verification=PASSED) for hour in range(3)]
+    broken = stored(5, verification=FAILED)
+
+    assert stale_stored_backups(good + [broken], keep=3) == []
+    assert stale_beyond_limit(good + [broken], keep=3) == [good[0].name]
+
+
+def test_a_hard_limit_never_takes_a_protected_or_the_newest_verified_backup():
+    verified = stored(0, verification=PASSED)
+    unverified = [stored(hour) for hour in range(1, 8)]
+
+    stale = stale_beyond_limit([verified] + unverified, keep=3, protect=(unverified[-1].name,))
+
+    assert stale == [backup.name for backup in unverified[:5]]
+
+
 def test_retention_always_keeps_one():
     with pytest.raises(ConfigurationError):
         stale_stored_backups([stored(0)], keep=0)
@@ -199,20 +217,21 @@ def test_leftovers_older_than_an_hour_are_swept_and_nothing_else(tmp_path):
 
     real = names_for(1)[0]
     stale_partial = f".{real}.ab12cd34"
+    stale_stream = f".{real}.ef56gh78.partial"
     fresh_partial = f".{names_for(2)[1]}.zz99yy88"
     stale_reservation = names_for(3)[2]
     hidden_backup = ".hand-kept.dbs"
     for name in (real, hidden_backup):
         (tmp_path / name).write_bytes(b"DBSCON01 backup bytes")
-    for name in (stale_partial, fresh_partial):
+    for name in (stale_partial, stale_stream, fresh_partial):
         (tmp_path / name).write_bytes(b"partial")
     (tmp_path / stale_reservation).write_bytes(b"")
     hour_ago = time.time() - 2 * 3600
-    for name in (real, hidden_backup, stale_partial, stale_reservation):
+    for name in (real, hidden_backup, stale_partial, stale_stream, stale_reservation):
         os.utime(tmp_path / name, (hour_ago, hour_ago))
 
     removed = sweep_leftovers(str(tmp_path))
 
-    assert sorted(removed) == sorted([stale_partial, stale_reservation])
+    assert sorted(removed) == sorted([stale_partial, stale_stream, stale_reservation])
     survivors = {path.name for path in tmp_path.iterdir()}
     assert survivors == {real, hidden_backup, fresh_partial}

@@ -153,7 +153,7 @@ class TeeSink:
         for start in range(0, len(view), chunk_size):
             self.write(view[start : start + chunk_size])
 
-    def finish(self) -> TeeResult:
+    def finish(self, verify=None) -> TeeResult:
         if not self.stream_lost:
             try:
                 self.stream.flush()
@@ -162,6 +162,8 @@ class TeeSink:
         self._file.flush()
         os.fsync(self._file.fileno())
         self._file.close()
+        if verify is not None:
+            verify(self.partial)
         name = install_backup(self.partial, self.directory, self.prefix, self.moment)
         return TeeResult(
             name=name,

@@ -1,5 +1,6 @@
 """The DBS control panel mounted inside the Django admin."""
 
+import hashlib
 import io
 
 import pytest
@@ -7,6 +8,7 @@ from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.test import Client
 
+from dbs.container import FORMAT_VERSION, read_format_version
 from dbs.models import AuditEvent, BackupRecord
 from tests.testapp.models import Author, Book
 
@@ -118,6 +120,8 @@ def test_taking_a_backup_writes_it_to_the_backup_folder_and_offers_it(
     event = AuditEvent.objects.get(action="backup.create")
     assert event.status == "succeeded" and event.target_name == record.filename
     assert event.data["size"] == path.stat().st_size == record.size_bytes
+    assert record.sha256 == event.data["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert read_format_version(io.BytesIO(path.read_bytes())) == FORMAT_VERSION
     download = f"/admin/dbs/backuprecord/{record.pk}/download/".encode()
     assert download in response.content
 

@@ -23,9 +23,9 @@ def watched(monkeypatch):
     from dbs.engine import backup
 
     seen = []
-    real = backup.create_backup
+    real = backup.write_backup
 
-    def create_backup(*args, **kwargs):
+    def write_backup(*args, **kwargs):
         seen.append(
             {
                 "events": list(AuditEvent.objects.values("action", "status", "target_name")),
@@ -41,7 +41,7 @@ def watched(monkeypatch):
         )
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(backup, "create_backup", create_backup)
+    monkeypatch.setattr(backup, "write_backup", write_backup)
     return seen
 
 
@@ -88,7 +88,7 @@ def test_a_failed_run_is_closed_and_waits_for_the_next_interval(backup_dir, monk
     def explode(*args, **kwargs):
         raise DBSError("disk full")
 
-    monkeypatch.setattr(backup, "create_backup", explode)
+    monkeypatch.setattr(backup, "write_backup", explode)
     BackupSchedule.objects.create(enabled=True, interval="6h")
     now = timezone.now()
 

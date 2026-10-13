@@ -12,6 +12,7 @@ import socket
 import threading
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from ..conf import setting
@@ -396,11 +397,19 @@ def _drop_when_unanswered(sock, seconds: float) -> None:
             return
 
 
-def _as_bytes(data_or_path: bytes | str) -> bytes:
+@contextmanager
+def _upload_source(data_or_path):
     if isinstance(data_or_path, (bytes, bytearray)):
-        return bytes(data_or_path)
-    with open(data_or_path, "rb") as fh:
-        return fh.read()
+        yield io.BytesIO(data_or_path), len(data_or_path)
+        return
+    if isinstance(data_or_path, (str, os.PathLike)):
+        with open(data_or_path, "rb") as fh:
+            yield fh, os.fstat(fh.fileno()).st_size
+        return
+    data_or_path.seek(0)
+    size = data_or_path.seek(0, io.SEEK_END)
+    data_or_path.seek(0)
+    yield data_or_path, size
 
 
 def _decode(stream) -> str:
@@ -470,15 +479,15 @@ class SSHSession:
     def path_for(self, remote_name: str) -> str:
         return posixpath.join(self.target.remote_dir, remote_name)
 
-    def push(self, data_or_path: bytes | str, remote_name: str) -> str:
-        data = _as_bytes(data_or_path)
+    def push(self, data_or_path, remote_name: str) -> str:
         remote_path = self.path_for(remote_name)
         partial = self.path_for(partial_name(remote_name))
         try:
             self.ensure_dir()
             self.sweep_partials()
             _create_private_remote(self.sftp, partial)
-            self.sftp.putfo(io.BytesIO(data), partial)
+            with _upload_source(data_or_path) as (source, size):
+                self.sftp.putfo(source, partial)
             _install_remote(self.sftp, partial, remote_path)
         except OSError as exc:
             self._discard_remote(partial)
@@ -487,7 +496,7 @@ class SSHSession:
             self._discard_remote(partial)
             raise
         logger.info(
-            "pushed %d bytes to %s:%s", len(data), self.target.host, remote_path
+            "pushed %d bytes to %s:%s", size, self.target.host, remote_path
         )
         return remote_path
 
@@ -809,8 +818,8 @@ def open_session(target: SSHTarget) -> SSHSession:
     return SSHSession(target)
 
 
-def push_backup(data_or_path: bytes | str, remote_name: str, target: SSHTarget) -> str:
-    """Upload backup bytes (or a local file) to ``target``; return the remote path."""
+def push_backup(data_or_path, remote_name: str, target: SSHTarget) -> str:
+    """Upload backup bytes, a local file or an open binary file to ``target``; return the remote path."""
     with SSHSession(target) as session:
         return session.push(data_or_path, remote_name)
 
@@ -896,8 +905,7 @@ def _install_remote(sftp, partial: str, remote_path: str) -> None:
 def _require_backup(path: str, name: str) -> None:
     from ..engine.validate import validate_backup
 
-    with open(path, "rb") as fh:
-        result = validate_backup(fh.read())
+    result = validate_backup(path)
     if not result.ok:
         raise DBSError(f"{name} is not a valid DBS backup: {result.summary()}")
 

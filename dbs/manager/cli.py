@@ -480,10 +480,10 @@ def command_export(args):
     output = os.path.abspath(args.file or default_export_name())
     passphrase = read_passphrase(args.passphrase_stdin, confirm=True)
     try:
-        container = export_manager(output, passphrase, with_backups=args.with_backups)
+        summary = export_manager(output, passphrase, with_backups=args.with_backups)
     except TransferError as exc:
         raise CommandFailed(str(exc)) from exc
-    print(f"Wrote {output} ({len(container)} bytes). Keep the passphrase with it.")
+    print(f"Wrote {output} ({summary.bytes_written} bytes). Keep the passphrase with it.")
     return 0
 
 

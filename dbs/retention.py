@@ -19,7 +19,7 @@ FAILED = "failed"
 UNKNOWN = "unknown"
 LEFTOVER_SECONDS = 3600
 
-_LEFTOVER_PATTERN = re.compile(r"^\..+\.dbs\.[A-Za-z0-9_]{8}$")
+_LEFTOVER_PATTERN = re.compile(r"^\..+\.dbs\.[A-Za-z0-9_]{8}(?:\.partial)?$")
 
 
 @dataclass(frozen=True)
@@ -93,6 +93,25 @@ def stale_stored_backups(backups: Iterable[StoredBackup], keep: int) -> list[str
         and (backup.verification != FAILED or position >= keep)
     ]
     return [backup.name for backup in reversed(stale)]
+
+
+def stale_beyond_limit(
+    backups: Iterable[StoredBackup], keep: int, protect: Iterable[str] = ()
+) -> list[str]:
+    backups = list(backups)
+    newest_first = sorted(backups, key=lambda backup: (backup.moment, backup.name), reverse=True)
+    verified = next((b.name for b in newest_first if b.verification == PASSED), None)
+    protected = set(protect) | ({verified} if verified else set())
+    stale = set(stale_stored_backups(backups, keep)) - protected
+    remaining = [backup.name for backup in newest_first if backup.name not in stale]
+    surplus = len(remaining) - keep
+    for name in reversed(remaining):
+        if surplus <= 0:
+            break
+        if name not in protected:
+            stale.add(name)
+            surplus -= 1
+    return [backup.name for backup in reversed(newest_first) if backup.name in stale]
 
 
 def remove_backups(directory: str, names: Iterable[str]) -> list[str]:

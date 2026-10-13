@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import tempfile
 from collections.abc import Iterator
@@ -53,7 +52,7 @@ def key_folder(data_dir) -> Iterator[Path]:
 
 
 def export_manager(output, passphrase, *, with_backups=False):
-    from dbs import create_backup
+    from dbs import write_backup
 
     output = str(output)
     if os.path.exists(output):
@@ -69,7 +68,11 @@ def export_manager(output, passphrase, *, with_backups=False):
                 roots.append(str(paths.backups_path(data_dir)))
             with transaction.atomic(), override_settings(DBS_FILE_ROOTS=roots):
                 entry = audit.record(EXPORT, target=target, data=data)
-                container = create_backup(passphrase, output=output)
+                summary = write_backup(output, passphrase)
+                data.update(size=summary.bytes_written, sha256=summary.sha256)
+                AuditEvent.objects.filter(pk=entry.pk, chain_index__isnull=True).update(
+                    data=data
+                )
     except Exception as exc:
         audit.safe_record(
             EXPORT,
@@ -80,30 +83,32 @@ def export_manager(output, passphrase, *, with_backups=False):
             error_code=audit.error_code_for(exc),
         )
         raise
-    data.update(size=len(container), sha256=hashlib.sha256(container).hexdigest())
-    AuditEvent.objects.filter(pk=entry.pk).update(data=data)
-    return container
+    return summary
 
 
-def read_export(source):
+@contextmanager
+def opened_export(source) -> Iterator:
     try:
-        return Path(source).read_bytes()
+        handle = Path(source).open("rb")
     except OSError as exc:
         raise TransferError(f"cannot read {source}: {exc}") from exc
+    with handle:
+        yield handle
 
 
 def exported_key(source, passphrase):
-    from dbs.engine.restore import read_payload
+    from dbs.engine.restore import backup_files
 
-    try:
-        payload = read_payload(read_export(source), passphrase)
-    except DBSError as exc:
-        raise TransferError(str(exc)) from exc
-    for entry, content in payload.files:
-        root = os.path.basename((entry.root or "").rstrip("/\\"))
-        if entry.kind == "root" and root == KEYS and entry.name == KEY_NAME:
-            return content.decode("ascii").strip()
-    return None
+    found = None
+    with opened_export(source) as handle:
+        try:
+            for entry, content in backup_files(handle, passphrase):
+                root = os.path.basename((entry.root or "").rstrip("/\\"))
+                if entry.kind == "root" and root == KEYS and entry.name == KEY_NAME:
+                    found = b"".join(content).decode("ascii").strip()
+        except DBSError as exc:
+            raise TransferError(str(exc)) from exc
+    return found
 
 
 def manages_servers():
@@ -113,7 +118,7 @@ def manages_servers():
 
 
 def import_manager(source, passphrase, *, replace=False):
-    from dbs.engine.restore import read_payload, restore_backup
+    from dbs.engine.restore import backup_files, restore_backup
 
     from .backups.repositories import BackupPlanRepository
 
@@ -121,13 +126,12 @@ def import_manager(source, passphrase, *, replace=False):
         raise TransferError(
             "this data directory already manages servers; pass --replace to replace them."
         )
-    data = read_export(source)
-    try:
-        result = restore_backup(data, passphrase, flush=True, write_files=False)
-        payload = read_payload(data, passphrase)
-    except DBSError as exc:
-        raise TransferError(str(exc)) from exc
-    written = write_roots(payload.files, conf.data_dir())
+    with opened_export(source) as handle:
+        try:
+            result = restore_backup(handle, passphrase, flush=True, write_files=False)
+            written = write_roots(backup_files(handle, passphrase), conf.data_dir())
+        except DBSError as exc:
+            raise TransferError(str(exc)) from exc
     removed = mark_missing_backups()
     BackupPlanRepository().keep_within_limits()
     audit.record(
@@ -164,7 +168,8 @@ def write_roots(files, data_dir):
             target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, paths.FILE_MODE
         )
         with os.fdopen(descriptor, "wb") as handle:
-            handle.write(content)
+            for piece in content:
+                handle.write(piece)
         written += 1
     return written
 

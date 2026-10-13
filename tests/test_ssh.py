@@ -187,6 +187,20 @@ def test_push_creates_the_directory_and_lands_atomically(fake_ssh):
     assert pull_backup(listed[0], target()) == b"payload"
 
 
+def test_push_streams_a_local_file_or_an_open_one(fake_ssh, tmp_path):
+    local = tmp_path / "local.dbs"
+    local.write_bytes(b"from a file" * 1000)
+
+    by_path = push_backup(str(local), backup_filename(), target())
+    with open(local, "rb") as handle:
+        handle.read(5)
+        by_handle = push_backup(handle, "dbs-20240101-000000Z.dbs", target())
+
+    for remote in (by_path, by_handle):
+        with open(fake_ssh.remote_path(REMOTE_DIR, os.path.basename(remote)), "rb") as fh:
+            assert fh.read() == local.read_bytes()
+
+
 def test_listing_ignores_files_that_are_not_backups(fake_ssh):
     name = backup_filename()
     fake_ssh.write_remote(REMOTE_DIR, name, b"payload")

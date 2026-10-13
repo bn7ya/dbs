@@ -38,7 +38,7 @@ def test_download_then_upload_restore(admin_client):
     response = admin_client.post("/dbs/backup/", {"passphrase": PASS, "passphrase2": PASS})
     assert response.status_code == 200
     assert response["Content-Disposition"].startswith("attachment;")
-    container = response.content
+    container = b"".join(response.streaming_content)
     assert container[:8] == b"DBSCON01"
 
     # Wipe, then restore by uploading the file back through the UI.

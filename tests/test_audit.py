@@ -74,7 +74,7 @@ def test_a_failed_backup_records_its_failure(tmp_path, monkeypatch):
     def explode(*args, **kwargs):
         raise DBSError("disk full")
 
-    monkeypatch.setattr("dbs.management.commands.dbs_backup.create_backup", explode)
+    monkeypatch.setattr("dbs.management.commands.dbs_backup.write_backup", explode)
 
     with pytest.raises(CommandError):
         backup(tmp_path / "broken.dbs")

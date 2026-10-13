@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import tempfile
@@ -246,19 +245,26 @@ def _start(job, runner, work, cleanup=None):
 
 
 def _take_backup(job, runner, output, stem, database, passphrase, note, actor):
-    from .engine import create_backup
     from .keys import default_passphrase
     from .models import BackupSchedule
     from .schedule_runner import discard_reservation, keep_newest, write_reserved
 
     try:
         with job.tracked():
-            container = create_backup(passphrase or default_passphrase(), using=database)
-            write_reserved(output, container)
-            digest = hashlib.sha256(container).hexdigest()
-            job.data.update(size=len(container), sha256=digest, verified=True, compressed=True)
+            summary = write_reserved(output, passphrase or default_passphrase(), using=database)
+            job.data.update(
+                size=summary.bytes_written,
+                sha256=summary.sha256,
+                verified=True,
+                compressed=True,
+            )
             audit.record_backup(
-                output, container, digest, database, created_by=actor, note=note
+                output,
+                summary.bytes_written,
+                summary.sha256,
+                database,
+                created_by=actor,
+                note=note,
             )
         keep = BackupSchedule.seed_keep(BackupSchedule.load().keep)
         keep_newest(os.path.dirname(output), stem, keep)
@@ -271,15 +277,15 @@ def _take_backup(job, runner, output, stem, database, passphrase, note, actor):
 
 def _restore(job, runner, path, passphrase, dry_run, flush, owned):
     from .engine import restore_backup
+    from .io import file_digest
     from .keys import with_passphrase
 
     try:
         with job.tracked():
-            with open(path, "rb") as fh:
-                data = fh.read()
-            job.data.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())
+            size, digest = file_digest(path)
+            job.data.update(size=size, sha256=digest)
             result = with_passphrase(
-                lambda secret: restore_backup(data, secret, dry_run=dry_run, flush=flush),
+                lambda secret: restore_backup(path, secret, dry_run=dry_run, flush=flush),
                 passphrase or None,
             )
             job.data.update(restore_outcome(result, dry_run))

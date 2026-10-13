@@ -450,10 +450,9 @@ class BackupRunService:
         passphrase = ServerConnectionService(job.actor).backup_passphrase(file.server)
         try:
             with self.storage.open_read(file.storage_path) as handle:
-                data = handle.read()
+                result = validate_backup(handle, passphrase)
         except FileNotFoundError as exc:
             raise BackupMissing() from exc
-        result = validate_backup(data, passphrase)
         decrypts: bool = result.ok and result.decrypted_ok
         return decrypts
 

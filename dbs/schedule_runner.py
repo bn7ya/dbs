@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import threading
@@ -11,8 +10,8 @@ from django.utils import timezone
 
 from . import audit, jobs, leases, retention
 from .conf import setting
-from .exceptions import BackupError, CorruptionError, DBSError
-from .io import write_new_file
+from .exceptions import BackupError, DBSError
+from .io import create_new_file
 from .naming import DEFAULT_PREFIX, backup_stem, parse_backup_moment, reserve_backup_name
 
 logger = logging.getLogger("dbs")
@@ -86,25 +85,28 @@ def discard_reservation(path):
         pass
 
 
-def write_reserved(output, container, verify=True):
-    def same_bytes(partial):
-        with open(partial, "rb") as fh:
-            if fh.read() != container:
-                raise CorruptionError(
-                    "verify-after-write: the file on disk does not match the backup."
-                )
+def write_reserved(output, passphrase, *, verify=True, **options):
+    from .engine.backup import verify_written, write_backup
+
+    written = {}
+
+    def check(partial):
+        verify_written(partial, passphrase, written["summary"])
 
     try:
-        write_new_file(output, container, same_bytes if verify else None, reserved=True)
+        with create_new_file(output, check if verify else None, reserved=True) as fh:
+            written["summary"] = write_backup(fh, passphrase, verify=False, **options)
     except FileExistsError:
         raise BackupError(
             f"{output} already exists. DBS never replaces a backup file; choose a new name."
         ) from None
+    summary = written["summary"]
+    summary.path = output
+    summary.verified = verify
+    return summary
 
 
 def run_cycle(passphrase, plan, runner=None):
-    from .engine import create_backup
-
     os.makedirs(plan["output_dir"], exist_ok=True)
     stem = backup_stem(plan["prefix"], plan["database"])
     name = reserve(plan["output_dir"], stem)
@@ -119,26 +121,25 @@ def run_cycle(passphrase, plan, runner=None):
             hold=(jobs.RUNNER_LEASE,) if runner else (),
         )
         with job.tracked():
-            container = create_backup(
+            summary = write_reserved(
+                output,
                 passphrase,
+                verify=plan["verify"],
                 using=plan["database"],
                 compress=plan["compress"],
-                verify=plan["verify"],
                 kdf_params=plan.get("kdf_params"),
                 **extra,
             )
-            write_reserved(output, container, plan["verify"])
-            digest = hashlib.sha256(container).hexdigest()
             job.data.update(
-                size=len(container),
-                sha256=digest,
+                size=summary.bytes_written,
+                sha256=summary.sha256,
                 verified=plan["verify"],
                 compressed=plan["compress"],
             )
-            audit.record_backup(output, container, digest, plan["database"])
+            audit.record_backup(output, summary.bytes_written, summary.sha256, plan["database"])
     finally:
         discard_reservation(output)
-    logger.info("scheduled backup wrote %s (%d bytes)", output, len(container))
+    logger.info("scheduled backup wrote %s (%d bytes)", output, summary.bytes_written)
     keep_newest(plan["output_dir"], stem, plan["keep"])
     return output
 
@@ -223,6 +224,15 @@ def stored_backups(directory, stem):
 
 def keep_newest(directory, stem, keep):
     stale = retention.stale_stored_backups(stored_backups(directory, stem), keep)
+    return remove_stale(directory, stale, keep)
+
+
+def keep_at_most(directory, stem, keep, written):
+    stale = retention.stale_beyond_limit(stored_backups(directory, stem), keep, (written,))
+    return remove_stale(directory, stale, keep)
+
+
+def remove_stale(directory, stale, keep):
     removed = retention.remove_backups(directory, stale)
     if removed:
         audit.safe_record(

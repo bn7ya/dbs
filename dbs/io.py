@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import itertools
 import os
 import shutil
 import stat
 import tempfile
+from contextlib import contextmanager
 from typing import Iterable
 
 PRIVATE_MODE = 0o600
@@ -21,12 +23,31 @@ LINK_UNSUPPORTED = {
 }
 
 
+DIGEST_CHUNK = 1024 * 1024
+
+
+def file_digest(path) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(DIGEST_CHUNK), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return size, digest.hexdigest()
+
+
 def refuse_existing(path: str) -> None:
     if os.path.lexists(path):
         raise FileExistsError(errno.EEXIST, "a file already exists at this path", path)
 
 
 def write_new_file(path: str, data: bytes, verify=None, *, reserved: bool = False) -> None:
+    with create_new_file(path, verify, reserved=reserved) as fh:
+        fh.write(data)
+
+
+@contextmanager
+def create_new_file(path: str, verify=None, *, reserved: bool = False):
     if not reserved:
         refuse_existing(path)
     directory = os.path.dirname(os.path.abspath(path))
@@ -36,7 +57,7 @@ def write_new_file(path: str, data: bytes, verify=None, *, reserved: bool = Fals
     try:
         with os.fdopen(descriptor, "wb") as fh:
             os.fchmod(fh.fileno(), PRIVATE_MODE)
-            fh.write(data)
+            yield fh
             fh.flush()
             os.fsync(fh.fileno())
         if verify is not None:

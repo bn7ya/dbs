@@ -310,6 +310,21 @@ def test_a_whole_block_lost_in_one_copy_is_restored(sample):
             assert report.spares_damaged == [5]
 
 
+def test_reading_can_check_the_spare_copies_in_the_same_pass(sample):
+    data, blob, _summary = sample
+    _first, second, slot = slot_offsets(blob)
+    damaged = bytearray(blob)
+    damaged[second[5] : second[5] + slot] = bytes(slot)
+
+    reader = StreamReader(io.BytesIO(bytes(damaged)), PASS)
+    assert b"".join(reader.chunks(check_spares=True)) == data
+    assert reader.report.spares_damaged == [5] and reader.report.healed
+
+    plain = StreamReader(io.BytesIO(bytes(damaged)), PASS)
+    assert b"".join(plain.chunks()) == data
+    assert plain.report.spares_damaged == [] and not plain.report.healed
+
+
 def test_a_burst_shorter_than_the_interleave_distance_is_survivable(sample):
     data, blob, summary = sample
     rng = random.Random(4)

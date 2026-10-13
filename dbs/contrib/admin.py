@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
 
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from django.template import RequestContext, Template
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_http_methods
 
 from .. import audit
-from ..engine import create_backup, restore_backup
+from ..engine import restore_backup, write_backup
 from ..exceptions import DBSError
 from ..naming import backup_filename
 
@@ -70,20 +71,34 @@ def backup_download(request):
             message="Passphrases are empty or do not match.",
         )
     name = backup_filename()
+    container = tempfile.TemporaryFile()
     try:
         with _tracked(request, EXPORT, name, {"file": name, "database": "default"}) as entry:
-            container = create_backup(passphrase)
+            summary = write_backup(container, passphrase)
             entry.data.update(
-                size=len(container),
-                sha256=hashlib.sha256(container).hexdigest(),
-                verified=True,
+                size=summary.bytes_written,
+                sha256=summary.sha256,
+                verified=summary.verified,
             )
     except DBSError as exc:
+        container.close()
         return _render(request, "Backup", fields, message=str(exc))
+    except BaseException:
+        container.close()
+        raise
 
-    response = HttpResponse(container, content_type="application/octet-stream")
+    container.seek(0)
+    response = FileResponse(container, content_type="application/octet-stream")
     response["Content-Disposition"] = f'attachment; filename="{name}"'
     return response
+
+
+def _upload_digest(upload):
+    digest = hashlib.sha256()
+    for chunk in upload.chunks():
+        digest.update(chunk)
+    upload.seek(0)
+    return digest.hexdigest()
 
 
 def _tracked(request, action, target, data):
@@ -125,9 +140,8 @@ def restore_upload(request):
     data = {"file": name, "size": upload.size, "dry_run": False, "flushed": False}
     try:
         with _tracked(request, RESTORE, name, data) as entry:
-            raw = upload.read()
-            entry.data["sha256"] = hashlib.sha256(raw).hexdigest()
-            result = restore_backup(raw, passphrase)
+            entry.data["sha256"] = _upload_digest(upload)
+            result = restore_backup(upload, passphrase)
             entry.data.update(
                 records=result.records_loaded,
                 files=result.files_written,

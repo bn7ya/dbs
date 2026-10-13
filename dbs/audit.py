@@ -158,14 +158,14 @@ def track(action, *, target="", data=None, **fields):
     )
 
 
-def record_backup(output, container, digest, database, *, created_by=None, note=""):
+def record_backup(output, size, digest, database, *, created_by=None, note=""):
     from .models import BackupRecord
 
     try:
         with transaction.atomic():
             return BackupRecord.objects.create(
                 filename=os.path.basename(output),
-                size_bytes=len(container),
+                size_bytes=size,
                 sha256=digest,
                 database=database,
                 location=os.path.abspath(output),

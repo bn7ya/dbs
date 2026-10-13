@@ -313,13 +313,135 @@ def test_a_failed_backup_leaves_no_partial_and_records_the_failure(tmp_path, mon
     def failing(*args, **kwargs):
         raise DBSError("the database went away")
 
-    monkeypatch.setattr("dbs.management.commands.dbs_backup.create_backup", failing)
+    monkeypatch.setattr("dbs.management.commands.dbs_backup.write_backup", failing)
 
     with pytest.raises(CommandError, match="the database went away"):
         stream_command(tmp_path, Receiver(), output_dir=str(tmp_path))
 
     assert names_in(tmp_path) == []
     assert AuditEvent.objects.get(action="backup.create").status == audit.FAILED
+
+
+@pytest.mark.django_db
+def test_a_kept_copy_that_fails_verification_is_removed_and_the_command_fails(
+    tmp_path, monkeypatch
+):
+    from dbs.engine.backup import verify_written
+
+    checked = []
+
+    def damaged(partial, passphrase, summary):
+        checked.append(partial)
+        with open(partial, "r+b") as fh:
+            fh.seek(os.path.getsize(partial) // 2)
+            fh.write(b"\x00" * 64)
+        verify_written(partial, passphrase, summary)
+
+    monkeypatch.setattr("dbs.management.commands.dbs_backup.verify_written", damaged)
+    receiver = Receiver()
+    stderr = io.StringIO()
+
+    with pytest.raises(CommandError, match="verify-after-write"):
+        call_command(
+            "dbs_backup",
+            "--stream",
+            passphrase=PASS,
+            kdf_time=1,
+            kdf_memory=8192,
+            output_dir=str(tmp_path),
+            stdout=BinaryStdout(receiver),
+            stderr=stderr,
+        )
+
+    assert len(checked) == 1 and is_partial_name(os.path.basename(checked[0]))
+    assert names_in(tmp_path) == []
+    assert not BackupRecord.objects.exists()
+    assert AuditEvent.objects.get(action="backup.create").status == audit.FAILED
+    assert "{" not in stderr.getvalue()
+
+
+@pytest.mark.django_db
+def test_no_verify_skips_reading_the_kept_copy_back(tmp_path, monkeypatch):
+    def unexpected(*args):
+        raise AssertionError("the kept copy was read back")
+
+    monkeypatch.setattr("dbs.management.commands.dbs_backup.verify_written", unexpected)
+
+    lines = stream_command(tmp_path, Receiver(), "--no-verify", output_dir=str(tmp_path))
+
+    assert names_in(tmp_path) == [json.loads(lines[-1])["name"]]
+    assert AuditEvent.objects.get(action="backup.create").data["verified"] is False
+
+
+def older_backups(directory, prefix, count, data):
+    names = []
+    for hour in range(count):
+        moment = datetime(2026, 1, 1, hour, 0, 0, tzinfo=timezone.utc)
+        path = directory / backup_filename(prefix, moment)
+        path.write_bytes(data)
+        names.append(path.name)
+    return names
+
+
+@pytest.fixture
+def stored_container(db):
+    from dbs.engine import create_backup
+    from tests.conftest import FAST_KDF
+
+    return create_backup(PASS, kdf_params=FAST_KDF)
+
+
+@pytest.mark.django_db
+def test_a_stream_keeps_at_most_five_backups_with_its_prefix(tmp_path, stored_container):
+    older = older_backups(tmp_path, "web", 7, stored_container)
+    others = older_backups(tmp_path, "shop", 2, stored_container)
+
+    lines = stream_command(tmp_path, Receiver(), "--prefix", "web", output_dir=str(tmp_path))
+
+    written = json.loads(lines[-1])["name"]
+    kept = [name for name in names_in(tmp_path) if is_backup_name(name, "web")]
+    assert kept == sorted(older[-4:] + [written])
+    assert all((tmp_path / name).exists() for name in others)
+    pruned = AuditEvent.objects.get(action="backup.prune")
+    assert sorted(pruned.data["removed"]) == sorted(older[:3])
+    assert pruned.data["keep"] == 5
+
+
+@pytest.mark.django_db
+def test_pruning_spares_the_new_copy_and_the_newest_verified_backup(
+    tmp_path, stored_container
+):
+    older = older_backups(tmp_path, "web", 7, stored_container)
+    audit.record("backup.validate", target=older[0], data={"ok": True})
+
+    lines = stream_command(
+        tmp_path, Receiver(), "--prefix", "web", "--no-verify", output_dir=str(tmp_path)
+    )
+
+    written = json.loads(lines[-1])["name"]
+    kept = [name for name in names_in(tmp_path) if is_backup_name(name, "web")]
+    assert len(kept) == 5
+    assert written in kept and older[0] in kept
+    assert kept == sorted([older[0], *older[-3:], written])
+
+
+@pytest.mark.django_db
+def test_repeated_streams_whose_stdout_breaks_never_pile_up(tmp_path, monkeypatch):
+    from dbs import tee
+
+    moments = iter(datetime(2026, 1, 2, 9, minute, tzinfo=timezone.utc) for minute in range(8))
+    real = tee.TeeSink.__init__
+
+    def at_next_minute(self, stream, directory, prefix, *, moment=None):
+        real(self, stream, directory, prefix, moment=next(moments))
+
+    monkeypatch.setattr(tee.TeeSink, "__init__", at_next_minute)
+
+    for _attempt in range(8):
+        lines = stream_command(tmp_path, Receiver(breaks_after=0), output_dir=str(tmp_path))
+        assert json.loads(lines[-1])["kept_on_server"] is True
+
+    assert len(names_in(tmp_path)) == 5
 
 
 @pytest.mark.django_db
