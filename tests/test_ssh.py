@@ -1,5 +1,6 @@
 """SSH transport: target configuration, auth wiring, and session operations."""
 
+import io
 import os
 
 import pytest
@@ -197,6 +198,51 @@ def test_pull_to_streams_to_disk_and_leaves_no_partial(fake_ssh, tmp_path):
     assert destination.read_bytes() == b"payload"
     assert destination.stat().st_mode & 0o777 == 0o600
     assert not (tmp_path / "local.dbs.part").exists()
+
+
+def test_a_pulled_file_is_private_while_it_downloads(fake_ssh, tmp_path, monkeypatch):
+    from tests.fake_ssh import FakeSFTP
+
+    name = backup_filename()
+    fake_ssh.write_remote(REMOTE_DIR, name, b"payload")
+    real_getfo = FakeSFTP.getfo
+    seen = []
+
+    def watching_getfo(self, remote_path, handle):
+        seen.append(os.stat(handle.fileno()).st_mode & 0o777)
+        return real_getfo(self, remote_path, handle)
+
+    monkeypatch.setattr(FakeSFTP, "getfo", watching_getfo)
+    previous = os.umask(0)
+    try:
+        pull_backup_to(name, str(tmp_path / "local.dbs"), target())
+    finally:
+        os.umask(previous)
+
+    assert seen == [0o600]
+    assert (tmp_path / "local.dbs").stat().st_mode & 0o777 == 0o600
+
+
+def test_a_pushed_file_is_private_before_its_bytes_arrive(fake_ssh, monkeypatch):
+    from tests.fake_ssh import FakeSFTP
+
+    real_putfo = FakeSFTP.putfo
+    seen = []
+
+    def watching_putfo(self, handle, remote_path):
+        data = handle.read()
+        if data:
+            seen.append(os.stat(self._local(remote_path)).st_mode & 0o777)
+        return real_putfo(self, io.BytesIO(data), remote_path)
+
+    monkeypatch.setattr(FakeSFTP, "putfo", watching_putfo)
+    previous = os.umask(0)
+    try:
+        push_backup(b"payload", backup_filename(), target())
+    finally:
+        os.umask(previous)
+
+    assert seen == [0o600]
 
 
 def test_a_failed_pull_does_not_clobber_an_existing_file(fake_ssh, tmp_path):

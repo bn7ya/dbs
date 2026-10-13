@@ -19,6 +19,7 @@ from ..naming import is_backup_name
 logger = logging.getLogger("dbs")
 
 MAX_CAPTURED_OUTPUT = 64 * 1024
+PRIVATE_MODE = 0o600
 
 _TARGET_KEYS = {
     "host",
@@ -379,8 +380,8 @@ class SSHSession:
         partial = f"{remote_path}.part"
         try:
             self.ensure_dir()
+            _create_private_remote(self.sftp, partial)
             self.sftp.putfo(io.BytesIO(data), partial)
-            self.sftp.chmod(partial, 0o600)
             _replace_remote(self.sftp, partial, remote_path)
         except OSError as exc:
             raise DBSError(f"SFTP upload failed: {exc}") from exc
@@ -406,14 +407,14 @@ class SSHSession:
         remote_path = self.path_for(remote_name)
         partial = f"{local_path}.part"
         try:
-            self.sftp.get(remote_path, partial)
+            with _private_local_file(partial) as handle:
+                self.sftp.getfo(remote_path, handle)
         except OSError as exc:
             _discard(partial)
             raise DBSError(f"SFTP download failed: {exc}") from exc
         size = os.path.getsize(partial)
-        os.chmod(partial, 0o600)
         os.replace(partial, local_path)
-        os.chmod(local_path, 0o600)
+        os.chmod(local_path, PRIVATE_MODE)
         logger.info(
             "pulled %d bytes from %s:%s to %s",
             size,
@@ -596,6 +597,21 @@ def _discard(path: str) -> None:
         os.remove(path)
     except OSError:
         pass
+
+
+def _private_local_file(path: str):
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, PRIVATE_MODE)
+    try:
+        os.fchmod(descriptor, PRIVATE_MODE)
+    except OSError:
+        os.close(descriptor)
+        raise
+    return os.fdopen(descriptor, "wb")
+
+
+def _create_private_remote(sftp, path: str) -> None:
+    sftp.putfo(io.BytesIO(b""), path)
+    sftp.chmod(path, PRIVATE_MODE)
 
 
 def _replace_remote(sftp, partial: str, remote_path: str) -> None:
