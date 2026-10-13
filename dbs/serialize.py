@@ -34,6 +34,51 @@ class AllRowsSerializer(JSONSerializer):
         self.carried = carried
         self.excluded = excluded
         self.natural_keys: dict = {}
+        self.members: dict = {}
+
+    def prepare(self, objects: list) -> None:
+        self.members = {}
+        if not objects:
+            return
+        database = objects[0]._state.db
+        keys = [obj.pk for obj in objects]
+        for field in objects[0]._meta.concrete_model._meta.local_many_to_many:
+            if (
+                field.serialize
+                and field.remote_field.through._meta.auto_created
+                and field.name not in self.excluded
+            ):
+                self.members[field.name] = self._members_of(field, keys, database)
+
+    def _members_of(self, field, keys: list, database) -> dict:
+        source, target = field.m2m_field_name(), field.m2m_reverse_field_name()
+        links = field.remote_field.through._base_manager.using(database).filter(
+            **{f"{source}__in": keys}
+        )
+        related = (
+            field.related_model._base_manager.using(database)
+            .filter(pk__in=links.values(target))
+            .order_by("pk")
+            .only("pk")
+        )
+        natural = self.by_natural_key(field.related_model)
+        values = {
+            item.pk: (
+                self.natural_key_of(field.related_model, "pk", item.pk, database)
+                if natural
+                else self._value_from_field(item, item._meta.pk)
+            )
+            for item in related
+        }
+        rank = {key: position for position, key in enumerate(values)}
+        grouped: dict = {}
+        for owner, member in links.values_list(source, target):
+            if member in rank:
+                grouped.setdefault(owner, set()).add(member)
+        return {
+            owner: [values[member] for member in sorted(members, key=rank.__getitem__)]
+            for owner, members in grouped.items()
+        }
 
     def get_dump_object(self, obj):
         for name in self.excluded:
@@ -72,6 +117,10 @@ class AllRowsSerializer(JSONSerializer):
     def handle_m2m_field(self, obj, field):
         through = field.remote_field.through
         if not through._meta.auto_created or field.name in self.excluded:
+            return
+        prefetched = self.members.get(field.name)
+        if prefetched is not None:
+            self._current[field.name] = prefetched.get(obj.pk, [])
             return
         target_ids = through._base_manager.using(obj._state.db).filter(
             **{field.m2m_field_name(): obj.pk}
@@ -112,6 +161,7 @@ def serialize_batches(
 
 
 def _serialized(serializer, batch: list, limit: int | None):
+    serializer.prepare(batch)
     text = serializer.serialize(batch, use_natural_foreign_keys=False).encode("utf-8")
     if limit is None or len(text) <= limit:
         yield text, len(batch)

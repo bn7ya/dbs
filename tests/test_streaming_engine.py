@@ -1,6 +1,7 @@
 import errno
 import hashlib
 import io
+import json
 import os
 import threading
 import tracemalloc
@@ -27,7 +28,7 @@ from dbs.exceptions import (
     MissingSourceFiles,
 )
 from dbs.files import SkippedFile
-from dbs.serialize import RowLoader, serialize_batches
+from dbs.serialize import AllRowsSerializer, RowLoader, serialize_batches
 from tests.conftest import FAST_KDF
 from tests.format1 import as_format1
 from tests.testapp.models import Author, Book, Tag
@@ -458,6 +459,20 @@ def test_a_large_block_size_narrows_the_interleave_to_fit(library):
 
     with pytest.raises(BackupError, match="block_size"):
         write_backup(io.BytesIO(), PASS, kdf_params=FAST_KDF, block_size=100)
+
+
+def test_batched_many_to_many_members_match_the_one_row_path(library):
+    batched = [
+        record
+        for body, _count in serialize_batches(Book, ModelBackup(), set(), frozenset(), "default", rows=4)
+        for record in json.loads(body)
+    ]
+    one_by_one = json.loads(
+        AllRowsSerializer().serialize(Book.objects.order_by("pk"), use_natural_foreign_keys=False)
+    )
+
+    assert batched == one_by_one
+    assert any(len(record["fields"]["tags"]) > 1 for record in batched)
 
 
 def test_a_row_too_large_for_a_frame_is_refused_and_batches_split(db):
