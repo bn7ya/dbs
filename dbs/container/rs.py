@@ -120,9 +120,10 @@ def is_well_formed(encoded_len: int, nsym: int) -> bool:
 def _parity_rows(messages: np.ndarray, table: np.ndarray) -> np.ndarray:
     accumulator = np.zeros((messages.shape[0], table.shape[2]), dtype=np.uint64)
     gathered = np.empty_like(accumulator)
-    columns = np.array(messages.T, dtype=np.intp, order="C")
-    for position, column in enumerate(columns):
-        np.take(table[position], column, axis=0, out=gathered)
+    indices = np.empty(messages.shape[0], dtype=np.intp)
+    for position, column in enumerate(np.ascontiguousarray(messages.T)):
+        indices[...] = column
+        np.take(table[position], indices, axis=0, out=gathered)
         np.bitwise_xor(accumulator, gathered, out=accumulator)
     return accumulator
 
