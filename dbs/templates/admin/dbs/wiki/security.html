@@ -12,6 +12,8 @@ enabled — distance from a known location and implied travel speed.</p>
 <p>An IsolationForest, shipped pre-trained on a synthetic corpus so it works from the first
 request, joined by a forest fitted to your own history once there is enough of it. Nothing is
 ever pickled or unpickled: models are refit from stored feature rows.</p>
+<p>The forest needs scikit-learn, which <code>pip install "django-dbs[guard]"</code>
+installs. <code>python manage.py dbs upgrade</code> reports a guard that is on without it.</p>
 <h2>Getting back in</h2>
 <p>A locked-out account is cleared from a shell, which always beats the detector:</p>
 <pre><code>python manage.py dbs security unlock alice</code></pre>

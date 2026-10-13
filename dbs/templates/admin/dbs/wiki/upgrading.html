@@ -9,6 +9,18 @@ do automatically:</p>
 Anything that means editing your own code it prints, with the exact line and where it goes.
 It never rewrites your settings.</p>
 
+<h2>Installing a new release</h2>
+<p>Pin the release in your requirements or lock file and reinstall, the same way every
+deploy does, with the extras you use:</p>
+<pre><code>pip install "django-dbs[guard]==X.Y.Z"</code></pre>
+<p>Inside a virtual environment DBS can run that step for you:</p>
+<pre><code>python manage.py dbs upgrade --self              # the newest release on PyPI
+python manage.py dbs upgrade --self --to X.Y.Z   # exactly this one</code></pre>
+<p>It prints the exact pinned <code>pip install</code> command, with the extras installed here,
+and asks before running it; <code>--yes</code> answers for a script. It leaves a source
+checkout alone, and an interpreter outside a virtual environment too unless you add
+<code>--system-python</code>. Pin the same version in your requirements afterwards.</p>
+
 <h2>In CI</h2>
 <pre><code>python manage.py dbs upgrade --check</code></pre>
 <p>Changes nothing, exits non-zero when something is outstanding.</p>
@@ -19,8 +31,11 @@ It never rewrites your settings.</p>
 version reads, so today this reports nothing to convert. It exists so that a future format
 change cannot strand files that already exist.</p>
 <p>When a backup cannot be read forward, the command stops and changes nothing. It never
-deletes, moves or overwrites a backup: a conversion writes a new <code>.converted</code>
-file beside the original and validates it end to end before counting it. The message names
+deletes, moves or overwrites a backup: a conversion writes a new backup beside the
+original, named <code>&lt;name&gt;.v&lt;version&gt;.dbs</code> (with <code>-2</code>,
+<code>-3</code> and on when that name is taken), readable by its owner alone, and validates it
+end to end before it takes that name. A backup converted on an earlier run is reported, not
+converted again. The message names
 the safe option first &mdash; install the version that wrote the file in a separate
 environment and restore from there.</p>
 <p>Accepting that a backup is unreadable is deliberately hard to do by accident: there is no
@@ -29,7 +44,7 @@ many backups you are giving up. Even then nothing is deleted.</p>
 
 <h2>From 0.2.x</h2>
 <ol>
-  <li><code>pip install --upgrade django-dbs</code></li>
+  <li><code>pip install "django-dbs[guard]==X.Y.Z"</code>, pinned in your requirements</li>
   <li><code>python manage.py dbs upgrade</code></li>
 </ol>
 <p>That applies the migrations 0.3.0 added and reports anything else. Existing backups
