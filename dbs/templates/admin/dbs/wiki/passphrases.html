@@ -5,6 +5,10 @@
 <p>DBS derives its backup passphrase from Django's <code>SECRET_KEY</code>, so there is
 nothing to configure. The derivation is domain separated, meaning the backup key is never the
 same bytes Django uses for sessions, CSRF and password-reset tokens.</p>
+<p><strong>A project's backup passphrase must never change.</strong> Every backup is
+encrypted under the passphrase in force when it was written. Change <code>SECRET_KEY</code>
+without keeping the old one, set a new <code>DBS_PASSPHRASE</code>, or store a different
+passphrase for this server in the DBS manager, and every older backup stops opening.</p>
 <h2>Order of precedence</h2>
 <ol>
   <li>An explicit <code>--passphrase</code>, <code>--passphrase-stdin</code>, or the form field.</li>
@@ -17,4 +21,8 @@ same bytes Django uses for sessions, CSRF and password-reset tokens.</p>
 When you rotate, keep the old value in <code>SECRET_KEY_FALLBACKS</code>; DBS tries every
 fallback on restore. To archive the derived passphrase somewhere safe:</p>
 <pre><code>python manage.py dbs key --show</code></pre>
+<h2>The DBS manager</h2>
+<p>The manager stores this server's backup passphrase, sealed, and hands it to the server on
+standard input for every backup and restore. Store it once, while adding the server and
+before its first backup, and never replace it afterwards.</p>
 {% endblock %}

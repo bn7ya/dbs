@@ -7,21 +7,33 @@
 <p>The <code>guard</code> extra installs scikit-learn for the session guard. A project that
 does not run the guard needs only <code>pip install django-dbs</code>.</p>
 <pre><code>INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
-MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]</code></pre>
+MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
+DBS_BACKUP_DIR = "/var/backups/myproject"</code></pre>
 <pre><code>python manage.py migrate</code></pre>
 <p><code>django.contrib.admin</code> mounts this panel; the middleware runs the session
-guard. Upgrading from 0.2.x needs that <code>migrate</code> &mdash; 0.3.0 added tables.</p>
+guard and goes below <code>AuthenticationMiddleware</code>. <code>DBS_BACKUP_DIR</code> is
+where this server keeps its backups, at most five. Upgrading from 0.2.x needs that
+<code>migrate</code> &mdash; 0.3.0 added tables.</p>
+<p>The backup passphrase is derived from <code>SECRET_KEY</code> and
+<strong>must never change</strong>: older backups would no longer open. See
+<a href="{% url 'admin:dbs_wiki' 'passphrases' %}">Passphrases</a>.</p>
 <h2>Declare what to back up</h2>
-<p>DBS backs up every model it finds. To narrow that, add a <code>dbs.py</code> to an app:</p>
-<pre><code>from dbs import backup_registry, ModelBackup
+<p>DBS backs up every model it finds, except models with <code>managed = False</code>. To
+configure a model, register it in a <code>dbs.py</code> inside an app; once anything is
+registered, only registered models are backed up:</p>
+<pre><code>from dbs import backup_registry, FieldType, ModelBackup
 from myapp.models import Invoice
 
-@backup_registry.register
+@backup_registry.register(Invoice)
 class InvoiceBackup(ModelBackup):
-    model = Invoice</code></pre>
+    overrides = {"render_cache": FieldType.EXCLUDE}</code></pre>
 <h2>Take a backup</h2>
-<p>From this panel, use <em>Take a backup</em>. From a shell:</p>
+<p>From this panel, use <em>Take a backup</em>: it writes the backup to
+<code>DBS_BACKUP_DIR</code> in the background and offers it for download once it is done.
+From a shell:</p>
 <pre><code>python manage.py dbs backup /var/backups/app.dbs</code></pre>
+<p>It refuses a path that already exists, and stops when a source file is missing or
+unreadable, naming it; <code>--allow-missing-files</code> backs up without it.</p>
 <h2>Keep taking them</h2>
 <pre><code>python manage.py dbs schedule --interval 6h --output-dir /var/backups --keep 5</code></pre>
 <p>Run one scheduler per output directory. Two loops sharing a directory race on retention.</p>

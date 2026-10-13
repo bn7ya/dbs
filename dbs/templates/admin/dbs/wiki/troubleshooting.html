@@ -7,9 +7,22 @@
 trusted list in setup.</p>
 <h2>A restore merged when I wanted it to replace</h2>
 <p>Tick <em>Replace instead of merge</em>, or pass <code>--flush</code> on the command line.</p>
+<h2>A backup refuses its output path</h2>
+<p><code>dbs backup</code> never replaces a file. Choose a new name each run, or let the
+schedule name them.</p>
+<h2>A backup stops on files it cannot read</h2>
+<p>It names each missing or unreadable source file. Restore them, or pass
+<code>--allow-missing-files</code> to back up without them.</p>
+<h2>A restore refuses a file</h2>
+<p>Files land only inside the restore roots. Add the directory to
+<code>DBS_RESTORE_ROOTS</code>, or map the old root to a new one with
+<code>DBS_RESTORE_PATH_MAP</code>. A dry run lists every file it would refuse.</p>
 <h2>The scheduler will not start</h2>
 <p>It needs an output directory: pass <code>--output-dir</code> or set
 <code>DBS_BACKUP_DIR</code>.</p>
+<h2><code>django_dbs</code> says it needs <code>django-dbs[manager]</code></h2>
+<p>The manager is an extra: <code>pip install "django-dbs[manager]"</code> on the machine
+that runs it.</p>
 <h2><code>django_dbs</code> is not recognized / command not found</h2>
 <p>pip installed the script into a folder that is not on your <code>PATH</code>, common with
 Windows user installs and <code>pip install --user</code>; pip prints that folder in a
