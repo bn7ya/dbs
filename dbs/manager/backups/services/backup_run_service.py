@@ -34,7 +34,7 @@ from dbs.manager.backups.services.dbs_runs import DbsOutcome, DbsRun, moment_of
 from dbs.manager.backups.services.plan_runs import last_run, run_detail
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.common.uploads import upload_name
-from dbs.manager.servers.exceptions import RemoteCommandFailed, StreamBroken
+from dbs.manager.servers.exceptions import StreamBroken, failure_facts
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerConnectionService, ServerService
 from dbs.manager.vault import VaultError, open_stream, seal_stream
@@ -472,6 +472,5 @@ class BackupRunService:
 def _failure_detail(job: AuditEvent, exc: APIException) -> Detail | None:
     if isinstance(exc, BackupQuarantined):
         return {**job.data, "output": exc.output, "quarantined": [exc.backup]}
-    if isinstance(exc, RemoteCommandFailed) and exc.output:
-        return {**job.data, "output": exc.output}
-    return None
+    facts = failure_facts(exc)
+    return {**job.data, **facts} if facts else None

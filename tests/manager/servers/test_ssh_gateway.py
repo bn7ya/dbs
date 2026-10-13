@@ -506,8 +506,11 @@ def test_a_server_whose_django_dbs_cannot_stream_is_too_old():
         result=RemoteResult(2, "", "manage.py dbs_backup: error: unrecognized arguments: --stream")
     )
 
-    with pytest.raises(DbsTooOld):
+    with pytest.raises(DbsTooOld) as raised:
         streamed(session)
+
+    assert raised.value.needs == "0.7.0"
+    assert "Upgrade it to 0.7.0 or later." in str(raised.value.detail)
 
 
 @pytest.mark.parametrize(

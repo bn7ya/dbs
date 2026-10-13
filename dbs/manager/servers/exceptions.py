@@ -75,9 +75,24 @@ class RestoreFailed(RemoteCommandFailed):
 
 class DbsTooOld(RemoteCommandFailed):
     default_code = "dbs_too_old"
-    default_detail = (
-        "The server's django-dbs is too old for this. Upgrade it to 0.2.2 or later."
-    )
+    default_detail = "The server's django-dbs is too old for this."
+
+    def __init__(self, needs: str, *, output: str = "") -> None:
+        super().__init__(self.needing(needs), output=output)
+        self.needs = needs
+
+    @classmethod
+    def needing(cls, version: str) -> str:
+        return f"{cls.default_detail} Upgrade it to {version} or later."
+
+
+def failure_facts(exc: Exception) -> dict[str, str]:
+    facts = {}
+    if isinstance(exc, RemoteCommandFailed) and exc.output:
+        facts["output"] = exc.output
+    if isinstance(exc, DbsTooOld):
+        facts["needs"] = exc.needs
+    return facts
 
 
 class RemoteNotFound(APIException):

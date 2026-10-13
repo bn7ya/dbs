@@ -551,19 +551,13 @@ class RemoteCommandLimits(Step):
     since = "0.7.0"
 
     def check(self):
-        targets = setting("DBS_SSH_TARGETS", {}) or {}
-        unlimited = sorted(
-            name for name, target in targets.items() if "command_timeout" not in target
-        )
-        if not targets:
-            return self.ok("no SSH targets are configured")
-        if not unlimited:
-            return self.ok("every SSH target sets its own command_timeout")
+        from .transports.ssh import DEFAULT_COMMAND_TIMEOUT, DEFAULT_KEEPALIVE_INTERVAL
+
         return self.ok(
-            "since 0.7.0 an SSH connection sends a keepalive every 15 seconds and a "
-            "command on it stops after 6 hours unless it sets its own time; give "
-            + ", ".join(unlimited)
-            + " a command_timeout if a remote backup there runs longer"
+            "since 0.7.0 an SSH connection sends a keepalive every "
+            f"{DEFAULT_KEEPALIVE_INTERVAL:g} seconds and a remote command stops after "
+            f"{DEFAULT_COMMAND_TIMEOUT / 3600:g} hours; an SSHTarget that runs longer "
+            "commands sets its own command_timeout"
         )
 
 
@@ -683,6 +677,10 @@ class PulledBackups(Step):
         "`django_dbs server add NAME --host HOST --user USER` for this server, then "
         "delete the settings listed here"
     )
+    explicit_target = (
+        "; code that read DBS_SSH_TARGETS through SSHTarget.from_settings builds "
+        "SSHTarget(host=..., username=..., ...) from explicit values now"
+    )
 
     def check(self):
         from django.conf import settings
@@ -699,7 +697,7 @@ class PulledBackups(Step):
         if problems:
             return self.warn(
                 "this server no longer pushes backups anywhere, but " + "; ".join(problems),
-                self.remedy,
+                self.remedy + (self.explicit_target if "DBS_SSH_TARGETS" in left else ""),
             )
         if removed:
             return self.ok(

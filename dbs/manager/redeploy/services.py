@@ -40,6 +40,7 @@ from dbs.manager.servers.exceptions import (
     RestoreFailed,
     SSHAuthFailed,
     SSHUnreachable,
+    failure_facts,
 )
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerConnectionService, ServerService
@@ -502,6 +503,4 @@ def _may_revert(detail: Detail, failed_step: str) -> bool:
 
 
 def _failed_detail(detail: Detail, exc: APIException) -> Detail:
-    if isinstance(exc, RemoteCommandFailed) and exc.output:
-        return {**detail, "output": exc.output}
-    return detail
+    return {**detail, **failure_facts(exc)}

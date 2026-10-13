@@ -1082,6 +1082,7 @@ def test_a_removed_push_setting_points_at_the_manager(settings, name):
     assert finding.level == WARN
     assert name in finding.message
     assert "django_dbs server add" in finding.remedy
+    assert ("SSHTarget.from_settings" in finding.remedy) == (name == "DBS_SSH_TARGETS")
 
 
 def historical(model, migration="0004_schedule_lease"):

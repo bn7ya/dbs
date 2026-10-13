@@ -294,14 +294,18 @@ def test_the_lock_is_let_go_when_the_restore_ends(api, server, host, run_jobs, t
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("failure", "code"),
+    ("failure", "code", "facts"),
     [
-        (RestoreFailed(output="IntegrityError: duplicate key"), "restore_failed"),
-        (DbsTooOld(output="error: unrecognized arguments: --dry-run"), "dbs_too_old"),
+        (RestoreFailed(output="IntegrityError: duplicate key"), "restore_failed", {}),
+        (
+            DbsTooOld("0.2.2", output="error: unrecognized arguments: --dry-run"),
+            "dbs_too_old",
+            {"needs": "0.2.2"},
+        ),
     ],
 )
 def test_a_restore_the_server_refuses_fails_the_job_with_its_output(
-    api, monkeypatch, run_jobs, taken, entry, failure, code
+    api, monkeypatch, run_jobs, taken, entry, failure, code, facts
 ):
     backup = taken()
     monkeypatch.setattr(CONNECT, connecting_to(BackupHost(failure=failure)))
@@ -321,6 +325,7 @@ def test_a_restore_the_server_refuses_fails_the_job_with_its_output(
         "mode": "merge",
         "rehearse": True,
         "output": failure.output,
+        **facts,
     }
 
 

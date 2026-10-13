@@ -4,7 +4,10 @@ from datetime import timedelta
 
 import pytest
 from django.utils import timezone
+from rest_framework.test import APIClient
 
+from dbs.manager.accounts.repositories import UserRepository
+from dbs.manager.permissions import Role
 from dbs.manager.servers.exceptions import (
     HostKeyConfirmationMismatch,
     HostKeyConfirmationMissing,
@@ -13,7 +16,7 @@ from dbs.manager.servers.exceptions import (
 )
 from dbs.manager.servers.gateways import parse_host_key
 from dbs.manager.servers.services import HostKeyConfirmationService
-from tests.manager.servers.support import host_key_line
+from tests.manager.servers.support import PASSWORD, host_key_line
 from tests.manager.support import logged
 
 FETCH_HOST_KEY = "dbs.manager.servers.services.server_service.fetch_host_key"
@@ -159,3 +162,39 @@ def test_every_confirmation_endpoint_needs_a_session(anonymous, method, path):
     response = getattr(anonymous, method)(LIST + path)
 
     assert response.status_code == 403
+
+
+def signed_in_as(role):
+    client = APIClient()
+    client.force_login(UserRepository().create(username=role, password=PASSWORD, role=role))
+    return client
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role", [Role.VIEWER, Role.OPERATOR])
+def test_only_an_account_that_may_add_servers_decides_a_host_key(confirmations, role):
+    held = confirmations.request("10.0.0.5", 22)
+    client = signed_in_as(role)
+
+    confirmed = client.post(f"{LIST}{held.id}/confirm/")
+    rejected = client.post(f"{LIST}{held.id}/reject/")
+    listed = client.get(LIST).json()
+
+    for refused in (confirmed, rejected):
+        assert refused.status_code == 403
+        assert refused.json()["error"]["code"] == "role_required"
+        assert "admin role or higher" in refused.json()["error"]["message"]
+    assert [row["status"] for row in listed["results"]] == ["pending"]
+    assert logged("server.host_key_confirm") == logged("server.host_key_reject") == []
+    with pytest.raises(HostKeyNotConfirmed):
+        confirmations.approved(held.id, "10.0.0.5", 22)
+
+
+@pytest.mark.django_db
+def test_an_admin_decides_a_host_key(confirmations):
+    held = confirmations.request("10.0.0.5", 22)
+
+    confirmed = signed_in_as(Role.ADMIN).post(f"{LIST}{held.id}/confirm/")
+
+    assert confirmed.status_code == 200
+    assert confirmations.approved(held.id, "10.0.0.5", 22) == held.line

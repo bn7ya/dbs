@@ -23,6 +23,7 @@ from paramiko import Channel, PKey, SFTPAttributes, SFTPClient, SFTPFile, SSHExc
 from paramiko.pkey import UnknownKeyType
 
 from dbs.exceptions import ConfigurationError, ConnectionLost, DBSError, RemoteTimeout
+from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import (
     ArchiveFailed,
     DbsTooOld,
@@ -530,7 +531,7 @@ class RemoteHost:
         output = _tail(result.stderr, passphrase)
         if not result.ok:
             if UNKNOWN_OPTION in result.stderr:
-                raise DbsTooOld(output=output)
+                raise DbsTooOld(versions.STREAM_FROM, output=output)
             raise RemoteCommandFailed(output=output)
         summary = _stream_summary(result.stderr, prefix)
         if summary is None:
@@ -645,7 +646,7 @@ class RemoteHost:
         if not result.ok:
             output = _tail(f"{result.stdout}\n{result.stderr}", passphrase)
             if UNKNOWN_OPTION in result.stderr:
-                raise DbsTooOld(output=output)
+                raise DbsTooOld(versions.COMPATIBLE_FROM, output=output)
             raise RestoreFailed(output=output)
         return _restore_report(
             result.stdout, flush=flush, dry_run=dry_run, copy_left=copy_left

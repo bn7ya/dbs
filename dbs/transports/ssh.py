@@ -15,7 +15,6 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from ..conf import setting
 from ..exceptions import (
     ConfigurationError,
     ConnectionLost,
@@ -244,13 +243,6 @@ class SSHTarget:
             command_timeout=float(data.get("command_timeout", DEFAULT_COMMAND_TIMEOUT)),
         )
 
-    @classmethod
-    def from_settings(cls, name: str) -> "SSHTarget":
-        targets = setting("DBS_SSH_TARGETS", {}) or {}
-        if name not in targets:
-            raise ConfigurationError(f"No DBS_SSH_TARGETS entry named {name!r}.")
-        return cls.from_dict(targets[name])
-
     @property
     def host_key_policy(self) -> str:
         if self.host_key:
@@ -465,7 +457,7 @@ class SSHSession:
             return False
         try:
             transport.global_request(KEEPALIVE_REQUEST, wait=True)
-        except (_paramiko().SSHException, OSError, EOFError):
+        except _connection_gone():
             return False
         return transport.is_active()
 
@@ -783,7 +775,7 @@ class _Deadline:
 
     def _expire(self, channel) -> None:
         self._expired.set()
-        channel.close()
+        _close_quietly(channel)
 
     @property
     def passed(self) -> bool:
@@ -914,7 +906,7 @@ class _Guarded:
     def __init__(self, timeout: float | None):
         self.timeout = timeout
         self.deadline = None if not timeout else time.monotonic() + timeout
-        self.lost = (OSError, EOFError, _paramiko().SSHException)
+        self.lost = _connection_gone()
 
     def __call__(self, action):
         try:
@@ -953,10 +945,14 @@ def _send_line(stdin, line: str | None) -> None:
     stdin.channel.shutdown_write()
 
 
+def _connection_gone() -> tuple[type[BaseException], ...]:
+    return (EOFError, OSError, _paramiko().SSHException)
+
+
 def _close_quietly(channel) -> None:
     try:
         channel.close()
-    except Exception:
+    except _connection_gone():
         pass
 
 

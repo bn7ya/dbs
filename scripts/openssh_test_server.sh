@@ -20,7 +20,7 @@ echo "$account:$password" | chpasswd
 home=$(getent passwd "$account" | cut -d: -f6)
 
 rm -f "$directory/client_key" "$directory/client_key.pub" "$directory/host_key" "$directory/host_key.pub"
-ssh-keygen -q -t ed25519 -N "" -C dbs-client -f "$directory/client_key"
+ssh-keygen -q -t ed25519 -N "" -C dbs-test-client -f "$directory/client_key"
 ssh-keygen -q -t ed25519 -N "" -C dbs-host -f "$directory/host_key"
 install -d -m 700 -o "$account" "$home/.ssh"
 install -m 600 -o "$account" "$directory/client_key.pub" "$home/.ssh/authorized_keys"

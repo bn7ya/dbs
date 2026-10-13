@@ -11,6 +11,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.permissions import Capability, requires
 from dbs.manager.servers.exceptions import (
     HostKeyConfirmationMismatch,
     HostKeyConfirmationMissing,
@@ -103,9 +104,15 @@ class HostKeyConfirmationService:
             raise HostKeyConfirmationMissing()
         return held[0]
 
+    @requires(Capability.SERVERS_MANAGE)
+    def to_decide(self, confirmation_id: str) -> HostKeyConfirmation:
+        return self.get(confirmation_id)
+
+    @requires(Capability.SERVERS_MANAGE)
     def confirm(self, confirmation_id: str) -> HostKeyConfirmation:
         return self._decide(confirmation_id, Decision.CONFIRMED, Action.CONFIRM)
 
+    @requires(Capability.SERVERS_MANAGE)
     def reject(self, confirmation_id: str) -> HostKeyConfirmation:
         return self._decide(confirmation_id, Decision.REJECTED, Action.REJECT)
 

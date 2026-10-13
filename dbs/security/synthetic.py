@@ -65,7 +65,7 @@ def _two_devices(rng, day):
     first_sighting = rng.random() < 0.08
     return _observation(
         moment=_moment(rng, day, 7, 22),
-        action=rng.choice(["view", "view", "backup", "console"]),
+        action=rng.choice(["view", "view", "backup", "settings_write"]),
         seconds_since_previous=rng.expovariate(1 / 200.0),
         events_last_five_minutes=rng.randint(1, 16),
         session_age_minutes=rng.uniform(0, 300),
@@ -133,7 +133,7 @@ def attack_rows(count: int = 60, seed: int = 7717) -> dict[str, list[list[float]
             features.to_vector(
                 _observation(
                     moment=_moment(rng, day, 2, 5),
-                    action=rng.choice(["download", "console", "restore"]),
+                    action=rng.choice(["download", "settings_write", "restore"]),
                     seconds_since_previous=rng.uniform(0.5, 5),
                     events_last_five_minutes=rng.randint(60, 200),
                     session_age_minutes=rng.uniform(0, 10),
@@ -160,7 +160,7 @@ def attack_rows(count: int = 60, seed: int = 7717) -> dict[str, list[list[float]
             features.to_vector(
                 _observation(
                     moment=_moment(rng, day, 0, 24),
-                    action=rng.choice(["restore", "console", "download"]),
+                    action=rng.choice(["restore", "settings_write", "download"]),
                     seconds_since_previous=rng.uniform(1, 30),
                     events_last_five_minutes=rng.randint(10, 40),
                     session_age_minutes=rng.uniform(300, 5000),

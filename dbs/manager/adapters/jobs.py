@@ -7,6 +7,7 @@ from rest_framework.exceptions import APIException
 from dbs import audit
 from dbs.manager.activity.serializers import ActivitySerializer
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.servers.exceptions import DbsTooOld
 from dbs.models import AuditEvent
 
 
@@ -24,9 +25,12 @@ def succeeded(entry: AuditEvent) -> bool:
 
 
 def failure(entry: AuditEvent) -> str:
-    detail = entry.data or {}
-    output = detail.get("output") if isinstance(detail, dict) else None
-    message = _messages().get(entry.error_code, entry.error_code)
+    detail = entry.data if isinstance(entry.data, dict) else {}
+    output = detail.get("output")
+    if entry.error_code == DbsTooOld.default_code and detail.get("needs"):
+        message = DbsTooOld.needing(str(detail["needs"]))
+    else:
+        message = _messages().get(entry.error_code, entry.error_code)
     return " ".join(part for part in (message, output) if part) or entry.status
 
 

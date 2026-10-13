@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Identity } from '@core/auth/data/auth.types';
 import { MASTER_ACCOUNT } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
+import { LocaleStore } from '@core/i18n/locale.store';
+import { ACTIVITY_ACTIONS } from '../../data/activity.types';
 import { ENTRY, FAILED, SERVER_ID, pageOf } from '../../testing/activity.fixtures';
 import { ActivityPage } from './activity';
 
@@ -111,6 +113,22 @@ describe('ActivityPage', () => {
     expect(page.actionLabel('redeploy.final_check')).toBe('Move: check again');
     expect(page.actionLabel('manager.export')).toBe('Export DBS data');
     expect(page.actionLabel('example.unknown')).toBe('example.unknown');
+  });
+
+  it('names every action it offers, in English and in Arabic', async () => {
+    const page = await show('/activity');
+    listRequest().flush(pageOf([]));
+    await settle();
+    const locale = TestBed.inject(LocaleStore);
+
+    expect(ACTIVITY_ACTIONS.filter((code) => page.actionLabel(code) === code)).toEqual([]);
+    expect(page.actionLabel('account.two_factor_reset')).toBe('Reset two-factor sign-in');
+    expect(page.actionLabel('auth.recovery_code_used')).toBe('Sign in with a recovery code');
+
+    locale.setLocale('ar');
+
+    expect(ACTIVITY_ACTIONS.filter((code) => page.actionLabel(code) === code)).toEqual([]);
+    expect(page.actionLabel('account.master')).toBe('تعيين الحساب الرئيسي');
   });
 
   it('shows a backup kept on the server as its own outcome, not a failure', async () => {

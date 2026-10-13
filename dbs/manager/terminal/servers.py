@@ -286,7 +286,7 @@ def host_key(session: TerminalSession) -> int:
 
 def confirm_host_key(session: TerminalSession) -> int:
     confirmations = HostKeyConfirmationService(session.user)
-    held = confirmations.get(session.args.confirmation)
+    held = confirmations.to_decide(session.args.confirmation)
     print(f"Claude asks to pin the host key {held.address} offers:")
     print(f"  {held.key_type} {held.fingerprint}")
     print("On the server, ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub prints the")
