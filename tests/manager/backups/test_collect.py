@@ -21,7 +21,8 @@ from dbs.manager.servers.exceptions import (
     SSHUnreachable,
 )
 from tests.manager.backups.support import BackupHost
-from tests.manager.servers.support import connecting_to
+from tests.manager.servers.support import PASSWORD, connecting_to
+from tests.manager.support import downloaded
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 DUMPS = "/var/backups/pg"
@@ -246,7 +247,7 @@ def test_a_file_that_changed_is_collected_again_and_both_download_as_they_were(
     assert before.storage_path == f"{server.pk}/{SECOND[0]}.sealed"
     assert again.storage_path == f"{server.pk}/{SECOND[0]}-2.sealed"
     for row, content in ((before, SECOND[1]), (again, REWRITTEN)):
-        response = api.get(f"/api/backups/{row.pk}/download/")
+        response = downloaded(api, row.pk)
         assert b"".join(response.streaming_content) == content
 
 
@@ -257,7 +258,9 @@ def test_a_file_a_person_deleted_is_not_collected_again(
     plan = collect_plan()
     collected(plan)
     _, first = alive(plan)
-    api.delete(f"/api/backups/{first.pk}/")
+    api.delete(
+        f"/api/backups/{first.pk}/", {"account_password": PASSWORD}, format="json"
+    )
 
     detail = collected(plan)
 
@@ -471,7 +474,7 @@ def test_a_collected_file_downloads_as_it_was_on_the_server(
     collected(plan)
     [row] = alive(plan)
 
-    response = api.get(f"/api/backups/{row.pk}/download/")
+    response = downloaded(api, row.pk)
 
     assert b"".join(response.streaming_content) == SECOND[1]
     assert response["Content-Disposition"] == f'attachment; filename="{SECOND[0]}"'

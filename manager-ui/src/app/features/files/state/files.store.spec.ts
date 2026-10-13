@@ -197,10 +197,56 @@ describe('FilesStore', () => {
       expect(store.entries()).toEqual([]);
     });
 
-    it('points a download at the file on the server on screen', async () => {
+  });
+
+  describe('downloading a file', () => {
+    const linkRequest = (): TestRequest => http.expectOne((request) => request.url === `${base()}download/`);
+    const refused = (fields?: Record<string, string[]>) =>
+      [
+        { error: { code: fields ? 'invalid' : 'not_a_file', message: 'Server prose', ...(fields ? { fields } : {}) } },
+        { status: 400, statusText: 'Bad Request' },
+      ] as const;
+
+    it('answers with a link for the file on the server on screen, busy while it asks', async () => {
       await showWith(listingOf([FILE]));
 
-      expect(store.downloadUrl(FILE)).toBe(`${base()}download/?path=${encodeURIComponent(FILE.path)}`);
+      const linking = store.downloadLink(FILE);
+      expect(store.isPreparing(FILE)).toBe(true);
+      const request = linkRequest();
+      expect(request.request.body).toEqual({ path: FILE.path });
+      request.flush({ url: `${base()}download/?path=x` });
+
+      await expect(linking).resolves.toBe(`${base()}download/?path=x`);
+      expect(store.isPreparing(FILE)).toBe(false);
+    });
+
+    it('leaves a request for the password to the prompt, and says any other refusal', async () => {
+      await showWith(listingOf([FILE]));
+
+      const asking = store.downloadLink(FILE);
+      linkRequest().flush(...refused({ account_password: ['required'] }));
+      await expect(asking).resolves.toBeNull();
+      expect(store.downloadNeedsPassword()).toBe(true);
+      expect(toasts).not.toHaveBeenCalled();
+
+      const failing = store.downloadLink(FILE);
+      linkRequest().flush(...refused());
+      await expect(failing).resolves.toBeNull();
+      expect(store.downloadNeedsPassword()).toBe(false);
+      expect(toasts).toHaveBeenCalledOnce();
+    });
+
+    it('keeps a wrong password for the prompt instead of saying it', async () => {
+      await showWith(listingOf([FILE]));
+
+      const refusing = store.downloadLink(FILE, 'wrong');
+      const request = linkRequest();
+      expect(request.request.body).toEqual({ path: FILE.path, account_password: 'wrong' });
+      request.flush({ error: { code: 'invalid_password', message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' });
+
+      await expect(refusing).resolves.toBeNull();
+      expect(store.downloadError()?.code).toBe('invalid_password');
+      expect(toasts).not.toHaveBeenCalled();
     });
   });
 

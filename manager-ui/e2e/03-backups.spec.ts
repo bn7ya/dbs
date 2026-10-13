@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs';
 import { Api } from './support/api';
-import { SSH } from './support/config';
+import { ADMIN, SSH } from './support/config';
 import { expect, test } from './support/fixtures';
 import { folderSnapshot, remoteExists, remoteReachable, scratchFile } from './support/ssh-fs';
 
@@ -90,7 +90,7 @@ test.describe('backups', () => {
     await journey.shot(page, 'backups-verified');
   });
 
-  test('Delete asks first, then Undo brings the file back', async ({ page, journey }) => {
+  test('Delete asks for the password first, then Undo brings the file back', async ({ page, journey }) => {
     const { t } = journey;
     await journey.signIn(page);
     await page.goto(backupsUrl);
@@ -98,9 +98,10 @@ test.describe('backups', () => {
     await expect(link).toBeVisible();
 
     await page.getByRole('button', { name: journey.named('delete', backupName) }).click();
-    const confirm = page.getByRole('alertdialog');
-    await expect(confirm.getByRole('heading', { level: 2 })).toContainText(backupName);
-    await confirm.getByRole('button', { name: t('delete'), exact: true }).click();
+    const prompt = page.getByRole('dialog');
+    await expect(prompt).toContainText(backupName);
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill(ADMIN.password);
+    await prompt.getByRole('button', { name: t('delete'), exact: true }).click();
 
     await expect(journey.toast(page, 'backupDeleted')).toBeVisible();
     await expect(link).toBeHidden();
@@ -126,7 +127,7 @@ test.describe('backups', () => {
 
     await expect(journey.toast(page, 'backupUploaded')).toBeVisible();
     await expect(journey.shown(page, t('uploaded'))).toBeVisible();
-    await expect(page.getByRole('link', { name: journey.named('download', uploadName) })).toBeVisible();
+    await expect(page.getByRole('button', { name: journey.named('download', uploadName) })).toBeVisible();
     await journey.shot(page, 'backups-uploaded');
   });
 

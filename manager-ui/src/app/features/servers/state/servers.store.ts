@@ -7,6 +7,8 @@ import type { ApiError, Page } from '@core/http/api.types';
 import { ServersApi } from '../data/servers.api';
 import type {
   HostKey,
+  HostKeyConfirmation,
+  HostKeyDecision,
   HostKeyTarget,
   Server,
   ServerListQuery,
@@ -84,6 +86,33 @@ export class ServersStore {
 
   reloadList(): void {
     this.listResource.reload();
+  }
+
+  private readonly hostKeysResource = rxResource({
+    params: () => this.listOpen() || undefined,
+    stream: () => this.api.hostKeyConfirmations(),
+  });
+
+  readonly pendingHostKeys = computed<readonly HostKeyConfirmation[]>(() =>
+    this.hostKeysResource.hasValue() ? (this.hostKeysResource.value()?.results ?? []) : [],
+  );
+
+  readonly decidingHostKeys = signal<ReadonlySet<string>>(new Set());
+  readonly hostKeyDecisionError = signal<ApiError | null>(null);
+
+  async decideHostKey(confirmation: HostKeyConfirmation, decision: HostKeyDecision): Promise<boolean> {
+    this.decidingHostKeys.update((ids) => new Set(ids).add(confirmation.id));
+    this.hostKeyDecisionError.set(null);
+    try {
+      await firstValueFrom(this.api.decideHostKey(confirmation.id, decision));
+      return true;
+    } catch (error) {
+      this.hostKeyDecisionError.set(error as ApiError);
+      return false;
+    } finally {
+      this.decidingHostKeys.update((ids) => new Set([...ids].filter((id) => id !== confirmation.id)));
+      this.hostKeysResource.reload();
+    }
   }
 
   private readonly serverId = signal<string | undefined>(undefined);
@@ -252,7 +281,7 @@ export class ServersStore {
   readonly deleting = signal(false);
   readonly deleteError = signal<ApiError | null>(null);
 
-  async remove(): Promise<boolean> {
+  async remove(password: string): Promise<boolean> {
     const id = this.serverId();
     if (!id) {
       return false;
@@ -260,7 +289,7 @@ export class ServersStore {
     this.deleting.set(true);
     this.deleteError.set(null);
     try {
-      await firstValueFrom(this.api.remove(id));
+      await firstValueFrom(this.api.remove(id, password));
       return true;
     } catch (error) {
       this.deleteError.set(error as ApiError);

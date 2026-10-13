@@ -118,9 +118,39 @@ export class FilesStore {
     this.listResource.reload();
   }
 
-  downloadUrl(entry: Entry): string {
+  readonly downloadError = signal<ApiError | null>(null);
+
+  readonly downloadNeedsPassword = computed(() => asksForPassword(this.downloadError()));
+
+  private readonly preparing = signal<ReadonlySet<string>>(new Set());
+
+  isPreparing(entry: Entry): boolean {
     const server = this.server();
-    return server === null ? '' : this.api.downloadUrl(server, entry.path);
+    return server !== null && this.preparing().has(entryKey(server, entry));
+  }
+
+  // Asked without a password, a refusal that wants one is the prompt's to show; any other is said here.
+  async downloadLink(entry: Entry, password = ''): Promise<string | null> {
+    const server = this.server();
+    if (server === null) {
+      return null;
+    }
+    const key = entryKey(server, entry);
+    this.preparing.update((keys) => withItem(keys, key));
+    this.downloadError.set(null);
+    try {
+      const { url } = await firstValueFrom(this.api.downloadLink(server, entry.path, password));
+      return url;
+    } catch (error) {
+      const failure = error as ApiError;
+      this.downloadError.set(failure);
+      if (password === '' && !asksForPassword(failure)) {
+        this.notifyFailure(failure, entry.name);
+      }
+      return null;
+    } finally {
+      this.preparing.update((keys) => withoutItem(keys, key));
+    }
   }
 
   private readonly uploads = signal<readonly Upload[]>([]);
@@ -224,7 +254,7 @@ export class FilesStore {
 
   isDeleting(entry: Entry): boolean {
     const server = this.server();
-    return server !== null && this.deleting().has(deletionKey(server, entry));
+    return server !== null && this.deleting().has(entryKey(server, entry));
   }
 
   async remove(entry: Entry): Promise<boolean> {
@@ -233,7 +263,7 @@ export class FilesStore {
     if (server === null) {
       return false;
     }
-    const key = deletionKey(server, entry);
+    const key = entryKey(server, entry);
     this.deleting.update((keys) => withItem(keys, key));
     try {
       await firstValueFrom(this.api.remove(server, entry.path));
@@ -282,8 +312,12 @@ function uploadErrorOf(error: ApiError): ApiError | string {
   return error.fields?.['file']?.[0] ?? error.fields?.['path']?.[0] ?? error;
 }
 
-function deletionKey(server: string, entry: Entry): string {
+function entryKey(server: string, entry: Entry): string {
   return `${server}\n${entry.path}`;
+}
+
+function asksForPassword(failure: ApiError | null): boolean {
+  return (failure?.fields?.['account_password'] ?? []).length > 0;
 }
 
 function withItem(items: ReadonlySet<string>, item: string): ReadonlySet<string> {

@@ -298,15 +298,24 @@ def test_renaming_needs_no_password(terminal, admin, make_server):
 
 
 @pytest.mark.django_db
-def test_remove_needs_the_name_typed_or_yes(terminal, admin, make_server, typing):
+def test_remove_needs_the_name_typed_or_yes_and_the_password(
+    terminal, admin, make_server, typing
+):
     make_server(name="web-1")
     make_server(name="web-2", host="10.0.0.6")
     typing.append("web")
 
     assert terminal("server", "remove", "web-1").code == 1
-    typing.append("web-1")
+    typing.extend(["web-1", PASSWORD])
     assert terminal("server", "remove", "web-1").code == 0
-    assert terminal("server", "remove", "web-2", "--yes").code == 0
+    no_password = terminal(
+        "server", "remove", "web-2", "--yes", "--password-stdin", stdin="\n"
+    )
+    assert no_password.code == 1 and ServerRepository().active().exists()
+    removed = terminal(
+        "server", "remove", "web-2", "--yes", "--password-stdin", stdin=f"{PASSWORD}\n"
+    )
+    assert removed.code == 0, removed.err
     assert not ServerRepository().active().exists()
 
 

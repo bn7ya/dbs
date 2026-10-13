@@ -205,7 +205,7 @@
   @if (passwordShown()) {
     <app-password-input
       [label]="'password.label' | t"
-      [hint]="'backups.plans.form.passwordHint' | t"
+      [hint]="passwordHint() | t"
       [error]="passwordError()"
       name="account_password"
       autocomplete="current-password"

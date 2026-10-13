@@ -266,7 +266,7 @@ def test_a_server_with_no_allowed_folders_says_so(admin, api, server, sessions):
 @pytest.mark.django_db
 def test_a_server_that_is_not_there_is_not_found(admin, api, server, sessions):
     unknown = api.get(f"/api/files/{uuid4()}/")
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
     deleted = api.get(url(server))
 
     for response in (unknown, deleted):

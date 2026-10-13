@@ -101,3 +101,39 @@ class NoPrivateKey(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "no_private_key"
     default_detail = "This server signs in with a password, so it has no key."
+
+
+class HostKeyConfirmationMissing(APIException):
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = "host_key_confirmation_missing"
+    default_detail = (
+        "There is no such host key confirmation, or its 10 minutes are over. "
+        "Read the host key again."
+    )
+
+
+class HostKeyConfirmationMismatch(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_confirmation_mismatch"
+    default_detail = "This host key confirmation is for another address or port."
+
+
+class HostKeyNotConfirmed(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_not_confirmed"
+    default_detail = (
+        "Nobody has confirmed this host key yet. A person confirms it in the "
+        "manager's Servers page or with django_dbs server confirm-host-key."
+    )
+
+
+class HostKeyRejected(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_rejected"
+    default_detail = "A person rejected this host key, so it cannot be pinned."
+
+
+class HostKeyDecided(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "host_key_decided"
+    default_detail = "This host key was already confirmed or rejected."

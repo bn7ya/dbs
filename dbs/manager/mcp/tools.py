@@ -36,14 +36,19 @@ from dbs.manager.redeploy.services import RedeployService
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
     AddedServerSerializer,
-    HostKeySerializer,
+    HostKeyConfirmationSerializer,
     ServerCreateSerializer,
     ServerListSerializer,
     ServerSerializer,
     ServerUpdateSerializer,
 )
 from dbs.manager.servers.serializers.browse import BrowseEntrySerializer
-from dbs.manager.servers.services import BrowseService, DiscoveryService, ServerService
+from dbs.manager.servers.services import (
+    BrowseService,
+    DiscoveryService,
+    HostKeyConfirmationService,
+    ServerService,
+)
 
 Arguments = Mapping[str, Any]
 
@@ -133,24 +138,47 @@ PLAN_FIELDS = {
         "type": ["integer", "null"],
         "description": "Run every this many minutes; null runs only when asked.",
     },
-    "keep": {"type": "integer", "minimum": 1, "description": "How many to keep here."},
+    "keep": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "How many to keep here, 1 to 5.",
+    },
     "keep_remote": {
         "type": "integer",
         "minimum": 0,
-        "description": "How many to keep on the server.",
+        "maximum": 5,
+        "description": "How many to keep on the server, 0 to 5.",
     },
     "enabled": {"type": "boolean"},
 }
 
+KEEPS_FEWER = (
+    "Keeping fewer backups than the plan keeps now deletes the oldest ones, so Claude "
+    "cannot do it. Ask the person to change it in the manager's interface or with "
+    "django_dbs plan edit in a terminal; it asks for their password."
+)
+
+SEALED_DOWNLOAD = (
+    "The manager keeps this file encrypted and saving it here would decrypt it, so "
+    "Claude cannot do it. Ask the person to download it in the manager's interface or "
+    "with django_dbs backup download in a terminal; it asks for their password."
+)
+
 INSTRUCTIONS = (
     "These tools drive the DBS manager, which backs up the Django projects on the servers "
     "it knows over SSH. Start with manager_overview or list_servers. To add a server, call "
-    "fingerprint_host, show the fingerprint to the person and wait for their yes, then call "
-    "add_server with that host_key. Taking a backup waits until it is done. Restores and "
-    "redeploys here are always rehearsals: nothing on the server changes. Revealing secrets, "
-    "real restores and redeploys, pushing a .env, and removing or deleting anything are not "
-    "available here; the person does those in the manager's interface or terminal. When a "
-    "tool says it needs the account password, tell the person to do it there."
+    "fingerprint_host, show the fingerprint to the person and ask them to confirm it on "
+    "the manager's Servers page or with the confirm_with command in a terminal; once they "
+    "have, call add_server with that confirmation. Taking a backup waits until it is done. "
+    "A plan can be made to keep more backups here, never fewer. Restores and redeploys "
+    "here are always rehearsals: nothing on the server changes. A server's backup "
+    "passphrase must never be changed, because older backups would no longer open; "
+    "capture it only while adding a server, before its first backup. Revealing secrets, "
+    "real restores and redeploys, pushing a .env, keeping fewer backups, saving a backup "
+    "the manager keeps encrypted, and removing or deleting anything are not available "
+    "here; the person does those in the manager's interface or terminal. When a tool "
+    "says it needs the account password, tell the person to do it there."
 )
 
 
@@ -205,18 +233,20 @@ class Toolbox:
             Tool(
                 "fingerprint_host",
                 "Read a host key",
-                "The SSH host key a machine offers. Show the fingerprint to the person and "
-                "wait for them to confirm it is their server before add_server.",
+                "The SSH host key a machine offers, held for 10 minutes for a person to "
+                "confirm. Show them the fingerprint and ask them to confirm it on the "
+                "manager's Servers page, or by running the confirm_with command in a "
+                "terminal. Only their confirmation lets add_server pin it.",
                 dict(host=TEXT, port=PORT),
                 self.fingerprint_host,
                 required=("host",),
-                read_only=True,
             ),
             Tool(
                 "add_server",
                 "Add a server",
-                "Add a server, pinning the host_key fingerprint_host returned and the person "
-                "confirmed. auth_method is password (pass password), key_file (the path of a "
+                "Add a server, pinning the host key a person confirmed: pass the id "
+                "fingerprint_host returned as confirmation, with the same host and port. "
+                "auth_method is password (pass password), key_file (the path of a "
                 "private key on this computer, read by the manager), or generate_key (a new "
                 "key: show the person the authorized_keys line it returns). Then it finds "
                 "the project and the Python with django-dbs, saves them and checks the "
@@ -226,9 +256,10 @@ class Toolbox:
                     host=TEXT,
                     port=PORT,
                     username={"type": "string", "description": "The SSH account."},
-                    host_key={
+                    confirmation={
                         "type": "string",
-                        "description": "The line fingerprint_host returned.",
+                        "description": "The id fingerprint_host returned, once a person "
+                        "confirmed the fingerprint.",
                     },
                     auth_method={"type": "string", "enum": list(AUTH_METHODS)},
                     password={"type": "string", "description": "The SSH password."},
@@ -247,7 +278,7 @@ class Toolbox:
                     **SETTINGS,
                 ),
                 self.add_server,
-                required=("name", "host", "username", "host_key", "auth_method"),
+                required=("name", "host", "username", "confirmation", "auth_method"),
             ),
             Tool(
                 "update_server",
@@ -295,7 +326,9 @@ class Toolbox:
                 "capture_passphrase",
                 "Store the backup passphrase",
                 "Read the server's backup passphrase from the server and store it, "
-                "encrypted. It is never returned.",
+                "encrypted. It is never returned. Use it only while adding a server, "
+                "before its first backup: a server's backup passphrase must never be "
+                "changed, because older backups would no longer open.",
                 dict(server=SERVER),
                 self.capture_passphrase,
                 required=("server",),
@@ -349,8 +382,11 @@ class Toolbox:
             Tool(
                 "download_backup",
                 "Save a backup here",
-                "Save a backup to this computer. path is an absolute file or folder; an "
-                "existing file is never overwritten.",
+                "Save a django-dbs backup to this computer, readable by its owner alone. "
+                "path is an absolute file or folder; an existing file is never "
+                "overwritten. Folder archives, collected and uploaded files are kept "
+                "encrypted by the manager and saving one decrypts it, so this tool "
+                "refuses them: the person downloads those in the manager.",
                 dict(backup=BACKUP, path={"type": "string"}),
                 self.download_backup,
                 required=("backup", "path"),
@@ -389,7 +425,9 @@ class Toolbox:
             Tool(
                 "update_plan",
                 "Change a plan",
-                "Change a plan's name, schedule, retention or switch it on or off.",
+                "Change a plan's name or schedule, switch it on or off, or keep more "
+                "backups. Keeping fewer deletes the oldest backups on the next run, so "
+                "this tool refuses it: the person does it in the manager.",
                 dict(plan=PLAN, name=TEXT, **PLAN_FIELDS),
                 self.update_plan,
                 required=("plan",),
@@ -518,25 +556,32 @@ class Toolbox:
         }
 
     def fingerprint_host(self, arguments: Arguments) -> dict[str, Any]:
-        offered = ServerService(self.user).fingerprint(
+        held = HostKeyConfirmationService(self.user).request(
             arguments["host"], arguments.get("port") or DEFAULT_PORT
         )
-        return HostKeySerializer(offered).data
+        return {
+            **HostKeyConfirmationSerializer(held).data,
+            "confirm_with": f"django_dbs server confirm-host-key {held.id}",
+        }
 
     def add_server(self, arguments: Arguments) -> dict[str, Any]:
         given = {
             field: arguments[field] for field in SETTING_FIELDS if field in arguments
         }
+        port = arguments.get("port") or DEFAULT_PORT
+        confirmation = str(arguments["confirmation"])
+        confirmations = HostKeyConfirmationService(self.user)
         body: dict[str, Any] = {
             "name": arguments["name"],
             "host": arguments["host"],
-            "port": arguments.get("port") or DEFAULT_PORT,
+            "port": port,
             "username": arguments["username"],
-            "host_key": arguments["host_key"],
+            "host_key": confirmations.approved(confirmation, arguments["host"], port),
             **_auth(arguments),
             **given,
         }
         added = ServerService(self.user).add(**validated(ServerCreateSerializer, body))
+        confirmations.settle(confirmation)
         answer = dict(AddedServerSerializer(added).data)
         if added.public_key:
             return answer
@@ -617,6 +662,8 @@ class Toolbox:
         target = Path(arguments["path"]).expanduser()
         if not target.is_absolute():
             raise AdapterError("path must be absolute.")
+        if BackupService(self.user).get(file_id).sealed:
+            raise AdapterError(SEALED_DOWNLOAD)
         target = backups.save(self.user, file_id, target)
         return {"path": str(target), "size": os.path.getsize(target)}
 
@@ -646,9 +693,10 @@ class Toolbox:
         if not changes:
             raise AdapterError("name at least one thing to change.")
         data = validated(PlanUpdateSerializer, changes, partial=True)
-        return BackupPlanSerializer(
-            BackupPlanService(self.user).update(plan_id, **data)
-        ).data
+        service = BackupPlanService(self.user)
+        if service.keeps_fewer(plan_id, data):
+            raise AdapterError(KEEPS_FEWER)
+        return BackupPlanSerializer(service.update(plan_id, **data)).data
 
     def run_plan(self, arguments: Arguments) -> dict[str, Any]:
         plan_id = references.identifier(arguments["plan"], "plan")

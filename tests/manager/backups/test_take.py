@@ -83,7 +83,7 @@ def test_a_take_needs_a_server(api):
 
 @pytest.mark.django_db
 def test_an_unknown_or_deleted_server_is_not_found(api, admin, server):
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     for server_id in (server.pk, uuid4()):
         response = api.post(TAKE, {"server": server_id})
@@ -237,7 +237,7 @@ def test_a_server_deleted_before_the_job_runs_fails_it(
 ):
     with django_capture_on_commit_callbacks() as queued:
         job = BackupService(admin).take(server.pk)
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     for send in queued:
         send()

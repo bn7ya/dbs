@@ -23,6 +23,7 @@ from tests.manager.backups.support import (
     archived_files,
 )
 from tests.manager.servers.support import BACKUP_DIR, connecting_to
+from tests.manager.support import downloaded
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 NAME = re.compile(r"web-1-files-\d{8}-\d{6}Z(?:-\d+)?\.tar\.gz")
@@ -122,7 +123,7 @@ def test_an_archive_downloads_as_the_archive_the_server_made(
 ):
     backup = archived(archive_plan())
 
-    response = api.get(f"/api/backups/{backup.pk}/download/")
+    response = downloaded(api, backup.pk)
 
     assert response.status_code == 200
     content = b"".join(response.streaming_content)
@@ -147,7 +148,7 @@ def test_an_archive_of_several_chunks_downloads_whole(
     monkeypatch.setattr(vault, "CHUNK_BYTES", 64)
     backup = archived(archive_plan())
 
-    response = api.get(f"/api/backups/{backup.pk}/download/")
+    response = downloaded(api, backup.pk)
 
     assert backup.size > 3 * 64
     assert b"".join(response.streaming_content) == host.archives[0].content
@@ -427,7 +428,7 @@ def test_a_sealed_archive_that_does_not_open_is_not_downloaded_or_logged(
     flip(storage / backup.storage_path, 0)
 
     with pytest.raises(VaultError):
-        api.get(f"/api/backups/{backup.pk}/download/")
+        downloaded(api, backup.pk)
 
     assert logged("backup.download") == []
 
@@ -441,7 +442,7 @@ def test_a_download_stops_at_a_chunk_altered_on_disk(
     flip(storage / backup.storage_path, -1)
     received = []
 
-    response = api.get(f"/api/backups/{backup.pk}/download/")
+    response = downloaded(api, backup.pk)
     with pytest.raises(VaultError):
         for chunk in response.streaming_content:
             received.append(chunk)

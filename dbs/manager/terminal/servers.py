@@ -6,6 +6,7 @@ from typing import Any
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
     AddedServerSerializer,
+    HostKeyConfirmationSerializer,
     HostKeySerializer,
     ServerCreateSerializer,
     ServerListSerializer,
@@ -13,7 +14,12 @@ from dbs.manager.servers.serializers import (
     ServerUpdateSerializer,
 )
 from dbs.manager.servers.serializers.browse import BrowseEntrySerializer
-from dbs.manager.servers.services import BrowseService, DiscoveryService, ServerService
+from dbs.manager.servers.services import (
+    BrowseService,
+    DiscoveryService,
+    HostKeyConfirmationService,
+    ServerService,
+)
 from dbs.manager.servers.services.discovery_service import discovered_settings
 from dbs.manager.adapters import references, servers
 from dbs.manager.terminal import CommandFailed
@@ -164,7 +170,10 @@ def remove(session: TerminalSession) -> int:
     session.confirm(
         f"Type the server's name ({server.name}) to remove it:", expected=server.name
     )
-    ServerService(session.user).delete(server.pk)
+    service = ServerService(session.user)
+    session.guarded(
+        lambda password: service.delete(server.pk, account_password=password)
+    )
     session.out.say(f"Removed {server.name}.", {"removed": str(server.pk)})
     return 0
 
@@ -261,6 +270,28 @@ def host_key(session: TerminalSession) -> int:
         ServerSerializer(saved).data,
     )
     return 0
+
+
+def confirm_host_key(session: TerminalSession) -> int:
+    confirmations = HostKeyConfirmationService(session.user)
+    held = confirmations.get(session.args.confirmation)
+    print(f"Claude asks to pin the host key {held.address} offers:")
+    print(f"  {held.key_type} {held.fingerprint}")
+    print("On the server, ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub prints the")
+    print("fingerprints to compare it with.")
+    if session.agrees("Is this the server's key? [y/N]"):
+        decided = confirmations.confirm(held.id)
+        session.out.say(
+            f"Confirmed; Claude can add {held.address} now.",
+            HostKeyConfirmationSerializer(decided).data,
+        )
+        return 0
+    decided = confirmations.reject(held.id)
+    session.out.say(
+        f"Rejected; Claude cannot pin this key for {held.address}.",
+        HostKeyConfirmationSerializer(decided).data,
+    )
+    return 1
 
 
 def passphrase(session: TerminalSession) -> int:

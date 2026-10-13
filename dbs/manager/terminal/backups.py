@@ -101,7 +101,11 @@ def restore(session: TerminalSession) -> int:
 def download(session: TerminalSession) -> int:
     file_id = references.identifier(session.args.backup, "backup")
     target = Path(session.args.output or BackupService(session.user).get(file_id).name)
-    saved = backups.save(session.user, file_id, target)
+    saved = session.guarded(
+        lambda password: backups.save(
+            session.user, file_id, target, account_password=password
+        )
+    )
     size = saved.stat().st_size
     session.out.say(
         f"Saved {saved} ({size} bytes).", {"path": str(saved.resolve()), "size": size}
@@ -121,7 +125,8 @@ def upload(session: TerminalSession) -> int:
 
 def delete(session: TerminalSession) -> int:
     file_id = references.identifier(session.args.backup, "backup")
-    BackupService(session.user).delete(file_id)
+    service = BackupService(session.user)
+    session.guarded(lambda password: service.delete(file_id, account_password=password))
     session.out.say(
         f"Deleted it. Bring it back with: django_dbs backup undo-delete {file_id}",
         {"deleted": str(file_id)},

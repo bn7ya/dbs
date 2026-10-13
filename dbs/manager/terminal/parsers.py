@@ -7,6 +7,8 @@ RESTORE_MODES = ("merge", "replace")
 PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
 ACTIVITY_LIMIT = 20
+KEEP_CHOICES = range(1, 6)
+KEEP_REMOTE_CHOICES = range(0, 6)
 
 Location = Callable[[argparse.ArgumentParser], None]
 
@@ -186,12 +188,17 @@ def servers(commands, location: Location) -> None:
     edit.add_argument(
         "--backup-passphrase",
         action="store_true",
-        help="Ask for the passphrase its backups use.",
+        help="Ask for the passphrase its backups use. Never change it once there are "
+        "backups: they would no longer open.",
     )
     _server_settings(edit)
 
     remove = _verb(
-        verbs, "remove", "Remove a server.", "terminal.servers:remove", location
+        verbs,
+        "remove",
+        "Remove a server. It asks for its name and your password.",
+        "terminal.servers:remove",
+        location,
     )
     remove.add_argument("server", help="The server's name or id.")
     _yes(remove)
@@ -249,10 +256,23 @@ def servers(commands, location: Location) -> None:
     repin.add_argument("--host-key", help="The host key to pin.")
     _yes(repin)
 
+    confirm_key = _verb(
+        verbs,
+        "confirm-host-key",
+        "Confirm or reject a host key Claude read with fingerprint_host. It shows the "
+        "fingerprint and asks; only a confirmed key can be pinned by Claude.",
+        "terminal.servers:confirm_host_key",
+        location,
+    )
+    confirm_key.add_argument(
+        "confirmation", help="The confirmation id Claude was given."
+    )
+
     passphrase = _verb(
         verbs,
         "passphrase",
-        "Show the passphrase a server's backups use.",
+        "Show the passphrase a server's backups use. Never change it: older backups "
+        "would no longer open.",
         "terminal.servers:passphrase",
         location,
     )
@@ -261,7 +281,9 @@ def servers(commands, location: Location) -> None:
     capture = _verb(
         verbs,
         "capture-passphrase",
-        "Read the backup passphrase from the server itself.",
+        "Read the backup passphrase from the server itself. Do it only while adding "
+        "a server, before its first backup: a server's backup passphrase must never "
+        "change, because older backups would no longer open.",
         "terminal.servers:capture_passphrase",
         location,
     )
@@ -315,7 +337,8 @@ def backups(commands, location: Location) -> None:
     download = _verb(
         verbs,
         "download",
-        "Save a backup to this computer.",
+        "Save a backup to this computer, readable by you alone. A backup the "
+        "manager keeps encrypted asks for your password.",
         "terminal.backups:download",
         location,
     )
@@ -333,7 +356,11 @@ def backups(commands, location: Location) -> None:
     upload.add_argument("file", help="The file to keep.")
 
     delete = _verb(
-        verbs, "delete", "Delete a backup.", "terminal.backups:delete", location
+        verbs,
+        "delete",
+        "Delete a backup. It asks for your password.",
+        "terminal.backups:delete",
+        location,
     )
     delete.add_argument("backup", help="The backup's id.")
 
@@ -364,9 +391,20 @@ def _plan_fields(parser) -> None:
         help="Run every this many minutes.",
     )
     parser.add_argument("--manual", action="store_true", help="Run only when asked.")
-    parser.add_argument("--keep", type=int, help="How many to keep here.")
     parser.add_argument(
-        "--keep-remote", type=int, help="How many to keep on the server."
+        "--keep",
+        type=int,
+        choices=KEEP_CHOICES,
+        metavar="N",
+        help="How many to keep here, 1 to 5. Keeping fewer asks for your password.",
+    )
+    parser.add_argument(
+        "--keep-remote",
+        type=int,
+        choices=KEEP_REMOTE_CHOICES,
+        metavar="N",
+        help="How many to keep on the server, 0 to 5. Keeping fewer asks for your "
+        "password.",
     )
 
 
@@ -482,7 +520,11 @@ def files(commands, location: Location) -> None:
     )
 
     download = _verb(
-        verbs, "download", "Save a file here.", "terminal.files:download", location
+        verbs,
+        "download",
+        "Save a file here, readable by you alone. A .env file asks for your password.",
+        "terminal.files:download",
+        location,
     )
     download.add_argument("server", help="The server's name or id.")
     download.add_argument("path", help="The file on the server.")

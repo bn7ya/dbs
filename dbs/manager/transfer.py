@@ -115,6 +115,8 @@ def manages_servers():
 def import_manager(source, passphrase, *, replace=False):
     from dbs.engine.restore import read_payload, restore_backup
 
+    from .backups.repositories import BackupPlanRepository
+
     if manages_servers() and not replace:
         raise TransferError(
             "this data directory already manages servers; pass --replace to replace them."
@@ -127,6 +129,7 @@ def import_manager(source, passphrase, *, replace=False):
         raise TransferError(str(exc)) from exc
     written = write_roots(payload.files, conf.data_dir())
     removed = mark_missing_backups()
+    BackupPlanRepository().keep_within_limits()
     audit.record(
         IMPORT,
         target=os.path.basename(str(source)),

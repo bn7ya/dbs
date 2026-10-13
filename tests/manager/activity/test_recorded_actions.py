@@ -112,7 +112,7 @@ def test_an_empty_secret_is_not_a_change(api, logged, server):
 
 @pytest.mark.django_db
 def test_deleting_a_server_is_logged(api, logged, server):
-    api.delete(server_url(server.pk))
+    api.delete(server_url(server.pk), {"account_password": PASSWORD}, format="json")
 
     entry = latest(logged, "server.delete")
     assert entry.subject == str(server.pk)

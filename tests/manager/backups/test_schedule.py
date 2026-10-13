@@ -24,7 +24,7 @@ from dbs.manager.backups.services.backup_schedule_service import following
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.scheduler import TASKS
 from dbs.manager.servers.services import ServerService
-from tests.manager.support import backdated
+from tests.manager.support import PASSWORD, backdated
 
 DAY = timedelta(days=1)
 HOUR = timedelta(hours=1)
@@ -104,7 +104,7 @@ def test_disabled_manual_and_deleted_plans_and_deleted_servers_are_never_run(
     )
     orphan = make_plan(server=other.pk, name="orphan")
     due(orphan)
-    ServerService(admin).delete(other.pk)
+    ServerService(admin).delete(other.pk, account_password=PASSWORD)
 
     dispatch(run_jobs)
 
@@ -178,7 +178,7 @@ def test_a_scheduled_run_the_broker_refuses_fails_and_lets_the_server_go(
 
 
 def deleted(admin, backup: BackupFile, ago: timedelta) -> BackupFile:
-    BackupService(admin).delete(backup.pk)
+    BackupService(admin).delete(backup.pk, account_password=PASSWORD)
     row = BackupFileRepository().find_including_deleted(backup.pk)
     return BackupFileRepository().update(row, deleted_at=timezone.now() - ago)
 

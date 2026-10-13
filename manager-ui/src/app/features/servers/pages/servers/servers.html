@@ -10,6 +10,54 @@
     </a>
   </header>
 
+  @if (pendingHostKeys().length > 0) {
+    <mat-card appearance="outlined">
+      <mat-card-content class="servers__body">
+        <div class="servers__title">
+          <h2>{{ 'servers.pendingKeys.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.pendingKeys.body' | t }}</p>
+        </div>
+        <ul class="servers__pending" role="list">
+          @for (key of pendingHostKeys(); track key.id) {
+            <li class="servers__pending-key">
+              <h3><bdi class="servers__address" dir="ltr">{{ addressOf(key) }}</bdi></h3>
+              <app-host-key-facts [keyType]="key.key_type" [fingerprint]="key.fingerprint" compare />
+              <p class="text-sm text-secondary">
+                {{ 'servers.pendingKeys.waits' | t }}
+                <time [attr.datetime]="key.expires_at">{{ key.expires_at | appDate }}</time>
+              </p>
+              <div class="servers__pending-actions">
+                <button
+                  matButton="outlined"
+                  class="app-danger"
+                  type="button"
+                  [disabled]="isDeciding(key)"
+                  [attr.aria-label]="'servers.pendingKeys.rejectLabel' | t: { address: addressOf(key) }"
+                  (click)="rejectHostKey(key)"
+                >
+                  {{ 'servers.pendingKeys.reject' | t }}
+                </button>
+                <button
+                  matButton="filled"
+                  type="button"
+                  [disabled]="isDeciding(key)"
+                  [attr.aria-busy]="isDeciding(key)"
+                  [attr.aria-label]="'servers.pendingKeys.confirmLabel' | t: { address: addressOf(key) }"
+                  (click)="confirmHostKey(key)"
+                >
+                  @if (isDeciding(key)) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ 'servers.pendingKeys.confirm' | t }}
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </mat-card-content>
+    </mat-card>
+  }
+
   <mat-card appearance="outlined">
     <mat-card-content class="servers__body">
       <mat-form-field class="servers__search">

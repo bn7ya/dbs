@@ -108,6 +108,19 @@ export class BackupsStore {
     return this.api.downloadUrl(file.id);
   }
 
+  readonly downloadError = signal<ApiError | null>(null);
+
+  async downloadLink(file: BackupFile, password: string): Promise<string | null> {
+    this.downloadError.set(null);
+    try {
+      const { url } = await firstValueFrom(this.api.downloadLink(file.id, password));
+      return url;
+    } catch (error) {
+      this.downloadError.set(error as ApiError);
+      return null;
+    }
+  }
+
   readonly planPage = linkedSignal({ source: this.server, computation: () => 0 });
 
   private readonly planQuery = computed<PlanListQuery | undefined>(() => {
@@ -501,12 +514,15 @@ export class BackupsStore {
 
   readonly undoing = signal(false);
 
-  async remove(file: BackupFile): Promise<boolean> {
+  readonly deleteError = signal<ApiError | null>(null);
+
+  async remove(file: BackupFile, password: string): Promise<boolean> {
     this.deleting.update((ids) => withItem(ids, file.id));
+    this.deleteError.set(null);
     try {
-      await firstValueFrom(this.api.remove(file.id));
+      await firstValueFrom(this.api.remove(file.id, password));
     } catch (error) {
-      this.notifyFailure(error as ApiError);
+      this.deleteError.set(error as ApiError);
       return false;
     } finally {
       this.deleting.update((ids) => withoutItem(ids, file.id));

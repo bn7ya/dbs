@@ -29,6 +29,7 @@ from dbs.manager.backups.services.actions import Action
 from dbs.manager.backups.services.backup_run_service import BackupRunService
 from dbs.manager.backups.services.job_queue import JobQueue
 from dbs.manager.backups.storage import BackupStorage
+from dbs.manager.common import tickets
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.common.uploads import UploadTooLarge, upload_name
 from dbs.manager.runner import get_runner
@@ -44,6 +45,10 @@ if TYPE_CHECKING:
 NAME_MAX_LENGTH: int = cast(int, BackupFile._meta.get_field("name").max_length)
 INVALID_NAME = "Give the file a name, not only spaces or dots."
 ACCOUNT_PASSWORD_REQUIRED = "Enter your own password to restore into the server."
+DOWNLOAD_PASSWORD_REQUIRED = (
+    "Enter your own password to download a file the manager keeps encrypted."
+)
+DELETE_PASSWORD_REQUIRED = "Enter your own password to delete a backup."
 SERVER_NAME_MISMATCH = "Type the server's name exactly as it is shown."
 
 
@@ -85,8 +90,12 @@ class BackupService:
         return file
 
     @requires(Capability.BACKUPS_DOWNLOAD)
-    def download(self, file_id: UUID) -> Download:
+    def download(
+        self, file_id: UUID, account_password: str = "", ticket: str = ""
+    ) -> Download:
         file = self.get(file_id)
+        if file.sealed:
+            self._unlock(file, account_password, ticket)
         try:
             handle = self.storage.open_read(file.storage_path)
         except FileNotFoundError as exc:
@@ -101,6 +110,15 @@ class BackupService:
             )
         self.activity.record(Action.DOWNLOAD, server=file.server, target=file.name)
         return download
+
+    @requires(Capability.BACKUPS_DOWNLOAD)
+    def download_ticket(self, file_id: UUID, account_password: str = "") -> str:
+        file = self.get(file_id)
+        if not file.sealed:
+            return ""
+        _require_password(account_password, DOWNLOAD_PASSWORD_REQUIRED)
+        self._confirm_password(file, Action.DOWNLOAD, account_password)
+        return tickets.issue(self.user, _download_subject(file))
 
     @requires(Capability.BACKUPS_UPLOAD)
     def upload(self, server_id: UUID, upload: UploadedFile) -> BackupFile:
@@ -225,8 +243,10 @@ class BackupService:
         )
 
     @requires(Capability.BACKUPS_DELETE)
-    def delete(self, file_id: UUID) -> None:
+    def delete(self, file_id: UUID, account_password: str = "") -> None:
         file = self.get(file_id)
+        _require_password(account_password, DELETE_PASSWORD_REQUIRED)
+        self._confirm_password(file, Action.DELETE, account_password)
         with transaction.atomic():
             self.files.soft_delete(file)
             self.activity.record(Action.DELETE, server=file.server, target=file.name)
@@ -247,6 +267,38 @@ class BackupService:
                 Action.UNDO_DELETE, server=file.server, target=file.name
             )
         return file
+
+    def _unlock(self, file: BackupFile, account_password: str, ticket: str) -> None:
+        if ticket and tickets.redeem(ticket, self.user, _download_subject(file)):
+            return
+        _require_password(account_password, DOWNLOAD_PASSWORD_REQUIRED)
+        self._confirm_password(file, Action.DOWNLOAD, account_password)
+
+    def _confirm_password(
+        self, file: BackupFile, action: str, account_password: str
+    ) -> None:
+        try:
+            AccountService(self.user).confirm_password(account_password)
+        except (InvalidPassword, TooManyAttempts) as exc:
+            self.activity.record(
+                action,
+                server=file.server,
+                target=file.name,
+                status=audit.FAILED,
+                error_code=error_code_of(exc),
+            )
+            raise
+
+
+def _require_password(account_password: str, message: str) -> None:
+    if not account_password:
+        raise ValidationError(
+            {"account_password": [ErrorDetail(message, code="required")]}
+        )
+
+
+def _download_subject(file: BackupFile) -> str:
+    return f"backup:{file.pk}"
 
 
 def _plaintext(handle: BinaryIO) -> Plaintext:

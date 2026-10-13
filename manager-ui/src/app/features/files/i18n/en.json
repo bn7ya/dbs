@@ -41,7 +41,12 @@
     },
     "download": {
       "action": "Download",
-      "label": "Download {name}"
+      "label": "Download {name}",
+      "working": "Preparing…",
+      "prompt": {
+        "title": "Download a .env file",
+        "body": "{name} holds the server's secrets. Enter your password to download it."
+      }
     },
     "delete": {
       "label": "Delete {name}",

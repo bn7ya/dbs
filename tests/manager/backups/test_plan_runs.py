@@ -18,7 +18,7 @@ from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.servers.exceptions import RemoteCommandFailed, SSHUnreachable
 from dbs.manager.servers.services import ServerService
 from tests.manager.backups.support import BackupHost
-from tests.manager.servers.support import BACKUP_DIR, connecting_to
+from tests.manager.servers.support import BACKUP_DIR, PASSWORD, connecting_to
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 
@@ -75,7 +75,7 @@ def test_a_plan_or_server_that_is_gone_is_not_run(api, admin, server, make_plan)
     deleted = make_plan(name="deleted")
     BackupPlanService(admin).delete(deleted.pk)
     orphan = make_plan(name="orphan")
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     for path in (
         run_url(deleted),
@@ -287,7 +287,11 @@ def test_a_run_keeps_the_plans_newest_files_and_deletes_the_rest(
 def test_retention_counts_only_files_still_listed(api, make_plan, ran):
     plan = make_plan(keep=2)
     first = ran(plan)
-    api.delete(f"/api/backups/{first.data['backup']}/")
+    api.delete(
+        f"/api/backups/{first.data['backup']}/",
+        {"account_password": PASSWORD},
+        format="json",
+    )
 
     ran(plan)
     ran(plan)

@@ -6,7 +6,10 @@ from django.db.models import Q
 
 from dbs.manager.common.models import BaseModel
 
-PLAN_KEEP_MAX = 365
+PLAN_KEEP_MIN = 1
+PLAN_KEEP_MAX = 5
+PLAN_KEEP_REMOTE_MIN = 0
+PLAN_KEEP_REMOTE_DEFAULT = 0
 PLAN_PATHS_MAX = 50
 PLAN_PATH_MAX_LENGTH = 1024
 PLAN_PATTERN_MAX_LENGTH = 200
@@ -40,10 +43,18 @@ class BackupPlan(BaseModel):
     )
     interval_minutes = models.PositiveIntegerField(null=True, blank=True)
     keep = models.PositiveSmallIntegerField(
-        default=7, validators=[MinValueValidator(1), MaxValueValidator(PLAN_KEEP_MAX)]
+        default=PLAN_KEEP_MAX,
+        validators=[
+            MinValueValidator(PLAN_KEEP_MIN),
+            MaxValueValidator(PLAN_KEEP_MAX),
+        ],
     )
     keep_remote = models.PositiveSmallIntegerField(
-        default=1, validators=[MaxValueValidator(PLAN_KEEP_MAX)]
+        default=PLAN_KEEP_REMOTE_DEFAULT,
+        validators=[
+            MinValueValidator(PLAN_KEEP_REMOTE_MIN),
+            MaxValueValidator(PLAN_KEEP_MAX),
+        ],
     )
     enabled = models.BooleanField(default=True)
     next_run_at = models.DateTimeField(null=True, blank=True)

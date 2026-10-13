@@ -4,6 +4,8 @@ from rest_framework import serializers
 
 from dbs.manager.backups.models import (
     PLAN_KEEP_MAX,
+    PLAN_KEEP_MIN,
+    PLAN_KEEP_REMOTE_MIN,
     PLAN_PATH_MAX_LENGTH,
     PLAN_PATHS_MAX,
     BackupPlan,
@@ -53,12 +55,12 @@ class PlanUpdateSerializer(serializers.Serializer):
         required=False,
     )
     keep = serializers.IntegerField(
-        min_value=1,
+        min_value=PLAN_KEEP_MIN,
         max_value=PLAN_KEEP_MAX,
         required=False,
     )
     keep_remote = serializers.IntegerField(
-        min_value=0,
+        min_value=PLAN_KEEP_REMOTE_MIN,
         max_value=PLAN_KEEP_MAX,
         required=False,
     )

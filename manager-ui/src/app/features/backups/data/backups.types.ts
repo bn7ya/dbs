@@ -24,6 +24,10 @@ export interface BackupFile {
   readonly created_at: string;
 }
 
+export interface DownloadLink {
+  readonly url: string;
+}
+
 export type UploadEvent =
   | { readonly kind: 'progress'; readonly sent: number; readonly total: number }
   | { readonly kind: 'uploaded'; readonly file: BackupFile };

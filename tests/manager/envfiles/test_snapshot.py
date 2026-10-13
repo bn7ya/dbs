@@ -9,6 +9,7 @@ from dbs.manager.envfiles.services.env_snapshot_service import snapshot_env_file
 from dbs.manager.scheduler import TASKS
 from dbs.manager.servers.services import ServerService
 from tests.manager.envfiles.conftest import LIST
+from tests.manager.support import PASSWORD
 
 
 def snapshot() -> None:
@@ -33,7 +34,7 @@ def test_every_server_is_pulled_and_one_that_fails_does_not_stop_the_rest(
     )
     make_server(name="c-no-env", host="10.0.0.8")
     deleted = make_server(name="d-deleted", host="10.0.0.10", env_path=str(env_file))
-    ServerService(admin).delete(deleted.pk)
+    ServerService(admin).delete(deleted.pk, account_password=PASSWORD)
 
     snapshot()
 

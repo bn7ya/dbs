@@ -664,6 +664,7 @@
           <mat-step [label]="'servers.wizard.steps.passphrase' | t" [completed]="stepDone('passphrase')" [optional]="true">
             <div class="wizard__step">
               <p class="text-secondary">{{ 'servers.wizard.passphrase.intro' | t }}</p>
+              <app-notice severity="warning">{{ 'servers.wizard.passphrase.neverChange' | t }}</app-notice>
               <div>
                 <button
                   matButton="outlined"

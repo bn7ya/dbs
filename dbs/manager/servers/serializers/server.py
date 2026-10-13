@@ -162,6 +162,10 @@ class ServerSettingsSerializer(serializers.Serializer):
     )
 
 
+class AccountPasswordSerializer(serializers.Serializer):
+    account_password = secret_field(ACCOUNT_PASSWORD_MAX_LENGTH)
+
+
 class ServerUpdateSerializer(ServerSettingsSerializer):
     account_password = secret_field(
         ACCOUNT_PASSWORD_MAX_LENGTH,

@@ -8,6 +8,7 @@ from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.servers.services import ServerService
+from tests.manager.support import PASSWORD
 
 LIST = "/api/backups/"
 
@@ -110,7 +111,7 @@ def test_the_list_holds_only_that_servers_backups_that_are_not_deleted(
     api, admin, server, taken
 ):
     kept, deleted = taken(), taken()
-    api.delete(url(deleted))
+    api.delete(url(deleted), {"account_password": PASSWORD}, format="json")
 
     ids = [row["id"] for row in api.get(LIST, {"server": server.pk}).json()["results"]]
 
@@ -121,7 +122,7 @@ def test_the_list_holds_only_that_servers_backups_that_are_not_deleted(
 @pytest.mark.django_db
 def test_a_deleted_servers_backups_are_still_listed(api, admin, server, taken):
     backup = taken()
-    ServerService(admin).delete(server.pk)
+    ServerService(admin).delete(server.pk, account_password=PASSWORD)
 
     ids = [row["id"] for row in api.get(LIST, {"server": server.pk}).json()["results"]]
 
@@ -172,7 +173,7 @@ def test_a_file_that_left_the_disk_is_missing(api, taken):
 @pytest.mark.django_db
 def test_a_deleted_backup_is_not_downloaded(api, taken):
     backup = taken()
-    api.delete(url(backup))
+    api.delete(url(backup), {"account_password": PASSWORD}, format="json")
 
     response = api.get(url(backup, "download/"))
 
@@ -186,7 +187,7 @@ def test_a_deleted_backup_is_hidden_and_its_file_kept(
 ):
     backup = taken()
 
-    response = api.delete(url(backup))
+    response = api.delete(url(backup), {"account_password": PASSWORD}, format="json")
 
     assert response.status_code == 204
     assert api.get(LIST, {"server": server.pk}).json()["count"] == 0
@@ -198,7 +199,9 @@ def test_a_deleted_backup_is_hidden_and_its_file_kept(
         admin,
     )
     for backup_id in (backup.pk, uuid4()):
-        again = api.delete(f"{LIST}{backup_id}/")
+        again = api.delete(
+            f"{LIST}{backup_id}/", {"account_password": PASSWORD}, format="json"
+        )
         assert again.status_code == 404
         assert again.json()["error"]["code"] == "not_found"
 
@@ -207,7 +210,7 @@ def test_a_deleted_backup_is_hidden_and_its_file_kept(
 def test_a_delete_can_be_undone_while_the_file_is_on_disk(api, admin, server, taken):
     backup = taken()
     [listed] = api.get(LIST, {"server": server.pk}).json()["results"]
-    api.delete(url(backup))
+    api.delete(url(backup), {"account_password": PASSWORD}, format="json")
 
     response = api.post(url(backup, "undo-delete/"))
 

@@ -10,7 +10,9 @@ from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupRunService, BackupService
 from dbs.manager.backups.storage import BackupStorage
-from tests.manager.servers.support import dbs_backup
+from tests.manager.servers.support import PASSWORD, dbs_backup
+
+CONNECT = "dbs.manager.servers.services.connection_service.connect"
 
 
 def url(backup) -> str:
@@ -92,7 +94,9 @@ def test_a_file_that_left_the_disk_fails_the_job(api, run_jobs, taken, entry):
 @pytest.mark.django_db
 def test_a_deleted_or_unknown_backup_is_not_verified(api, taken):
     backup = taken()
-    api.delete(f"/api/backups/{backup.pk}/")
+    api.delete(
+        f"/api/backups/{backup.pk}/", {"account_password": PASSWORD}, format="json"
+    )
 
     for backup_id in (backup.pk, uuid4()):
         response = api.post(f"/api/backups/{backup_id}/verify/")
@@ -107,7 +111,9 @@ def test_a_backup_deleted_after_its_verify_was_queued_is_still_verified(
     backup = taken()
     with django_capture_on_commit_callbacks() as queued:
         job = BackupService(admin).verify(backup.pk)
-    api.delete(f"/api/backups/{backup.pk}/")
+    api.delete(
+        f"/api/backups/{backup.pk}/", {"account_password": PASSWORD}, format="json"
+    )
 
     for send in queued:
         send()

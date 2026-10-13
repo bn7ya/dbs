@@ -14,6 +14,8 @@ import type {
   PublicKey,
   RemoteFolder,
   HostKey,
+  HostKeyConfirmation,
+  HostKeyDecision,
   HostKeyRepin,
   HostKeyTarget,
   Server,
@@ -22,6 +24,8 @@ import type {
   ServerSummary,
   ServerUpdate,
 } from './servers.types';
+
+const HOST_KEYS_PAGE_SIZE = 100;
 
 @Injectable({ providedIn: 'root' })
 export class ServersApi {
@@ -75,12 +79,21 @@ export class ServersApi {
     return this.http.patch<Server>(`${this.base}/${id}/`, changes);
   }
 
-  remove(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.base}/${id}/`);
+  remove(id: string, accountPassword: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}/`, { body: { account_password: accountPassword } });
   }
 
   fingerprint(target: HostKeyTarget): Observable<HostKey> {
     return this.http.post<HostKey>(`${this.base}/fingerprint/`, target);
+  }
+
+  hostKeyConfirmations(): Observable<Page<HostKeyConfirmation>> {
+    const params = new HttpParams().set('page', 1).set('page_size', HOST_KEYS_PAGE_SIZE);
+    return this.http.get<Page<HostKeyConfirmation>>(`${this.base}/host-keys/`, { params });
+  }
+
+  decideHostKey(id: string, decision: HostKeyDecision): Observable<HostKeyConfirmation> {
+    return this.http.post<HostKeyConfirmation>(`${this.base}/host-keys/${id}/${decision}/`, {});
   }
 
   check(id: string): Observable<CheckedServer> {

@@ -4,6 +4,7 @@ import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, withComponentInputBinding, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
@@ -12,6 +13,9 @@ import { errorInterceptor } from '@core/http/error.interceptor';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import type { DialogHandle } from '@shared/dialogs/dialogs.types';
+import { Downloader } from '@shared/downloader/downloader';
+import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
+import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { Toaster } from '@shared/toaster/toaster';
 import { NewFolderDialog } from '../../components/new-folder/new-folder';
 import type { Entry, Listing } from '../../data/files.types';
@@ -137,16 +141,50 @@ describe('FilesPage', () => {
     expect(link.querySelector('a[aria-label^="Open folder"]')).toBeNull();
   });
 
-  it('offers a download for a file only, pointed at its path', async () => {
+  it('offers a download for a file only, and starts it from the link the server gives', async () => {
     await showWith(listingOf([FOLDER, FILE, LINK]));
+    const started = vi.spyOn(TestBed.inject(Downloader), 'start').mockReturnValue(undefined);
 
-    const downloads = rows().flatMap((row) => Array.from(row.querySelectorAll<HTMLAnchorElement>('a[download]')));
-    expect(downloads).toHaveLength(1);
-    expect(downloads[0].getAttribute('href')).toBe(
-      `/api/files/${SERVER_ID}/download/?path=${encodeURIComponent(FILE.path)}`,
+    const downloads = rows().flatMap((row) =>
+      Array.from(row.querySelectorAll<HTMLButtonElement>('button[aria-label^="Download "]')),
     );
-    expect(downloads[0].getAttribute('download')).toBe(FILE.name);
-    expect(downloads[0].getAttribute('aria-label')).toBe(`Download ${FILE.name}`);
+    expect(downloads.map((button) => button.getAttribute('aria-label'))).toEqual([`Download ${FILE.name}`]);
+    downloads[0].click();
+
+    const request = await vi.waitFor(() => http.expectOne(`/api/files/${SERVER_ID}/download/`));
+    expect(request.request.body).toEqual({ path: FILE.path });
+    request.flush({ url: `/api/files/${SERVER_ID}/download/?path=x` });
+    await vi.waitFor(() => expect(started).toHaveBeenCalledWith(`/api/files/${SERVER_ID}/download/?path=x`));
+  });
+
+  it('asks for the password when the server says the file holds secrets', async () => {
+    const env: Entry = { ...FILE, name: '.env', path: `${ROOT}/.env` };
+    const page = await showWith(listingOf([env]));
+    const started = vi.spyOn(TestBed.inject(Downloader), 'start').mockReturnValue(undefined);
+    const handle: DialogHandle<unknown> = { closed: of(true), whenClosed: () => Promise.resolve(true) };
+    const open = vi.spyOn(harness.routeDebugElement!.injector.get(Dialogs), 'open').mockReturnValue(handle);
+
+    const downloading = page.download(env);
+    http
+      .expectOne(`/api/files/${SERVER_ID}/download/`)
+      .flush(
+        { error: { code: 'invalid', message: 'Server prose', fields: { account_password: ['required'] } } },
+        { status: 400, statusText: 'Bad Request' },
+      );
+    await downloading;
+
+    const [component, options] = open.mock.calls[0];
+    expect(component).toBe(PasswordPrompt);
+    const prompt = options.data as PasswordPromptData;
+    expect(prompt).toMatchObject({ titleKey: 'files.download.prompt.title', bodyValues: { name: '⁨.env⁩' } });
+    expect(started).not.toHaveBeenCalled();
+
+    const linking = prompt.submit('hunter2');
+    const request = http.expectOne(`/api/files/${SERVER_ID}/download/`);
+    expect(request.request.body).toEqual({ path: env.path, account_password: 'hunter2' });
+    request.flush({ url: `/api/files/${SERVER_ID}/download/?path=x&ticket=t1` });
+    await expect(linking).resolves.toBe(true);
+    expect(started).toHaveBeenCalledWith(`/api/files/${SERVER_ID}/download/?path=x&ticket=t1`);
   });
 
   describe('the way back up', () => {

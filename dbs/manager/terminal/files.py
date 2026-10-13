@@ -5,6 +5,7 @@ from pathlib import Path
 from dbs.manager.files.serializers import FileEntrySerializer
 from dbs.manager.files.services import FileService
 from dbs.manager.adapters import references
+from dbs.manager.adapters.local import private_file
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.terminal.backups import local_file
 from dbs.manager.terminal.session import TerminalSession
@@ -40,13 +41,18 @@ def list_folder(session: TerminalSession) -> int:
 
 def download(session: TerminalSession) -> int:
     server = references.server(session.user, session.args.server)
-    fetched = FileService(session.user).download(server.pk, session.args.path)
+    service = FileService(session.user)
+    fetched = session.guarded(
+        lambda password: service.download(
+            server.pk, session.args.path, account_password=password
+        )
+    )
     target = Path(session.args.output or fetched.name)
     if target.is_dir():
         target = target / fetched.name
     written = 0
     try:
-        with target.open("xb") as handle:
+        with private_file(target) as handle:
             for chunk in fetched.content:
                 handle.write(chunk)
                 written += len(chunk)

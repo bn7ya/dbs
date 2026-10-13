@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from typing import cast
+from urllib.parse import urlencode
 from uuid import UUID
 
 from django.http import HttpRequest, StreamingHttpResponse
+from django.urls import reverse
 from django.utils.http import content_disposition_header
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
@@ -13,9 +15,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from dbs.manager.files.serializers import (
+    DownloadLinkSerializer,
+    DownloadQuerySerializer,
+    DownloadRequestSerializer,
     FileEntrySerializer,
     FileUploadSerializer,
-    PathQuerySerializer,
 )
 from dbs.manager.files.services import FileService
 from dbs.manager.files.uploads import UploadHandler
@@ -25,11 +29,9 @@ class DownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, server: UUID) -> StreamingHttpResponse:
-        query = PathQuerySerializer(data=request.query_params)
+        query = DownloadQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
-        download = FileService(request.user).download(
-            server, query.validated_data["path"]
-        )
+        download = FileService(request.user).download(server, **query.validated_data)
         response = StreamingHttpResponse(
             download.content, content_type="application/octet-stream"
         )
@@ -40,6 +42,21 @@ class DownloadView(APIView):
         )
         response["Cache-Control"] = "no-store"
         return response
+
+    def post(self, request: Request, server: UUID) -> Response:
+        payload = DownloadRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        ticket = FileService(request.user).download_ticket(
+            server, **payload.validated_data
+        )
+        query = {"path": payload.validated_data["path"]}
+        if ticket:
+            query["ticket"] = ticket
+        url = f"{reverse('files:download', args=[server])}?{urlencode(query)}"
+        return Response(
+            DownloadLinkSerializer({"url": url}).data,
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 class UploadView(APIView):

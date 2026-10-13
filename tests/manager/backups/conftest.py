@@ -122,7 +122,7 @@ def make_plan(admin, server) -> Callable[..., BackupPlan]:
             "name": "django-dbs",
             "kind": "dbs",
             "interval_minutes": 1440,
-            "keep": 7,
+            "keep": 5,
             "keep_remote": 1,
             "enabled": True,
         }

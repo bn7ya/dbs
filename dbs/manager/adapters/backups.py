@@ -9,6 +9,7 @@ from typing import Any
 from rest_framework.exceptions import APIException
 
 from dbs.manager.adapters import AdapterError, jobs
+from dbs.manager.adapters.local import private_file
 from dbs.manager.adapters.problems import problem
 from dbs.manager.backups.services import BackupService
 from dbs.manager.backups.services.backup_run_service import KEPT_ON_SERVER
@@ -75,15 +76,15 @@ def take(
     return taken
 
 
-def save(user: Any, file_id: Any, target: Path) -> Path:
+def save(user: Any, file_id: Any, target: Path, account_password: str = "") -> Path:
     service = BackupService(user)
     if target.is_dir():
         target = target / service.get(file_id).name
     if target.exists():
         raise AdapterError(f"{target} already exists; nothing was overwritten.")
-    fetched = service.download(file_id)
+    fetched = service.download(file_id, account_password=account_password)
     try:
-        with target.open("xb") as handle:
+        with private_file(target) as handle:
             if hasattr(fetched.content, "read"):
                 shutil.copyfileobj(fetched.content, handle)
             else:

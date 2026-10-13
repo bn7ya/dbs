@@ -57,8 +57,23 @@ describe('ServersApi', () => {
     expect(patch.request.method).toBe('PATCH');
     expect(patch.request.body).toEqual({ name: 'Renamed' });
 
-    void firstValueFrom(api.remove(SERVER.id));
-    expect(http.expectOne(detail).request.method).toBe('DELETE');
+    void firstValueFrom(api.remove(SERVER.id, 'hunter2'));
+    const removal = http.expectOne(detail);
+    expect(removal.request.method).toBe('DELETE');
+    expect(removal.request.body).toEqual({ account_password: 'hunter2' });
+  });
+
+  it('lists the host keys awaiting confirmation, and confirms or rejects one by id', () => {
+    void firstValueFrom(api.hostKeyConfirmations());
+    const listing = http.expectOne((request) => request.url === '/api/servers/host-keys/');
+    expect(listing.request.method).toBe('GET');
+    expect(listing.request.params.get('page_size')).toBe('100');
+
+    void firstValueFrom(api.decideHostKey('9f3a1c2e', 'confirm'));
+    expect(http.expectOne('/api/servers/host-keys/9f3a1c2e/confirm/').request.method).toBe('POST');
+
+    void firstValueFrom(api.decideHostKey('9f3a1c2e', 'reject'));
+    expect(http.expectOne('/api/servers/host-keys/9f3a1c2e/reject/').request.method).toBe('POST');
   });
 
   it('fetches a host key without pinning it', () => {
