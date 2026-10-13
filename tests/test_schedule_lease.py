@@ -183,16 +183,16 @@ def test_each_tick_clears_leftovers_older_than_an_hour(backup_dir):
 
 @pytest.mark.django_db(transaction=True)
 def test_the_heartbeat_keeps_a_short_lease_for_as_long_as_the_work_runs():
-    assert leases.acquire("job", "worker", 1)
+    assert leases.acquire("job", "worker", 2)
 
-    with leases.Heartbeat(["job"], "worker", 1, 0.1) as beating:
-        time.sleep(1.5)
-        assert leases.holder("job").owner == "worker"
-        assert not leases.acquire("job", "intruder", 1)
+    with leases.Heartbeat(["job"], "worker", 2, 0.1) as beating:
+        time.sleep(3)
 
     assert not beating.lost.is_set()
-    time.sleep(1.2)
-    assert leases.acquire("job", "intruder", 1)
+    assert leases.holder("job").owner == "worker"
+    assert not leases.acquire("job", "intruder", 2)
+    time.sleep(2.5)
+    assert leases.acquire("job", "intruder", 2)
 
 
 @pytest.mark.django_db
