@@ -237,3 +237,43 @@ def test_files_opened_on_a_metered_channel_count_reads_windows_and_writes():
 
     assert moved == [3, 2, 3, 2]
     assert handle.closed
+
+
+class ClosingChannel:
+    def __init__(self, error):
+        self.error = error
+        self.closed = threading.Event()
+
+    def close(self):
+        self.closed.set()
+        raise self.error
+
+
+def expire(channel, monkeypatch):
+    from dbs.transports.ssh import _Deadline
+
+    escaped = []
+    monkeypatch.setattr(threading, "excepthook", escaped.append)
+    deadline = _Deadline(channel, 0.01)
+    assert channel.closed.wait(5)
+    deadline._timer.join(5)
+    return deadline, [failure.exc_type for failure in escaped]
+
+
+@pytest.mark.parametrize("error", [EOFError(), OSError("socket is closed")])
+def test_a_deadline_that_fires_after_the_connection_dropped_stays_quiet(
+    fake_ssh, monkeypatch, error
+):
+    deadline, escaped = expire(ClosingChannel(error), monkeypatch)
+
+    assert deadline.passed
+    assert escaped == []
+
+
+def test_a_deadline_still_reports_an_error_a_lost_connection_does_not_explain(
+    fake_ssh, monkeypatch
+):
+    deadline, escaped = expire(ClosingChannel(RuntimeError("unexpected")), monkeypatch)
+
+    assert deadline.passed
+    assert escaped == [RuntimeError]

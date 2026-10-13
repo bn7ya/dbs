@@ -457,7 +457,7 @@ class SSHSession:
             return False
         try:
             transport.global_request(KEEPALIVE_REQUEST, wait=True)
-        except (_paramiko().SSHException, OSError, EOFError):
+        except _connection_gone():
             return False
         return transport.is_active()
 
@@ -775,7 +775,7 @@ class _Deadline:
 
     def _expire(self, channel) -> None:
         self._expired.set()
-        channel.close()
+        _close_quietly(channel)
 
     @property
     def passed(self) -> bool:
@@ -906,7 +906,7 @@ class _Guarded:
     def __init__(self, timeout: float | None):
         self.timeout = timeout
         self.deadline = None if not timeout else time.monotonic() + timeout
-        self.lost = (OSError, EOFError, _paramiko().SSHException)
+        self.lost = _connection_gone()
 
     def __call__(self, action):
         try:
@@ -945,10 +945,14 @@ def _send_line(stdin, line: str | None) -> None:
     stdin.channel.shutdown_write()
 
 
+def _connection_gone() -> tuple[type[BaseException], ...]:
+    return (EOFError, OSError, _paramiko().SSHException)
+
+
 def _close_quietly(channel) -> None:
     try:
         channel.close()
-    except Exception:
+    except _connection_gone():
         pass
 
 
