@@ -537,6 +537,25 @@ def test_a_missing_manager_dependency_is_reported(monkeypatch):
     assert "django-dbs>=0.5" in finding.remedy
 
 
+def test_missing_numpy_is_reported(monkeypatch):
+    import importlib
+
+    real_import = importlib.import_module
+
+    def without_numpy(name, *args, **kwargs):
+        if name == "numpy":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", without_numpy)
+
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == ACTION
+    assert "numpy" in finding.message
+    assert "django-dbs>=0.7" in finding.remedy
+
+
 def _finding(step):
     return next(f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == step)
 

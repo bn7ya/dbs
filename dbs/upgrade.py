@@ -236,6 +236,11 @@ class Dependencies(Step):
     since = "0.3.0"
 
     def check(self):
+        if not self.importable("numpy"):
+            return self.action(
+                "numpy is missing, so backups cannot compute their Reed-Solomon parity",
+                'pip install --upgrade "django-dbs>=0.7"',
+            )
         try:
             import sklearn  # noqa: F401
         except ImportError:

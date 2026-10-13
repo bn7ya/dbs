@@ -21,6 +21,7 @@ help a developer review their dependencies; it is not legal advice.
 | [cryptography](https://github.com/pyca/cryptography) | `>=41` | Apache-2.0 OR BSD-3-Clause | AES-256-GCM encryption and HKDF key derivation |
 | [argon2-cffi](https://github.com/hynek/argon2-cffi) | `>=21.3` | MIT | Argon2id key derivation from the passphrase |
 | [reedsolo](https://github.com/tomerfiliba/reedsolomon) | `>=1.7` | Unlicense OR MIT-0 | Reed-Solomon parity that repairs damaged blocks |
+| [numpy](https://numpy.org/) | `>=1.21` | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | Vectorised Reed-Solomon parity |
 | [scikit-learn](https://scikit-learn.org/) | `>=1.3` | BSD-3-Clause | The session guard's IsolationForest detector |
 | [paramiko](https://github.com/paramiko/paramiko) | `>=3` | LGPL-2.1-or-later | SSH and SFTP transports, and the manager's connections to servers |
 | [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15` | BSD-3-Clause | The manager's REST API |
@@ -43,7 +44,6 @@ The exact set depends on the versions pip resolves. This is the set for the newe
 | pycparser | cffi | BSD-3-Clause |
 | argon2-cffi-bindings | argon2-cffi | MIT |
 | typing_extensions (Python < 3.11 only) | asgiref, cryptography | PSF-2.0 |
-| numpy | scikit-learn, scipy | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
 | scipy | scikit-learn | BSD-3-Clause |
 | joblib | scikit-learn | BSD-3-Clause |
 | cloudpickle | joblib (1.6 and later) | BSD-3-Clause |
