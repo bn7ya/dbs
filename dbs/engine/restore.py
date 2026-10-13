@@ -17,8 +17,9 @@ from ..crypto import decrypt_payload
 from ..crypto.envelope import EnvelopeMaterial
 from ..exceptions import ContainerError, CorruptionError
 from ..files import restore_file
-from ..introspect import topological_order
-from ..serialize import load_records
+from ..introspect import backup_plan, excluded_fields, topological_order
+from ..registry import ModelBackup, backup_registry
+from ..serialize import resolve_natural_keys, save_records
 from .backup import migration_state
 from .payload import unpack_payload
 
@@ -27,6 +28,8 @@ logger = logging.getLogger("dbs")
 SUPPORTED_MANIFEST_VERSION = 1
 
 DEFAULT_MAX_PAYLOAD_BYTES = 4 * 1024 ** 3
+
+FLUSH_BATCH = 500
 
 
 class _DryRunRollback(Exception):
@@ -115,13 +118,17 @@ def restore_backup(
     write_files: bool = True,
     dry_run: bool = False,
     flush: bool = False,
+    registry=None,
 ) -> RestoreResult:
     """Restore database rows and files from container ``data``.
 
-    Rows merge by primary key by default. ``flush`` clears the backed-up models
-    first so the restore replaces rather than merges, and ``dry_run`` rehearses
-    the whole load inside a transaction it rolls back, changing nothing.
+    Rows load in the order the backup recorded, parents before children, and
+    merge by primary key by default: an existing row only takes the fields the
+    backup carries. ``flush`` first deletes the rows the backup covers so the
+    restore replaces rather than merges, and ``dry_run`` rehearses the load in
+    a transaction it rolls back, changing nothing.
     """
+    registry = registry or backup_registry
     result = read_payload(data, passphrase)
     out = RestoreResult(repair_report=result.repair_report)
     out.models = result.document.get("stats", {}).get("models", [])
@@ -140,41 +147,30 @@ def restore_backup(
         len(result.files),
     )
 
+    records = ordered_records(result.document, result.records)
+
     if dry_run:
         _rehearse_load(
-            result.records,
+            records,
             out,
             backup_models,
             using=using,
             load_data=load_data,
             flush=flush,
+            registry=registry,
         )
         if write_files:
             out.files_would_write = len(result.files)
         logger.info(
-            "dry run complete: %d records would load, %d files would be written; nothing was changed",
+            "dry run complete: %d records would load, %d files would be written; "
+            "nothing was changed",
             out.records_would_load,
             out.files_would_write,
         )
         return out
 
     if load_data:
-        if flush:
-            with transaction.atomic(using=using):
-                out.records_flushed = _flush_existing_rows(backup_models, using)
-                out.records_loaded = load_records(result.records, using=using)
-            logger.info(
-                "flush removed %d existing rows before the load",
-                out.records_flushed,
-            )
-        else:
-            if out.preexisting_models:
-                logger.warning(
-                    "target database already holds rows for %s; the restore will "
-                    "merge by primary key (use flush to replace instead)",
-                    ", ".join(out.preexisting_models),
-                )
-            out.records_loaded = load_records(result.records, using=using)
+        _load(records, out, backup_models, using=using, flush=flush, registry=registry)
     if write_files:
         for entry, file_bytes in result.files:
             restore_file(entry, file_bytes)
@@ -187,6 +183,22 @@ def restore_backup(
     return out
 
 
+def _load(records, out, backup_models, *, using, flush, registry) -> None:
+    prepared = resolve_natural_keys(records, using) if records else []
+    if not flush and out.preexisting_models:
+        logger.warning(
+            "target database already holds rows for %s; the restore will "
+            "merge by primary key (use flush to replace instead)",
+            ", ".join(out.preexisting_models),
+        )
+    with transaction.atomic(using=using):
+        if flush:
+            out.records_flushed = _flush_existing_rows(backup_models, using, registry)
+        out.records_loaded = save_records(prepared, using=using) if prepared else 0
+    if flush:
+        logger.info("flush removed %d existing rows before the load", out.records_flushed)
+
+
 def _rehearse_load(
     records: list,
     out: RestoreResult,
@@ -195,17 +207,38 @@ def _rehearse_load(
     using: str,
     load_data: bool,
     flush: bool,
+    registry,
 ) -> None:
     if not load_data:
         return
+    prepared = resolve_natural_keys(records, using) if records else []
     try:
         with transaction.atomic(using=using):
             if flush:
-                out.records_flushed = _flush_existing_rows(backup_models, using)
-            out.records_would_load = load_records(records, using=using)
+                out.records_flushed = _flush_existing_rows(backup_models, using, registry)
+            if prepared:
+                out.records_would_load = save_records(
+                    prepared, using=using, adjust_sequences=False
+                )
             raise _DryRunRollback
     except _DryRunRollback:
         pass
+
+
+def ordered_records(document: dict, records: list) -> list:
+    order = document.get("order") or _target_order(records)
+    rank = {label: position for position, label in enumerate(order)}
+    return sorted(records, key=lambda record: rank.get(record.get("model"), len(rank)))
+
+
+def _target_order(records: list) -> list:
+    models = []
+    for label in dict.fromkeys(record.get("model") for record in records):
+        try:
+            models.append(apps.get_model(label))
+        except (LookupError, TypeError, ValueError):
+            continue
+    return [model._meta.label_lower for model in topological_order(models)]
 
 
 def _backup_models(document: dict, records: list) -> list:
@@ -224,28 +257,57 @@ def _backup_models(document: dict, records: list) -> list:
     return resolved
 
 
-def _flush_targets(models: list) -> list:
-    targets = list(models)
+def _covers_whole_table(config) -> bool:
+    return type(config).get_queryset is ModelBackup.get_queryset
+
+
+def _flush_scopes(models: list, using: str, registry) -> dict:
+    configs = dict(backup_plan(registry))
+    scopes: dict = {}
     for model in models:
+        config = configs.get(model) or ModelBackup()
+        keys = None
+        if not _covers_whole_table(config):
+            keys = list(config.get_queryset(model).using(using).values_list("pk", flat=True))
+        scopes[model] = None if keys is None else ("pk", keys)
+        skipped = excluded_fields(model, config)
         for m2m in model._meta.local_many_to_many:
             through = m2m.remote_field.through
-            if through._meta.auto_created and through not in targets:
-                targets.append(through)
-    return targets
+            if not through._meta.auto_created or m2m.name in skipped:
+                continue
+            scopes[through] = None if keys is None else (m2m.m2m_field_name(), keys)
+    return scopes
 
 
-def _flush_existing_rows(models: list, using: str) -> int:
+def _flush_existing_rows(models: list, using: str, registry=None) -> int:
+    scopes = _flush_scopes(models, using, registry or backup_registry)
     connection = connections[using]
-    children_first = reversed(topological_order(_flush_targets(models)))
     deleted = 0
+    for model in reversed(topological_order(list(scopes))):
+        scope = scopes[model]
+        if scope is None:
+            deleted += _delete_table(connection, model)
+        else:
+            deleted += _delete_selected(model, *scope, using=using)
+    return deleted
+
+
+def _delete_table(connection, model) -> int:
+    table = connection.ops.quote_name(model._meta.db_table)
     with connection.cursor() as cursor:
-        for model in children_first:
-            table = connection.ops.quote_name(model._meta.db_table)
-            cursor.execute(f"SELECT COUNT(*) FROM {table}")
-            count = cursor.fetchone()[0]
-            if count:
-                cursor.execute(f"DELETE FROM {table}")
-                deleted += count
+        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        count = cursor.fetchone()[0]
+        if count:
+            cursor.execute(f"DELETE FROM {table}")
+    return count
+
+
+def _delete_selected(model, column: str, keys: list, *, using: str) -> int:
+    manager = model._base_manager.using(using)
+    deleted = 0
+    for start in range(0, len(keys), FLUSH_BATCH):
+        batch = keys[start : start + FLUSH_BATCH]
+        deleted += manager.filter(**{f"{column}__in": batch})._raw_delete(using)
     return deleted
 
 
@@ -276,6 +338,7 @@ def _warn_on_environment_drift(document: dict, connection) -> None:
     if target_ahead:
         logger.warning(
             "migration drift for %s: the target database schema is newer than "
-            "the backup; fields added since the backup keep their defaults",
+            "the backup; fields added since the backup keep their defaults on new "
+            "rows and their current values on existing ones",
             ", ".join(target_ahead),
         )

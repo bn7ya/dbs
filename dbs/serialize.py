@@ -5,14 +5,17 @@ import logging
 
 from django.apps import apps
 from django.core import serializers
-from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist, ValidationError
 from django.core.management.color import no_style
 from django.core.serializers.json import Serializer as JSONSerializer
 from django.db import connections, transaction
+from django.db.models import AutoField, Model
 
 from .exceptions import RestoreError
 
 logger = logging.getLogger("dbs")
+
+EXISTENCE_BATCH = 500
 
 
 def has_natural_key(model) -> bool:
@@ -89,16 +92,48 @@ def serialize_model(
     return records
 
 
-def reset_sequences(connection, models) -> None:
+def raise_sequences(connection, models) -> None:
     if not models:
         return
     ordered = sorted(models, key=lambda model: model._meta.label)
+    if connection.vendor == "postgresql":
+        _raise_postgresql_sequences(connection, ordered)
+        return
     statements = connection.ops.sequence_reset_sql(no_style(), ordered)
     if not statements:
         return
     with connection.cursor() as cursor:
         for statement in statements:
             cursor.execute(statement)
+
+
+def _auto_field(model):
+    return next(
+        (field for field in model._meta.local_fields if isinstance(field, AutoField)),
+        None,
+    )
+
+
+def _raise_postgresql_sequences(connection, models) -> None:
+    quote = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        for model in models:
+            field = _auto_field(model)
+            if field is None:
+                continue
+            table = quote(model._meta.db_table)
+            cursor.execute("SELECT pg_get_serial_sequence(%s, %s)", [table, field.column])
+            sequence = cursor.fetchone()[0]
+            if sequence is None:
+                continue
+            cursor.execute(
+                "SELECT setval(%s::regclass, highest.value) "
+                f"FROM (SELECT max({quote(field.column)}) AS value FROM {table}) AS highest, "
+                f"{sequence.replace('%', '%%')} AS counter "
+                "WHERE highest.value >= CASE WHEN counter.is_called "
+                "THEN counter.last_value + 1 ELSE counter.last_value END",
+                [sequence],
+            )
 
 
 class NaturalKeyResolver:
@@ -200,21 +235,85 @@ def resolve_natural_keys(records: list[dict], using: str) -> list[dict]:
     return resolved
 
 
-def load_records(records: list[dict], *, using: str = "default") -> int:
-    if not records:
-        return 0
+def existing_rows(records: list[dict], using: str) -> dict:
+    wanted: dict = {}
+    for record in records:
+        try:
+            model = apps.get_model(record["model"])
+            wanted.setdefault(model, []).append(model._meta.pk.to_python(record["pk"]))
+        except (KeyError, LookupError, ValidationError):
+            continue
+    found: dict = {}
+    for model, keys in wanted.items():
+        manager = model._base_manager.using(using)
+        present = found.setdefault(model, set())
+        for start in range(0, len(keys), EXISTENCE_BATCH):
+            batch = keys[start : start + EXISTENCE_BATCH]
+            present.update(manager.filter(pk__in=batch).values_list("pk", flat=True))
+    return found
+
+
+def _deserialized(record: dict, using: str):
+    try:
+        restored = serializers.deserialize(
+            "python", [record], using=using, ignorenonexistent=True
+        )
+        return next(iter(restored), None)
+    except Exception as exc:
+        raise RestoreError(
+            f"{record.get('model')} {record.get('pk')!r} could not be read: {exc}"
+        ) from exc
+
+
+def _carried_columns(model, names) -> list[str]:
+    columns = []
+    for name in names:
+        try:
+            field = model._meta.get_field(name)
+        except FieldDoesNotExist:
+            continue
+        if field.concrete and not field.many_to_many and not field.primary_key:
+            columns.append(field.name)
+    return columns
+
+
+def _update_carried_fields(restored, record: dict, using: str) -> None:
+    instance = restored.object
+    columns = _carried_columns(type(instance), record.get("fields", {}))
+    if columns:
+        Model.save_base(instance, using=using, raw=True, update_fields=columns)
+    for accessor, members in (restored.m2m_data or {}).items():
+        getattr(instance, accessor).set(members)
+
+
+def save_records(records: list[dict], *, using: str, adjust_sequences: bool = True) -> int:
     connection = connections[using]
+    existing = existing_rows(records, using)
     saved = 0
     restored_models = set()
-    with transaction.atomic(using=using):
-        records = resolve_natural_keys(records, using)
-        with connection.constraint_checks_disabled():
-            for obj in serializers.deserialize(
-                "json", json.dumps(records), using=using, ignorenonexistent=True
-            ):
-                obj.save(using=using)
-                restored_models.add(type(obj.object))
-                saved += 1
-        connection.check_constraints()
-        reset_sequences(connection, restored_models)
+    with connection.constraint_checks_disabled():
+        for record in records:
+            restored = _deserialized(record, using)
+            if restored is None:
+                continue
+            model = type(restored.object)
+            if restored.object.pk in existing.get(model, ()):
+                _update_carried_fields(restored, record, using)
+            else:
+                restored.save(using=using)
+            restored_models.add(model)
+            saved += 1
+    connection.check_constraints()
+    if adjust_sequences:
+        raise_sequences(connection, restored_models)
     return saved
+
+
+def load_records(
+    records: list[dict], *, using: str = "default", adjust_sequences: bool = True
+) -> int:
+    if not records:
+        return 0
+    records = resolve_natural_keys(records, using)
+    with transaction.atomic(using=using):
+        return save_records(records, using=using, adjust_sequences=adjust_sequences)
