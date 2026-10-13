@@ -47,6 +47,16 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AddField(
+            model_name="auditevent",
+            name="chain_index",
+            field=models.PositiveBigIntegerField(blank=True, db_index=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="auditevent",
+            name="chain_hash",
+            field=models.CharField(blank=True, default="", max_length=64),
+        ),
         migrations.RunPython(record_removed_targets, migrations.RunPython.noop),
         migrations.RemoveField(
             model_name="backupschedule",

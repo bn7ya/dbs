@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import os
+
 from django.conf import settings
 from django.contrib.auth.decorators import user_passes_test
 from django.http import HttpResponse
@@ -7,11 +10,14 @@ from django.template import RequestContext, Template
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_http_methods
 
+from .. import audit
 from ..engine import create_backup, restore_backup
 from ..exceptions import DBSError
 from ..naming import backup_filename
 
 DEFAULT_MAX_UPLOAD_BYTES = 1024 ** 3
+EXPORT = "backup.export"
+RESTORE = "backup.restore"
 
 _PAGE = Template(
     """
@@ -63,14 +69,33 @@ def backup_download(request):
             request, "Backup", fields,
             message="Passphrases are empty or do not match.",
         )
+    name = backup_filename()
     try:
-        container = create_backup(passphrase)
+        with _tracked(request, EXPORT, name, {"file": name, "database": "default"}) as entry:
+            container = create_backup(passphrase)
+            entry.data.update(
+                size=len(container),
+                sha256=hashlib.sha256(container).hexdigest(),
+                verified=True,
+            )
     except DBSError as exc:
         return _render(request, "Backup", fields, message=str(exc))
 
     response = HttpResponse(container, content_type="application/octet-stream")
-    response["Content-Disposition"] = f'attachment; filename="{backup_filename()}"'
+    response["Content-Disposition"] = f'attachment; filename="{name}"'
     return response
+
+
+def _tracked(request, action, target, data):
+    from ..security.features import client_address
+
+    return audit.track(
+        action,
+        target=target,
+        data=audit.with_actor(data, request.user),
+        actor=request.user,
+        remote_addr=client_address(request),
+    )
 
 
 @_superuser_required
@@ -96,8 +121,18 @@ def restore_upload(request):
             request, "Restore", fields, multipart=True,
             message=f"Upload is larger than the {max_bytes} byte limit.",
         )
+    name = os.path.basename(upload.name or "upload.dbs")
+    data = {"file": name, "size": upload.size, "dry_run": False, "flushed": False}
     try:
-        result = restore_backup(upload.read(), passphrase)
+        with _tracked(request, RESTORE, name, data) as entry:
+            raw = upload.read()
+            entry.data["sha256"] = hashlib.sha256(raw).hexdigest()
+            result = restore_backup(raw, passphrase)
+            entry.data.update(
+                records=result.records_loaded,
+                files=result.files_written,
+                healed=bool(result.healed),
+            )
     except DBSError as exc:
         return _render(
             request, "Restore", fields, multipart=True,

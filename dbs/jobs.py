@@ -180,7 +180,7 @@ def start_backup(*, database, passphrase="", note="", actor=None, remote_addr=""
         job = Job.begin(
             BACKUP,
             target=name,
-            data={"file": name, "database": database},
+            data=audit.with_actor({"file": name, "database": database}, actor),
             owner=runner.owner,
             hold=(RUNNER_LEASE,),
             actor=actor,
@@ -214,7 +214,7 @@ def start_restore(
         job = Job.begin(
             RESTORE,
             target=name,
-            data={"file": name, "dry_run": dry_run, "flushed": flush},
+            data=audit.with_actor({"file": name, "dry_run": dry_run, "flushed": flush}, actor),
             owner=runner.owner,
             hold=(RUNNER_LEASE,),
             actor=actor,

@@ -630,3 +630,21 @@ def test_the_migration_lowers_a_schedule_keeping_more_than_five():
     assert before.level == WARN and "keeps 9" in before.message
     assert after.level == OK
     assert BackupSchedule.objects.get().keep == 5
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_audit_chain_step_applies_its_migration():
+    call_command("migrate", "dbs", "0004", verbosity=0)
+    try:
+        step = upgrade.AuditChain()
+
+        reported = step.check()
+        applied = step.fix()
+
+        assert reported.level == ACTION
+        assert reported.remedy == "python manage.py migrate dbs"
+        assert applied.level == FIXED
+        assert step.check().level == OK
+        assert "dbs audit verify" in step.check().message
+    finally:
+        call_command("migrate", "dbs", verbosity=0)

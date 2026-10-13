@@ -31,7 +31,7 @@
   <table>
     <tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>OK</th></tr>
     {% for event in audit %}
-    <tr><td>{{ event.created_at|date:"Y-m-d H:i" }}</td><td>{{ event.actor }}</td>
+    <tr><td>{{ event.created_at|date:"Y-m-d H:i" }}</td><td>{{ event.actor_name|default:"-" }}</td>
         <td>{{ event.action }}</td><td>{{ event.target_name }}</td>
         <td>{{ event.succeeded|yesno:"yes,no" }}</td></tr>
     {% endfor %}

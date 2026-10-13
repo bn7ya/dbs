@@ -20,6 +20,36 @@ from .models import (
 
 
 class SuperuserOnlyAdmin(admin.ModelAdmin):
+    audit_as = ""
+
+    def audit_target(self, obj):
+        return str(obj)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if self.audit_as:
+            fields = sorted(form.changed_data)
+            views._audit(
+                request,
+                f"{self.audit_as}.{'update' if change else 'add'}",
+                target=self.audit_target(obj),
+                detail=", ".join(fields),
+                data={"fields": fields},
+            )
+
+    def delete_model(self, request, obj):
+        target = self.audit_target(obj)
+        super().delete_model(request, obj)
+        if self.audit_as:
+            views._audit(request, f"{self.audit_as}.delete", target=target)
+
+    def delete_queryset(self, request, queryset):
+        targets = [self.audit_target(obj) for obj in queryset]
+        super().delete_queryset(request, queryset)
+        if self.audit_as:
+            for target in targets:
+                views._audit(request, f"{self.audit_as}.delete", target=target)
+
     def has_module_permission(self, request):
         return self._allowed(request)
 
@@ -42,6 +72,7 @@ class SuperuserOnlyAdmin(admin.ModelAdmin):
 
 @admin.register(BackupRecord)
 class BackupRecordAdmin(SuperuserOnlyAdmin):
+    audit_as = "backup.record"
     list_display = ("filename", "created_at", "size_bytes", "database", "created_by", "restore_link")
     list_filter = ("database",)
     search_fields = ("filename", "sha256")
@@ -128,12 +159,15 @@ class BackupScheduleAdmin(SuperuserOnlyAdmin):
                 "enabled": obj.enabled,
                 "interval": obj.interval,
                 "keep": obj.keep,
+                "database": obj.database,
+                "fields": sorted(form.changed_data),
             },
         )
 
 
 @admin.register(SecurityPolicy)
 class SecurityPolicyAdmin(SuperuserOnlyAdmin):
+    audit_as = "security.policy"
     list_display = ("level", "configured", "warn_threshold", "logout_threshold", "updated_at")
 
     def has_add_permission(self, request):
@@ -160,9 +194,14 @@ class AnomalyEventAdmin(SuperuserOnlyAdmin):
 
 @admin.register(AuditEvent)
 class AuditEventAdmin(SuperuserOnlyAdmin):
-    list_display = ("created_at", "actor", "action", "target_name", "status", "duration")
+    list_display = ("created_at", "who", "action", "target_name", "status", "duration")
     list_filter = ("action", "status")
     search_fields = ("action", "target_name", "detail")
+    list_select_related = ("actor",)
+
+    @admin.display(description="by")
+    def who(self, obj):
+        return obj.actor_name or "-"
 
     def has_add_permission(self, request):
         return False
@@ -176,7 +215,11 @@ class AuditEventAdmin(SuperuserOnlyAdmin):
 
 @admin.register(KnownLocation)
 class KnownLocationAdmin(SuperuserOnlyAdmin):
+    audit_as = "security.location"
     list_display = ("user", "label", "latitude", "longitude", "radius_km")
+
+    def audit_target(self, obj):
+        return f"{obj.user.get_username()}: {obj.label}"
 
 
 @admin.register(Panel)

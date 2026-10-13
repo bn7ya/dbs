@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from dbs import audit
 from dbs.conf import setting
-from dbs.models import AnomalyEvent, AuditEvent, Lockout, SecurityPolicy, SessionEvent
+from dbs.models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
 from dbs.security import detector
 
 ACTIONS = ("status", "unlock", "policy", "retrain", "reset-baseline", "events", "purge")
@@ -97,12 +97,11 @@ class Command(BaseCommand):
         cutoff = timezone.now() - timedelta(days=days)
         events, _ = SessionEvent.objects.filter(created_at__lt=cutoff).delete()
         anomalies, _ = AnomalyEvent.objects.filter(created_at__lt=cutoff).delete()
-        audit, _ = AuditEvent.objects.filter(created_at__lt=cutoff).delete()
         detector.forget()
         self.stdout.write(
             self.style.SUCCESS(
-                f"Removed {events} events, {anomalies} anomalies and {audit} audit "
-                f"rows older than {days} days."
+                f"Removed {events} events and {anomalies} anomalies older than {days} days. "
+                "Audit rows are kept."
             )
         )
 

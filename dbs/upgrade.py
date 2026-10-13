@@ -502,6 +502,28 @@ class PulledBackups(Step):
             return []
 
 
+class AuditChain(AuditTrail):
+    name = "audit chain"
+    since = "0.7.0"
+    migration = ("dbs", "0005_pull_only_retention_chain")
+
+    def check(self):
+        finding = super().check()
+        if finding.level == OK:
+            return self.ok(
+                "every finished audit row is sealed in a hash chain; "
+                "`manage.py dbs audit verify` checks it"
+            )
+        return self.action(
+            "the audit trail cannot be sealed in a hash chain until dbs.0005 is applied",
+            finding.remedy,
+        )
+
+    def fix(self):
+        super().fix()
+        return self.fixed("applied the migration that seals the audit trail")
+
+
 class KeepAtMostFive(Step):
     name = "retention"
     since = "0.7.0"
@@ -555,6 +577,7 @@ STEPS = (
     AiInstructions,
     PulledBackups,
     KeepAtMostFive,
+    AuditChain,
 )
 
 

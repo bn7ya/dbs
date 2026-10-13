@@ -28,16 +28,17 @@ DEFAULT_MAX_UPLOAD_BYTES = 1024 ** 3
 JOB_REFRESH_SECONDS = 3
 
 
-def _audit(request, action, target="", detail="", succeeded=True, data=None):
+def _audit(request, action, target="", detail="", succeeded=True, data=None, error_code=""):
     from .security.features import client_address
 
-    audit.record(
+    return audit.record(
         action,
         actor=request.user,
         target=target,
         detail=detail,
-        data=data,
+        data=audit.with_actor(data, request.user),
         status=audit.SUCCEEDED if succeeded else audit.FAILED,
+        error_code=error_code,
         remote_addr=client_address(request),
     )
 
@@ -67,7 +68,8 @@ def setup(request):
             policy.configured = True
             policy.configured_by = request.user
             policy.save()
-            if policy.collect_location and data.get("latitude") is not None:
+            located = policy.collect_location and data.get("latitude") is not None
+            if located:
                 KnownLocation.objects.update_or_create(
                     user=request.user,
                     label="usual",
@@ -76,7 +78,16 @@ def setup(request):
                         "longitude": round(data["longitude"], geo.COORDINATE_PRECISION),
                     },
                 )
-            _audit(request, "security.setup", detail=f"level={policy.level}")
+            _audit(
+                request,
+                "security.setup",
+                detail=f"level={policy.level}",
+                data={
+                    "level": policy.level,
+                    "collect_location": policy.collect_location,
+                    "known_location": bool(located),
+                },
+            )
             messages.success(request, "DBS security is configured.")
             return redirect("admin:app_list", app_label="dbs")
     else:

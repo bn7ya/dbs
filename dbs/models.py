@@ -125,6 +125,8 @@ class AuditEvent(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    chain_index = models.PositiveBigIntegerField(null=True, blank=True, db_index=True)
+    chain_hash = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         ordering = ("-created_at",)
@@ -136,7 +138,15 @@ class AuditEvent(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.action} by {self.actor_id or 'system'}"
+        if self.actor_name:
+            return f"{self.action} by {self.actor_name}"
+        return self.action
+
+    @property
+    def actor_name(self):
+        if self.actor_id is not None and self.actor is not None:
+            return self.actor.get_username()
+        return (self.data or {}).get("actor_username", "")
 
     @property
     def duration(self):

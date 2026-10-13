@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import datetime
+import hashlib
+import json
 import logging
 import os
 from contextlib import contextmanager
+from dataclasses import dataclass
 
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, IntegrityError, router, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -17,6 +21,8 @@ FAILED = "failed"
 FINISHED = (SUCCEEDED, FAILED)
 UNFINISHED = (QUEUED, RUNNING)
 INTERRUPTED = "interrupted"
+UNEXPECTED = "unexpected"
+USERNAME_KEY = "actor_username"
 
 ACTION_MAX = 64
 TARGET_MAX = 1024
@@ -25,11 +31,36 @@ ADDRESS_MAX = 64
 ERROR_CODE_MAX = 64
 SUBJECT_MAX = 64
 
+CHAIN_LOCK = "dbs.audit.chain"
+SEAL_BATCH = 500
+CHAINED_FIELDS = (
+    "action",
+    "target_name",
+    "detail",
+    "data",
+    "status",
+    "error_code",
+    "subject",
+    "remote_addr",
+    "succeeded",
+    "started_at",
+    "finished_at",
+    "created_at",
+)
+
 
 def _known_actor(actor):
     if actor is None or not getattr(actor, "is_authenticated", False):
         return None
     return actor if getattr(actor, "pk", None) else None
+
+
+def with_actor(data, actor):
+    merged = dict(data or {})
+    known = _known_actor(actor)
+    if known is not None:
+        merged.setdefault(USERNAME_KEY, known.get_username())
+    return merged
 
 
 def record(
@@ -51,7 +82,7 @@ def record(
     now = timezone.now()
     if finished_at is None and status in FINISHED:
         finished_at = now
-    return AuditEvent.objects.create(
+    event = AuditEvent.objects.create(
         actor=_known_actor(actor),
         action=str(action)[:ACTION_MAX],
         target_name=str(target or "")[:TARGET_MAX],
@@ -65,6 +96,9 @@ def record(
         started_at=started_at or now,
         finished_at=finished_at,
     )
+    if status in FINISHED:
+        seal_after_commit()
+    return event
 
 
 def safe_record(action, **fields):
@@ -77,10 +111,22 @@ def safe_record(action, **fields):
 
 
 def error_code_for(exc):
+    from django.core.management.base import CommandError
+
+    from .exceptions import DBSError
+
     code = getattr(exc, "code", None)
     if isinstance(code, str) and code:
         return code
-    return type(exc).__name__
+    if isinstance(exc, DBSError):
+        return type(exc).__name__
+    if isinstance(exc.__cause__, DBSError):
+        return error_code_for(exc.__cause__)
+    if isinstance(exc, CommandError):
+        return type(exc).__name__
+    if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+        return INTERRUPTED
+    return UNEXPECTED
 
 
 class Tracked:
@@ -178,7 +224,10 @@ def _close(event_id, status, *, data=None, error_code="", detail=""):
         fields["data"] = dict(data)
     if detail:
         fields["detail"] = str(detail)[:DETAIL_MAX]
-    return AuditEvent.objects.filter(pk=event_id, status__in=UNFINISHED).update(**fields)
+    closed = AuditEvent.objects.filter(pk=event_id, status__in=UNFINISHED).update(**fields)
+    if closed:
+        seal_after_commit()
+    return closed
 
 
 def interrupt(*, idle_since=None, keep=(), events=None):
@@ -192,9 +241,133 @@ def interrupt(*, idle_since=None, keep=(), events=None):
     unfinished = AuditEvent.objects.filter(queued | running).exclude(pk__in=keep)
     if events is not None:
         unfinished = unfinished.filter(pk__in=events)
-    return unfinished.update(
+    interrupted = unfinished.update(
         status=FAILED,
         succeeded=False,
         error_code=INTERRUPTED,
         finished_at=timezone.now(),
     )
+    if interrupted:
+        seal_after_commit()
+    return interrupted
+
+
+def _plain(value):
+    if isinstance(value, datetime.datetime):
+        if timezone.is_aware(value):
+            value = value.astimezone(datetime.timezone.utc)
+        return value.isoformat()
+    return value
+
+
+def canonical(event):
+    body = {name: _plain(getattr(event, name)) for name in CHAINED_FIELDS}
+    body["chain_index"] = event.chain_index
+    return json.dumps(body, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def link(previous_hash, event):
+    return hashlib.sha256((previous_hash + canonical(event)).encode("utf-8")).hexdigest()
+
+
+def _hold_chain(alias):
+    from .models import Lease
+
+    now = timezone.now()
+    locks = Lease.objects.using(alias).filter(name=CHAIN_LOCK)
+    if locks.update(renewed_at=now):
+        return
+    try:
+        with transaction.atomic(using=alias):
+            Lease.objects.using(alias).create(name=CHAIN_LOCK, owner="", expires_at=now)
+    except IntegrityError:
+        locks.update(renewed_at=now)
+
+
+def seal_pending(limit=SEAL_BATCH):
+    from .models import AuditEvent
+
+    alias = router.db_for_write(AuditEvent)
+    with transaction.atomic(using=alias):
+        _hold_chain(alias)
+        events = AuditEvent.objects.using(alias)
+        pending = list(
+            events.filter(chain_index__isnull=True, status__in=FINISHED).order_by("pk")[:limit]
+        )
+        if not pending:
+            return 0
+        last = (
+            events.filter(chain_index__isnull=False)
+            .order_by("-chain_index")
+            .values_list("chain_index", "chain_hash")
+            .first()
+        )
+        index, previous = last or (0, "")
+        for event in pending:
+            index += 1
+            event.chain_index = index
+            event.chain_hash = link(previous, event)
+            events.filter(pk=event.pk, chain_index__isnull=True).update(
+                chain_index=index, chain_hash=event.chain_hash
+            )
+            previous = event.chain_hash
+    return len(pending)
+
+
+def _seal_quietly():
+    try:
+        seal_pending()
+    except DatabaseError as exc:
+        logger.warning("Could not seal the audit trail: %s", exc)
+
+
+def seal_after_commit():
+    from .models import AuditEvent
+
+    transaction.on_commit(_seal_quietly, using=router.db_for_write(AuditEvent))
+
+
+@dataclass
+class ChainCheck:
+    checked: int = 0
+    head: str = ""
+    broken_at: int | None = None
+    event_id: int | None = None
+    reason: str = ""
+    unsealed: int = 0
+    unfinished: int = 0
+
+    @property
+    def intact(self):
+        return self.broken_at is None
+
+
+def verify_chain():
+    from .models import AuditEvent
+
+    check = ChainCheck()
+    previous, expected = "", 1
+    sealed = AuditEvent.objects.filter(chain_index__isnull=False).order_by("chain_index", "pk")
+    for event in sealed.iterator():
+        if event.chain_index != expected:
+            check.broken_at, check.event_id = expected, event.pk
+            if event.chain_index < expected:
+                check.reason = f"link {event.chain_index} appears twice (row {event.pk})"
+            else:
+                check.reason = (
+                    f"links {expected} to {event.chain_index - 1} are missing before row "
+                    f"{event.pk}: rows were deleted or unsealed"
+                )
+            return check
+        if link(previous, event) != event.chain_hash:
+            check.broken_at, check.event_id = expected, event.pk
+            check.reason = f"row {event.pk} was changed after it was sealed"
+            return check
+        previous, expected = event.chain_hash, expected + 1
+        check.checked += 1
+    check.head = previous
+    check.unsealed = AuditEvent.objects.filter(
+        chain_index__isnull=True, status__in=FINISHED
+    ).count()
+    check.unfinished = AuditEvent.objects.filter(status__in=UNFINISHED).count()
+    return check

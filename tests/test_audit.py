@@ -30,6 +30,8 @@ AUDIT_FIELDS = {
     "started_at",
     "finished_at",
     "created_at",
+    "chain_index",
+    "chain_hash",
 }
 
 
@@ -79,7 +81,7 @@ def test_a_failed_backup_records_its_failure(tmp_path, monkeypatch):
 
     event = AuditEvent.objects.get(action="backup.create")
     assert event.status == audit.FAILED and not event.succeeded
-    assert event.error_code == "CommandError"
+    assert event.error_code == "DBSError"
     assert "disk full" in event.detail
     assert not BackupRecord.objects.exists()
 
