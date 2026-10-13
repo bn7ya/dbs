@@ -69,7 +69,6 @@ class Runner:
 class Job:
     def __init__(self, event, owner, hold=()):
         self.event_id = event.pk
-        self.target = event.target_name
         self.data = dict(event.data or {})
         self.owner = owner
         self.lease = job_lease(event.pk)
@@ -229,18 +228,19 @@ def start_restore(
         job,
         runner,
         lambda: _restore(job, runner, path, passphrase, dry_run, flush, owned),
-        cleanup=lambda: owned and _remove(path),
+        cleanup=(lambda: _remove(path)) if owned else None,
     )
     return job.event_id
 
 
-def _start(job, runner, work, cleanup):
+def _start(job, runner, work, cleanup=None):
     try:
         launch(work)
     except BaseException as exc:
         job.fail(exc)
         job.close()
-        cleanup()
+        if cleanup is not None:
+            cleanup()
         runner.release()
         raise
 
@@ -325,7 +325,6 @@ def _remove(path):
         os.remove(path)
     except OSError:
         pass
-    return True
 
 
 def describe(event):

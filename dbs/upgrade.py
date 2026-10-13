@@ -446,11 +446,8 @@ class PulledBackups(Step):
 
         left = [name for name in self.removed_settings if hasattr(settings, name)]
         stored = self._stored_targets()
-        if stored is None:
-            stored = []
-            removed = self._removed_targets()
-        else:
-            removed = []
+        removed = self._removed_targets() if stored is None else []
+        stored = stored or []
         problems = []
         if stored:
             problems.append("the panel still holds the SFTP targets " + ", ".join(stored))
