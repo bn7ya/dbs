@@ -10,6 +10,7 @@ from .paths import HOME_ENV
 SETTINGS_MODULE = "dbs.manager.settings"
 DATABASE_URL_ENV = "DBS_MANAGER_DATABASE_URL"
 HOST_ENV = "DBS_MANAGER_HOST"
+TRUSTED_PROXY_ENV = "DBS_MANAGER_TRUSTED_PROXY"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
@@ -28,6 +29,7 @@ __all__ = [
     "LOCAL_HOSTS",
     "SETTINGS_MODULE",
     "SETUP_LEASE",
+    "TRUSTED_PROXY_ENV",
     "data_dir",
     "is_loopback",
     "jobs_inline",

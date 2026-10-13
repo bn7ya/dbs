@@ -10,6 +10,7 @@ api_patterns = [
     path("health/", HealthView.as_view(), name="health"),
     path("setup/", SetupView.as_view(), name="setup"),
     path("auth/", include("dbs.manager.accounts.urls")),
+    path("accounts/", include("dbs.manager.accounts.account_urls")),
     path("activity/", include("dbs.manager.activity.urls")),
     path("servers/", include("dbs.manager.servers.urls")),
     path("backups/", include("dbs.manager.backups.urls")),

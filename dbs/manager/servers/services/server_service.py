@@ -37,6 +37,7 @@ from dbs.manager.servers.repositories import ServerRepository
 from dbs.manager.servers.services import pythons, vault_contexts
 from dbs.manager.servers.services.connection_service import ServerConnectionService
 from dbs.manager.vault import seal_text
+from dbs.manager.permissions import Capability, requires
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
@@ -153,6 +154,7 @@ class ServerService:
             raise NotFound()
         return server
 
+    @requires(Capability.SERVERS_MANAGE)
     def fingerprint(self, host: str, port: int) -> HostKey:
         with self.activity.track(
             Action.FINGERPRINT, target=_address(host, port)
@@ -161,6 +163,7 @@ class ServerService:
             entry.detail = {"fingerprint": key.fingerprint}
             return key
 
+    @requires(Capability.SERVERS_MANAGE)
     def add(self, **data: Any) -> AddedServer:
         if not data.pop("generate_key", False):
             return AddedServer(server=self.create(**data))
@@ -171,6 +174,7 @@ class ServerService:
             authorized_keys_hint=keys.authorized_keys_hint(public_key, server.username),
         )
 
+    @requires(Capability.SERVERS_MANAGE)
     def create(self, **data: Any) -> Server:
         data.pop("generate_key", None)
         errors: Errors = {}
@@ -197,6 +201,7 @@ class ServerService:
             self.activity.record(Action.CREATE, server=server, target=server.name)
         return server
 
+    @requires(Capability.SERVERS_MANAGE)
     def create_with_key(self, **data: Any) -> tuple[Server, str]:
         private_key, public_key = keys.generate_keypair()
         data.update(
@@ -226,6 +231,7 @@ class ServerService:
         except keys.KeyUnreadable as exc:
             raise NoPrivateKey() from exc
 
+    @requires(Capability.SERVERS_MANAGE)
     def update(
         self, server_id: UUID, account_password: str = "", **data: Any
     ) -> Server:
@@ -293,12 +299,14 @@ class ServerService:
             and server.last_check_status != Server.CheckStatus.OK
         )
 
+    @requires(Capability.SERVERS_MANAGE)
     def delete(self, server_id: UUID) -> None:
         server = self.get(server_id)
         with transaction.atomic():
             self.servers.soft_delete(server)
             self.activity.record(Action.DELETE, server=server, target=server.name)
 
+    @requires(Capability.SERVERS_MANAGE)
     def repin(self, server_id: UUID, host_key: str, password: str) -> Server:
         server = self.get(server_id)
         with self.activity.track(
@@ -317,6 +325,7 @@ class ServerService:
                 last_check_error="",
             )
 
+    @requires(Capability.SERVERS_PASSPHRASE)
     def reveal_passphrase(self, server_id: UUID, password: str) -> str:
         server = self.get(server_id)
         with self.activity.track(
@@ -325,6 +334,7 @@ class ServerService:
             AccountService(self.user).confirm_password(password)
             return self.connections.backup_passphrase(server)
 
+    @requires(Capability.SERVERS_CHECK)
     def check(self, server_id: UUID) -> Server:
         server = self.get(server_id)
         with self.activity.track(
@@ -353,6 +363,7 @@ class ServerService:
         remote = (server.last_check_report or {}).get("dbs_version")
         return versions.compatibility(remote)
 
+    @requires(Capability.SERVERS_MANAGE)
     def capture_passphrase(self, server_id: UUID) -> Server:
         server = self.get(server_id)
         with self.activity.track(

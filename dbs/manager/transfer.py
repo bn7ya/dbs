@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
+from django.conf import settings
 from django.db import transaction
 from django.test.utils import override_settings
 from django.utils import timezone
@@ -13,17 +17,15 @@ from dbs.exceptions import DBSError
 from dbs.models import AuditEvent
 
 from . import conf, paths
+from .staging import TransferError
 
 EXPORT = "manager.export"
 IMPORT = "manager.import"
 KEYS = "keys"
+KEY_NAME = paths.KEY_FILE.name
 BACKUPS = paths.BACKUPS_DIRECTORY
 ROOTS = (KEYS, BACKUPS)
 MINIMUM_PASSPHRASE = 12
-
-
-class TransferError(Exception):
-    pass
 
 
 def default_export_name():
@@ -38,6 +40,18 @@ def checked_passphrase(passphrase):
     return passphrase
 
 
+@contextmanager
+def key_folder(data_dir) -> Iterator[Path]:
+    keys = Path(data_dir) / KEYS
+    if (keys / KEY_NAME).exists():
+        yield keys
+        return
+    with tempfile.TemporaryDirectory(prefix=".export-", dir=data_dir) as holder:
+        folder = paths.private_directory(Path(holder) / KEYS)
+        paths.write_private(folder / KEY_NAME, settings.SECRET_KEY)
+        yield folder
+
+
 def export_manager(output, passphrase, *, with_backups=False):
     from dbs import create_backup
 
@@ -46,15 +60,16 @@ def export_manager(output, passphrase, *, with_backups=False):
         raise TransferError(f"{output} already exists; choose another name.")
     passphrase = checked_passphrase(passphrase)
     data_dir = conf.data_dir()
-    roots = [str(data_dir / KEYS)]
-    if with_backups:
-        roots.append(str(paths.backups_path(data_dir)))
     data = {"with_backups": with_backups}
     target = os.path.basename(output)
     try:
-        with transaction.atomic(), override_settings(DBS_FILE_ROOTS=roots):
-            entry = audit.record(EXPORT, target=target, data=data)
-            container = create_backup(passphrase, output=output)
+        with key_folder(data_dir) as keys:
+            roots = [str(keys)]
+            if with_backups:
+                roots.append(str(paths.backups_path(data_dir)))
+            with transaction.atomic(), override_settings(DBS_FILE_ROOTS=roots):
+                entry = audit.record(EXPORT, target=target, data=data)
+                container = create_backup(passphrase, output=output)
     except Exception as exc:
         audit.safe_record(
             EXPORT,
@@ -70,19 +85,41 @@ def export_manager(output, passphrase, *, with_backups=False):
     return container
 
 
+def read_export(source):
+    try:
+        return Path(source).read_bytes()
+    except OSError as exc:
+        raise TransferError(f"cannot read {source}: {exc}") from exc
+
+
+def exported_key(source, passphrase):
+    from dbs.engine.restore import read_payload
+
+    try:
+        payload = read_payload(read_export(source), passphrase)
+    except DBSError as exc:
+        raise TransferError(str(exc)) from exc
+    for entry, content in payload.files:
+        root = os.path.basename((entry.root or "").rstrip("/\\"))
+        if entry.kind == "root" and root == KEYS and entry.name == KEY_NAME:
+            return content.decode("ascii").strip()
+    return None
+
+
+def manages_servers():
+    from .servers.models import Server
+
+    return Server.all_objects.exists()
+
+
 def import_manager(source, passphrase, *, replace=False):
     from dbs.engine.restore import read_payload, restore_backup
 
-    from .servers.models import Server
-
-    if Server.all_objects.exists() and not replace:
+    if manages_servers() and not replace:
         raise TransferError(
             "this data directory already manages servers; pass --replace to replace them."
         )
-    try:
-        data = Path(source).read_bytes()
-    except OSError as exc:
-        raise TransferError(f"cannot read {source}: {exc}") from exc
+    data = read_export(source)
     try:
         result = restore_backup(data, passphrase, flush=True, write_files=False)
         payload = read_payload(data, passphrase)

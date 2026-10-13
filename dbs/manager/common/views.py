@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 from rest_framework import status
@@ -18,7 +19,11 @@ class HealthView(APIView):
         checks = {"database": self._database(), "cache": self._cache()}
         healthy = all(checks.values())
         return Response(
-            {"status": "ok" if healthy else "degraded", "checks": checks},
+            {
+                "status": "ok" if healthy else "degraded",
+                "checks": checks,
+                "key_store": getattr(settings, "DBS_MANAGER_KEY_STORE", "file"),
+            },
             status=status.HTTP_200_OK
             if healthy
             else status.HTTP_503_SERVICE_UNAVAILABLE,

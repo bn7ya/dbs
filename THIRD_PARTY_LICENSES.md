@@ -25,6 +25,7 @@ help a developer review their dependencies; it is not legal advice.
 | [paramiko](https://github.com/paramiko/paramiko) | `>=3` | LGPL-2.1-or-later | SSH and SFTP transports, and the manager's connections to servers |
 | [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15` | BSD-3-Clause | The manager's REST API |
 | [waitress](https://github.com/Pylons/waitress) | `>=3` | ZPL-2.1 | The web server behind `django_dbs run` |
+| [keyring](https://github.com/jaraco/keyring) | `>=24` | MIT | Keeps the DBS manager's sealing key in the system keychain |
 | [tomli](https://github.com/hukkin/tomli) | `>=1.1.0`, Python < 3.11 only | MIT | Reading `dbs-client.toml` |
 
 The `ssh` and `client` extras name paramiko and tomli, which the list above already installs.
@@ -52,6 +53,14 @@ The exact set depends on the versions pip resolves. This is the set for the newe
 | bcrypt | paramiko | Apache-2.0 |
 | PyNaCl | paramiko | Apache-2.0 |
 | invoke | paramiko (recent releases) | BSD-2-Clause |
+| jaraco.classes, jaraco.functools, jaraco.context | keyring | MIT |
+| more-itertools | jaraco.classes, jaraco.functools | MIT |
+| backports.tarfile (Python < 3.12 only) | jaraco.context | MIT |
+| importlib_metadata (Python < 3.12 only) | keyring | Apache-2.0 |
+| zipp (Python < 3.12 only) | importlib_metadata | MIT |
+| SecretStorage (Linux only) | keyring | BSD-3-Clause |
+| jeepney (Linux only) | keyring, SecretStorage | MIT |
+| pywin32-ctypes (Windows only) | keyring | BSD-3-Clause |
 
 The binary wheels of numpy and scipy also carry the native libraries they link against, each
 named with its license in the wheel's own `LICENSE.txt`. The Linux wheels, for example, carry

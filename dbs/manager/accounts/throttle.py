@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import math
+import time
 from collections.abc import Iterable
 
 from django.conf import settings
 from django.core.cache import cache
 
 PREFIX = "accounts:failures:"
+BACKOFF_PREFIX = "accounts:backoff:"
+KNOWN_PREFIX = "accounts:known:"
+LARGEST_DOUBLING = 16
 
 
 def _key(name: str) -> str:
@@ -36,3 +41,39 @@ def given_back(names: Iterable[str]) -> None:
 
 def cleared(names: Iterable[str]) -> None:
     cache.delete_many([_key(name) for name in names])
+
+
+def slowed(name: str, free: int) -> int:
+    failures = _count(_key(name))
+    if failures <= free:
+        return 0
+    doublings = min(failures - free - 1, LARGEST_DOUBLING)
+    wait = min(
+        settings.AUTH_BACKOFF_SECONDS * 2**doublings,
+        settings.AUTH_BACKOFF_MAX_SECONDS,
+    )
+    cache.set(BACKOFF_PREFIX + name, time.time() + wait, timeout=math.ceil(wait))
+    return wait
+
+
+def waiting(name: str) -> int:
+    until = cache.get(BACKOFF_PREFIX + name)
+    if until is None:
+        return 0
+    return max(0, math.ceil(until - time.time()))
+
+
+def remember(name: str, address: str) -> None:
+    cache.set(
+        KNOWN_PREFIX + f"{name}:{address}",
+        True,
+        timeout=settings.AUTH_KNOWN_ADDRESS_SECONDS,
+    )
+
+
+def known(name: str, address: str) -> bool:
+    return bool(cache.get(KNOWN_PREFIX + f"{name}:{address}"))
+
+
+def unslowed(name: str) -> None:
+    cache.delete_many([_key(name), BACKOFF_PREFIX + name])

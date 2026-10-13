@@ -21,6 +21,7 @@ from dbs.manager.backups.services.plan_runs import run_detail
 from dbs.manager.common.paths import absolute_path
 from dbs.manager.runner import get_runner
 from dbs.manager.servers.services import ServerService
+from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
 if TYPE_CHECKING:
@@ -103,6 +104,7 @@ class BackupPlanService:
             raise NotFound()
         return plan
 
+    @requires(Capability.PLANS_MANAGE)
     def create(
         self, *, server: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
@@ -127,6 +129,7 @@ class BackupPlanService:
                 )
             )
 
+    @requires(Capability.PLANS_MANAGE)
     def update(
         self, plan_id: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
@@ -154,6 +157,7 @@ class BackupPlanService:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(lambda: self.plans.update(plan, **changes))
 
+    @requires(Capability.PLANS_MANAGE)
     def delete(self, plan_id: UUID) -> None:
         plan = self.get(plan_id)
         with transaction.atomic():
@@ -162,6 +166,7 @@ class BackupPlanService:
                 Action.PLAN_DELETE, server=plan.server, target=plan.name
             )
 
+    @requires(Capability.PLANS_RUN)
     def run(self, plan_id: UUID) -> AuditEvent:
         plan = self.get(plan_id)
         server = self.servers.get(plan.server_id)

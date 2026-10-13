@@ -5,6 +5,7 @@ import pytest
 from dbs import audit
 from dbs.manager.servers.exceptions import HostKeyChanged, SSHUnreachable
 from dbs.manager.servers.gateways import parse_host_key
+from tests.manager.accounts.support import enrolled, signed_in
 from tests.manager.servers.support import (
     BACKUP_PASSPHRASE,
     KEY_PASSPHRASE,
@@ -236,7 +237,8 @@ def test_showing_the_passphrase_is_logged(api, logged, server):
 
 
 @pytest.mark.django_db
-def test_no_secret_reaches_the_log(api, monkeypatch, server, private_key):
+def test_no_secret_reaches_the_log(api, admin, monkeypatch, server, private_key):
+    enrolled(admin)
     replacement_key = host_key_line()
     monkeypatch.setattr(CONNECT, refusing_with(SSHUnreachable()))
     api.patch(
@@ -272,7 +274,7 @@ def test_no_secret_reaches_the_log(api, monkeypatch, server, private_key):
     )
     api.post("/api/auth/logout/")
     api.post("/api/auth/login/", {"username": "sara", "password": f"{PASSWORD}-typo"})
-    api.post("/api/auth/login/", {"username": "sara", "password": PASSWORD})
+    signed_in(api, "sara", PASSWORD)
 
     response = api.get(LOG, {"page_size": 200})
 
@@ -291,7 +293,8 @@ def test_no_secret_reaches_the_log(api, monkeypatch, server, private_key):
 
 @pytest.mark.django_db
 def test_signing_in_is_logged(anonymous, admin, logged):
-    anonymous.post("/api/auth/login/", {"username": "sara", "password": PASSWORD})
+    enrolled(admin)
+    signed_in(anonymous, "sara", PASSWORD)
 
     entry = latest(logged, "auth.sign_in")
     assert entry.actor == admin

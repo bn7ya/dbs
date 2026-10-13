@@ -37,4 +37,5 @@ class DashboardSerializer(serializers.BaseSerializer):
             "storage_bytes": instance["storage_bytes"],
             "last_export_at": moment(instance["last_export_at"]),
             "recent_failures": failures,
+            "key_store": instance["key_store"],
         }

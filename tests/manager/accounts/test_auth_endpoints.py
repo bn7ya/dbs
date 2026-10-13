@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 
 from dbs.manager.accounts.repositories import UserRepository
+from tests.manager.accounts.support import enrolled, signed_in
 
 if TYPE_CHECKING:
     from rest_framework.response import _MonkeyPatchedResponse as ApiResponse
@@ -47,12 +48,10 @@ def test_me_requires_authentication(client: APIClient) -> None:
 def test_sign_in_returns_identity_with_group_names(
     client: APIClient, member: User
 ) -> None:
-    response: ApiResponse = client.post(
-        "/api/auth/login/",
-        {"username": "sara", "password": PASSWORD},
-    )
+    enrolled(member)
 
-    assert response.status_code == 200
+    response: ApiResponse = signed_in(client, "sara", PASSWORD)
+
     body: dict[str, Any] = response.json()
     assert body["username"] == "sara"
     assert body["groups"] == ["members"]
@@ -127,3 +126,4 @@ def test_health_is_public(client: APIClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["checks"]["database"] is True
+    assert response.json()["key_store"] == "file"

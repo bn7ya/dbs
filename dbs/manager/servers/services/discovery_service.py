@@ -18,6 +18,7 @@ from dbs.manager.servers.services import pythons
 from dbs.manager.servers.services.connection_service import ServerConnectionService
 from dbs.manager.servers.services.pythons import quiet
 from dbs.manager.servers.services.server_service import ServerService
+from dbs.manager.permissions import Capability, requires
 
 SEARCH_ROOTS = ("~", "/srv", "/var/www", "/opt")
 SEARCH_DEPTH = 2
@@ -55,6 +56,7 @@ class DiscoveryService:
         self.connections = ServerConnectionService(user)
         self.activity = ActivityService(user)
 
+    @requires(Capability.SERVERS_MANAGE)
     def discover(
         self,
         server_id: UUID,

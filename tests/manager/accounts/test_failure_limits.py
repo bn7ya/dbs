@@ -5,10 +5,12 @@ from django.contrib.auth.models import AbstractBaseUser
 from django.core.cache import cache
 from rest_framework.test import APIClient
 
+from dbs.manager.accounts import throttle
 from dbs.manager.accounts.exceptions import InvalidPassword, TooManyAttempts
 from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.repositories import ActivityRepository
+from tests.manager.accounts.support import enrolled, signed_in
 
 PASSWORD = "correct-horse-battery-staple"
 WRONG = "not-the-password"
@@ -52,11 +54,66 @@ def test_a_name_past_its_limit_is_refused_even_with_the_right_password(sara):
 
 
 @pytest.mark.django_db
-def test_the_name_limit_ignores_case_and_holds_across_addresses(sara):
-    for address in ("203.0.113.1", "203.0.113.2", "203.0.113.3"):
-        sign_in("SARA", WRONG, address)
+def test_the_limit_ignores_case_and_holds_one_address_and_name_only(sara):
+    for _ in range(3):
+        sign_in("SARA", WRONG, "203.0.113.1")
 
-    assert sign_in("sara", PASSWORD, "198.51.100.9").status_code == 429
+    assert sign_in("sara", PASSWORD, "203.0.113.1").status_code == 429
+    assert sign_in("sara", PASSWORD, "198.51.100.9").status_code == 200
+
+
+class Clock:
+    def __init__(self, now: float) -> None:
+        self.now = now
+
+    def time(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def clock(monkeypatch, settings):
+    settings.AUTH_BACKOFF_SECONDS = 2
+    settings.AUTH_BACKOFF_MAX_SECONDS = 8
+    moments = Clock(1_700_000_000.0)
+    monkeypatch.setattr(throttle, "time", moments)
+    return moments
+
+
+@pytest.mark.django_db
+def test_failures_from_many_addresses_slow_the_name_down(sara, clock):
+    for number in range(4):
+        sign_in("sara", WRONG, f"203.0.113.{number}")
+
+    slowed = sign_in("sara", PASSWORD, "198.51.100.9")
+    clock.now += 2
+    allowed = sign_in("sara", PASSWORD, "198.51.100.9")
+
+    assert slowed.status_code == 429 and code(slowed) == "too_many_attempts"
+    assert slowed["Retry-After"] == "2"
+    assert allowed.status_code == 200
+
+
+@pytest.mark.django_db
+def test_the_slow_down_doubles_but_never_locks_the_name_out(sara, clock):
+    waits = []
+    for number in range(8):
+        sign_in("sara", WRONG, f"203.0.113.{number}")
+        waits.append(throttle.waiting("sign-in:name:sara"))
+        clock.now += waits[-1]
+
+    assert waits == [0, 0, 0, 2, 4, 8, 8, 8]
+    assert sign_in("sara", PASSWORD, "198.51.100.9").status_code == 200
+
+
+@pytest.mark.django_db
+def test_an_address_that_signed_in_before_is_not_slowed(sara, clock):
+    enrolled(sara)
+    signed_in(APIClient(REMOTE_ADDR="198.51.100.9"), "sara", PASSWORD)
+    for number in range(6):
+        sign_in("sara", WRONG, f"203.0.113.{number}")
+
+    assert sign_in("sara", PASSWORD, "198.51.100.10").status_code == 429
+    assert sign_in("sara", PASSWORD, "198.51.100.9").status_code == 200
 
 
 @pytest.mark.django_db

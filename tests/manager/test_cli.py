@@ -26,6 +26,7 @@ def clean_env(**extra):
         for key, value in os.environ.items()
         if not key.startswith("DBS_MANAGER_") and key != "DJANGO_SETTINGS_MODULE"
     }
+    env["DBS_MANAGER_KEY_STORE"] = "file"
     env.update(extra)
     return env
 
@@ -173,17 +174,57 @@ def test_paths_names_every_file(tmp_path, capsys):
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.0.2.10", "::"])
-def test_listening_beyond_this_machine_prints_a_warning(host, capsys):
-    cli.warn_if_exposed(host)
+def test_listening_beyond_this_machine_is_refused_without_a_proxy(host):
+    with pytest.raises(cli.CommandFailed) as refused:
+        cli.exposure(host, [], insecure=False)
 
-    assert "Warning: listening on" in capsys.readouterr().err
+    assert "--trusted-proxy" in str(refused.value)
+    assert "--allow-insecure-http" in str(refused.value)
+
+
+def test_listening_beyond_this_machine_behind_a_proxy_is_allowed(capsys):
+    cli.exposure("0.0.0.0", ["10.0.0.0/24"], insecure=False)
+
+    assert "behind the proxy at 10.0.0.0/24" in capsys.readouterr().err
+
+
+def test_plain_http_beyond_this_machine_needs_asking_for_and_warns(capsys):
+    cli.exposure("192.0.2.10", [], insecure=True)
+
+    assert capsys.readouterr().err.startswith("WARNING: listening on 192.0.2.10")
 
 
 @pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
 def test_listening_on_this_machine_alone_is_quiet(host, capsys):
-    cli.warn_if_exposed(host)
+    cli.exposure(host, [], insecure=False)
 
     assert capsys.readouterr().err == ""
+
+
+def test_a_trusted_proxy_is_an_address_range():
+    assert cli.trusted_proxies(["10.0.0.7/24,fd00::1"]) == [
+        "10.0.0.0/24",
+        "fd00::1/128",
+    ]
+    with pytest.raises(cli.CommandFailed):
+        cli.trusted_proxies(["proxy.example.com"])
+
+
+def test_run_refuses_to_listen_beyond_this_machine_without_a_proxy(tmp_path):
+    refused = subprocess.run(
+        manager(
+            "run", "--no-browser", "--host", "0.0.0.0", "--data-dir", str(tmp_path)
+        ),
+        cwd=ROOT,
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=BOOT_SECONDS,
+    )
+
+    assert refused.returncode == 1
+    assert "--trusted-proxy" in refused.stderr
+    assert not (tmp_path / "manager.sqlite3").exists()
 
 
 def test_the_browser_is_sent_to_a_reachable_address():
@@ -273,7 +314,9 @@ def test_password_changes_an_accounts_password_and_refuses_an_unknown_one(tmp_pa
         )
 
     assert command("createuser", "sara").returncode == 0
-    assert command("createuser", "sara").returncode == 1
+    assert command("createuser", "sara", "--role", "admin").returncode == 1
+    same = command("password", "sara")
+    assert same.returncode == 1 and "has not been using" in same.stderr
     changed = command("password", "sara", password="another-long-passphrase")
     assert changed.returncode == 0, changed.stderr
     assert "Changed the password of sara" in changed.stdout

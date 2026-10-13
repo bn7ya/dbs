@@ -264,6 +264,23 @@ class Dependencies(Step):
         return True
 
 
+class ManagerKeychain(Step):
+    name = "manager keychain"
+    since = "0.7.0"
+
+    def check(self):
+        if Dependencies.importable("keyring"):
+            return self.ok(
+                "keyring is available, so the DBS manager keeps its sealing key in "
+                "the system keychain wherever one works"
+            )
+        return self.warn(
+            "keyring is missing, so the DBS manager keeps its sealing key in a file "
+            "next to the data it protects",
+            'pip install --upgrade "django-dbs>=0.7"',
+        )
+
+
 class AdminPanel(Step):
     name = "admin panel"
     since = "0.3.0"
@@ -434,6 +451,7 @@ STEPS = (
     SchedulerMode,
     BackupDirectory,
     Dependencies,
+    ManagerKeychain,
     AdminPanel,
     GuardMiddleware,
     ExcludeSemantics,
