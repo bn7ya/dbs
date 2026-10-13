@@ -34,14 +34,18 @@ def test_the_token_file_is_private(token):
     assert token_path().stat().st_mode & 0o777 == 0o600
 
 
-def test_setup_creates_the_first_account_and_signs_it_in(anonymous, token):
+def test_setup_creates_the_master_account_and_starts_its_two_factor_setup(
+    anonymous, token
+):
     response = post(anonymous, token=token, username="sara", password=PASSWORD)
 
     assert response.status_code == 201
-    assert response.json() == {"username": "sara"}
+    assert response.json() == {"username": "sara", "step": "enroll"}
     user = UserRepository().find_by_username("sara")
     assert user.is_superuser and user.check_password(PASSWORD)
-    assert anonymous.get("/api/auth/me/").json()["username"] == "sara"
+    assert user.manager_account.role == "master"
+    assert anonymous.get("/api/auth/me/").status_code == 403
+    assert anonymous.post("/api/auth/two-factor/enrollment/").status_code == 200
     assert not token_path().exists()
     [entry] = logged("account.setup")
     assert entry.actor == user and entry.target_name == "sara"

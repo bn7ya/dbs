@@ -33,6 +33,7 @@ from dbs.manager.servers.exceptions import (
 )
 from dbs.manager.servers.services import ServerConnectionService, ServerService
 from dbs.manager.vault import open_stream
+from dbs.manager.permissions import Capability, requires
 
 RUN = "redeploy.run"
 STEPS = ("check", "env", "migrate", "restore", "archives", "final_check")
@@ -75,6 +76,7 @@ class RedeployService:
         self.versions = EnvVersionRepository()
         self.activity = ActivityService(user)
 
+    @requires(Capability.REDEPLOY_RUN)
     def start(
         self,
         *,

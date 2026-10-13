@@ -3,6 +3,7 @@ import tempfile
 
 os.environ["DBS_MANAGER_HOME"] = tempfile.mkdtemp(prefix="dbs-manager-test-")
 os.environ.pop("DBS_MANAGER_DATABASE_URL", None)
+os.environ.setdefault("DBS_MANAGER_KEY_STORE", "file")
 
 from dbs.manager.settings import *  # noqa: E402,F403
 

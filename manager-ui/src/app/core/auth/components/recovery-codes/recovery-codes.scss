@@ -1,0 +1,15 @@
+.recovery-codes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.recovery-codes__list {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: var(--app-space-2) var(--app-space-7);
+  margin: 0;
+  padding-inline-start: var(--app-space-6);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-1);
+}

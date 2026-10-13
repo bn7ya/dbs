@@ -4,7 +4,7 @@
       <h1>{{ 'servers.title' | t }}</h1>
       <p class="text-secondary">{{ 'servers.subtitle' | t }}</p>
     </div>
-    <a matButton="filled" routerLink="new">
+    <a *appCan="'servers.manage'" matButton="filled" routerLink="new">
       <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
       {{ 'servers.add' | t }}
     </a>
@@ -52,7 +52,7 @@
             [title]="'servers.empty.title' | t"
             [description]="'servers.empty.body' | t"
           >
-            <a matButton="filled" routerLink="new">{{ 'servers.add' | t }}</a>
+            <a *appCan="'servers.manage'" matButton="filled" routerLink="new">{{ 'servers.add' | t }}</a>
           </app-empty-state>
         }
       } @else {

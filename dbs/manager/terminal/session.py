@@ -21,6 +21,7 @@ class TerminalSession:
         self.args = args
         self.out = Output(as_json=getattr(args, "json", False))
         self.user = accounts.acting(getattr(args, "account", None))
+        accounts.warn_if_expired(self.user)
         self._password: str | None = None
 
     def password(self) -> str:

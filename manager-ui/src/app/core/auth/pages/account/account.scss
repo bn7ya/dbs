@@ -1,0 +1,31 @@
+@use "layout" as *;
+
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+  max-inline-size: $dialog-md;
+}
+
+.account__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.account__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--app-space-2) var(--app-space-6);
+  margin: 0;
+
+  dd {
+    margin: 0;
+  }
+}
+
+.account__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}

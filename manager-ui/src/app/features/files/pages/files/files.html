@@ -15,6 +15,7 @@
             type="button"
             [disabled]="current() === null || uploading()"
             [attr.aria-busy]="uploading()"
+            *appCan="'files.change'"
             (click)="picker.click()"
           >
             @if (uploading()) {
@@ -22,7 +23,7 @@
             }
             {{ 'files.upload.action' | t }}
           </button>
-          <button matButton="outlined" type="button" [disabled]="current() === null" (click)="newFolder()">
+          <button *appCan="'files.change'" matButton="outlined" type="button" [disabled]="current() === null" (click)="newFolder()">
             {{ 'files.newFolder.action' | t }}
           </button>
         </div>
@@ -159,6 +160,7 @@
                     @if (row.kind === 'file') {
                       <a
                         matButton
+                        *appCan="'files.download'"
                         [href]="downloadUrl(row)"
                         [attr.download]="row.name"
                         [attr.aria-label]="'files.download.label' | t: { name: row.name }"
@@ -173,6 +175,7 @@
                       [disabled]="isDeleting(row)"
                       [attr.aria-busy]="isDeleting(row)"
                       [attr.aria-label]="'files.delete.label' | t: { name: row.name }"
+                      *appCan="'files.change'"
                       (click)="remove(row)"
                     >
                       @if (isDeleting(row)) {

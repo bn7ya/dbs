@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
@@ -36,6 +37,7 @@ const EXPORT_COMMAND = 'django_dbs export manager.dbs';
 @Component({
   selector: 'app-dashboard-page',
   imports: [
+    Can,
     RouterLink,
     MatButton,
     MatCard,
@@ -67,6 +69,7 @@ export class DashboardPage {
   readonly failuresThisWeek = this.store.failuresThisWeek;
   readonly lastExportAt = this.store.lastExportAt;
   readonly exportDue = this.store.exportDue;
+  readonly keyInFile = this.store.keyInFile;
 
   readonly exportCommand = EXPORT_COMMAND;
   readonly skeletonLines = [1, 2, 3, 4];

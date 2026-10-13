@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
+import { MASTER_ACCOUNT } from '@core/auth/testing/identity.fixtures';
 import { AuthStore } from '@core/auth/state/auth.store';
 import type { ApiError } from './api.types';
 import { errorInterceptor } from './error.interceptor';
@@ -20,6 +21,7 @@ const IDENTITY: Identity = {
   is_superuser: false,
   groups: [],
   permissions: [],
+  ...MASTER_ACCOUNT,
 };
 
 const FILES_URL = '/api/files/0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001/';
@@ -91,6 +93,20 @@ describe('errorInterceptor', () => {
 
       expect(error.code).toBe('authentication_failed');
       expect(navigate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('an expired password', () => {
+    it('reloads who is signed in and opens the change-password page', async () => {
+      await signIn();
+
+      const error = await fail(FILES_URL, envelope('password_change_required'), 403, 'Forbidden');
+      http.expectOne('/api/auth/me/').flush({ ...IDENTITY, password_change_required: true });
+      await vi.waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+
+      expect(error.code).toBe('password_change_required');
+      expect(auth.passwordChangeRequired()).toBe(true);
+      expect(navigate.mock.lastCall?.[0]).toEqual(['/password']);
     });
   });
 

@@ -35,6 +35,7 @@ from dbs.manager.runner import get_runner
 from dbs.manager.servers.exceptions import PassphraseMissing
 from dbs.manager.servers.services import ServerService
 from dbs.manager.vault import open_stream, seal_stream
+from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
 if TYPE_CHECKING:
@@ -83,6 +84,7 @@ class BackupService:
             raise NotFound()
         return file
 
+    @requires(Capability.BACKUPS_DOWNLOAD)
     def download(self, file_id: UUID) -> Download:
         file = self.get(file_id)
         try:
@@ -100,6 +102,7 @@ class BackupService:
         self.activity.record(Action.DOWNLOAD, server=file.server, target=file.name)
         return download
 
+    @requires(Capability.BACKUPS_UPLOAD)
     def upload(self, server_id: UUID, upload: UploadedFile) -> BackupFile:
         try:
             name = upload_name(upload.name or "", NAME_MAX_LENGTH)
@@ -141,6 +144,7 @@ class BackupService:
             raise
         return file
 
+    @requires(Capability.BACKUPS_TAKE)
     def take(self, server_id: UUID) -> AuditEvent:
         server = self.servers.get(server_id)
         return self.jobs.queue_backup(
@@ -150,6 +154,7 @@ class BackupService:
             send=lambda job: get_runner().submit(BackupRunService().take, job.pk),
         )
 
+    @requires(Capability.BACKUPS_VERIFY)
     def verify(self, file_id: UUID) -> AuditEvent:
         file = self.get(file_id)
         return self.jobs.queue(
@@ -161,6 +166,7 @@ class BackupService:
             ),
         )
 
+    @requires(Capability.BACKUPS_RESTORE)
     def restore(
         self,
         file_id: UUID,
@@ -218,12 +224,14 @@ class BackupService:
             ),
         )
 
+    @requires(Capability.BACKUPS_DELETE)
     def delete(self, file_id: UUID) -> None:
         file = self.get(file_id)
         with transaction.atomic():
             self.files.soft_delete(file)
             self.activity.record(Action.DELETE, server=file.server, target=file.name)
 
+    @requires(Capability.BACKUPS_DELETE)
     def undo_delete(self, file_id: UUID) -> BackupFile:
         file = self.files.find_including_deleted(file_id)
         if (

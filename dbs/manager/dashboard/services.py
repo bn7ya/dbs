@@ -57,6 +57,7 @@ class DashboardService:
             "last_export_at": self.last_export_at(),
             "recent_failures": recent,
             "recent_failure_servers": self.activity.servers_for(recent),
+            "key_store": key_store(),
         }
 
     def about(self) -> dict[str, Any]:
@@ -66,6 +67,7 @@ class DashboardService:
             "database": describe_database(),
             "backups_dir": str(settings.BACKUP_STORAGE_DIR),
             "last_export_at": self.last_export_at(),
+            "key_store": key_store(),
         }
 
     def last_export_at(self):
@@ -85,6 +87,10 @@ class DashboardService:
             "created_at": file.created_at,
             "validation": file.validation,
         }
+
+
+def key_store() -> str:
+    return getattr(settings, "DBS_MANAGER_KEY_STORE", "file")
 
 
 def describe_database() -> str:

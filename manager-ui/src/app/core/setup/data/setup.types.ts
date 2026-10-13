@@ -1,3 +1,5 @@
+import type { SignInStepName } from '@core/auth/data/auth.types';
+
 export interface SetupStatus {
   readonly needed: boolean;
 }
@@ -10,4 +12,5 @@ export interface SetupRequest {
 
 export interface SetupResult {
   readonly username: string;
+  readonly step: SignInStepName;
 }

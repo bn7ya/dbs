@@ -10,7 +10,7 @@
           <p class="text-sm text-secondary">{{ 'envfiles.body' | t }}</p>
         </div>
         @if (offerPull()) {
-          <button matButton="filled" type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
+          <button *appCan="'env.pull'" matButton="filled" type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
             @if (pulling()) {
               <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
@@ -46,7 +46,7 @@
           [title]="'envfiles.empty.title' | t"
           [description]="'envfiles.empty.body' | t"
         >
-          <button matButton="filled" type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
+          <button *appCan="'env.pull'" matButton="filled" type="button" [disabled]="pulling()" [attr.aria-busy]="pulling()" (click)="pull()">
             @if (pulling()) {
               <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
@@ -232,7 +232,7 @@
 
         <div class="envfiles__actions">
           <!-- One button that changes its word: focus returns to it from the password prompt. -->
-          <button matButton="outlined" type="button" (click)="toggleValues(version)">
+          <button *appCan="'env.reveal'" matButton="outlined" type="button" (click)="toggleValues(version)">
             {{ (content() === null ? 'envfiles.reveal.show' : 'envfiles.reveal.hide') | t }}
           </button>
           @if (hasPrevious() && !comparison()) {
@@ -250,7 +250,7 @@
             </button>
           }
           @if (!noPath()) {
-            <button matButton="outlined" class="app-danger" type="button" (click)="push(version)">
+            <button *appCan="'env.push'" matButton="outlined" class="app-danger" type="button" (click)="push(version)">
               {{ 'envfiles.push.action' | t }}
             </button>
           }

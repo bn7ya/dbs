@@ -58,14 +58,14 @@ export class SignInPage {
       return;
     }
 
-    const signedIn = await this.auth.signIn({
+    const step = await this.auth.signIn({
       username: this.username().trim(),
       password: this.password(),
     });
 
-    if (signedIn) {
-      const next = this.route.snapshot.queryParamMap.get('next') ?? '/';
-      await this.router.navigateByUrl(next);
+    if (step) {
+      const next = this.route.snapshot.queryParamMap.get('next');
+      await this.router.navigate(['/sign-in', step], next ? { queryParams: { next } } : {});
     }
   }
 }

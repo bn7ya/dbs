@@ -9,6 +9,7 @@ import { MatInput } from '@angular/material/input';
 import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
@@ -38,6 +39,7 @@ const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
 @Component({
   selector: 'app-server-overview-page',
   imports: [
+    Can,
     RouterLink,
     MatButton,
     MatIconButton,

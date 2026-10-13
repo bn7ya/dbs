@@ -1,0 +1,51 @@
+<div class="account">
+  <header class="account__header">
+    <h1>{{ 'account.title' | t }}</h1>
+    <p class="text-secondary">{{ 'account.subtitle' | t }}</p>
+  </header>
+
+  @if (user(); as signedIn) {
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <dl class="account__facts">
+          <dt>{{ 'account.username' | t }}</dt>
+          <dd><bdi dir="auto">{{ signedIn.username }}</bdi></dd>
+          <dt>{{ 'account.role' | t }}</dt>
+          <dd>{{ 'roles.' + signedIn.role | t }}</dd>
+          <dt>{{ 'account.passwordExpires' | t }}</dt>
+          <dd>{{ signedIn.password_expires_at | appDate }}</dd>
+          <dt>{{ 'account.recoveryLeft' | t }}</dt>
+          <dd>{{ signedIn.recovery_codes_left }}</dd>
+        </dl>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  <mat-card appearance="outlined">
+    <mat-card-content class="account__section">
+      <h2>{{ 'account.passwordTitle' | t }}</h2>
+      <p class="text-secondary">{{ 'account.passwordBody' | t }}</p>
+      <app-change-password-form (changed)="changed()" />
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <mat-card-content class="account__section">
+      <h2>{{ 'account.recovery.title' | t }}</h2>
+      @if (recoveryCodes(); as codes) {
+        <app-recovery-codes [codes]="codes" />
+        <div>
+          <button matButton="filled" type="button" (click)="dismissCodes()">{{ 'account.recovery.done' | t }}</button>
+        </div>
+      } @else {
+        <p class="text-secondary">{{ 'account.recovery.body' | t }}</p>
+        <div>
+          <button matButton="outlined" type="button" (click)="newRecoveryCodes()">
+            <i matButtonIcon class="fa-solid fa-key" aria-hidden="true"></i>
+            {{ 'account.recovery.make' | t }}
+          </button>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -26,9 +26,10 @@ help a developer review their dependencies; it is not legal advice.
 | [paramiko](https://github.com/paramiko/paramiko) | `>=3` | LGPL-2.1-or-later | SSH and SFTP transports, and the manager's connections to servers |
 | [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15` | BSD-3-Clause | The manager's REST API |
 | [waitress](https://github.com/Pylons/waitress) | `>=3` | ZPL-2.1 | The web server behind `django_dbs run` |
+| [keyring](https://github.com/jaraco/keyring) | `>=24` | MIT | Keeps the DBS manager's sealing key in the system keychain |
 
-The `ssh` and `manager` extras name paramiko, djangorestframework and waitress, which the list
-above already installs.
+The `ssh` and `manager` extras name paramiko, djangorestframework, waitress and keyring, which
+the list above already installs.
 
 ### Brought in by those packages
 
@@ -52,6 +53,14 @@ The exact set depends on the versions pip resolves. This is the set for the newe
 | bcrypt | paramiko | Apache-2.0 |
 | PyNaCl | paramiko | Apache-2.0 |
 | invoke | paramiko (recent releases) | BSD-2-Clause |
+| jaraco.classes, jaraco.functools, jaraco.context | keyring | MIT |
+| more-itertools | jaraco.classes, jaraco.functools | MIT |
+| backports.tarfile (Python < 3.12 only) | jaraco.context | MIT |
+| importlib_metadata (Python < 3.12 only) | keyring | Apache-2.0 |
+| zipp (Python < 3.12 only) | importlib_metadata | MIT |
+| SecretStorage (Linux only) | keyring | BSD-3-Clause |
+| jeepney (Linux only) | keyring, SecretStorage | MIT |
+| pywin32-ctypes (Windows only) | keyring | BSD-3-Clause |
 
 The binary wheels of numpy and scipy also carry the native libraries they link against, each
 named with its license in the wheel's own `LICENSE.txt`. The Linux wheels, for example, carry
@@ -73,6 +82,7 @@ listed by the build's own `3rdpartylicenses.txt`, at the versions locked in
 | tslib | 2.8.1 | 0BSD |
 | @fortawesome/fontawesome-free | 7.3.1 | CC-BY-4.0 AND OFL-1.1 AND MIT: icons under CC BY 4.0, fonts under the SIL OFL 1.1, code under MIT |
 | @fontsource/tajawal (the Tajawal typeface) | 5.3.0 | OFL-1.1 |
+| qrcode-generator | 2.0.4 | MIT |
 
 `manager-ui/package.json` also declares @angular/compiler and zone.js (both MIT). The
 production build compiles ahead of time and runs without zone.js, so neither is in the bundle.

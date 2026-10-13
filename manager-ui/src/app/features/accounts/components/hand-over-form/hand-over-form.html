@@ -1,0 +1,44 @@
+<form class="dialog-form" novalidate (ngSubmit)="submit()">
+  @if (formFailure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <app-notice severity="warning">{{ 'accounts.handOver.body' | t: { name: name } }}</app-notice>
+
+  <app-password-input
+    [label]="'password.label' | t"
+    [error]="passwordError()"
+    name="password"
+    autocomplete="current-password"
+    [ngModel]="password()"
+    (ngModelChange)="password.set($event)"
+  />
+
+  <mat-form-field>
+    <mat-label>{{ 'auth.twoFactor.code' | t }}</mat-label>
+    <input
+      matInput
+      name="code"
+      dir="ltr"
+      inputmode="numeric"
+      autocomplete="one-time-code"
+      [appFieldError]="codeError()"
+      [ngModel]="code()"
+      (ngModelChange)="code.set($event)"
+    />
+    <mat-hint>{{ 'accounts.handOver.codeHint' | t }}</mat-hint>
+    @if (codeError(); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" class="app-danger" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+      @if (busy()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (busy() ? 'accounts.handOver.working' : 'accounts.handOver.submit') | t }}
+    </button>
+  </div>
+</form>

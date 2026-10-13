@@ -1,0 +1,61 @@
+<main id="main" class="two-factor">
+  <mat-card appearance="outlined" class="two-factor__card">
+    <mat-card-content class="two-factor__content">
+      <header class="two-factor__header">
+        <h1>{{ 'auth.twoFactor.title' | t }}</h1>
+        <p class="text-secondary">
+          {{ (recovery() ? 'auth.twoFactor.recoverySubtitle' : 'auth.twoFactor.subtitle') | t }}
+        </p>
+      </header>
+
+      @if (expired()) {
+        <app-notice severity="warning">{{ 'sign_in_expired' | errorText }}</app-notice>
+        <div>
+          <button matButton="filled" type="button" (click)="startOver()">{{ 'auth.twoFactor.startOver' | t }}</button>
+        </div>
+      } @else {
+        @if (otherFailure(); as failure) {
+          <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+        }
+
+        <form class="two-factor__form" novalidate (ngSubmit)="submit()">
+          <mat-form-field>
+            <mat-label>{{ (recovery() ? 'auth.twoFactor.recoveryCode' : 'auth.twoFactor.code') | t }}</mat-label>
+            <input
+              matInput
+              name="code"
+              dir="ltr"
+              [attr.inputmode]="recovery() ? 'text' : 'numeric'"
+              [attr.autocomplete]="recovery() ? 'off' : 'one-time-code'"
+              [appFieldError]="codeError()"
+              [ngModel]="code()"
+              (ngModelChange)="code.set($event)"
+            />
+            <mat-hint>{{ (recovery() ? 'auth.twoFactor.recoveryHint' : 'auth.twoFactor.codeHint') | t }}</mat-hint>
+            @if (codeError(); as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+
+          <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+            @if (busy()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ (busy() ? 'auth.twoFactor.working' : 'auth.twoFactor.submit') | t }}
+          </button>
+        </form>
+
+        <div class="two-factor__other">
+          <button matButton type="button" (click)="switchFactor()">
+            {{ (recovery() ? 'auth.twoFactor.useCode' : 'auth.twoFactor.useRecovery') | t }}
+          </button>
+          <button matButton type="button" (click)="startOver()">{{ 'auth.twoFactor.startOver' | t }}</button>
+        </div>
+      }
+
+      <footer>
+        <app-locale-switcher />
+      </footer>
+    </mat-card-content>
+  </mat-card>
+</main>

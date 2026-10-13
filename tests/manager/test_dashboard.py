@@ -87,6 +87,7 @@ def test_an_empty_manager_has_an_empty_dashboard(api):
         "storage_bytes": 0,
         "last_export_at": None,
         "recent_failures": [],
+        "key_store": "file",
     }
 
 
@@ -188,5 +189,14 @@ def test_about_names_the_version_and_where_the_data_lives(api, data_dir, setting
         "database": body["database"],
         "backups_dir": settings.BACKUP_STORAGE_DIR,
         "last_export_at": None,
+        "key_store": "file",
     }
     assert body["database"].startswith("sqlite:")
+
+
+@pytest.mark.django_db
+def test_a_key_kept_in_the_keychain_is_named_on_the_dashboard(api, settings):
+    settings.DBS_MANAGER_KEY_STORE = "keychain"
+
+    assert api.get(DASHBOARD).json()["key_store"] == "keychain"
+    assert api.get("/api/about/").json()["key_store"] == "keychain"

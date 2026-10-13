@@ -1,0 +1,89 @@
+<main id="main" class="enroll">
+  <mat-card appearance="outlined" class="enroll__card">
+    <mat-card-content class="enroll__content">
+      @if (recoveryCodes(); as codes) {
+        <header class="enroll__header">
+          <h1>{{ 'auth.recovery.title' | t }}</h1>
+          <p class="text-secondary">{{ 'auth.recovery.subtitle' | t }}</p>
+        </header>
+
+        <app-recovery-codes [codes]="codes" />
+
+        <div>
+          <button matButton="filled" type="button" (click)="continue()">{{ 'auth.recovery.continue' | t }}</button>
+        </div>
+      } @else {
+        <header class="enroll__header">
+          <h1>{{ 'auth.enroll.title' | t }}</h1>
+          <p class="text-secondary">{{ 'auth.enroll.subtitle' | t }}</p>
+        </header>
+
+        @if (expired()) {
+          <app-notice severity="warning">{{ 'sign_in_expired' | errorText }}</app-notice>
+          <div>
+            <button matButton="filled" type="button" (click)="startOver()">{{ 'auth.twoFactor.startOver' | t }}</button>
+          </div>
+        } @else if (loadFailure(); as failure) {
+          <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+        } @else if (enrollment(); as shown) {
+          <ol class="enroll__steps">
+            <li class="enroll__step">
+              <p>{{ 'auth.enroll.scan' | t }}</p>
+              <app-qr-code [value]="shown.uri" [label]="'auth.enroll.qrLabel' | t" />
+            </li>
+
+            <li class="enroll__step">
+              <p>{{ 'auth.enroll.typeInstead' | t }}</p>
+              <code class="enroll__secret" dir="ltr">{{ groupedSecret() }}</code>
+              <div>
+                <app-copy-button [text]="shown.secret" [label]="'auth.enroll.copySecret' | t" />
+              </div>
+            </li>
+
+            <li class="enroll__step">
+              <p>{{ 'auth.enroll.confirm' | t }}</p>
+              @if (otherFailure(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              }
+              <form class="enroll__form" novalidate (ngSubmit)="submit()">
+                <mat-form-field>
+                  <mat-label>{{ 'auth.twoFactor.code' | t }}</mat-label>
+                  <input
+                    matInput
+                    name="code"
+                    dir="ltr"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    [appFieldError]="codeError()"
+                    [ngModel]="code()"
+                    (ngModelChange)="code.set($event)"
+                  />
+                  <mat-hint>{{ 'auth.twoFactor.codeHint' | t }}</mat-hint>
+                  @if (codeError(); as message) {
+                    <mat-error>{{ message }}</mat-error>
+                  }
+                </mat-form-field>
+
+                <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+                  @if (busy()) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ (busy() ? 'auth.enroll.working' : 'auth.enroll.submit') | t }}
+                </button>
+              </form>
+            </li>
+          </ol>
+        } @else {
+          <div class="enroll__loading" aria-busy="true">
+            <app-skeleton />
+            <app-skeleton />
+          </div>
+        }
+      }
+
+      <footer>
+        <app-locale-switcher />
+      </footer>
+    </mat-card-content>
+  </mat-card>
+</main>

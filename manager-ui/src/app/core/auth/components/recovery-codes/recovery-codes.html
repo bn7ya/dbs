@@ -1,0 +1,11 @@
+<section class="recovery-codes" [attr.aria-label]="'auth.recovery.title' | t">
+  <app-notice severity="warning">{{ 'auth.recovery.keep' | t }}</app-notice>
+  <ol class="recovery-codes__list" dir="ltr">
+    @for (code of codes(); track code) {
+      <li><code>{{ code }}</code></li>
+    }
+  </ol>
+  <div>
+    <app-copy-button [text]="text()" [label]="'auth.recovery.copy' | t" />
+  </div>
+</section>

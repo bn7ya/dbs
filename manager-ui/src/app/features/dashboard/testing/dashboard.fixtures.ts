@@ -38,6 +38,7 @@ export const DASHBOARD: Dashboard = {
   servers: [WEB, STAGING],
   storage_bytes: 5_000_000,
   last_export_at: '2026-10-08T12:00:00Z',
+  key_store: 'keychain',
   recent_failures: [
     {
       id: 41,

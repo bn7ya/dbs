@@ -30,6 +30,7 @@ export class DashboardStore {
   readonly storageBytes = computed(() => this.dashboard()?.storage_bytes ?? 0);
   readonly failuresThisWeek = computed(() => this.servers().reduce((sum, server) => sum + server.failures_7d, 0));
   readonly lastExportAt = computed(() => this.dashboard()?.last_export_at ?? null);
+  readonly keyInFile = computed(() => this.dashboard()?.key_store === 'file');
 
   readonly exportDue = computed(() => {
     const dashboard = this.dashboard();

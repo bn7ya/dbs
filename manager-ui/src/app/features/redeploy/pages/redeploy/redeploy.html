@@ -124,7 +124,7 @@
               }
               {{ 'redeploy.rehearse' | t }}
             </button>
-            <button matButton="filled" class="app-danger" type="submit" [disabled]="running()" [attr.aria-busy]="running()">
+            <button *appCan="'redeploy.run'" matButton="filled" class="app-danger" type="submit" [disabled]="running()" [attr.aria-busy]="running()">
               @if (running() && !rehearsing()) {
                 <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
               }

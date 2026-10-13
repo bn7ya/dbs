@@ -14,6 +14,7 @@ import { map } from 'rxjs';
 import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
@@ -36,6 +37,7 @@ const FIELD_FAILURES: ReadonlySet<string> = new Set(['invalid_password', 'confir
 @Component({
   selector: 'app-redeploy-page',
   imports: [
+    Can,
     FormsModule,
     RouterLink,
     MatButton,

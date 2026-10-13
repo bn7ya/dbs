@@ -19,6 +19,7 @@ from dbs.manager.files.exceptions import CannotDeleteRoot, NotAFile
 from dbs.manager.files.paths import Located
 from dbs.manager.servers.exceptions import RemoteNotFound, RemotePermissionDenied
 from dbs.manager.servers.services import ServerConnectionService, ServerService
+from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
 if TYPE_CHECKING:
@@ -116,6 +117,7 @@ class FileService:
             entries=sorted(shown, key=_listing_order),
         )
 
+    @requires(Capability.FILES_DOWNLOAD)
     def download(self, server_id: UUID, path: str) -> Download:
         server = self.servers.get(server_id)
         with ExitStack() as stack:
@@ -136,6 +138,7 @@ class FileService:
             content=content, name=_download_name(located.name), size=found.size
         )
 
+    @requires(Capability.FILES_CHANGE)
     def upload(self, server_id: UUID, folder: str, upload: UploadedFile) -> RemoteEntry:
         try:
             name = upload_name(upload.name or "", paths.NAME_MAX_BYTES, utf8_length)
@@ -160,6 +163,7 @@ class FileService:
             upload.close()
         return replace(created, path=posixpath.join(located.path, name))
 
+    @requires(Capability.FILES_CHANGE)
     def create_folder(self, server_id: UUID, folder: str, name: str) -> RemoteEntry:
         if paths.entry_name(name) is None:
             raise ValidationError(
@@ -175,6 +179,7 @@ class FileService:
                 created = remote.make_folder(posixpath.join(real, name))
         return replace(created, path=posixpath.join(located.path, name))
 
+    @requires(Capability.FILES_CHANGE)
     def delete(self, server_id: UUID, path: str) -> None:
         server = self.servers.get(server_id)
         with self.activity.track(

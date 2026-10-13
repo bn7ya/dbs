@@ -5,7 +5,7 @@
       <p class="text-secondary">{{ 'dashboard.subtitle' | t }}</p>
     </div>
     @if (!empty()) {
-      <a matButton="filled" routerLink="/servers/new">
+      <a *appCan="'servers.manage'" matButton="filled" routerLink="/servers/new">
         <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
         {{ 'dashboard.add' | t }}
       </a>
@@ -30,9 +30,13 @@
       [title]="'dashboard.empty.title' | t"
       [description]="'dashboard.empty.body' | t"
     >
-      <a matButton="filled" routerLink="/servers/new">{{ 'dashboard.add' | t }}</a>
+      <a *appCan="'servers.manage'" matButton="filled" routerLink="/servers/new">{{ 'dashboard.add' | t }}</a>
     </app-empty-state>
   } @else {
+    @if (keyInFile()) {
+      <app-notice severity="warning">{{ 'dashboard.keyInFile' | t }}</app-notice>
+    }
+
     @if (exportDue()) {
       <app-notice severity="warning">
         <span class="dashboard__export">

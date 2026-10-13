@@ -33,6 +33,14 @@ export const COPY = {
   },
   enterPassword: { en: 'Enter your password.', ar: 'أدخل كلمة مرورك.' },
 
+  // Two-factor sign-in
+  twoFactorTitle: { en: 'Two-factor sign-in', ar: 'التحقق بخطوتين' },
+  enrollTitle: { en: 'Set up two-factor sign-in', ar: 'إعداد التحقق بخطوتين' },
+  code: { en: 'Code', ar: 'الرمز' },
+  turnOnTwoFactor: { en: 'Turn on two-factor sign-in', ar: 'تفعيل التحقق بخطوتين' },
+  recoveryTitle: { en: 'Your recovery codes', ar: 'رموز الاسترداد' },
+  savedThem: { en: 'I have saved them', ar: 'حفظتها' },
+
   // Servers list
   serversTitle: { en: 'Servers', ar: 'الخوادم' },
   addServer: { en: 'Add server', ar: 'إضافة خادم' },

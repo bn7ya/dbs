@@ -49,9 +49,12 @@ export interface DashboardFailure {
   readonly created_at: string;
 }
 
+export type KeyStore = 'file' | 'keychain';
+
 export interface Dashboard {
   readonly servers: readonly DashboardServer[];
   readonly storage_bytes: number;
   readonly last_export_at: string | null;
   readonly recent_failures: readonly DashboardFailure[];
+  readonly key_store: KeyStore;
 }

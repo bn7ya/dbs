@@ -1,5 +1,6 @@
 import { ADMIN } from './support/config';
 import { expect, test } from './support/fixtures';
+import { freshCode } from './support/totp';
 
 test.describe('the shell', () => {
   test('a signed-out visitor is sent to sign in, and the API refuses on its own', async ({
@@ -31,6 +32,10 @@ test.describe('the shell', () => {
 
     await page.getByLabel(journey.t('password'), { exact: true }).fill(ADMIN.password);
     await page.getByRole('button', { name: journey.t('signIn'), exact: true }).click();
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(journey.t('twoFactorTitle'));
+    await page.getByRole('textbox', { name: journey.t('code') }).fill(await freshCode());
+    await page.getByRole('button', { name: journey.t('continue'), exact: true }).click();
 
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(journey.t('dashboardTitle'));
