@@ -28,6 +28,7 @@ print(json.dumps(loaded))
 def test_a_backup_never_loads_the_manager_or_rest_framework(tmp_path):
     output = tmp_path / "alone.dbs"
     env = dict(os.environ, DJANGO_SETTINGS_MODULE="tests.settings")
+    env.pop("DBS_TEST_DB", None)
 
     result = subprocess.run(
         [sys.executable, "-c", SCRIPT, str(output)],
