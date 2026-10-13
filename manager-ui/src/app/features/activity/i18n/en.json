@@ -86,10 +86,21 @@
       "auth": {
         "sign_in": "Sign in",
         "sign_in_failed": "Failed sign-in",
-        "sign_out": "Sign out"
+        "sign_out": "Sign out",
+        "recovery_code_used": "Sign in with a recovery code"
       },
       "account": {
-        "setup": "First account created"
+        "setup": "First account created",
+        "create": "Add account",
+        "role": "Change account role",
+        "disable": "Disable account",
+        "enable": "Enable account",
+        "master": "Make master account",
+        "two_factor_enrolled": "Set up two-factor sign-in",
+        "two_factor_reset": "Reset two-factor sign-in",
+        "recovery_codes": "Create new recovery codes",
+        "password": "Change password",
+        "password_expire": "Ask for a new password"
       },
       "redeploy": {
         "run": "Move to another server",

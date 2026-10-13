@@ -50,11 +50,22 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'redeploy.revert_env',
   'redeploy.revert_restore',
   'account.setup',
+  'account.create',
+  'account.role',
+  'account.disable',
+  'account.enable',
+  'account.master',
+  'account.two_factor_enrolled',
+  'account.two_factor_reset',
+  'account.recovery_codes',
+  'account.password',
+  'account.password_expire',
   'manager.export',
   'manager.import',
   'auth.sign_in',
   'auth.sign_in_failed',
   'auth.sign_out',
+  'auth.recovery_code_used',
 ];
 
 export interface ActivityEntry {
