@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
-import { SERVER, SUMMARY, pageOf } from '../testing/servers.fixtures';
+import { HOST_KEY_CONFIRMATION, SERVER, SUMMARY, pageOf } from '../testing/servers.fixtures';
 import { ServersStore } from './servers.store';
 
 const DETAIL = `/api/servers/${SERVER.id}/`;
@@ -16,6 +16,14 @@ describe('ServersStore', () => {
   let http: HttpTestingController;
 
   const listRequest = (): TestRequest => http.expectOne((request) => request.url === '/api/servers/');
+  const hostKeysRequest = (): TestRequest =>
+    http.expectOne((request) => request.url === '/api/servers/host-keys/');
+
+  const openList = (): void => {
+    store.openList();
+    TestBed.tick();
+    hostKeysRequest().flush(pageOf([]));
+  };
 
   const settle = (): Promise<void> => TestBed.inject(ApplicationRef).whenStable();
 
@@ -55,8 +63,7 @@ describe('ServersStore', () => {
     });
 
     it('loads the first page when the list opens', async () => {
-      store.openList();
-      TestBed.tick();
+      openList();
       expect(store.listPending()).toBe(true);
 
       const request = listRequest();
@@ -72,8 +79,7 @@ describe('ServersStore', () => {
     });
 
     it('keeps the page on screen while the next one loads', async () => {
-      store.openList();
-      TestBed.tick();
+      openList();
       listRequest().flush(pageOf([SUMMARY], 41));
       await settle();
       expect(store.servers()).toEqual([SUMMARY]);
@@ -91,8 +97,7 @@ describe('ServersStore', () => {
     });
 
     it('holds the failure as an ApiError and retries on reload', async () => {
-      store.openList();
-      TestBed.tick();
+      openList();
       listRequest().flush(
         { error: { code: 'unknown', message: 'Server prose' } },
         { status: 500, statusText: 'Server Error' },
@@ -110,8 +115,7 @@ describe('ServersStore', () => {
     });
 
     it('forgets the rows when the list closes, so a deleted server never flashes back', async () => {
-      store.openList();
-      TestBed.tick();
+      openList();
       listRequest().flush(pageOf([SUMMARY]));
       await settle();
       expect(store.servers()).toEqual([SUMMARY]);
@@ -120,6 +124,57 @@ describe('ServersStore', () => {
       TestBed.tick();
 
       expect(store.servers()).toEqual([]);
+    });
+  });
+
+  describe('host keys awaiting confirmation', () => {
+    const showPending = async (): Promise<void> => {
+      store.openList();
+      TestBed.tick();
+      hostKeysRequest().flush(pageOf([HOST_KEY_CONFIRMATION]));
+      listRequest().flush(pageOf([SUMMARY]));
+      await settle();
+    };
+
+    it('loads them with the list', async () => {
+      await showPending();
+
+      expect(store.pendingHostKeys()).toEqual([HOST_KEY_CONFIRMATION]);
+    });
+
+    it('confirms one, busy while it does, then reads them again', async () => {
+      await showPending();
+
+      const deciding = store.decideHostKey(HOST_KEY_CONFIRMATION, 'confirm');
+      expect(store.decidingHostKeys().has(HOST_KEY_CONFIRMATION.id)).toBe(true);
+      http
+        .expectOne(`/api/servers/host-keys/${HOST_KEY_CONFIRMATION.id}/confirm/`)
+        .flush({ ...HOST_KEY_CONFIRMATION, status: 'confirmed' });
+
+      await expect(deciding).resolves.toBe(true);
+      expect(store.decidingHostKeys().size).toBe(0);
+      TestBed.tick();
+      hostKeysRequest().flush(pageOf([]));
+      await settle();
+      expect(store.pendingHostKeys()).toEqual([]);
+    });
+
+    it('keeps why a decision failed, and reads them again', async () => {
+      await showPending();
+
+      const deciding = store.decideHostKey(HOST_KEY_CONFIRMATION, 'reject');
+      http
+        .expectOne(`/api/servers/host-keys/${HOST_KEY_CONFIRMATION.id}/reject/`)
+        .flush(
+          { error: { code: 'host_key_confirmation_missing', message: 'Server prose' } },
+          { status: 404, statusText: 'Not Found' },
+        );
+
+      await expect(deciding).resolves.toBe(false);
+      expect(store.hostKeyDecisionError()?.code).toBe('host_key_confirmation_missing');
+      TestBed.tick();
+      hostKeysRequest().flush(pageOf([]));
+      await settle();
     });
   });
 
@@ -255,17 +310,30 @@ describe('ServersStore', () => {
   });
 
   describe('deleting a server', () => {
-    it('deletes the server on screen', async () => {
+    it('deletes the server on screen with the password', async () => {
       await showServer();
 
-      const removing = store.remove();
+      const removing = store.remove('hunter2');
       expect(store.deleting()).toBe(true);
       const request = http.expectOne(DETAIL);
       expect(request.request.method).toBe('DELETE');
+      expect(request.request.body).toEqual({ account_password: 'hunter2' });
       request.flush(null, { status: 204, statusText: 'No Content' });
 
       await expect(removing).resolves.toBe(true);
       expect(store.deleting()).toBe(false);
+    });
+
+    it('keeps a wrong password for the prompt', async () => {
+      await showServer();
+
+      const removing = store.remove('wrong');
+      http
+        .expectOne(DETAIL)
+        .flush({ error: { code: 'invalid_password', message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' });
+
+      await expect(removing).resolves.toBe(false);
+      expect(store.deleteError()?.code).toBe('invalid_password');
     });
   });
 });

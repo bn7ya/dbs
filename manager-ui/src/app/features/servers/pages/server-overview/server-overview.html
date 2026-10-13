@@ -148,6 +148,8 @@
           <p class="text-sm text-secondary">{{ 'servers.passphrase.body' | t }}</p>
         </div>
 
+        <app-notice severity="warning">{{ 'servers.passphrase.neverChange' | t }}</app-notice>
+
         @if (passphrase(); as value) {
           <mat-form-field class="overview__passphrase">
             <mat-label>{{ 'servers.passphrase.label' | t }}</mat-label>

@@ -10,6 +10,8 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'server.repin',
   'server.passphrase_reveal',
   'server.fingerprint',
+  'server.host_key_confirm',
+  'server.host_key_reject',
   'server.keypair',
   'server.discover',
   'server.passphrase_capture',

@@ -155,6 +155,19 @@ export interface HostKey {
   readonly fingerprint: string;
 }
 
+export interface HostKeyConfirmation {
+  readonly id: string;
+  readonly host: string;
+  readonly port: number;
+  readonly key_type: string;
+  readonly fingerprint: string;
+  readonly status: 'pending' | 'confirmed' | 'rejected';
+  readonly requested_at: string;
+  readonly expires_at: string;
+}
+
+export type HostKeyDecision = 'confirm' | 'reject';
+
 export interface HostKeyRepin {
   readonly host_key: string;
   readonly password: string;

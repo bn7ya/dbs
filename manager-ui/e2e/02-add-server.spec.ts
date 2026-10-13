@@ -222,15 +222,16 @@ test.describe('adding a server', () => {
     await expect(review).toBeHidden();
   });
 
-  test('deleting the server asks first, then it is gone', async ({ page, journey }) => {
+  test('deleting the server asks for the password first, then it is gone', async ({ page, journey }) => {
     const { t } = journey;
     await journey.signIn(page);
     await page.goto(serverUrl);
 
     await page.getByRole('button', { name: t('deleteServer') }).click();
-    const confirm = page.getByRole('alertdialog');
-    await expect(confirm.getByRole('heading', { level: 2 })).toContainText(name);
-    await confirm.getByRole('button', { name: t('deleteServer') }).click();
+    const prompt = page.getByRole('dialog');
+    await expect(prompt).toContainText(name);
+    await prompt.getByLabel(t('yourPassword'), { exact: true }).fill(ADMIN.password);
+    await prompt.getByRole('button', { name: t('deleteServer') }).click();
 
     await expect(page).toHaveURL(/\/servers$/);
     await expect(page.getByRole('main').getByRole('link', { name })).toHaveCount(0);

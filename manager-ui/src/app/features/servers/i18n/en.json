@@ -7,6 +7,19 @@
       "label": "Search",
       "placeholder": "Name or host"
     },
+    "pendingKeys": {
+      "title": "Host keys awaiting confirmation",
+      "body": "Claude read these host keys. It can add a server only with a key you confirm here, so compare each fingerprint with the one the server prints first.",
+      "waits": "Waits for an answer until",
+      "confirm": "Confirm",
+      "reject": "Reject",
+      "confirmLabel": "Confirm the host key of {address}",
+      "rejectLabel": "Reject the host key of {address}",
+      "confirmTitle": "Confirm the host key of {address}?",
+      "confirmBody": "Claude can then add this server with this key. Confirm only if the fingerprint matches the one the server prints.",
+      "confirmed": "Host key confirmed. Claude can add the server now.",
+      "rejected": "Host key rejected."
+    },
     "list": {
       "label": "Servers",
       "name": "Name",
@@ -123,6 +136,7 @@
       "copy": "Copy passphrase",
       "copied": "Passphrase copied.",
       "copyUnavailable": "Copying is not available here. Select the passphrase and copy it.",
+      "neverChange": "Never change this passphrase: the backups taken with it would no longer open.",
       "prompt": {
         "title": "Show backup passphrase",
         "body": "Enter your password to show the backup passphrase."
@@ -132,8 +146,7 @@
       "title": "Delete server",
       "body": "Removes this server from DBS. Backups stored on the server stay there.",
       "action": "Delete server",
-      "confirmTitle": "Delete {name}?",
-      "confirmBody": "The server is removed from DBS. Backups stored on the server stay there.",
+      "prompt": "{name} is removed from DBS, and backups stored on the server stay there. Enter your password to delete it.",
       "done": "Server deleted."
     },
     "form": {
@@ -301,6 +314,7 @@
       "passphrase": {
         "intro": "The backup passphrase can be read from the project settings on the server. This step is optional.",
         "capture": "Read it from the server",
+        "neverChange": "Read it now, before the first backup. A server's backup passphrase must never change afterwards: older backups would no longer open.",
         "captured": "The backup passphrase is saved."
       },
       "backup": {
@@ -360,6 +374,8 @@
     "snippet_not_dbs": "This is not a DBS connection snippet.",
     "no_private_key": "This server signs in with a password, so it has no key.",
     "compose_service_required": "Name the Compose service that runs the project.",
-    "compose_folder_required": "Enter the folder that holds the compose file."
+    "compose_folder_required": "Enter the folder that holds the compose file.",
+    "host_key_confirmation_missing": "This request has expired.",
+    "host_key_decided": "This host key was already confirmed or rejected."
   }
 }

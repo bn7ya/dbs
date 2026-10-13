@@ -47,6 +47,8 @@
         "repin": "Pin host key",
         "passphrase_reveal": "Show backup passphrase",
         "fingerprint": "Get host key",
+        "host_key_confirm": "Confirm host key for Claude",
+        "host_key_reject": "Reject host key for Claude",
         "keypair": "Create SSH key",
         "discover": "Find django-dbs settings",
         "passphrase_capture": "Save backup passphrase"

@@ -47,6 +47,8 @@
         "repin": "اعتماد مفتاح المضيف",
         "passphrase_reveal": "إظهار عبارة مرور النسخ الاحتياطية",
         "fingerprint": "جلب مفتاح المضيف",
+        "host_key_confirm": "تأكيد مفتاح المضيف لـ Claude",
+        "host_key_reject": "رفض مفتاح المضيف لـ Claude",
         "keypair": "إنشاء مفتاح SSH",
         "discover": "البحث عن إعدادات django-dbs",
         "passphrase_capture": "حفظ عبارة مرور النسخ الاحتياطية"
