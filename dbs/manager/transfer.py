@@ -73,6 +73,7 @@ def export_manager(output, passphrase, *, with_backups=False):
 def import_manager(source, passphrase, *, replace=False):
     from dbs.engine.restore import read_payload, restore_backup
 
+    from .backups.repositories import BackupPlanRepository
     from .servers.models import Server
 
     if Server.all_objects.exists() and not replace:
@@ -90,6 +91,7 @@ def import_manager(source, passphrase, *, replace=False):
         raise TransferError(str(exc)) from exc
     written = write_roots(payload.files, conf.data_dir())
     removed = mark_missing_backups()
+    BackupPlanRepository().keep_within_limits()
     audit.record(
         IMPORT,
         target=os.path.basename(str(source)),

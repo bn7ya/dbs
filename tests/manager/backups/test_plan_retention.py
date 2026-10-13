@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 import pytest
 from django.apps import apps
 from django.core.exceptions import ValidationError
 
+from dbs.engine import restore
+from dbs.manager import transfer
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.backups.models import BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository
@@ -84,6 +87,29 @@ def test_the_migration_clamps_what_was_kept_before_into_range(make_plan):
         for plan in BackupPlan.all_objects.all()
     }
     assert kept == {"many": (5, 5), "none": (1, 0), "fine": (3, 2)}
+
+
+@pytest.mark.django_db
+def test_an_import_keeps_what_an_older_export_kept_in_range(
+    monkeypatch, make_plan, tmp_path
+):
+    plan = make_plan()
+    exported = tmp_path / "manager.dbs"
+    exported.write_bytes(b"an export")
+
+    def restored(data, passphrase, **options):
+        BackupPlan.objects.filter(pk=plan.pk).update(keep=30, keep_remote=9)
+        return SimpleNamespace(records_loaded=1, healed=False)
+
+    monkeypatch.setattr(restore, "restore_backup", restored)
+    monkeypatch.setattr(
+        restore, "read_payload", lambda data, passphrase: SimpleNamespace(files=[])
+    )
+
+    transfer.import_manager(exported, "a-long-export-passphrase", replace=True)
+
+    stored = BackupPlan.objects.get(pk=plan.pk)
+    assert (stored.keep, stored.keep_remote) == (5, 5)
 
 
 @pytest.mark.django_db
