@@ -23,7 +23,7 @@ from tests.manager.servers.support import (
     private_key_text,
 )
 from tests.manager.terminal.test_servers import ready_remote
-from tests.manager.test_redeploy import world  # noqa: F401
+from tests.manager.test_redeploy import failing_migration, for_real, world  # noqa: F401
 from tests.manager.support import logged
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
@@ -309,6 +309,22 @@ def test_redeploys_are_always_rehearsals(mcp, world):  # noqa: F811
     assert [
         "--dry-run" in restore["argv"] for restore in world["sent"]["restores"]
     ] == [True]
+    assert world["sent"]["taken"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_putting_a_new_server_back_is_only_ever_rehearsed(mcp, api, world):  # noqa: F811
+    failing_migration(world)
+    response = api.post("/api/redeploy/", for_real(world), format="json")
+    moved = response.json()["activity"]
+    pushed = world["env"].read_bytes()
+
+    ran = mcp("rehearse_revert", move=moved)
+
+    assert ran.ok and ran.data["ok"], ran.raw
+    [revert] = world["sent"]["restores"]
+    assert "--dry-run" in revert["argv"] and "--flush" in revert["argv"]
+    assert world["env"].read_bytes() == pushed
 
 
 @pytest.mark.django_db

@@ -78,8 +78,6 @@ HEALED = "Corruption detected and repaired"
 UNKNOWN_OPTION = "unrecognized arguments"
 RESTORE_FILE_PREFIX = ".dbs-restore-"
 RESTORE_FILE_MODE = 0o600
-EXTRACT_FILE_PREFIX = ".dbs-extract-"
-ARCHIVE_SUFFIX = ".tar.gz"
 REMOTE_DIRECTORY_MODE = 0o700
 PARTIAL_FILE_MODE = 0o600
 TRANSFER_WINDOW = 4 * 1024 * 1024
@@ -555,36 +553,6 @@ class RemoteHost:
         if not copied.ok:
             raise RestoreFailed(output=_tail(copied.stderr or copied.stdout))
         self._hand_to_container_user(profile, inside)
-
-    def extract_archive(
-        self,
-        source: SupportsRead[bytes],
-        remote_dir: str,
-        timeout: float,
-        relocate: Mapping[str, str] | None = None,
-    ) -> str:
-        name = f"{EXTRACT_FILE_PREFIX}{secrets.token_hex(8)}{ARCHIVE_SUFFIX}"
-        path = posixpath.join(remote_dir, name)
-        self._make_dirs(remote_dir)
-        self.write_new(source, remote_dir, name, mode=RESTORE_FILE_MODE)
-        try:
-            result = self.run(
-                [
-                    "tar",
-                    "-xzf",
-                    path,
-                    "-C",
-                    "/",
-                    "--no-same-owner",
-                    *_transforms(relocate or {}),
-                ],
-                timeout=timeout,
-            )
-        finally:
-            copy_left = self._removed_or_left(path)
-        if not result.ok:
-            raise ArchiveFailed(output=_tail(result.stderr or result.stdout))
-        return copy_left
 
     def archive(
         self, paths: Sequence[str], remote_dir: str, name: str, timeout: float
@@ -1123,21 +1091,3 @@ def _interrupted(exc: BaseException, settles_at: datetime) -> RemoteCommandFaile
     if isinstance(exc, RemoteTimeout):
         return RemoteCommandTimedOut(settles_at=settles_at)
     return RemoteCommandFailed(settles_at=settles_at)
-
-
-def _sed_literal(text: str) -> str:
-    return re.sub(r"([\\.\[\]*^$|])", r"\\\1", text)
-
-
-def _transforms(relocate: Mapping[str, str]) -> list[str]:
-    rules = []
-    for old, new in relocate.items():
-        old_member = posixpath.normpath(old).strip("/")
-        new_member = posixpath.normpath(new).strip("/")
-        if not old_member or not new_member or old_member == new_member:
-            continue
-        replacement = (
-            new_member.replace("\\", "\\\\").replace("|", "\\|").replace("&", "\\&")
-        )
-        rules.append(f"--transform=s|^{_sed_literal(old_member)}/|{replacement}/|")
-    return rules

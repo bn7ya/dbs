@@ -31,7 +31,7 @@ from dbs.manager.envfiles.services import EnvFileService
 from dbs.manager.files.serializers import FileEntrySerializer
 from dbs.manager.files.services import FileService
 from dbs.manager.mcp.protocol import Tool
-from dbs.manager.redeploy.serializers import RedeploySerializer
+from dbs.manager.redeploy.serializers import RedeploySerializer, RevertSerializer
 from dbs.manager.redeploy.services import RedeployService
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
@@ -146,9 +146,10 @@ INSTRUCTIONS = (
     "These tools drive the DBS manager, which backs up the Django projects on the servers "
     "it knows over SSH. Start with manager_overview or list_servers. To add a server, call "
     "fingerprint_host, show the fingerprint to the person and wait for their yes, then call "
-    "add_server with that host_key. Taking a backup waits until it is done. Restores and "
-    "redeploys here are always rehearsals: nothing on the server changes. Revealing secrets, "
-    "real restores and redeploys, pushing a .env, and removing or deleting anything are not "
+    "add_server with that host_key. Taking a backup waits until it is done. Restores, "
+    "moves and reverts of a move here are always rehearsals: nothing on the server changes. "
+    "Revealing secrets, real restores, moves and reverts, pushing a .env, and removing or "
+    "deleting anything are not "
     "available here; the person does those in the manager's interface or terminal. When a "
     "tool says it needs the account password, tell the person to do it there."
 )
@@ -471,21 +472,40 @@ class Toolbox:
             ),
             Tool(
                 "rehearse_redeploy",
-                "Rehearse a redeploy",
-                "Check that a server's backup could stand its project up on another server, "
-                "restoring in a transaction that is rolled back. Nothing changes. A real "
-                "redeploy is done by the person.",
+                "Rehearse a move",
+                "Check that a project could move onto a new server with the same "
+                "environment: the new server is checked, the old one is asked whether it "
+                "answers, and a backup is restored in a transaction that is rolled back. "
+                "Nothing changes on either server. A real move is done by the person.",
                 dict(
                     source_server=SERVER,
                     target_server=SERVER,
-                    backup=BACKUP,
+                    backup={
+                        **BACKUP,
+                        "description": "The old server's backup to restore. Defaults "
+                        "to its newest.",
+                    },
                     env_version=VERSION,
-                    archives={"type": "array", "items": BACKUP},
-                    migrate={"type": "boolean"},
                     flush={"type": "boolean"},
                 ),
                 self.rehearse_redeploy,
-                required=("source_server", "target_server", "backup"),
+                required=("source_server", "target_server"),
+                idempotent=True,
+            ),
+            Tool(
+                "rehearse_revert",
+                "Rehearse putting a new server back",
+                "For a move that stopped after it changed the new server, rehearse "
+                "restoring the new server's safety backup. Nothing changes. Putting the "
+                "server back for real is done by the person.",
+                dict(
+                    move={
+                        "type": "integer",
+                        "description": "The move's activity number.",
+                    }
+                ),
+                self.rehearse_revert,
+                required=("move",),
                 idempotent=True,
             ),
         ]
@@ -702,21 +722,22 @@ class Toolbox:
         body: dict[str, Any] = {
             "source_server": self._server(arguments["source_server"]).pk,
             "target_server": self._server(arguments["target_server"]).pk,
-            "backup": references.identifier(arguments["backup"], "backup"),
-            "archives": [
-                references.identifier(item, "archive")
-                for item in arguments.get("archives", [])
-            ],
-            "migrate": bool(arguments.get("migrate")),
             "flush": bool(arguments.get("flush")),
             "rehearsal": True,
         }
+        if arguments.get("backup"):
+            body["backup"] = references.identifier(arguments["backup"], "backup")
         if arguments.get("env_version"):
             body["env_version"] = references.identifier(
                 arguments["env_version"], "version"
             )
         data = validated(RedeploySerializer, body)
         return self._job(RedeployService(self.user).start(**data))
+
+    def rehearse_revert(self, arguments: Arguments) -> dict[str, Any]:
+        move = references.number(str(arguments["move"]), "move")
+        data = validated(RevertSerializer, {"rehearsal": True})
+        return self._job(RedeployService(self.user).revert(move, **data))
 
     def _server(self, reference: Any) -> Server:
         return references.server(self.user, str(reference))

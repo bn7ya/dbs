@@ -109,6 +109,11 @@ class BackupRunService:
         finally:
             self.locks.release(UUID(job.subject), job.pk)
 
+    def back_up(self, job: AuditEvent, server: Server, *, keep_remote: int) -> BackupFile:
+        return self._back_up(
+            job, server, prefix=take_prefix(server), keep_remote=keep_remote, plan=None
+        )
+
     def _run(self, job: AuditEvent, work: Callable[[AuditEvent], Detail]) -> None:
         try:
             detail = work(job)

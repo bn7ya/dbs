@@ -527,27 +527,40 @@ def redeploy(commands, location: Location) -> None:
     start = _verb(
         verbs,
         "start",
-        "Restore a server's backup onto another server. Rehearses unless --real.",
+        "Move a project onto a new server with the same environment: back up the "
+        "old one now, record the new one, push the .env, migrate, restore and "
+        "check. Rehearses unless --real.",
         "terminal.redeploy:start",
         location,
     )
     start.add_argument(
-        "--from", dest="source", required=True, help="The source server."
+        "--from", dest="source", required=True, help="The old server."
     )
-    start.add_argument("--to", dest="target", required=True, help="The target server.")
-    start.add_argument("--backup", required=True, help="The source backup's id.")
-    start.add_argument("--env", dest="env_version", help="A .env version to write.")
+    start.add_argument("--to", dest="target", required=True, help="The new server.")
     start.add_argument(
-        "--archive",
-        dest="archives",
-        action="append",
-        default=[],
-        metavar="ID",
-        help="An archive to unpack. Repeat for more.",
+        "--backup",
+        help="The old server's backup to restore when it cannot be reached. "
+        "Defaults to its newest.",
     )
-    start.add_argument("--migrate", action="store_true", help="Run migrate first.")
-    start.add_argument("--flush", action="store_true", help="Empty the database first.")
-    start.add_argument("--real", action="store_true", help="Redeploy for real.")
+    start.add_argument("--env", dest="env_version", help="A .env version to push.")
     start.add_argument(
-        "--confirm-name", help="The target server's name, instead of typing it."
+        "--flush", action="store_true", help="Replace the new server's data."
+    )
+    start.add_argument("--real", action="store_true", help="Move for real.")
+    start.add_argument(
+        "--confirm-name", help="The new server's name, instead of typing it."
+    )
+
+    revert = _verb(
+        verbs,
+        "revert",
+        "Put the new server back as it was before a move that stopped: push its "
+        "recorded .env back and restore its safety backup. Rehearses unless --real.",
+        "terminal.redeploy:revert",
+        location,
+    )
+    revert.add_argument("move", metavar="MOVE_ID", help="The move's activity number.")
+    revert.add_argument("--real", action="store_true", help="Revert for real.")
+    revert.add_argument(
+        "--confirm-name", help="The new server's name, instead of typing it."
     )
