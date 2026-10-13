@@ -13,7 +13,8 @@ PASS = "ui-pass-phrase"
 
 
 @pytest.fixture
-def admin_client(db):
+def admin_client(db, settings):
+    settings.DBS_TRUSTED_NETWORKS = ["127.0.0.0/8"]
     user = User.objects.create_superuser("root", "root@example.com", "pw")
     client = Client()
     client.force_login(user)

@@ -7,7 +7,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from ..conf import setting
-from . import networks
+from . import networks, telemetry
 
 SCHEMA_VERSION = 1
 
@@ -108,16 +108,14 @@ class Observation:
 
 
 def observe_request(user, request, action, location=None):
-    from ..models import KnownLocation, SessionEvent
+    from ..models import KnownLocation
 
     now = timezone.now()
     address = client_address(request)
     prefix = ip_prefix(address)
     agent = digest(request.META.get("HTTP_USER_AGENT", ""))
     session_hash = digest(getattr(request.session, "session_key", "") or "")
-    recent = list(
-        SessionEvent.objects.filter(user=user).order_by("-created_at")[:500]
-    )
+    recent = list(telemetry.requests_for(user).order_by("-created_at")[:500])
     previous = recent[0] if recent else None
     established = [
         event

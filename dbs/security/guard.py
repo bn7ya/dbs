@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from ..conf import setting
 from ..models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
-from . import detector, features, geo, networks, sessions
+from . import detector, features, geo, networks, sessions, telemetry
 
 logger = logging.getLogger("dbs")
 
@@ -61,7 +61,8 @@ def evaluate(request, action="view", location=None) -> Verdict:
     )
     values = features.build(observation)
 
-    model_score = detector.get_detector().score(user, values)
+    learning = _still_learning(user, policy)
+    model_score = detector.model_score(user, values, learning=learning)
     rules, reasons = detector.rule_score(values)
     if not address:
         reasons.append("the client address could not be determined")
@@ -71,8 +72,7 @@ def evaluate(request, action="view", location=None) -> Verdict:
     score = max(model_score, rules)
 
     trusted = is_trusted(address, policy)
-    learning = _still_learning(user, policy)
-    level = _level(score, policy, trusted, learning)
+    level = _level(score, policy, trusted)
 
     _record(user, request, values, address, prefix, agent, location, score, level)
     return Verdict(level=level, score=round(score, 4), reasons=reasons)
@@ -81,17 +81,11 @@ def evaluate(request, action="view", location=None) -> Verdict:
 def _still_learning(user, policy) -> bool:
     if not policy.learning_logins:
         return False
-    seen = (
-        SessionEvent.objects.filter(user=user)
-        .values("session_key_hash")
-        .distinct()
-        .count()
-    )
-    return seen < policy.learning_logins
+    return telemetry.sessions_seen(user) < policy.learning_logins
 
 
-def _level(score, policy, trusted, learning) -> str:
-    if trusted or learning:
+def _level(score, policy, trusted) -> str:
+    if trusted:
         return OK
     if not enforcement_enabled():
         return OK if score < policy.warn_threshold else WARN

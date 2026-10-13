@@ -9,11 +9,9 @@ from django.utils import timezone
 from dbs import audit
 from dbs.conf import setting
 from dbs.models import AnomalyEvent, AuditEvent, Lockout, SecurityPolicy, SessionEvent
-from dbs.security import detector
+from dbs.security import detector, telemetry
 
 ACTIONS = ("status", "unlock", "policy", "retrain", "reset-baseline", "events", "purge")
-
-DEFAULT_RETENTION_DAYS = 90
 
 
 class Command(BaseCommand):
@@ -36,10 +34,10 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"warn at              {policy.warn_threshold}")
         self.stdout.write(f"log out at           {policy.logout_threshold}")
-        self.stdout.write(f"learning period      {policy.learning_logins} events")
+        self.stdout.write(f"learning period      {policy.learning_logins} sessions")
         self.stdout.write(f"enforcement          {setting('DBS_ANOMALY_ENFORCE', True)}")
         self.stdout.write(f"browser location     {setting('DBS_GEOLOCATION', False)}")
-        self.stdout.write(f"recorded events      {SessionEvent.objects.count()}")
+        self.stdout.write(f"recorded events      {telemetry.recorded_requests().count()}")
         self.stdout.write(f"anomalies            {AnomalyEvent.objects.count()}")
         locked = list(Lockout.objects.select_related("user"))
         if locked:
@@ -93,10 +91,9 @@ class Command(BaseCommand):
             )
 
     def _purge(self, options):
-        days = int(setting("DBS_SECURITY_RETENTION_DAYS", DEFAULT_RETENTION_DAYS))
+        days = telemetry.retention_days()
+        events, anomalies = telemetry.purge(days)
         cutoff = timezone.now() - timedelta(days=days)
-        events, _ = SessionEvent.objects.filter(created_at__lt=cutoff).delete()
-        anomalies, _ = AnomalyEvent.objects.filter(created_at__lt=cutoff).delete()
         audit, _ = AuditEvent.objects.filter(created_at__lt=cutoff).delete()
         detector.forget()
         self.stdout.write(
