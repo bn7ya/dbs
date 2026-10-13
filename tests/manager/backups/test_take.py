@@ -13,7 +13,7 @@ from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupRunService, BackupService
 from dbs.manager.servers.exceptions import (
-    BackupInvalid,
+    DbsTooOld,
     HostKeyChanged,
     RemoteCommandFailed,
     SSHAuthFailed,
@@ -198,7 +198,7 @@ def test_a_server_that_cannot_be_reached_fails_the_job(
             RemoteCommandFailed(output="exit 1: No module named dbs"),
             "remote_command_failed",
         ),
-        (BackupInvalid(output="[INVALID] Not a DBS container"), "backup_invalid"),
+        (DbsTooOld(output="error: unrecognized arguments: --stream"), "dbs_too_old"),
     ],
 )
 def test_a_take_the_server_fails_keeps_the_end_of_its_output(

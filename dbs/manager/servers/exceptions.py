@@ -36,13 +36,6 @@ class RemoteCommandFailed(APIException):
         self.output: str = output
 
 
-class BackupInvalid(RemoteCommandFailed):
-    default_code = "backup_invalid"
-    default_detail = (
-        "The server made a backup file that is not a valid django-dbs backup."
-    )
-
-
 class StreamBroken(RemoteCommandFailed):
     default_code = "stream_broken"
     default_detail = (

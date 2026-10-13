@@ -348,12 +348,14 @@ class BackupRunService:
     def _retain_dbs(
         self, job: AuditEvent, server: Server, plan: BackupPlan | None, keep: int
     ) -> None:
+        plan_id = plan and plan.pk
         good = sorted(
-            self.files.good_backups(server.pk, plan and plan.pk),
-            key=moment_of,
-            reverse=True,
+            self.files.good_backups(server.pk, plan_id), key=moment_of, reverse=True
         )
-        self._expire(job, server, plan, good[max(keep, 1) :])
+        quarantined = sorted(
+            self.files.quarantined(server.pk, plan_id), key=moment_of, reverse=True
+        )
+        self._expire(job, server, plan, [*good[max(keep, 1) :], *quarantined[KEEP_MAX:]])
 
     def _expire(
         self,

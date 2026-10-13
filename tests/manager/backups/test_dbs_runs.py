@@ -281,6 +281,21 @@ def test_retention_keeps_at_most_five_good_backups_and_never_counts_quarantined(
     assert host.remote_names() == []
 
 
+def test_quarantined_arrivals_are_kept_five_at_most_apart_from_the_good_ones(
+    monkeypatch, server, server_root, take
+):
+    hosting(monkeypatch, server_root)
+    take()
+    for attempt in range(KEEP_MAX + 2):
+        hosting(monkeypatch, server_root, content=f"not a backup {attempt}".encode())
+        take()
+
+    good = [file for file in files(server) if not file.failure]
+    quarantined = [file for file in files(server) if file.failure]
+    assert len(good) == 1
+    assert len(quarantined) == KEEP_MAX
+
+
 def test_a_plan_never_keeps_more_than_five(server, host, make_plan, ran):
     plan = make_plan(keep=7, keep_remote=0)
 

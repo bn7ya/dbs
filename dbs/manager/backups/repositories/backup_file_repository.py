@@ -69,6 +69,20 @@ class BackupFileRepository(BaseRepository):
             .exclude(validation=BackupFile.Validation.FAILED)
         )
 
+    def quarantined(
+        self, server_id: UUID, plan_id: UUID | None
+    ) -> QuerySet[BackupFile]:
+        return (
+            self.active()
+            .filter(
+                server_id=server_id,
+                plan_id=plan_id,
+                kind=BackupFile.Kind.DBS,
+                validation=BackupFile.Validation.FAILED,
+            )
+            .exclude(failure="")
+        )
+
     def find_including_deleted(self, file_id: UUID) -> BackupFile | None:
         return (
             self.all_including_deleted()
