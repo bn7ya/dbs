@@ -97,6 +97,10 @@ export class ServerOverviewPage {
         ? presenceRow('servers.check.report.envFile', report.env_file)
         : { labelKey: 'servers.check.report.envFile', value: null, presence: 'notSet' },
       presenceRow('servers.check.report.remoteBackupDir', report.remote_backup_dir),
+      presenceRow(
+        'servers.check.report.timeout',
+        server.runtime === 'compose' ? server.timeout_in_container : server.timeout_on_host,
+      ),
     ];
     const roots = server.file_roots.map((path) => ({ path, presence: presenceOf(report.roots?.[path]) }));
     return { rows, roots, dockerSaid: compose?.error ?? '' };

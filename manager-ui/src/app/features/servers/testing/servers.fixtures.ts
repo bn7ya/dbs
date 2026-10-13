@@ -9,6 +9,9 @@ export const SUMMARY: ServerSummary = {
   username: 'deploy',
   last_check_status: 'ok',
   last_checked_at: '2026-09-30T12:00:00Z',
+  connection_state: 'online',
+  last_seen_at: '2026-09-30T12:00:00Z',
+  last_connection_error: '',
 };
 
 export const SERVER: Server = {
@@ -31,6 +34,8 @@ export const SERVER: Server = {
   env_path: '',
   last_check_error: '',
   last_check_report: { system: 'Linux', dbs_version: '0.4.0', backup_command: true },
+  timeout_on_host: true,
+  timeout_in_container: null,
   created_at: '2026-09-01T00:00:00Z',
   updated_at: '2026-09-30T12:00:00Z',
 };

@@ -29,6 +29,7 @@ import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
+import { JobConnection } from '@shared/job-connection/job-connection';
 import { Notice } from '@shared/notice/notice';
 import { Skeleton } from '@shared/skeleton/skeleton';
 import { StatusTag } from '@shared/status-tag/status-tag';
@@ -70,6 +71,7 @@ const FIRST_PLAN_NAME = 'django-dbs';
     MatPaginator,
     MatProgressBar,
     MatTableModule,
+    JobConnection,
     Notice,
     Skeleton,
     StatusTag,
@@ -113,6 +115,7 @@ export class BackupsPage {
   readonly empty = this.store.empty;
   readonly taking = this.store.taking;
   readonly backingUp = this.store.backingUp;
+  readonly liveConnection = this.store.liveConnection;
   readonly upload = this.store.upload;
   readonly uploading = this.store.uploading;
   readonly uploadProgress = this.store.uploadProgress;

@@ -7,6 +7,7 @@ import { RouterLink } from '@angular/router';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
+import { ConnectionDot } from '@shared/connection-dot/connection-dot';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
 import { Notice } from '@shared/notice/notice';
@@ -41,6 +42,7 @@ const EXPORT_COMMAND = 'django_dbs export manager.dbs';
     MatCard,
     MatCardContent,
     MatTableModule,
+    ConnectionDot,
     EmptyState,
     Notice,
     Skeleton,

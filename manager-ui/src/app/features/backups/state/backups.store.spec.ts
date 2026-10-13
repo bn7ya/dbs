@@ -582,6 +582,25 @@ describe('BackupsStore', () => {
       expect(store.files()).toEqual([FILE]);
     });
 
+    it("shows whether a running job's connection is alive, on its own server only", async () => {
+      await openWith({ files: [] });
+      store.take();
+      http.expectOne('/api/backups/take/').flush({ activity: JOB_ID });
+      expect(store.liveConnection()).toBeNull();
+
+      const connection = { state: 'alive', last_activity_at: '2026-09-30T12:00:30Z', bytes: 4096 } as const;
+      jobs.report(jobOf('backup.take', { status: 'running', finished_at: null, connection }));
+      expect(store.liveConnection()).toEqual(connection);
+
+      await openWith({ files: [], plans: [] }, OTHER_SERVER);
+      expect(store.liveConnection()).toBeNull();
+      await openWith();
+
+      jobs.report(jobOf('backup.take', { connection: null }));
+      expect(store.liveConnection()).toBeNull();
+      await answerReload();
+    });
+
     it('takes one backup of a server at a time, and shows it only on that server', async () => {
       await openWith();
       store.take();

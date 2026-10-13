@@ -83,6 +83,7 @@
                   <bdi class="dashboard__code text-sm text-secondary" dir="ltr">{{ server.host }}</bdi>
                 </div>
                 <div class="dashboard__tags">
+                  <app-connection-dot [state]="server.connection_state" [lastSeenAt]="server.last_seen_at" />
                   <app-status-tag
                     [severity]="checkLook(server).severity"
                     [icon]="checkLook(server).icon"

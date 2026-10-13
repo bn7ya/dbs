@@ -11,6 +11,7 @@
       "label": "الخوادم",
       "name": "الاسم",
       "address": "العنوان",
+      "connection": "الاتصال",
       "status": "الحالة",
       "lastChecked": "آخر فحص",
       "never": "لم يتم فحصه",
@@ -65,6 +66,7 @@
         "backupCommand": "أمر النسخ الاحتياطي",
         "envFile": "ملف متغيرات البيئة",
         "remoteBackupDir": "مجلد النسخ الاحتياطية على الخادم",
+        "timeout": "أمر timeout لإيقاف أي أمر يتجاوز وقته",
         "roots": "المجلدات المسموح بها",
         "docker": "Docker Compose",
         "service": "خدمة Compose"

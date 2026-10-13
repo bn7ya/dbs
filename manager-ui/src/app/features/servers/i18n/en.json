@@ -11,6 +11,7 @@
       "label": "Servers",
       "name": "Name",
       "address": "Address",
+      "connection": "Connection",
       "status": "Status",
       "lastChecked": "Last checked",
       "never": "Never",
@@ -65,6 +66,7 @@
         "backupCommand": "Backup command",
         "envFile": ".env file",
         "remoteBackupDir": "Remote backup folder",
+        "timeout": "The timeout command, to stop a command that runs out of time",
         "roots": "Allowed folders",
         "docker": "Docker Compose",
         "service": "Compose service"

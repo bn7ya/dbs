@@ -61,6 +61,8 @@ describe('DashboardPage', () => {
     const [web, staging] = cards.map((card) => card.textContent ?? '');
     expect(web).toContain('Production web');
     expect(web).toContain('Check: Ready');
+    expect(web).toContain('Online');
+    expect(staging).toContain('Offline, last seen 3 hours ago');
     expect(web).toContain('Health: Warning');
     expect(web).toContain('3 hours ago');
     expect(web).toContain('5 MB');

@@ -1,0 +1,8 @@
+@if (alive()) {
+  <app-status-tag severity="success" icon="fa-solid fa-signal" [label]="'connection.alive' | t" />
+} @else {
+  <app-status-tag severity="danger" icon="fa-solid fa-plug-circle-xmark" [label]="'connection.lost' | t" />
+}
+<span class="job-connection__progress">
+  {{ 'connection.progress' | t: { size: (connection().bytes | fileSize), age: (connection().last_activity_at | timeAgo) } }}
+</span>

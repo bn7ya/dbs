@@ -40,6 +40,15 @@
     "label": "Your password",
     "required": "Enter your password."
   },
+  "connection": {
+    "online": "Online",
+    "offline": "Offline",
+    "unknown": "Not seen yet",
+    "offlineSeen": "Offline, last seen {age}",
+    "alive": "Connection alive",
+    "lost": "Connection lost",
+    "progress": "{size} moved, last heard {age}"
+  },
   "errors": {
     "generic": "Something went wrong. Try again.",
     "notFound": "Page not found.",
@@ -64,9 +73,12 @@
     "ssh_auth_failed": "The server refused the username, key or password.",
     "ssh_unreachable": "The server did not answer over SSH.",
     "remote_command_failed": "A command on the server failed.",
+    "remote_command_timed_out": "A command on the server ran out of time and was stopped.",
+    "connection_lost": "The connection to the server was lost while it worked.",
     "invalid_host_key": "The host key is not valid. Get it again.",
     "backup_invalid": "The backup file is not valid.",
     "backup_running": "A backup or restore of this server is already running.",
+    "server_settling": "A command that ran out of time may still be stopping on this server. Try again in a minute.",
     "interrupted": "The job stopped before it finished.",
     "unexpected": "Something unexpected went wrong. Try again.",
     "backup_missing": "This backup's file is no longer here.",
