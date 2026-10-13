@@ -36,3 +36,8 @@ def clear_reauthentication(request) -> None:
     session = getattr(request, "session", None)
     if session is not None:
         session.pop(REAUTH_FLAG, None)
+
+
+def must_reauthenticate(request) -> bool:
+    session = getattr(request, "session", None)
+    return bool(session is not None and session.get(REAUTH_FLAG))

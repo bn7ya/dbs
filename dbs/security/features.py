@@ -35,6 +35,7 @@ ACTION_RISK = {
     "target_write": 0.8,
     "restore": 1.0,
     "delete": 1.0,
+    "account_write": 1.0,
 }
 
 EARTH_RADIUS_KM = 6371.0
