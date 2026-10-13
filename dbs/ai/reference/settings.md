@@ -6,36 +6,33 @@ Every setting is optional; DBS works with none of them set.
 
 | Setting | Purpose |
 |---|---|
-| `DBS_EXCLUDE_MODELS` | Models skipped in addition to the defaults. A `-label` prefix re-includes a default-skipped model |
+| `DBS_EXCLUDE_MODELS` | Models skipped in addition to the defaults. A `-label` prefix re-includes a default-skipped or unmanaged model |
 | `DBS_FILE_ROOTS` | Extra directories embedded in every backup |
 | `DBS_RESTORE_ROOTS` | Directories a restore may write into (falls back to `DBS_FILE_ROOTS`) |
+| `DBS_RESTORE_PATH_MAP` | `{"/old/root": "/new/root"}`: where a restore puts files from a server whose paths differ. Each new root must be inside a restore root |
 
 ## Where backups go
 
 | Setting | Purpose |
 |---|---|
-| `DBS_BACKUP_DIR` | Where scheduled backups are kept, restored from in the panel, and checked by health |
+| `DBS_BACKUP_DIR` | Where backups are kept (at most five), restored from in the panel, and checked by health |
 | `DBS_SCHEDULER` | `"thread"` (default), `"command"` or `"off"`: where the panel's schedule runs |
 | `DBS_BACKUP_PREFIX` | Default backup filename prefix |
 | `DBS_SCHEDULE_INTERVAL` | Seeds the panel's first schedule; default for `dbs schedule` flags (default `24h`) |
-| `DBS_SCHEDULE_KEEP` | Seeds the panel's first schedule; default local retention (default 7) |
-| `DBS_SSH_TARGETS` | Named SFTP profiles defined in settings; read-only in the admin |
-| `DBS_SCHEDULE_PUSH_TARGET` | Default target to push to |
-| `DBS_SCHEDULE_KEEP_REMOTE` | Default retention for pushed backups |
+| `DBS_SCHEDULE_KEEP` | Seeds the panel's first schedule; default local retention, 1 to 5 (default 5) |
 
 ## Encryption
 
 | Setting | Purpose |
 |---|---|
-| `DBS_PASSPHRASE` | Explicit passphrase, overriding the one derived from `SECRET_KEY` |
-| `DBS_KDF_TIME_COST` / `DBS_KDF_MEMORY_COST` / `DBS_KDF_PARALLELISM` | Argon2id cost for new backups |
+| `DBS_PASSPHRASE` | Explicit passphrase, overriding the one derived from `SECRET_KEY`. Never change it once backups exist |
+| `DBS_KDF_TIME_COST` / `DBS_KDF_MEMORY_COST` / `DBS_KDF_PARALLELISM` | Argon2id cost for new backups. A time cost above 10 or a memory cost above 262144 KiB makes every backup fail |
 
 ## The panel and its guard
 
 | Setting | Purpose |
 |---|---|
 | `DBS_SETUP_WIZARD` | Redirect superusers to the setup wizard until configured. Default `True` |
-| `DBS_ADMIN_CONSOLE_SHELL` | Allow free-form SSH commands from the console. Default `False` |
 | `DBS_ANOMALY_ENFORCE` | Whether a blocking verdict ends sessions. Default `True` |
 | `DBS_TRUSTED_NETWORKS` | CIDRs scored but never enforced against |
 | `DBS_ANOMALY_DETECTOR` | Dotted path to a replacement detector class |
@@ -43,11 +40,25 @@ Every setting is optional; DBS works with none of them set.
 | `DBS_GUARD_POLL_SECONDS` | How often an open page re-checks authorization (default 15) |
 | `DBS_GUARD_EVERYWHERE` | Extend the guard poller to the whole admin. Default `False` |
 | `DBS_GEOLOCATION` | Collect browser location as a signal. Default `False` |
-| `DBS_SECURITY_RETENTION_DAYS` | Telemetry retention for `dbs security purge` (default 90) |
+| `DBS_SECURITY_RETENTION_DAYS` | Telemetry older than this is purged automatically, once a day (default 90) |
 | `DBS_MAX_UPLOAD_BYTES` | Restore upload cap (default 1 GiB) |
-| `DBS_MAX_PAYLOAD_BYTES` | Decompressed payload cap on restore (default 4 GiB) |
+| `DBS_MAX_PAYLOAD_BYTES` | Decompressed payload cap when restoring a format 1 backup (default 4 GiB) |
 | `DBS_TRUST_FORWARDED_FOR` | Read the client IP from `X-Forwarded-For`. Default `False` |
-| `DBS_TRUSTED_PROXIES` | Proxies in front, counted from the right of that header (default 1) |
+| `DBS_TRUSTED_PROXIES` | The proxies' networks as CIDRs, e.g. `["10.0.0.0/24"]`. The header is read only from them |
 
-Trusted networks narrower than /8 (v4) or /16 (v6) only; wider entries are refused by the
-form and ignored when read, so a guarded session cannot trust the whole internet.
+Trusted networks and proxies no wider than /8 (v4) or /16 (v6); wider entries are refused by
+the form and ignored when read, so a guarded session cannot trust the whole internet.
+
+## Removed
+
+`DBS_SSH_TARGETS`, `DBS_SCHEDULE_PUSH_TARGET`, `DBS_SCHEDULE_KEEP_REMOTE` and
+`DBS_ADMIN_CONSOLE_SHELL` went with the panel's SFTP targets and console. `dbs upgrade`
+reports them; delete them. The DBS manager pulls off-site copies.
+
+## The DBS manager
+
+The manager is not configured through Django settings. It reads environment variables:
+`DBS_MANAGER_HOME` (the data folder), `DBS_MANAGER_DATABASE_URL` (PostgreSQL or MySQL
+instead of SQLite), `DBS_MANAGER_KEY_STORE` (`keychain` or `file`, where the sealing key
+lives), `DBS_MANAGER_HOST` (the name browsed to behind a proxy) and
+`DBS_MANAGER_TRUSTED_PROXY` (the proxy ranges `--trusted-proxy` sets).
