@@ -51,7 +51,7 @@ def _wipe(book, sidecar):
 
 
 @pytest.mark.django_db
-def test_backup_restore_roundtrip(tmp_path, settings):
+def test_backup_restore_roundtrip(tmp_path, settings, committed):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     cover_name = book.cover.name
@@ -64,7 +64,8 @@ def test_backup_restore_roundtrip(tmp_path, settings):
     _wipe(book, sidecar)
     assert not Book.objects.exists()
 
-    out = restore_backup(container, PASS)
+    with committed():
+        out = restore_backup(container, PASS)
     assert out.records_loaded >= 4  # author + 2 tags + book
     assert out.files_written == 2   # cover + sidecar
 
@@ -78,7 +79,7 @@ def test_backup_restore_roundtrip(tmp_path, settings):
 
 
 @pytest.mark.django_db
-def test_restore_heals_corruption_in_one_copy(tmp_path, settings):
+def test_restore_heals_corruption_in_one_copy(tmp_path, settings, committed):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     container = create_backup(PASS, kdf_params=FAST_KDF)
@@ -91,14 +92,15 @@ def test_restore_heals_corruption_in_one_copy(tmp_path, settings):
     damaged[a_off : a_off + wipe] = b"\x00" * wipe
 
     _wipe(book, sidecar)
-    out = restore_backup(bytes(damaged), PASS)
+    with committed():
+        out = restore_backup(bytes(damaged), PASS)
     assert out.healed
     assert Book.objects.filter(title="Resilient Data").exists()
     assert sidecar.read_bytes() == SIDECAR_BYTES
 
 
 @pytest.mark.django_db
-def test_restore_survives_truncation_that_destroys_copy_b(tmp_path, settings):
+def test_restore_survives_truncation_that_destroys_copy_b(tmp_path, settings, committed):
     settings.DBS_RESTORE_ROOTS = [str(tmp_path)]
     book, sidecar = _make_sample(tmp_path)
     container = create_backup(PASS, kdf_params=FAST_KDF)
@@ -111,7 +113,8 @@ def test_restore_survives_truncation_that_destroys_copy_b(tmp_path, settings):
     assert result.repair_report.healed
 
     _wipe(book, sidecar)
-    out = restore_backup(truncated, PASS)
+    with committed():
+        out = restore_backup(truncated, PASS)
     assert out.healed
     assert Book.objects.filter(title="Resilient Data").exists()
     assert sidecar.read_bytes() == SIDECAR_BYTES

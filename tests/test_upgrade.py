@@ -571,3 +571,33 @@ def test_the_new_backup_defaults_are_explained():
     assert "--allow-missing-files" in missing.message
     assert paths.level == OK and paths.since == "0.7.0"
     assert "already exists" in paths.message
+
+
+@pytest.mark.django_db
+def test_no_path_map_needs_nothing():
+    assert _finding("restore path map").level == OK
+
+
+@pytest.mark.django_db
+def test_a_malformed_path_map_is_reported(settings):
+    settings.DBS_RESTORE_PATH_MAP = ["/srv/old", "/srv/new"]
+
+    finding = _finding("restore path map")
+
+    assert finding.level == WARN
+    assert "DBS_RESTORE_PATH_MAP" in finding.remedy
+
+
+@pytest.mark.django_db
+def test_a_path_map_into_a_directory_no_root_allows_is_reported(settings, tmp_path):
+    settings.DBS_RESTORE_ROOTS = [str(tmp_path / "allowed")]
+    settings.DBS_RESTORE_PATH_MAP = {"/srv/old": str(tmp_path / "elsewhere")}
+
+    finding = _finding("restore path map")
+
+    assert finding.level == WARN
+    assert str(tmp_path / "elsewhere") in finding.message
+
+    settings.DBS_RESTORE_PATH_MAP = {"/srv/old": str(tmp_path / "allowed" / "media")}
+
+    assert _finding("restore path map").level == OK

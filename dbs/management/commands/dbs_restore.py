@@ -79,6 +79,15 @@ class Command(BaseCommand):
                     "nothing was written."
                 )
             )
+            if result.files_refused:
+                for problem in result.files_refused:
+                    self.stdout.write(self.style.ERROR(f"Would refuse {problem}"))
+                raise CommandError(
+                    f"Dry run: the restore would stop before loading any row, because "
+                    f"{len(result.files_refused)} file(s) cannot be written. Allow their "
+                    "directories in DBS_RESTORE_ROOTS, or map old roots with "
+                    "DBS_RESTORE_PATH_MAP."
+                )
             return
         if options["flush"]:
             self.stdout.write(
@@ -104,6 +113,7 @@ def restore_summary(result, dry_run):
         return {
             "records": result.records_would_load,
             "files": result.files_would_write,
+            "files_refused": len(result.files_refused),
             "healed": bool(result.healed),
         }
     return {

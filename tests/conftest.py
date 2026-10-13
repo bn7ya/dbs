@@ -2,6 +2,7 @@
 
 import os
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,11 @@ FAST_KDF = KDFParams(time_cost=1, memory_cost=8 * 1024, parallelism=1)
 @pytest.fixture
 def fast_kdf():
     return FAST_KDF
+
+
+@pytest.fixture
+def committed(django_capture_on_commit_callbacks):
+    return partial(django_capture_on_commit_callbacks, execute=True)
 
 
 @pytest.fixture

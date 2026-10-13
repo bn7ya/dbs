@@ -351,7 +351,8 @@ class RestoreRoots(Step):
             return self.ok("restores are confined to DBS_FILE_ROOTS")
         if not restore_roots:
             return self.warn(
-                "DBS_RESTORE_ROOTS is empty, so file restores will refuse every path",
+                "DBS_RESTORE_ROOTS is empty, so file restores will refuse every path "
+                "outside the file fields' storage and ModelBackup.file_roots",
                 "List the directories a restore may write into, or unset it",
             )
         return self.ok("restores are confined to DBS_RESTORE_ROOTS")
@@ -430,6 +431,36 @@ class BackupPaths(Step):
         )
 
 
+class RestorePathMap(Step):
+    name = "restore path map"
+    since = "0.7.0"
+
+    def check(self):
+        from .exceptions import ConfigurationError
+        from .files import is_inside, restore_path_map, restore_roots
+
+        try:
+            path_map = restore_path_map()
+        except ConfigurationError as exc:
+            return self.warn(str(exc), 'DBS_RESTORE_PATH_MAP = {"/old/root": "/new/root"}')
+        if not path_map:
+            return self.ok("no restore path map is configured")
+        roots = restore_roots()
+        unreachable = sorted(
+            new
+            for new in path_map.values()
+            if not any(is_inside(os.path.realpath(new), root) for root in roots)
+        )
+        if unreachable:
+            return self.warn(
+                "DBS_RESTORE_PATH_MAP sends files to "
+                + ", ".join(unreachable)
+                + ", which no restore root allows, so those files would be refused",
+                "Add those directories to DBS_RESTORE_ROOTS (or DBS_FILE_ROOTS)",
+            )
+        return self.ok("every new root in DBS_RESTORE_PATH_MAP is inside a restore root")
+
+
 class AiInstructions(Step):
     name = "ai instructions"
     since = "0.3.1"
@@ -485,6 +516,7 @@ STEPS = (
     UnmanagedModels,
     SourceFiles,
     BackupPaths,
+    RestorePathMap,
     AiInstructions,
 )
 

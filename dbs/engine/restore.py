@@ -15,8 +15,8 @@ from ..container.blocks import BlockPlan, RepairReport
 from ..container.format import read_container
 from ..crypto import decrypt_payload
 from ..crypto.envelope import EnvelopeMaterial
-from ..exceptions import ContainerError, CorruptionError
-from ..files import restore_file
+from ..exceptions import ContainerError, CorruptionError, RestoreError
+from ..files import StagedFiles, plan_restore, refusal_message
 from ..introspect import backup_plan, excluded_fields, topological_order
 from ..registry import ModelBackup, backup_registry
 from ..serialize import resolve_natural_keys, save_records
@@ -55,6 +55,7 @@ class RestoreResult:
     files_would_write: int = 0
     records_flushed: int = 0
     preexisting_models: list = field(default_factory=list)
+    files_refused: list = field(default_factory=list)
 
     @property
     def healed(self) -> bool:
@@ -125,8 +126,11 @@ def restore_backup(
     Rows load in the order the backup recorded, parents before children, and
     merge by primary key by default: an existing row only takes the fields the
     backup carries. ``flush`` first deletes the rows the backup covers so the
-    restore replaces rather than merges, and ``dry_run`` rehearses the load in
-    a transaction it rolls back, changing nothing.
+    restore replaces rather than merges. Every file target is checked before
+    any row loads; files are staged beside their targets and moved into place
+    when the rows commit. ``dry_run`` runs the same checks, lists refused files
+    in ``files_refused`` and rehearses the load in a transaction it rolls back,
+    changing nothing.
     """
     registry = registry or backup_registry
     result = read_payload(data, passphrase)
@@ -147,9 +151,14 @@ def restore_backup(
         len(result.files),
     )
 
-    records = ordered_records(result.document, result.records)
+    placements = plan_restore(result.files, registry=registry) if write_files else []
+    out.files_refused = [placement.problem for placement in placements if placement.problem]
+    records = _point_rows_at_moved_files(
+        ordered_records(result.document, result.records), placements
+    )
 
     if dry_run:
+        out.files_would_write = len(placements) - len(out.files_refused)
         _rehearse_load(
             records,
             out,
@@ -159,22 +168,28 @@ def restore_backup(
             flush=flush,
             registry=registry,
         )
-        if write_files:
-            out.files_would_write = len(result.files)
         logger.info(
-            "dry run complete: %d records would load, %d files would be written; "
-            "nothing was changed",
+            "dry run complete: %d records would load, %d files would be written, "
+            "%d files would be refused; nothing was changed",
             out.records_would_load,
             out.files_would_write,
+            len(out.files_refused),
         )
         return out
 
-    if load_data:
-        _load(records, out, backup_models, using=using, flush=flush, registry=registry)
-    if write_files:
-        for entry, file_bytes in result.files:
-            restore_file(entry, file_bytes)
-            out.files_written += 1
+    if out.files_refused:
+        raise RestoreError(refusal_message(out.files_refused))
+
+    staged = StagedFiles()
+    staged.stage_all(placements)
+    try:
+        if load_data:
+            _load(records, out, backup_models, staged, using=using, flush=flush, registry=registry)
+        else:
+            _publish(staged, out)
+    except BaseException:
+        staged.discard()
+        raise
     logger.info(
         "restore complete: %d records loaded, %d files written",
         out.records_loaded,
@@ -183,7 +198,7 @@ def restore_backup(
     return out
 
 
-def _load(records, out, backup_models, *, using, flush, registry) -> None:
+def _load(records, out, backup_models, staged, *, using, flush, registry) -> None:
     prepared = resolve_natural_keys(records, using) if records else []
     if not flush and out.preexisting_models:
         logger.warning(
@@ -195,8 +210,16 @@ def _load(records, out, backup_models, *, using, flush, registry) -> None:
         if flush:
             out.records_flushed = _flush_existing_rows(backup_models, using, registry)
         out.records_loaded = save_records(prepared, using=using) if prepared else 0
+        transaction.on_commit(lambda: _publish(staged, out), using=using)
     if flush:
         logger.info("flush removed %d existing rows before the load", out.records_flushed)
+
+
+def _publish(staged: StagedFiles, out: RestoreResult) -> None:
+    try:
+        staged.publish()
+    finally:
+        out.files_written = staged.published
 
 
 def _rehearse_load(
@@ -239,6 +262,26 @@ def _target_order(records: list) -> list:
         except (LookupError, TypeError, ValueError):
             continue
     return [model._meta.label_lower for model in topological_order(models)]
+
+
+def _point_rows_at_moved_files(records: list, placements: list) -> list:
+    moved = {
+        (placement.entry.model, str(placement.entry.pk), placement.entry.field): placement.moved_to
+        for placement in placements
+        if placement.moved_to and not placement.problem
+    }
+    if not moved:
+        return records
+    pointed = []
+    for record in records:
+        fields = record.get("fields", {})
+        changes = {
+            name: moved[(record.get("model"), str(record.get("pk")), name)]
+            for name in fields
+            if (record.get("model"), str(record.get("pk")), name) in moved
+        }
+        pointed.append({**record, "fields": {**fields, **changes}} if changes else record)
+    return pointed
 
 
 def _backup_models(document: dict, records: list) -> list:
