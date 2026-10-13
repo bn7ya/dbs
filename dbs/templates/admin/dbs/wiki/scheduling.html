@@ -9,7 +9,11 @@ the <a href="{% url 'admin:dbs_wiki' 'manager' %}">DBS manager</a> takes the off
 by connecting to this server and pulling them.</p>
 <p>The schedule runs inside your web workers. Each worker starts a small background thread
 on the first request it serves, and the thread checks once a minute whether a backup is
-due. A lease in the database lets exactly one of them take each backup.</p>
+due. A lease in the database lets exactly one of them take each backup, and only one backup
+or restore runs at a time. The lease lasts two minutes and is renewed while the backup runs,
+so a long backup is never started twice. If a worker dies mid-backup, its audit row is marked
+interrupted and the next tick takes the backup again; if that one dies too, the schedule
+waits for the next interval.</p>
 <h2>Choosing where it runs</h2>
 <ul>
   <li><code>DBS_SCHEDULER = "thread"</code> (default): inside the web workers.</li>

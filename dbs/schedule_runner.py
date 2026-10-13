@@ -7,21 +7,26 @@ import threading
 from datetime import timedelta, timezone as dt_timezone
 
 from django.db import DatabaseError, close_old_connections
-from django.db.models import Q
 from django.utils import timezone
 
-from . import audit, leases, retention
+from . import audit, jobs, leases, retention
 from .conf import setting
 from .exceptions import DBSError
 from .naming import DEFAULT_PREFIX, backup_stem, parse_backup_moment, reserve_backup_name
 
 logger = logging.getLogger("dbs")
 
-SCHEDULE_LEASE = "dbs.schedule"
 SEEN_LEASE = "dbs.scheduler.seen"
 TICK_SECONDS = 60
-LONGEST_RUN_SECONDS = 6 * 3600
 MINIMUM_INTERVAL_SECONDS = 300
+RUNNING = "running"
+RETRYING = "retrying"
+INTERRUPTED = "interrupted"
+INTERRUPTED_ONCE = "The last scheduled backup stopped before it finished; it is taken again now."
+INTERRUPTED_TWICE = (
+    "Two scheduled backups in a row stopped before they finished; the next one runs "
+    "at the usual time."
+)
 VERIFYING_ACTIONS = ("backup.create", "backup.validate")
 VERIFICATION_FAILURES = ("CorruptionError", "ContainerError")
 THREAD = "thread"
@@ -80,7 +85,7 @@ def discard_reservation(path):
         pass
 
 
-def run_cycle(passphrase, plan):
+def run_cycle(passphrase, plan, runner=None):
     from .engine import create_backup
 
     os.makedirs(plan["output_dir"], exist_ok=True)
@@ -89,11 +94,14 @@ def run_cycle(passphrase, plan):
     output = os.path.join(plan["output_dir"], name)
     extra = {"block_size": plan["block_size"]} if plan.get("block_size") else {}
     try:
-        with audit.track(
+        job = jobs.Job.begin(
             "backup.create",
             target=name,
             data={"file": name, "database": plan["database"]},
-        ) as entry:
+            owner=runner.owner if runner else leases.unique_owner(),
+            hold=(jobs.RUNNER_LEASE,) if runner else (),
+        )
+        with job.tracked():
             container = create_backup(
                 passphrase,
                 using=plan["database"],
@@ -104,7 +112,7 @@ def run_cycle(passphrase, plan):
                 **extra,
             )
             digest = hashlib.sha256(container).hexdigest()
-            entry.data.update(
+            job.data.update(
                 size=len(container),
                 sha256=digest,
                 verified=plan["verify"],
@@ -234,6 +242,10 @@ def database_schedule():
         return None
 
 
+def is_due(schedule, now):
+    return schedule.next_run_at is None or schedule.next_run_at <= now
+
+
 def run_due(*, force=False, now=None):
     from .models import BackupSchedule
 
@@ -241,48 +253,89 @@ def run_due(*, force=False, now=None):
     if not schedule.enabled and not force:
         return None
     now = now or timezone.now()
-    if not force and schedule.next_run_at and schedule.next_run_at > now:
+    if not force and not is_due(schedule, now):
         return None
-    owner = f"{leases.process_owner()}:{threading.get_ident()}"
-    if not leases.acquire(SCHEDULE_LEASE, owner, LONGEST_RUN_SECONDS):
+    runner = jobs.Runner()
+    try:
+        runner.take()
+    except jobs.Busy:
         return None
     try:
-        claimed = BackupSchedule.objects.filter(pk=schedule.pk)
-        if not force:
-            claimed = claimed.filter(Q(next_run_at__isnull=True) | Q(next_run_at__lte=now))
-        following = now + timedelta(seconds=schedule.interval_seconds)
-        if not claimed.update(next_run_at=following):
+        schedule.refresh_from_db()
+        if not _resume(schedule, now) and not force:
             return None
-        return _run(schedule)
+        if not force and not is_due(schedule, now):
+            return None
+        return _run(schedule, runner, now)
     finally:
-        leases.release(SCHEDULE_LEASE, owner)
+        runner.release()
 
 
-def _run(schedule):
+def _resume(schedule, now):
     from .models import BackupSchedule
 
+    if schedule.last_status == RUNNING:
+        BackupSchedule.objects.filter(pk=schedule.pk).update(
+            last_status=INTERRUPTED, last_error=INTERRUPTED_ONCE
+        )
+        schedule.last_status = INTERRUPTED
+        return True
+    if schedule.last_status == RETRYING:
+        following = now + timedelta(seconds=schedule.interval_seconds)
+        BackupSchedule.objects.filter(pk=schedule.pk).update(
+            last_status=audit.FAILED, last_error=INTERRUPTED_TWICE, next_run_at=following
+        )
+        schedule.last_status = audit.FAILED
+        schedule.next_run_at = following
+        return False
+    return True
+
+
+def _run(schedule, runner, now):
+    from .models import BackupSchedule
+
+    attempt = RETRYING if schedule.last_status == INTERRUPTED else RUNNING
+    following = now + timedelta(seconds=schedule.interval_seconds)
+    BackupSchedule.objects.filter(pk=schedule.pk).update(
+        last_status=attempt, last_run_at=timezone.now()
+    )
     try:
         passphrase = unattended_passphrase()
         if passphrase is None:
             raise ScheduleError(
                 "Scheduled backups have no passphrase: set SECRET_KEY or DBS_PASSPHRASE."
             )
-        output = run_cycle(passphrase, schedule_plan(schedule))
+        output = run_cycle(passphrase, schedule_plan(schedule), runner)
     except Exception as exc:
         BackupSchedule.objects.filter(pk=schedule.pk).update(
-            last_run_at=timezone.now(), last_status=audit.FAILED, last_error=str(exc)[:4000]
+            last_run_at=timezone.now(),
+            last_status=audit.FAILED,
+            last_error=str(exc)[:4000],
+            next_run_at=following,
         )
         raise
     BackupSchedule.objects.filter(pk=schedule.pk).update(
-        last_run_at=timezone.now(), last_status=audit.SUCCEEDED, last_error=""
+        last_run_at=timezone.now(),
+        last_status=audit.SUCCEEDED,
+        last_error="",
+        next_run_at=following,
     )
     return output
+
+
+def sweep():
+    directory = backup_directory()
+    if not directory:
+        return []
+    return retention.sweep_leftovers(directory)
 
 
 def tick():
     close_old_connections()
     try:
         leases.acquire(SEEN_LEASE, leases.process_owner(), TICK_SECONDS * 3)
+        jobs.recover()
+        sweep()
         return run_due()
     except DatabaseError as exc:
         logger.debug("the backup schedule could not be read: %s", exc)
