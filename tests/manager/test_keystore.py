@@ -97,6 +97,19 @@ def test_a_key_the_keychain_does_not_give_back_stays_in_its_file(home, ring):
         keystore.load(home, KEYCHAIN)
 
 
+def test_a_keychain_that_fails_never_mints_a_new_key(home, ring, monkeypatch):
+    def refuse(service, username):
+        raise RuntimeError("locked")
+
+    monkeypatch.setattr(ring, "get_password", refuse)
+
+    with pytest.raises(keystore.KeyStoreError) as refused:
+        keystore.load(home, AUTO)
+
+    assert "locked" in str(refused.value) and keystore.STORE_ENV in str(refused.value)
+    assert not paths.key_path(home).exists()
+
+
 def test_two_different_keys_stop_everything(home, ring):
     keystore.load(home, AUTO)
     paths.write_private(paths.key_path(home), "another-key")

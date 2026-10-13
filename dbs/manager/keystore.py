@@ -100,8 +100,11 @@ def load(data_dir, environ=None) -> SealingKey:
         try:
             return _from_keychain(ring, data_dir)
         except KeychainFailed as exc:
-            if store == KEYCHAIN:
-                raise KeyStoreError(f"the system keychain refused: {exc}.") from exc
+            if store == KEYCHAIN or paths.stored_key(data_dir) is None:
+                raise KeyStoreError(
+                    f"the system keychain refused: {exc}. Unlock it and start again, "
+                    f"or set {STORE_ENV}=file to keep the sealing key in a file."
+                ) from exc
     elif store == KEYCHAIN:
         raise KeyStoreError(
             f"${STORE_ENV}=keychain, but no system keychain works on this computer."
