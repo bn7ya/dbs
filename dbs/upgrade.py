@@ -426,6 +426,29 @@ class AiInstructions(Step):
         return self.fixed(f"refreshed {len(stale)} AI instruction file(s)")
 
 
+class ClientRetired(Step):
+    name = "dbs-client"
+    since = "0.7.0"
+    config_paths = ("dbs-client.toml", "~/.config/dbs/client.toml")
+
+    def _configs(self):
+        candidates = [os.environ.get("DBS_CLIENT_CONFIG", ""), *self.config_paths]
+        expanded = [os.path.expanduser(path) for path in candidates if path]
+        return [path for path in dict.fromkeys(expanded) if os.path.isfile(path)]
+
+    def check(self):
+        found = self._configs()
+        if not found:
+            return self.ok("no dbs-client config is left to move")
+        return self.warn(
+            "dbs-client was removed, and "
+            + ", ".join(found)
+            + " still lists the servers it backed up",
+            "Add each server to the manager with `django_dbs run` or "
+            "`django_dbs server add`, and back it up from there",
+        )
+
+
 STEPS = (
     InstalledApp,
     Migrations,
@@ -441,6 +464,7 @@ STEPS = (
     RestoreRoots,
     HiddenRows,
     AiInstructions,
+    ClientRetired,
 )
 
 
