@@ -10,6 +10,7 @@ import { MatTableModule } from '@angular/material/table';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { Notice } from '@shared/notice/notice';
@@ -20,6 +21,7 @@ import { SERVER_PAGE_SIZES, ServersStore } from '../../state/servers.store';
 @Component({
   selector: 'app-servers-page',
   imports: [
+    Can,
     FormsModule,
     RouterLink,
     MatButton,

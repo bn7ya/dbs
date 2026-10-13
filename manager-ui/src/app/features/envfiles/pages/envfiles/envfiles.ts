@@ -13,6 +13,7 @@ import { map } from 'rxjs';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
@@ -35,6 +36,7 @@ const CONTENT_ROWS_MAX = 20;
 @Component({
   selector: 'app-envfiles-page',
   imports: [
+    Can,
     RouterLink,
     MatButton,
     MatCard,

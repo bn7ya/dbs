@@ -7,7 +7,7 @@
           <p class="text-sm text-secondary">{{ 'backups.plans.body' | t }}</p>
         </div>
         @if (!plansEmpty()) {
-          <button matButton="outlined" type="button" (click)="addPlan()">{{ 'backups.plans.add' | t }}</button>
+          <button *appCan="'plans.manage'" matButton="outlined" type="button" (click)="addPlan()">{{ 'backups.plans.add' | t }}</button>
         }
       </div>
 
@@ -30,11 +30,11 @@
             [title]="'backups.plans.empty.title' | t"
             [description]="'backups.plans.empty.body' | t"
           >
-            <button matButton="filled" type="button" (click)="addFirstPlan()">{{ 'backups.plans.empty.action' | t }}</button>
-            <button matButton="outlined" type="button" (click)="addFolderPlan()">
+            <button *appCan="'plans.manage'" matButton="filled" type="button" (click)="addFirstPlan()">{{ 'backups.plans.empty.action' | t }}</button>
+            <button *appCan="'plans.manage'" matButton="outlined" type="button" (click)="addFolderPlan()">
               {{ 'backups.plans.empty.folders' | t }}
             </button>
-            <button matButton="outlined" type="button" (click)="addCollectPlan()">
+            <button *appCan="'plans.manage'" matButton="outlined" type="button" (click)="addCollectPlan()">
               {{ 'backups.plans.empty.collect' | t }}
             </button>
           </app-empty-state>
@@ -144,6 +144,7 @@
                       [disabled]="isRunning(row)"
                       [attr.aria-busy]="isRunning(row)"
                       [attr.aria-label]="'backups.plans.run.label' | t: { name: row.name }"
+                      *appCan="'plans.run'"
                       (click)="run(row)"
                     >
                       @if (isRunning(row)) {
@@ -155,6 +156,7 @@
                       matButton
                       type="button"
                       [attr.aria-label]="'backups.plans.edit.label' | t: { name: row.name }"
+                      *appCan="'plans.manage'"
                       (click)="editPlan(row)"
                     >
                       {{ 'actions.edit' | t }}
@@ -166,6 +168,7 @@
                       [disabled]="isDeletingPlan(row)"
                       [attr.aria-busy]="isDeletingPlan(row)"
                       [attr.aria-label]="'backups.delete.label' | t: { name: row.name }"
+                      *appCan="'plans.manage'"
                       (click)="removePlan(row)"
                     >
                       @if (isDeletingPlan(row)) {
@@ -213,6 +216,7 @@
             type="button"
             [disabled]="uploading()"
             [attr.aria-busy]="uploading()"
+            *appCan="'backups.upload'"
             (click)="picker.click()"
           >
             @if (uploading()) {
@@ -220,7 +224,7 @@
             }
             {{ (uploading() ? 'backups.upload.working' : 'backups.upload.action') | t }}
           </button>
-          <button matButton="filled" type="button" [disabled]="taking()" [attr.aria-busy]="taking()" (click)="take()">
+          <button *appCan="'backups.take'" matButton="filled" type="button" [disabled]="taking()" [attr.aria-busy]="taking()" (click)="take()">
             @if (taking()) {
               <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
@@ -368,6 +372,7 @@
                   <div class="backups__actions">
                     <a
                       matButton
+                      *appCan="'backups.download'"
                       [href]="downloadUrl(row)"
                       [attr.download]="row.name"
                       [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
@@ -380,6 +385,7 @@
                       [disabled]="isVerifying(row)"
                       [attr.aria-busy]="isVerifying(row)"
                       [attr.aria-label]="'backups.verify.label' | t: { name: row.name }"
+                      *appCan="'backups.verify'"
                       (click)="verify(row)"
                     >
                       @if (isVerifying(row)) {
@@ -394,6 +400,7 @@
                         [disabled]="restoring(row) !== null"
                         [attr.aria-busy]="restoring(row) !== null"
                         [attr.aria-label]="'backups.restore.label' | t: { name: row.name }"
+                        *appCan="'backups.rehearse'"
                         (click)="restore(row)"
                       >
                         @if (restoring(row) !== null) {
@@ -409,6 +416,7 @@
                       [disabled]="isDeleting(row)"
                       [attr.aria-busy]="isDeleting(row)"
                       [attr.aria-label]="'backups.delete.label' | t: { name: row.name }"
+                      *appCan="'backups.delete'"
                       (click)="remove(row)"
                     >
                       @if (isDeleting(row)) {

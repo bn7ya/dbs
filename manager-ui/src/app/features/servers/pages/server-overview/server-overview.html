@@ -20,7 +20,7 @@
             {{ 'host_key_changed' | errorText }} {{ 'servers.check.blocked' | t }}
           </app-notice>
           <div>
-            <button matButton="outlined" class="app-danger" type="button" (click)="reviewHostKey()">
+            <button *appCan="'servers.manage'" matButton="outlined" class="app-danger" type="button" (click)="reviewHostKey()">
               {{ 'servers.hostKey.review' | t }}
             </button>
           </div>
@@ -75,7 +75,7 @@
 
         <div class="overview__actions overview__actions--spread">
           <p class="text-sm text-secondary">{{ 'servers.check.wait' | t }}</p>
-          <button matButton="filled" type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="check()">
+          <button *appCan="'servers.check'" matButton="filled" type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="check()">
             @if (checking()) {
               <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
@@ -119,7 +119,7 @@
         </dl>
 
         <div class="overview__actions">
-          <button matButton="outlined" type="button" (click)="edit()">{{ 'actions.edit' | t }}</button>
+          <button *appCan="'servers.manage'" matButton="outlined" type="button" (click)="edit()">{{ 'actions.edit' | t }}</button>
         </div>
       </mat-card-content>
     </mat-card>
@@ -134,7 +134,7 @@
         <app-host-key-facts [keyType]="current.host_key_type" [fingerprint]="current.host_key_fingerprint" />
 
         <div class="overview__actions">
-          <button matButton="outlined" type="button" (click)="reviewHostKey()">
+          <button *appCan="'servers.manage'" matButton="outlined" type="button" (click)="reviewHostKey()">
             {{ 'servers.hostKey.review' | t }}
           </button>
         </div>
@@ -166,7 +166,7 @@
 
         <!-- One button that changes its word: focus returns to it from the password prompt. -->
         <div class="overview__actions">
-          <button matButton="outlined" type="button" (click)="togglePassphrase()">
+          <button *appCan="'servers.passphrase'" matButton="outlined" type="button" (click)="togglePassphrase()">
             {{ (passphrase() ? 'servers.passphrase.hide' : 'servers.passphrase.show') | t }}
           </button>
         </div>
@@ -180,7 +180,7 @@
           <p class="text-sm text-secondary">{{ 'servers.move.body' | t }}</p>
         </div>
         <div class="overview__actions">
-          <a matButton="outlined" routerLink="move">{{ 'servers.move.action' | t }}</a>
+          <a *appCan="'redeploy.rehearse'" matButton="outlined" routerLink="move">{{ 'servers.move.action' | t }}</a>
         </div>
       </mat-card-content>
     </mat-card>
@@ -199,6 +199,7 @@
             type="button"
             [disabled]="deleting()"
             [attr.aria-busy]="deleting()"
+            *appCan="'servers.manage'"
             (click)="remove()"
           >
             @if (deleting()) {

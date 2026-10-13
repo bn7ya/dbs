@@ -10,6 +10,7 @@ import { MatSelect } from '@angular/material/select';
 import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
 import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
@@ -24,6 +25,7 @@ const MODES: readonly RestoreMode[] = ['merge', 'replace'];
 @Component({
   selector: 'app-restore-form',
   imports: [
+    Can,
     FormsModule,
     MatButton,
     MatFormField,

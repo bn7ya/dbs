@@ -27,6 +27,7 @@ import { map } from 'rxjs';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Breadcrumb } from '@shared/breadcrumb/breadcrumb';
 import type { BreadcrumbItem } from '@shared/breadcrumb/breadcrumb.types';
@@ -55,6 +56,7 @@ const SKELETON_LINES: readonly number[] = [0, 1, 2, 3, 4, 5];
 @Component({
   selector: 'app-files-page',
   imports: [
+    Can,
     FormsModule,
     RouterLink,
     MatButton,
