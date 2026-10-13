@@ -64,6 +64,15 @@ class TerminalSession:
             return 1
         raise CommandFailed(f"failed: {jobs.failure(entry)}")
 
+    def agrees(self, question: str) -> bool:
+        if not interactive():
+            raise CommandFailed("this needs a person to answer; run it in a terminal.")
+        try:
+            answer = input(f"{question} ").strip()
+        except EOFError:
+            answer = ""
+        return answer.lower() in ("y", "yes")
+
     def confirm(self, question: str, *, expected: str | None = None) -> None:
         if getattr(self.args, "yes", False):
             return

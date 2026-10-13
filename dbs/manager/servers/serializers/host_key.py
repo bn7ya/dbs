@@ -21,3 +21,14 @@ class RepinSerializer(serializers.Serializer):
     password = serializers.CharField(
         max_length=128, trim_whitespace=False, write_only=True
     )
+
+
+class HostKeyConfirmationSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    host = serializers.CharField(read_only=True)
+    port = serializers.IntegerField(read_only=True)
+    key_type = serializers.CharField(read_only=True)
+    fingerprint = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    requested_at = serializers.DateTimeField(read_only=True)
+    expires_at = serializers.DateTimeField(read_only=True)

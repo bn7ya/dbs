@@ -188,7 +188,8 @@ def servers(commands, location: Location) -> None:
     edit.add_argument(
         "--backup-passphrase",
         action="store_true",
-        help="Ask for the passphrase its backups use.",
+        help="Ask for the passphrase its backups use. Never change it once there are "
+        "backups: they would no longer open.",
     )
     _server_settings(edit)
 
@@ -251,10 +252,23 @@ def servers(commands, location: Location) -> None:
     repin.add_argument("--host-key", help="The host key to pin.")
     _yes(repin)
 
+    confirm_key = _verb(
+        verbs,
+        "confirm-host-key",
+        "Confirm or reject a host key Claude read with fingerprint_host. It shows the "
+        "fingerprint and asks; only a confirmed key can be pinned by Claude.",
+        "terminal.servers:confirm_host_key",
+        location,
+    )
+    confirm_key.add_argument(
+        "confirmation", help="The confirmation id Claude was given."
+    )
+
     passphrase = _verb(
         verbs,
         "passphrase",
-        "Show the passphrase a server's backups use.",
+        "Show the passphrase a server's backups use. Never change it: older backups "
+        "would no longer open.",
         "terminal.servers:passphrase",
         location,
     )
@@ -263,7 +277,9 @@ def servers(commands, location: Location) -> None:
     capture = _verb(
         verbs,
         "capture-passphrase",
-        "Read the backup passphrase from the server itself.",
+        "Read the backup passphrase from the server itself. Do it only while adding "
+        "a server, before its first backup: a server's backup passphrase must never "
+        "change, because older backups would no longer open.",
         "terminal.servers:capture_passphrase",
         location,
     )
