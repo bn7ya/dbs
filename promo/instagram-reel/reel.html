@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DBS Reel</title>
+<style>
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 100 800;
+  src: url(fonts/jetbrains-mono-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 100 800;
+  src: url(fonts/jetbrains-mono-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+:root {
+  --bg: #06080c;
+  --ink: #f2f5f7;
+  --dim: #8b96a3;
+  --faint: #4a5562;
+  --red: #ff4d5e;
+  --green: #44b78b;
+  --mint: #5be3a8;
+  --amber: #ffb547;
+  --cyan: #5cc8ff;
+  --violet: #a78bfa;
+  --mono: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  --sans: 'Inter Display', 'Inter', sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); }
+#stage {
+  position: relative; width: 1080px; height: 1920px; overflow: hidden;
+  background: var(--bg); color: var(--ink); font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+#grid {
+  position: absolute; inset: -120px;
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 2px, transparent 2px);
+  background-size: 72px 72px;
+}
+.glow { position: absolute; border-radius: 50%; filter: blur(40px); opacity: 0; }
+#glowRed { width: 1400px; height: 1400px; left: -160px; top: 120px; background: radial-gradient(circle, rgba(255,77,94,.30), rgba(255,77,94,0) 62%); }
+#glowGreen { width: 1500px; height: 1500px; left: -210px; top: 160px; background: radial-gradient(circle, rgba(68,183,139,.34), rgba(68,183,139,0) 62%); }
+#glowCyan { width: 1400px; height: 1400px; left: -160px; top: 80px; background: radial-gradient(circle, rgba(92,200,255,.22), rgba(92,200,255,0) 62%); }
+#hex { position: absolute; left: 0; top: 0; }
+#vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(6,8,12,0) 55%, rgba(6,8,12,.7) 100%); pointer-events: none; }
+#flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+.scene { position: absolute; inset: 0; opacity: 0; }
+.abs { position: absolute; }
+.mono { font-family: var(--mono); }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 16px;
+  font: 600 28px/1 var(--mono); letter-spacing: .14em; color: #ffd0d5;
+  padding: 16px 26px; border: 2px solid rgba(255,77,94,.55); border-radius: 999px;
+  background: #1d0b10;
+}
+.tag i { width: 16px; height: 16px; border-radius: 50%; background: var(--red); display: block; box-shadow: 0 0 18px var(--red); }
+
+#s1 .h { font-weight: 800; letter-spacing: -.035em; line-height: .98; }
+#hookBig { font-weight: 900; font-size: 262px; letter-spacing: -.055em; line-height: .9; color: var(--red); }
+#hookCount { font: 500 36px/1 var(--mono); color: var(--dim); letter-spacing: .02em; }
+#hookCount b { color: #ffd0d5; font-weight: 700; }
+#hookThen { font-weight: 800; font-size: 86px; letter-spacing: -.03em; }
+
+.term {
+  position: absolute; left: 40px; width: 1000px; border-radius: 30px; overflow: hidden;
+  background: rgba(11,14,20,.94); border: 2px solid rgba(255,255,255,.10);
+  box-shadow: 0 40px 120px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.term .bar { height: 74px; display: flex; align-items: center; gap: 14px; padding: 0 30px; border-bottom: 2px solid rgba(255,255,255,.06); background: rgba(255,255,255,.025); }
+.term .bar i { width: 20px; height: 20px; border-radius: 50%; display: block; }
+.term .bar i:nth-child(1) { background: #ff5f57; }
+.term .bar i:nth-child(2) { background: #febc2e; }
+.term .bar i:nth-child(3) { background: #28c840; }
+.term .bar span { margin-left: 18px; font: 500 24px/1 var(--mono); color: var(--faint); }
+.term .body { padding: 30px 40px 36px; font: 500 34px/1.45 var(--mono); white-space: pre; color: #c9d3dd; }
+.term .ln { opacity: 0; }
+.term .p { color: var(--mint); }
+.term .c { color: var(--faint); }
+.term .r { color: var(--red); font-weight: 700; }
+.term .a { color: var(--amber); }
+.term .w { color: #fff; font-weight: 700; }
+.term .g { color: var(--mint); font-weight: 700; }
+.term .hl { background: rgba(91,227,168,.12); box-shadow: -40px 0 0 rgba(91,227,168,.12), 40px 0 0 rgba(91,227,168,.12); }
+.caret { display: inline-block; width: .6em; height: 1.1em; background: var(--mint); vertical-align: -.2em; margin-left: 2px; }
+
+#proofBig { font-weight: 900; font-size: 100px; letter-spacing: -.045em; line-height: 1; }
+#proofSub { font: 500 38px/1.3 var(--mono); color: var(--dim); }
+#proofSub b { color: var(--mint); font-weight: 700; }
+
+.mark { width: 200px; height: 200px; }
+#meet { font-weight: 700; font-size: 64px; color: var(--dim); letter-spacing: -.02em; }
+.word { font-weight: 900; letter-spacing: -.06em; line-height: .86; background: linear-gradient(180deg, #ffffff 30%, #a7f3d0 100%); -webkit-background-clip: text; background-clip: text; color: transparent; display: inline-block; }
+.kicker { font: 600 32px/1 var(--mono); letter-spacing: .32em; color: var(--mint); }
+#tagline { font-weight: 800; font-size: 96px; letter-spacing: -.04em; line-height: 1.02; }
+#tagline .heal { color: var(--mint); position: relative; display: inline-block; }
+#tagline .heal u { position: absolute; left: 0; bottom: -6px; height: 10px; border-radius: 6px; background: var(--mint); text-decoration: none; display: block; transform-origin: left center; }
+
+.title { font-weight: 900; font-size: 92px; letter-spacing: -.045em; line-height: 1; }
+.title em { font-style: normal; color: var(--mint); }
+
+.rowlabel { font: 600 26px/1 var(--mono); letter-spacing: .2em; color: var(--dim); }
+.blk { position: absolute; width: 92px; height: 112px; border-radius: 16px; overflow: hidden; background: rgba(92,200,255,.10); border: 2px solid rgba(92,200,255,.55); }
+.blk .data { position: absolute; left: 0; right: 0; top: 0; height: 86px; background: linear-gradient(160deg, rgba(92,200,255,.55), rgba(92,200,255,.18)); }
+.blk .par { position: absolute; left: 0; right: 0; bottom: 0; height: 26px; background: var(--violet); opacity: 0; }
+.blk .noise { position: absolute; inset: 0; opacity: 0; background-color: rgba(255,77,94,.85); }
+.blk .ok { position: absolute; left: 0; right: 0; top: 18px; text-align: center; font: 800 48px/1 var(--sans); color: #062016; opacity: 0; }
+.blk .heal { position: absolute; inset: 0; background: var(--mint); opacity: 0; }
+
+.feat { position: absolute; left: 72px; width: 900px; display: flex; gap: 30px; align-items: center; opacity: 0; }
+.feat .ic { width: 84px; height: 84px; border-radius: 22px; flex: none; display: grid; place-items: center; }
+.feat .ic svg { width: 46px; height: 46px; }
+.feat h4 { margin: 0; font-weight: 800; font-size: 50px; letter-spacing: -.03em; line-height: 1.05; }
+.feat p { margin: 6px 0 0; font-weight: 500; font-size: 35px; color: var(--dim); letter-spacing: -.01em; }
+
+#note { font-weight: 700; font-size: 50px; letter-spacing: -.03em; line-height: 1.15; }
+#note code { font-family: var(--mono); font-size: 44px; color: var(--amber); font-weight: 700; letter-spacing: 0; }
+#note span { color: var(--dim); font-weight: 600; }
+
+.chip { position: absolute; left: 72px; height: 98px; display: flex; align-items: center; gap: 26px; padding: 0 36px 0 22px; border-radius: 26px; background: rgba(255,255,255,.045); border: 2px solid rgba(255,255,255,.09); opacity: 0; }
+.chip .ck { width: 54px; height: 54px; border-radius: 16px; background: rgba(91,227,168,.16); display: grid; place-items: center; flex: none; }
+.chip .ck svg { width: 32px; height: 32px; }
+.chip span { font-weight: 700; font-size: 42px; letter-spacing: -.025em; white-space: nowrap; }
+.chip code { font-family: var(--mono); font-size: 38px; color: var(--amber); font-weight: 600; letter-spacing: 0; }
+
+#pip { display: inline-flex; align-items: center; gap: 22px; padding: 34px 48px; border-radius: 30px; border: 3px solid var(--green); background: rgba(68,183,139,.12); font: 700 50px/1 var(--mono); box-shadow: 0 0 80px rgba(68,183,139,.25); }
+#pip .d { color: var(--mint); }
+#oss { font-weight: 600; font-size: 40px; color: var(--dim); letter-spacing: -.01em; }
+#save { display: inline-flex; align-items: center; gap: 22px; font-weight: 800; font-size: 56px; letter-spacing: -.035em; }
+#save svg { width: 54px; height: 54px; }
+#credit { font: 500 26px/1.4 var(--mono); color: var(--faint); letter-spacing: .06em; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="grid"></div>
+  <div class="glow" id="glowRed"></div>
+  <div class="glow" id="glowCyan"></div>
+  <div class="glow" id="glowGreen"></div>
+  <canvas id="hex" width="1080" height="1920"></canvas>
+  <div id="vignette"></div>
+
+  <section class="scene" id="s1">
+    <div class="abs" style="left:72px; top:262px"><span class="tag"><i id="recDot"></i>REAL TEST · REPRODUCIBLE</span></div>
+    <div class="abs h" style="left:72px; top:420px; font-size:112px">I flipped</div>
+    <div class="abs" id="hookBig" style="left:60px; top:540px">10,000</div>
+    <div class="abs h" style="left:72px; top:800px; font-size:98px">random bytes</div>
+    <div class="abs h" style="left:72px; top:906px; font-size:98px">in my Django</div>
+    <div class="abs h" style="left:72px; top:1012px; font-size:98px">backup.</div>
+    <div class="abs" id="hookCount" style="left:76px; top:1160px"><b id="hookN">0</b> of 3,917,816 bytes flipped</div>
+    <div class="abs" id="hookThen" style="left:72px; top:1250px">Then I restored it.</div>
+  </section>
+
+  <section class="scene" id="s2">
+    <div class="term" id="t2" style="top:250px">
+      <div class="bar"><i></i><i></i><i></i><span>~/dbs</span></div>
+      <div class="body"><div class="ln" id="t2a"><span class="p">$ </span><span id="t2aT"></span></div><div class="ln" id="t2b"><span id="t2bT"></span></div><div class="ln" data-at="5.30">backup container: 3,917,816 bytes</div><div class="ln r" data-at="5.55">flipped 10,000 bytes across the container</div><div class="ln a" data-at="5.85">corruption detected and healed:</div><div class="ln a" data-at="6.05">  REPAIRED: 28 blocks intact after healing</div><div class="ln c" data-at="6.40">database file deleted</div><div class="ln w" data-at="6.75">records restored: 31,140</div><div class="ln g hl" data-at="7.10">restored database matches the original:</div><div class="ln g hl" data-at="7.25">counts, hashes, samples and aggregates</div><div class="ln g hl" data-at="7.35">all equal</div></div>
+    </div>
+    <div class="abs" id="proofBig" style="left:72px; top:1010px">Every row<br>came back.</div>
+    <div class="abs" id="proofSub" style="left:76px; top:1240px"><b>31,140</b> records · every hash matches</div>
+  </section>
+
+  <section class="scene" id="s3">
+    <svg class="abs mark" id="mark3" style="left:440px; top:330px" viewBox="0 0 120 120"><defs><linearGradient id="mg3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5be3a8"/><stop offset="1" stop-color="#1e8f62"/></linearGradient></defs><rect x="4" y="4" width="112" height="112" rx="30" fill="url(#mg3)"/><g fill="none" stroke="#052016" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="60" cy="36" rx="27" ry="10"/><path d="M33 36v22c0 5.5 12 10 27 10s27-4.5 27-10V36"/><path d="M33 58v22c0 5.5 12 10 27 10s27-4.5 27-10V58"/></g></svg>
+    <div class="abs" id="meet" style="left:0; width:1080px; text-align:center; top:590px">Meet</div>
+    <div class="abs" style="left:0; width:1080px; text-align:center; top:670px"><span id="w3" style="font-size:330px"><span class="word" id="w3d">D</span><span class="word" id="w3b">B</span><span class="word" id="w3s">S</span></span></div>
+    <div class="abs kicker" id="k3" style="left:0; width:1080px; text-align:center; top:1000px">DJANGO BACKUP SOLUTION</div>
+    <div class="abs" id="tagline" style="left:0; width:1080px; text-align:center; top:1130px">Backups that<br><span class="heal">heal<u id="healU"></u></span> themselves.</div>
+  </section>
+
+  <section class="scene" id="s4">
+    <div class="abs title" id="t4" style="left:72px; top:250px">Inside one<br><em>.dbs</em> file</div>
+    <div class="abs rowlabel" id="la" style="left:116px; top:500px">COPY A</div>
+    <div class="abs rowlabel" id="lb" style="left:116px; top:690px">COPY B <span style="color:var(--faint)">· 64 BLOCKS LATER</span></div>
+    <div id="blocks"></div>
+    <div id="feats"></div>
+  </section>
+
+  <section class="scene" id="s5">
+    <div class="abs title" id="t5a" style="left:72px; top:250px">Add one app.</div>
+    <div class="abs title" id="t5b" style="left:72px; top:356px">Run <em>one command.</em></div>
+    <div class="term" id="t5" style="top:540px">
+      <div class="bar"><i></i><i></i><i></i><span>~/myproject</span></div>
+      <div class="body"><div class="ln" id="t5a1"><span class="p">$ </span><span id="t5a1T"></span></div><div class="ln c" id="t5a2"># settings.py: INSTALLED_APPS += ["dbs"]</div><div class="ln" id="t5a3"><span class="p">$ </span><span id="t5a3T"></span></div><div class="ln g" id="t5a4">Wrote backup.dbs (3,917,816 bytes),</div><div class="ln g" id="t5a5">verified, two redundant copies</div><div class="ln g" id="t5a6">+ Reed-Solomon parity.</div></div>
+    </div>
+    <div class="abs" id="note" style="left:72px; top:1060px">No passphrase to invent.<br><span>DBS derives one from</span> <code>SECRET_KEY</code><span>.</span></div>
+  </section>
+
+  <section class="scene" id="s6">
+    <div class="abs title" id="t6" style="left:72px; top:250px">Also in <em>the box</em></div>
+    <div id="chips"></div>
+  </section>
+
+  <section class="scene" id="s7">
+    <svg class="abs mark" id="mark7" style="left:72px; top:290px; width:170px; height:170px" viewBox="0 0 120 120"><defs><linearGradient id="mg7" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5be3a8"/><stop offset="1" stop-color="#1e8f62"/></linearGradient></defs><rect x="4" y="4" width="112" height="112" rx="30" fill="url(#mg7)"/><g fill="none" stroke="#052016" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="60" cy="36" rx="27" ry="10"/><path d="M33 36v22c0 5.5 12 10 27 10s27-4.5 27-10V36"/><path d="M33 58v22c0 5.5 12 10 27 10s27-4.5 27-10V58"/></g></svg>
+    <div class="abs" id="w7" style="left:62px; top:490px"><span class="word" style="font-size:250px">DBS</span></div>
+    <div class="abs kicker" id="k7" style="left:76px; top:740px">DJANGO BACKUP SOLUTION</div>
+    <div class="abs" id="line7" style="left:72px; top:820px; font-weight:800; font-size:62px; letter-spacing:-.035em; line-height:1.08">Encrypted. Redundant.<br><span style="color:var(--mint)">Self-healing.</span></div>
+    <div class="abs" id="pipWrap" style="left:72px; top:1010px"><span id="pip"><span class="d">$</span><span>pip install django-dbs</span></span></div>
+    <div class="abs" id="oss" style="left:76px; top:1180px">Free and open source · MIT</div>
+    <div class="abs" id="save" style="left:72px; top:1270px"><svg viewBox="0 0 24 24" fill="none" stroke="#5be3a8" stroke-width="2.4" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>Save it for your next deploy</div>
+    <div class="abs" id="credit" style="left:76px; top:1400px">SUDUM TECHNOLOGY · RESEARCH AND DEVELOPMENT</div>
+  </section>
+
+  <div id="flash"></div>
+</div>
+
+<script>
+const FLIPS = 10000;
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+const easeInOut = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const backOut = x => { const c = 1.9; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+const mix = (a, b, k) => a + (b - a) * k;
+
+function hash(a, b) {
+  let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ 0x5bd1e995;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+const rand = (a, b) => hash(a, b) / 4294967296;
+
+function scene(t, a, b, fadeIn = .3, fadeOut = .3) {
+  if (t < a || t >= b) return 0;
+  const i = fadeIn ? easeOut(prog(t, a, a + fadeIn)) : 1;
+  const o = fadeOut ? 1 - easeInOut(prog(t, b - fadeOut, b)) : 1;
+  return Math.min(i, o);
+}
+function place(el, opacity, x = 0, y = 0, s = 1, extra = '') {
+  el.style.opacity = opacity;
+  el.style.transform = `translate(${x}px, ${y}px) scale(${s})${extra}`;
+}
+function rise(el, t, at, dur = .45, dist = 50) {
+  const k = easeOut(prog(t, at, at + dur));
+  place(el, k, 0, (1 - k) * dist);
+  return k;
+}
+function typeInto(el, text, t, at, cps, caret) {
+  const n = clamp(Math.floor((t - at) * cps), 0, text.length);
+  const typing = t >= at && n < text.length;
+  const blink = caret !== undefined && t >= at && t < caret && Math.floor(t * 2.5) % 2 === 0;
+  el.innerHTML = text.slice(0, n).replace(/&/g, '&amp;').replace(/</g, '&lt;') + (typing || blink ? '<span class="caret"></span>' : '');
+}
+
+const hex = $('hex');
+const ctx = hex.getContext('2d');
+const HEX_LH = 44, HEX_FS = 27;
+const HEAL_START = 5.85, HEAL_SPAN = 1.1;
+
+function drawHex(t) {
+  ctx.clearRect(0, 0, 1080, 1920);
+  const visible = t < 9.6;
+  if (!visible) return;
+  ctx.font = `500 ${HEX_FS}px 'JetBrains Mono'`;
+  ctx.textBaseline = 'middle';
+  const cw = ctx.measureText('0').width;
+  const scroll = t * 26;
+  const first = Math.floor(scroll / HEX_LH);
+  const offset = -(scroll % HEX_LH);
+  const left = (1080 - cw * 57) / 2;
+  const sweep = (t - HEAL_START) / HEAL_SPAN * 2100;
+  const quiet = t < 3.5 ? [370, 1235] : [985, 1440];
+  for (let i = 0; i < 1920 / HEX_LH + 2; i++) {
+    const row = first + i;
+    const y = offset + i * HEX_LH + HEX_LH / 2;
+    ctx.globalAlpha = y > quiet[0] && y < quiet[1] ? .28 : 1;
+    ctx.fillStyle = 'rgba(120,135,150,.22)';
+    ctx.fillText((row * 16).toString(16).padStart(7, '0'), left, y);
+    for (let c = 0; c < 16; c++) {
+      const x = left + cw * (9 + c * 3);
+      const v = hash(row, c) & 255;
+      const roll = hash(row + 7919, c);
+      const flipAt = .05 + ((roll >>> 11) % 1000) / 1000 * 2.5;
+      const chosen = roll % 1000 < 150;
+      const flipped = chosen && t >= flipAt;
+      const healedAt = HEAL_START + Math.max(0, y) / 2100 * HEAL_SPAN;
+      const healed = flipped && sweep > y;
+      let text = v.toString(16).padStart(2, '0');
+      if (healed) {
+        const age = t - healedAt;
+        const g = clamp(1 - age / .9);
+        ctx.fillStyle = `rgba(91,227,168,${.22 * g})`;
+        ctx.fillRect(x - 5, y - 19, cw * 2 + 10, 38);
+        ctx.fillStyle = g > .05 ? `rgba(${mix(120, 91, g)},${mix(135, 227, g)},${mix(150, 168, g)},${mix(.22, 1, g)})` : 'rgba(120,135,150,.22)';
+      } else if (flipped) {
+        text = (v ^ 255).toString(16).padStart(2, '0');
+        const fresh = t - flipAt < .07;
+        ctx.fillStyle = fresh ? 'rgba(255,255,255,.55)' : 'rgba(255,77,94,.20)';
+        ctx.fillRect(x - 5, y - 19, cw * 2 + 10, 38);
+        ctx.fillStyle = fresh ? '#ffffff' : '#ff6b7a';
+      } else {
+        ctx.fillStyle = 'rgba(120,135,150,.22)';
+      }
+      ctx.fillText(text, x, y);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+const BLOCKS = 8, BLK_W = 92, BLK_GAP = 18;
+const BLK_LEFT = (1080 - (BLOCKS * BLK_W + (BLOCKS - 1) * BLK_GAP)) / 2;
+const ROWS = [{ top: 545, damaged: [1, 4, 6] }, { top: 735, damaged: [4, 6, 7] }];
+const blockEls = [];
+ROWS.forEach((row, r) => {
+  for (let i = 0; i < BLOCKS; i++) {
+    const el = document.createElement('div');
+    el.className = 'blk';
+    el.style.left = (BLK_LEFT + i * (BLK_W + BLK_GAP)) + 'px';
+    el.style.top = row.top + 'px';
+    el.innerHTML = '<div class="data"></div><div class="par"></div><div class="noise"></div><div class="heal"></div><div class="ok">✓</div>';
+    $('blocks').appendChild(el);
+    blockEls.push({ el, r, i, damaged: row.damaged.includes(i), parts: {
+      data: el.querySelector('.data'), par: el.querySelector('.par'), noise: el.querySelector('.noise'),
+      heal: el.querySelector('.heal'), ok: el.querySelector('.ok') } });
+  }
+});
+const DAMAGE_AT = 15.95;
+const HEALS = [];
+blockEls.filter(b => b.damaged).forEach((b, k) => { b.healAt = 16.75 + k * .14; HEALS.push(b.healAt); });
+
+const ICONS = {
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></svg>',
+  parity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 4H6l7 8-7 8h12"/></svg>',
+  heal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="#5be3a8" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
+};
+const FEATS = [
+  { at: 13.15, icon: 'lock', color: '#5cc8ff', title: 'Encrypted', sub: 'AES-256-GCM, key from Argon2id' },
+  { at: 14.15, icon: 'copy', color: '#5cc8ff', title: 'Stored twice', sub: 'every block, 64 blocks apart' },
+  { at: 15.05, icon: 'parity', color: '#a78bfa', title: 'Reed-Solomon parity', sub: 'on every single block' },
+  { at: 16.80, icon: 'heal', color: '#5be3a8', title: 'Self-healing', sub: 'damage found and fixed on restore' }
+];
+const featEls = FEATS.map((f, k) => {
+  const el = document.createElement('div');
+  el.className = 'feat';
+  el.style.top = (960 + k * 128) + 'px';
+  el.innerHTML = `<div class="ic" style="color:${f.color}; background:${f.color}22">${ICONS[f.icon]}</div><div><h4>${f.title}</h4><p>${f.sub}</p></div>`;
+  $('feats').appendChild(el);
+  return el;
+});
+
+const CHIPS = [
+  'Rows, relations and files in one file',
+  'Verified end to end before it is kept',
+  'Never overwrites a backup',
+  'Dry-run restores that change nothing',
+  'A panel at <code>/admin/dbs/</code>',
+  'Hash-chained audit trail',
+  'Pulls backups to your machine over SSH',
+  'Claude can drive it over MCP',
+  'Django 4.2 to 6.x · Python 3.9+'
+];
+const CHIP_START = 22.75, CHIP_STEP = .25;
+const chipEls = CHIPS.map((text, k) => {
+  const el = document.createElement('div');
+  el.className = 'chip';
+  el.style.top = (420 + k * 112) + 'px';
+  el.innerHTML = `<div class="ck">${ICONS.check}</div><span>${text}</span>`;
+  $('chips').appendChild(el);
+  return el;
+});
+
+const BEATS = { hook: 0, proof: 3.5, meet: 9.5, inside: 12.5, command: 18.5, box: 22.5, end: 26.5 };
+
+function render(t) {
+  const frame = Math.round(t * 30);
+
+  $('grid').style.transform = `translateY(${-(t * 12) % 72}px)`;
+  $('grid').style.opacity = t < 3.5 ? .25 : 1;
+  $('glowRed').style.opacity = scene(t, 0, 6.2, 0, .9) * (.8 + .2 * Math.sin(t * 9));
+  $('glowGreen').style.opacity = Math.max(scene(t, 5.9, 12.5, .8, .6), scene(t, 26.5, 30.1, .5, 0)) * .95;
+  $('glowCyan').style.opacity = scene(t, 12.5, 22.5, .5, .5) * .9;
+  $('glowGreen').style.transform = `translate(0px, ${t > 26 ? -260 : 0}px) scale(${1 + .04 * Math.sin(t * 2)})`;
+
+  drawHex(t);
+  hex.style.opacity = t < 3.5 ? 1 : t < 9.6 ? mix(.55, 0, prog(t, 9.0, 9.6)) : 0;
+
+  const flash = Math.max(1 - prog(t, 9.5, 9.85), 0) * (t >= 9.5 ? .5 : 0) + Math.max(1 - prog(t, 26.5, 26.8), 0) * (t >= 26.5 ? .28 : 0);
+  $('flash').style.opacity = flash;
+
+  const a1 = scene(t, 0, 3.5, 0, .28);
+  const shake = t < 2.6 && rand(frame, 3) > .72 ? (rand(frame, 4) - .5) * 14 : 0;
+  place($('s1'), a1, shake, 0, 1 + .05 * prog(t, 3.2, 3.5));
+  $('recDot').style.opacity = Math.floor(t * 2.2) % 2 === 0 ? 1 : .25;
+  const g = t < 2.6 ? (rand(frame, 9) > .6 ? 6 + rand(frame, 10) * 22 : 3) : 3;
+  const slice = t < 2.6 && rand(frame, 11) > .85 ? (rand(frame, 12) - .5) * 30 : 0;
+  $('hookBig').style.textShadow = `${g}px 0 rgba(255,42,85,.9), ${-g}px 0 rgba(34,211,238,.75)`;
+  $('hookBig').style.transform = `translateX(${slice}px)`;
+  $('hookBig').style.color = t < 2.6 && rand(frame, 13) > .9 ? '#ffffff' : '#ff4d5e';
+  const counted = Math.round(FLIPS * easeOut(prog(t, .1, 2.5)));
+  $('hookN').textContent = counted.toLocaleString('en-US');
+  rise($('hookThen'), t, 2.05, .4, 40);
+  rise($('hookCount'), t, 0, .01, 0);
+
+  const a2 = scene(t, 3.5, 9.5, .35, .3);
+  place($('s2'), a2);
+  rise($('t2'), t, 3.5, .5, 120);
+  $('t2a').style.opacity = t >= 3.75 ? 1 : 0;
+  typeInto($('t2aT'), 'DBS_STRESS_FLIPS=10000 \\', t, 3.8, 34);
+  $('t2b').style.opacity = t >= 4.55 ? 1 : 0;
+  typeInto($('t2bT'), '    python scripts/stress_roundtrip.py', t, 4.6, 52);
+  document.querySelectorAll('#t2 .ln[data-at]').forEach(el => {
+    const at = parseFloat(el.dataset.at);
+    const k = easeOut(prog(t, at, at + .12));
+    el.style.opacity = k;
+    el.style.transform = `translateX(${(1 - k) * -14}px)`;
+  });
+  rise($('proofBig'), t, 7.55, .5, 60);
+  rise($('proofSub'), t, 7.8, .5, 40);
+
+  const a3 = scene(t, 9.5, 12.5, 0, .3);
+  place($('s3'), a3, 0, 0, 1 + .03 * prog(t, 9.5, 12.5));
+  const m3 = backOut(prog(t, 9.5, 9.95));
+  place($('mark3'), clamp(m3 * 2), 0, 0, .4 + .6 * m3, ` rotate(${(1 - m3) * -18}deg)`);
+  rise($('meet'), t, 9.6, .35, 30);
+  ['w3d', 'w3b', 'w3s'].forEach((id, k) => {
+    const p = backOut(prog(t, 9.72 + k * .12, 10.12 + k * .12));
+    const el = $(id);
+    el.style.display = 'inline-block';
+    place(el, clamp(p * 3), 0, (1 - p) * 120, .7 + .3 * p);
+  });
+  const k3 = easeOut(prog(t, 10.15, 10.6));
+  place($('k3'), k3);
+  $('k3').style.letterSpacing = `${mix(.6, .32, k3)}em`;
+  rise($('tagline'), t, 10.5, .45, 50);
+  $('healU').style.width = '100%';
+  $('healU').style.transform = `scaleX(${easeInOut(prog(t, 10.95, 11.35))})`;
+
+  const a4 = scene(t, 12.5, 18.5, .3, .3);
+  place($('s4'), a4);
+  rise($('t4'), t, 12.55, .45, 40);
+  rise($('la'), t, 12.85, .3, 20);
+  rise($('lb'), t, 13.85, .3, 20);
+  blockEls.forEach(b => {
+    const appear = (b.r === 0 ? 12.9 : 13.9) + b.i * .08;
+    const p = backOut(prog(t, appear, appear + .35));
+    place(b.el, clamp(p * 2), 0, (1 - p) * 30, .6 + .4 * p);
+    const parAt = 14.95 + (b.r * BLOCKS + b.i) * .03;
+    b.parts.par.style.opacity = easeOut(prog(t, parAt, parAt + .2));
+    const hit = b.damaged && t >= DAMAGE_AT + (b.i % 3) * .05;
+    const healing = hit && t >= b.healAt;
+    const noise = hit && !healing;
+    b.parts.noise.style.opacity = noise ? (.75 + .25 * rand(frame, b.i + b.r * 8)) : 0;
+    if (noise) {
+      const s = rand(frame, b.i * 31 + b.r);
+      b.parts.noise.style.backgroundImage = `repeating-linear-gradient(${Math.floor(s * 180)}deg, rgba(0,0,0,.55) 0 ${3 + Math.floor(s * 6)}px, transparent ${3 + Math.floor(s * 6)}px ${9 + Math.floor(s * 9)}px)`;
+      b.el.style.borderColor = 'rgba(255,77,94,.95)';
+      b.el.style.transform += ` translate(${(rand(frame, b.i + 50) - .5) * 8}px, ${(rand(frame, b.i + 90) - .5) * 6}px)`;
+    } else if (healing) {
+      b.el.style.borderColor = 'rgba(91,227,168,.95)';
+    } else {
+      b.el.style.borderColor = 'rgba(92,200,255,.55)';
+    }
+    b.parts.heal.style.opacity = healing ? mix(1, .82, prog(t, b.healAt, b.healAt + .35)) : 0;
+    b.parts.ok.style.opacity = healing ? easeOut(prog(t, b.healAt + .05, b.healAt + .25)) : 0;
+  });
+  featEls.forEach((el, k) => {
+    const f = FEATS[k];
+    const p = easeOut(prog(t, f.at, f.at + .4));
+    place(el, p, (1 - p) * -60, 0);
+  });
+
+  const a5 = scene(t, 18.5, 22.5, .3, .3);
+  place($('s5'), a5);
+  rise($('t5a'), t, 18.55, .4, 40);
+  rise($('t5b'), t, 18.7, .4, 40);
+  rise($('t5'), t, 18.75, .45, 80);
+  $('t5a1').style.opacity = t >= 19.0 ? 1 : 0;
+  typeInto($('t5a1T'), 'pip install django-dbs', t, 19.05, 44);
+  $('t5a2').style.opacity = easeOut(prog(t, 19.7, 19.85));
+  $('t5a3').style.opacity = t >= 19.95 ? 1 : 0;
+  typeInto($('t5a3T'), 'python manage.py dbs backup backup.dbs', t, 20.0, 52);
+  $('t5a4').style.opacity = easeOut(prog(t, 20.85, 20.97));
+  $('t5a5').style.opacity = easeOut(prog(t, 20.97, 21.09));
+  $('t5a6').style.opacity = easeOut(prog(t, 21.09, 21.21));
+  rise($('note'), t, 21.25, .45, 40);
+
+  const a6 = scene(t, 22.5, 26.5, .3, .3);
+  place($('s6'), a6);
+  rise($('t6'), t, 22.55, .4, 40);
+  chipEls.forEach((el, k) => {
+    const at = CHIP_START + k * CHIP_STEP;
+    const p = backOut(prog(t, at, at + .3));
+    place(el, clamp(p * 2), (1 - p) * -90, 0);
+  });
+
+  const a7 = scene(t, 26.5, 30.1, 0, 0);
+  place($('s7'), a7);
+  const m7 = backOut(prog(t, 26.5, 26.9));
+  place($('mark7'), clamp(m7 * 2), 0, 0, .5 + .5 * m7, ` rotate(${(1 - m7) * -14}deg)`);
+  rise($('w7'), t, 26.6, .45, 70);
+  rise($('k7'), t, 26.8, .4, 20);
+  rise($('line7'), t, 26.95, .45, 40);
+  const pp = backOut(prog(t, 27.25, 27.65));
+  place($('pipWrap'), clamp(pp * 2), 0, (1 - pp) * 40, .9 + .1 * pp);
+  $('pip').style.boxShadow = `0 0 ${60 + 40 * Math.sin(t * 4)}px rgba(68,183,139,${.22 + .1 * Math.sin(t * 4)})`;
+  rise($('oss'), t, 27.6, .4, 30);
+  rise($('save'), t, 27.85, .45, 30);
+  rise($('credit'), t, 28.1, .4, 20);
+}
+
+window.render = render;
+window.BEATS = BEATS;
+window.CUES = { heals: HEALS, chips: CHIPS.map((_, k) => CHIP_START + k * CHIP_STEP), damage: DAMAGE_AT, healSweep: HEAL_START };
+render(0);
+</script>
+</body>
+</html>

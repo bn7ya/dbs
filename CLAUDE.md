@@ -111,6 +111,9 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   stand-in used by the transport and manager tests, and `tests/test_ssh_openssh.py` runs
   against a real OpenSSH server when `DBS_TEST_SSH_*` names one. `tests/manager/` is the
   manager's suite, run as a second session with its own settings.
+- `promo/instagram-reel/` — the promotional reel: an HTML composition rendered frame by frame,
+  a numpy soundtrack, and `build.sh` that makes the MP4. Its README traces every on-screen claim
+  to a run or a line of the README; not part of the package.
 - `RELEASE_NOTES.md` — the developer-facing notes for the current release, used as the GitHub
   Release body. `THIRD_PARTY_LICENSES.md` — the license of every dependency; update it in
   the same commit that adds, removes or bundles one.
