@@ -192,17 +192,22 @@ def test_a_server_that_cannot_be_reached_fails_the_job(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("error", "code"),
+    ("error", "code", "facts"),
     [
         (
             RemoteCommandFailed(output="exit 1: No module named dbs"),
             "remote_command_failed",
+            {},
         ),
-        (DbsTooOld(output="error: unrecognized arguments: --stream"), "dbs_too_old"),
+        (
+            DbsTooOld("0.7.0", output="error: unrecognized arguments: --stream"),
+            "dbs_too_old",
+            {"needs": "0.7.0"},
+        ),
     ],
 )
 def test_a_take_the_server_fails_keeps_the_end_of_its_output(
-    admin, monkeypatch, server, run_jobs, storage, entry, error, code
+    admin, monkeypatch, server, run_jobs, storage, entry, error, code, facts
 ):
     monkeypatch.setattr(CONNECT, connecting_to(BackupHost(failure=error)))
 
@@ -212,7 +217,7 @@ def test_a_take_the_server_fails_keeps_the_end_of_its_output(
     failed = entry(job.pk)
     assert failed.status == audit.FAILED
     assert failed.error_code == code
-    assert failed.data == {"output": error.output}
+    assert failed.data == {"output": error.output, **facts}
     assert list(BackupFileRepository().alive_for_server(server.pk)) == []
     assert files_on_disk(storage) == []
 

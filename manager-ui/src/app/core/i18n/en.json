@@ -172,7 +172,7 @@
     "archive_mismatch": "The archive fetched here does not match the one on the server. Nothing was kept.",
     "archive_failed": "The archive could not be created on the server.",
     "restore_failed": "The restore failed on the server.",
-    "dbs_too_old": "django-dbs on the server is too old for this. It needs version 0.2.2 or later.",
+    "dbs_too_old": "django-dbs on the server is too old for this. Upgrade it to the version this manager runs.",
     "remote_not_found": "The folder or file does not exist on the server.",
     "remote_permission_denied": "Access to the folder or file was denied on the server.",
     "env_path_missing": "This server has no .env file set.",

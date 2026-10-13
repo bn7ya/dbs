@@ -6,6 +6,7 @@ import dbs
 
 COMPATIBLE_FROM = "0.2.2"
 HEALTH_FROM = "0.5.0"
+STREAM_FROM = "0.7.0"
 NUMBER = re.compile(r"\d+")
 
 

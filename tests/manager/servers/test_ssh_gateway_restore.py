@@ -256,6 +256,7 @@ def test_a_server_whose_django_dbs_lacks_an_option_is_dbs_too_old(server):
         restore(server, flush=False, dry_run=True)
 
     assert "unrecognized arguments" in raised.value.output
+    assert "Upgrade it to 0.2.2 or later." in str(raised.value.detail)
     assert os.listdir(server.backup_dir) == []
 
 
