@@ -51,14 +51,14 @@ describe('SetupStore', () => {
 
   it('primes CSRF, posts the account and ends the setup', async () => {
     const creating = store.complete(request);
-    http.expectOne('/api/auth/csrf/').flush(null);
+    http.expectOne('/api/auth/csrf/').flush({ csrf_token: 'token' });
 
     const post = await vi.waitFor(() => http.expectOne('/api/setup/'));
     expect(post.request.method).toBe('POST');
     expect(post.request.body).toEqual(request);
-    post.flush({ username: 'sara' }, { status: 201, statusText: 'Created' });
+    post.flush({ username: 'sara', step: 'enroll' }, { status: 201, statusText: 'Created' });
 
-    await expect(creating).resolves.toBe(true);
+    await expect(creating).resolves.toBe('enroll');
     expect(store.needed()).toBe(false);
     expect(store.error()).toBeNull();
     expect(store.busy()).toBe(false);
@@ -70,13 +70,13 @@ describe('SetupStore', () => {
     await opening;
 
     const creating = store.complete(request);
-    http.expectOne('/api/auth/csrf/').flush(null);
+    http.expectOne('/api/auth/csrf/').flush({ csrf_token: 'token' });
     (await vi.waitFor(() => http.expectOne('/api/setup/'))).flush(
       { error: { code: 'setup_token_invalid', message: 'Server prose' } },
       { status: 403, statusText: 'Forbidden' },
     );
 
-    await expect(creating).resolves.toBe(false);
+    await expect(creating).resolves.toBeNull();
     expect(store.error()?.code).toBe('setup_token_invalid');
     expect(store.needed()).toBe(true);
   });
@@ -87,13 +87,13 @@ describe('SetupStore', () => {
     await opening;
 
     const creating = store.complete(request);
-    http.expectOne('/api/auth/csrf/').flush(null);
+    http.expectOne('/api/auth/csrf/').flush({ csrf_token: 'token' });
     (await vi.waitFor(() => http.expectOne('/api/setup/'))).flush(
       { error: { code: 'setup_done', message: 'Server prose' } },
       { status: 409, statusText: 'Conflict' },
     );
 
-    await expect(creating).resolves.toBe(false);
+    await expect(creating).resolves.toBeNull();
     expect(store.needed()).toBe(false);
     await expect(store.check()).resolves.toBe(false);
   });

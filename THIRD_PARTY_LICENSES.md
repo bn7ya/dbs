@@ -82,6 +82,7 @@ listed by the build's own `3rdpartylicenses.txt`, at the versions locked in
 | tslib | 2.8.1 | 0BSD |
 | @fortawesome/fontawesome-free | 7.3.1 | CC-BY-4.0 AND OFL-1.1 AND MIT: icons under CC BY 4.0, fonts under the SIL OFL 1.1, code under MIT |
 | @fontsource/tajawal (the Tajawal typeface) | 5.3.0 | OFL-1.1 |
+| qrcode-generator | 2.0.4 | MIT |
 
 `manager-ui/package.json` also declares @angular/compiler and zone.js (both MIT). The
 production build compiles ahead of time and runs without zone.js, so neither is in the bundle.

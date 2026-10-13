@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { AuthApi } from '@core/auth/data/auth.api';
+import type { SignInStepName } from '@core/auth/data/auth.types';
 import type { ApiError } from '@core/http/api.types';
 import { SetupApi } from '../data/setup.api';
 import type { SetupRequest } from '../data/setup.types';
@@ -31,21 +32,21 @@ export class SetupStore {
     }
   }
 
-  async complete(request: SetupRequest): Promise<boolean> {
+  async complete(request: SetupRequest): Promise<SignInStepName | null> {
     this.busy.set(true);
     this.error.set(null);
     try {
       await firstValueFrom(this.auth.primeCsrf());
-      await firstValueFrom(this.api.complete(request));
+      const { step } = await firstValueFrom(this.api.complete(request));
       this.status.set(false);
-      return true;
+      return step;
     } catch (error) {
       const failure = error as ApiError;
       if (failure.code === 'setup_done') {
         this.status.set(false);
       }
       this.error.set(failure);
-      return false;
+      return null;
     } finally {
       this.busy.set(false);
     }

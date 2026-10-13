@@ -81,15 +81,15 @@ export class SetupPage {
       return;
     }
 
-    const created = await this.setup.complete({
+    const step = await this.setup.complete({
       token: this.key().trim(),
       username: this.username().trim(),
       password: this.password(),
     });
 
-    if (created) {
-      await this.auth.restore();
-      await this.router.navigateByUrl('/');
+    if (step) {
+      this.auth.begin(step);
+      await this.router.navigate(['/sign-in', step]);
     }
   }
 

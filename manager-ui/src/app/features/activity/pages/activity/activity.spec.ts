@@ -7,6 +7,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
+import { MASTER_ACCOUNT } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { ENTRY, FAILED, SERVER_ID, pageOf } from '../../testing/activity.fixtures';
 import { ActivityPage } from './activity';
@@ -21,6 +22,7 @@ const IDENTITY: Identity = {
   is_superuser: false,
   groups: [],
   permissions: [],
+  ...MASTER_ACCOUNT,
 };
 
 const ROUTES: Routes = [

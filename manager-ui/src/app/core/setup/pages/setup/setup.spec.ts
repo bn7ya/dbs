@@ -4,6 +4,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuthStore } from '@core/auth/state/auth.store';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import ar from '../../i18n/ar.json';
@@ -30,10 +31,10 @@ describe('SetupPage', () => {
   };
 
   const post = async (): Promise<void> => {
-    http.expectOne('/api/auth/csrf/').flush(null);
+    http.expectOne('/api/auth/csrf/').flush({ csrf_token: 'token' });
     await vi.waitFor(() => http.expectOne('/api/setup/')).then((request) => {
       expect(request.request.body).toEqual({ token: 'k3y', username: 'sara', password: 'a long passphrase' });
-      request.flush({ username: 'sara' }, { status: 201, statusText: 'Created' });
+      request.flush({ username: 'sara', step: 'enroll' }, { status: 201, statusText: 'Created' });
     });
   };
 
@@ -78,27 +79,17 @@ describe('SetupPage', () => {
     http.expectNone('/api/setup/');
   });
 
-  it('creates the account, loads who is signed in and opens the start page', async () => {
-    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+  it('creates the master account and goes on to set up its two-factor sign-in', async () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     fixture.componentRef.setInput('token', 'k3y');
     fill();
 
     const submitting = page.submit();
     await post();
-    (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush({
-      id: 1,
-      username: 'sara',
-      email: '',
-      first_name: '',
-      last_name: '',
-      is_staff: true,
-      is_superuser: true,
-      groups: [],
-      permissions: [],
-    });
     await submitting;
 
-    expect(navigate).toHaveBeenCalledWith('/');
+    expect(TestBed.inject(AuthStore).step()).toBe('enroll');
+    expect(navigate).toHaveBeenCalledWith(['/sign-in', 'enroll']);
   });
 
   it('shows what the backend says about the password under its field', async () => {
@@ -106,7 +97,7 @@ describe('SetupPage', () => {
     fill();
 
     const submitting = page.submit();
-    http.expectOne('/api/auth/csrf/').flush(null);
+    http.expectOne('/api/auth/csrf/').flush({ csrf_token: 'token' });
     (await vi.waitFor(() => http.expectOne('/api/setup/'))).flush(
       { error: { code: 'invalid', message: 'Server prose', fields: { password: ['password_too_common'] } } },
       { status: 400, statusText: 'Bad Request' },
@@ -121,7 +112,7 @@ describe('SetupPage', () => {
     fill();
 
     const submitting = page.submit();
-    http.expectOne('/api/auth/csrf/').flush(null);
+    http.expectOne('/api/auth/csrf/').flush({ csrf_token: 'token' });
     (await vi.waitFor(() => http.expectOne('/api/setup/'))).flush(
       { error: { code: 'setup_done', message: 'Server prose' } },
       { status: 409, statusText: 'Conflict' },

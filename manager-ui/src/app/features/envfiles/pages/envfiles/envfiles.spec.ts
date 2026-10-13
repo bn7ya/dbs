@@ -8,6 +8,7 @@ import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
+import { MASTER_ACCOUNT } from '@core/auth/testing/identity.fixtures';
 import type { Page } from '@core/http/api.types';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { Confirmation } from '@shared/confirm/confirmation';
@@ -32,6 +33,7 @@ const IDENTITY: Identity = {
   is_superuser: false,
   groups: [],
   permissions: [],
+  ...MASTER_ACCOUNT,
 };
 
 const ROUTES: Routes = [
