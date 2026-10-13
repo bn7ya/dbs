@@ -25,6 +25,7 @@ class Command(BaseCommand):
         parser.add_argument("--block-size", type=int, default=None, help="Block size in bytes.")
         parser.add_argument("--kdf-time", type=int, default=None, help="Argon2 time cost.")
         parser.add_argument("--kdf-memory", type=int, default=None, help="Argon2 memory cost (KiB).")
+        parser.add_argument("--allow-missing-files", action="store_true", help="Back up even when a source file is missing or unreadable, listing what was left out.")
 
     def handle(self, *args, **options):
         passphrase = resolve_passphrase(
@@ -47,6 +48,7 @@ class Command(BaseCommand):
             extra["block_size"] = options["block_size"]
 
         output = options["output"]
+        skipped_files: list = []
         with audit.track(
             "backup.create",
             target=os.path.basename(output),
@@ -60,6 +62,8 @@ class Command(BaseCommand):
                     verify=not options["no_verify"],
                     kdf_params=kdf_params,
                     output=output,
+                    allow_missing_files=options.get("allow_missing_files", False),
+                    skipped_files=skipped_files,
                     **extra,
                 )
             except DBSError as exc:
@@ -84,5 +88,12 @@ class Command(BaseCommand):
                 "verified, two redundant copies + Reed-Solomon parity."
             )
         )
+        if skipped_files:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Left out {len(skipped_files)} source file(s) that could not be read: "
+                    + "; ".join(skipped_files)
+                )
+            )
         self.stdout.write(f"Passphrase came from {source}.")
 

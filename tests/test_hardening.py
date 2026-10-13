@@ -113,7 +113,7 @@ def test_unencrypted_manifest_does_not_disclose_backup_metadata(tmp_path):
     missing = tmp_path / "confidential-customer-name.txt"
     Book.objects.create(title="Private title", author=author, sidecar_path=str(missing))
 
-    container = create_backup(PASS, kdf_params=FAST_KDF)
+    container = create_backup(PASS, kdf_params=FAST_KDF, allow_missing_files=True)
     manifest, _copy_a, _copy_b = read_container(container)
 
     assert "stats" not in manifest
@@ -150,7 +150,7 @@ def test_missing_source_file_is_reported(tmp_path):
     Book.objects.create(
         title="Ghost", author=author, sidecar_path=str(tmp_path / "gone.dat")
     )
-    container = create_backup(PASS, kdf_params=FAST_KDF)
+    container = create_backup(PASS, kdf_params=FAST_KDF, allow_missing_files=True)
     result = validate_backup(container, PASS)
     assert any("gone.dat" in item for item in result.stats["skipped_files"])
 

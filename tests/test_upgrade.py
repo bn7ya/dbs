@@ -525,3 +525,49 @@ def test_a_missing_manager_dependency_is_reported(monkeypatch):
     assert finding.level == ACTION
     assert "waitress" in finding.message and "paramiko" not in finding.message
     assert "django-dbs>=0.5" in finding.remedy
+
+
+def _finding(step):
+    return next(f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == step)
+
+
+@pytest.mark.django_db
+def test_unmanaged_models_left_out_by_discovery_are_named(monkeypatch):
+    from dbs.registry import BackupRegistry
+
+    monkeypatch.setattr("dbs.registry.backup_registry", BackupRegistry())
+
+    finding = _finding("unmanaged models")
+
+    assert finding.level == OK
+    assert finding.since == "0.7.0"
+    assert "restoreapp.venue" in finding.message
+
+
+@pytest.mark.django_db
+def test_a_reincluded_unmanaged_model_is_not_named(monkeypatch, settings):
+    from dbs.registry import BackupRegistry
+
+    monkeypatch.setattr("dbs.registry.backup_registry", BackupRegistry())
+    settings.DBS_EXCLUDE_MODELS = ["-restoreapp.venue"]
+
+    assert _finding("unmanaged models").message == "no unmanaged model is left out of backups"
+
+
+@pytest.mark.django_db
+def test_a_registry_keeps_unmanaged_models_in_the_developers_hands():
+    finding = _finding("unmanaged models")
+
+    assert finding.level == OK
+    assert "restoreapp.venue" not in finding.message
+
+
+@pytest.mark.django_db
+def test_the_new_backup_defaults_are_explained():
+    missing = _finding("missing source files")
+    paths = _finding("backup paths")
+
+    assert missing.level == OK and missing.since == "0.7.0"
+    assert "--allow-missing-files" in missing.message
+    assert paths.level == OK and paths.since == "0.7.0"
+    assert "already exists" in paths.message

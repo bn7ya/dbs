@@ -388,6 +388,48 @@ class HiddenRows(Step):
         )
 
 
+class UnmanagedModels(Step):
+    name = "unmanaged models"
+    since = "0.7.0"
+
+    def check(self):
+        from .introspect import unmanaged_models_left_out
+        from .registry import backup_registry
+
+        if not backup_registry.is_empty():
+            return self.ok("backup_registry chooses the models, so an unmanaged one is backed up when registered")
+        left_out = sorted(model._meta.label_lower for model in unmanaged_models_left_out())
+        if not left_out:
+            return self.ok("no unmanaged model is left out of backups")
+        return self.ok(
+            "since 0.7.0 backups leave out unmanaged models (managed = False): "
+            + ", ".join(left_out)
+            + "; list '-app.model' in DBS_EXCLUDE_MODELS or register one to keep backing it up"
+        )
+
+
+class SourceFiles(Step):
+    name = "missing source files"
+    since = "0.7.0"
+
+    def check(self):
+        return self.ok(
+            "since 0.7.0 a backup stops and names every source file it cannot read; "
+            "pass --allow-missing-files (allow_missing_files=True) to back up without them"
+        )
+
+
+class BackupPaths(Step):
+    name = "backup paths"
+    since = "0.7.0"
+
+    def check(self):
+        return self.ok(
+            "since 0.7.0 dbs backup PATH and create_backup(output=PATH) refuse a PATH that "
+            "already exists; a script that reuses one name must choose a new one each run"
+        )
+
+
 class AiInstructions(Step):
     name = "ai instructions"
     since = "0.3.1"
@@ -440,6 +482,9 @@ STEPS = (
     Passphrase,
     RestoreRoots,
     HiddenRows,
+    UnmanagedModels,
+    SourceFiles,
+    BackupPaths,
     AiInstructions,
 )
 

@@ -16,6 +16,7 @@ INSTALLED_APPS = [
     "tests.testapp",
     "tests.complexapp",
     "tests.softdeleteapp",
+    "tests.restoreapp",
 ]
 
 MIDDLEWARE = [
@@ -48,7 +49,11 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": ":memory:",
-    }
+    },
+    "secondary": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+    },
 }
 
 # Sequence handling is backend specific, so the suite can run against PostgreSQL
@@ -64,6 +69,9 @@ if os.environ.get("DBS_TEST_DB") == "postgres":
             "PORT": os.environ.get("DBS_TEST_PG_PORT", "5432"),
         }
     }
+    DATABASES["secondary"] = dict(
+        DATABASES["default"], NAME=DATABASES["default"]["NAME"] + "_secondary"
+    )
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

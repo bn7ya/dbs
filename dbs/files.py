@@ -3,16 +3,26 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import stat
 from dataclasses import dataclass
 
 from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import SuspiciousFileOperation
 from django.core.files.base import ContentFile
+from django.core.files.storage import FileSystemStorage
 
 from .registry import FieldType
 
 logger = logging.getLogger("dbs")
 
+READ_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_NONBLOCK", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NOCTTY", 0)
+    | getattr(os, "O_BINARY", 0)
+)
 
 @dataclass
 class FileEntry:
@@ -46,8 +56,82 @@ class FileEntry:
         return cls(**data)
 
 
+class SkippedFile(Exception):
+    pass
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def is_inside(path: str, root: str) -> bool:
+    try:
+        return os.path.commonpath([path, root]) == root
+    except ValueError:
+        return False
+
+
+def regular_file(path: str, root: str | None = None) -> str:
+    resolved = os.path.realpath(path)
+    if root is not None and not is_inside(resolved, os.path.realpath(root)):
+        raise SkippedFile("a symlink that leads outside its root")
+    try:
+        info = os.stat(resolved)
+    except FileNotFoundError:
+        raise SkippedFile("missing") from None
+    except OSError as exc:
+        raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
+    if not stat.S_ISREG(info.st_mode):
+        raise SkippedFile("not a regular file")
+    return resolved
+
+
+def _read_descriptor(path: str) -> bytes:
+    try:
+        descriptor = os.open(path, READ_FLAGS)
+    except OSError as exc:
+        raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
+    with os.fdopen(descriptor, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            raise SkippedFile("not a regular file")
+        try:
+            return fh.read()
+        except OSError as exc:
+            raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
+
+
+def read_regular_file(path: str, root: str | None = None) -> bytes:
+    return _read_descriptor(regular_file(path, root))
+
+
+def _reads_plain_files(storage) -> bool:
+    return (
+        isinstance(storage, FileSystemStorage)
+        and getattr(storage.__class__, "_open", None) is FileSystemStorage._open
+    )
+
+
+def _read_through_storage(storage, name: str) -> bytes:
+    try:
+        with storage.open(name, "rb") as fh:
+            return fh.read()
+    except FileNotFoundError:
+        raise SkippedFile("missing") from None
+    except OSError as exc:
+        raise SkippedFile(f"unreadable: {exc.strerror or exc}") from None
+
+
+def read_storage_file(storage, name: str) -> bytes:
+    try:
+        local = storage.path(name)
+    except NotImplementedError:
+        return _read_through_storage(storage, name)
+    except SuspiciousFileOperation:
+        raise SkippedFile("outside its storage") from None
+    resolved = regular_file(local, getattr(storage, "location", None))
+    if _reads_plain_files(storage):
+        return _read_descriptor(resolved)
+    return _read_through_storage(storage, name)
 
 
 def collect_instance_files(
@@ -60,10 +144,9 @@ def collect_instance_files(
             if not fobj or not getattr(fobj, "name", None):
                 continue
             try:
-                with fobj.storage.open(fobj.name, "rb") as fh:
-                    data = fh.read()
-            except (FileNotFoundError, OSError):
-                skipped.append(f"{label}.{field_name}: {fobj.name}")
+                data = read_storage_file(fobj.storage, fobj.name)
+            except SkippedFile as reason:
+                skipped.append(f"{label}.{field_name}: {fobj.name} ({reason})")
                 continue
             yield (
                 FileEntry(
@@ -77,10 +160,9 @@ def collect_instance_files(
             if not path:
                 continue
             try:
-                with open(path, "rb") as fh:
-                    data = fh.read()
-            except OSError:
-                skipped.append(f"{label}.{field_name}: {path}")
+                data = read_regular_file(path)
+            except SkippedFile as reason:
+                skipped.append(f"{label}.{field_name}: {path} ({reason})")
                 continue
             yield (
                 FileEntry(
@@ -95,20 +177,28 @@ def collect_root_files(root: str, skipped: list[str]):
     root = os.path.abspath(root)
     if not os.path.isdir(root):
         return
-    for dirpath, _dirs, filenames in os.walk(root):
-        for filename in filenames:
+    real_root = os.path.realpath(root)
+
+    def unreadable_directory(error):
+        skipped.append(f"{error.filename} (unreadable directory: {error.strerror})")
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=unreadable_directory):
+        dirnames.sort()
+        for dirname in dirnames:
+            linked = os.path.join(dirpath, dirname)
+            if os.path.islink(linked) and not is_inside(os.path.realpath(linked), real_root):
+                skipped.append(f"{linked} (a symlink that leads outside its root)")
+        for filename in sorted(filenames):
             abspath = os.path.join(dirpath, filename)
-            relpath = os.path.relpath(abspath, root)
             try:
-                with open(abspath, "rb") as fh:
-                    data = fh.read()
-            except OSError:
-                skipped.append(abspath)
+                data = read_regular_file(abspath, real_root)
+            except SkippedFile as reason:
+                skipped.append(f"{abspath} ({reason})")
                 continue
             yield (
                 FileEntry(
                     kind="root", size=len(data), sha256=_sha256(data),
-                    root=root, name=relpath,
+                    root=root, name=os.path.relpath(abspath, root),
                 ),
                 data,
             )

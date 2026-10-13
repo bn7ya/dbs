@@ -72,10 +72,14 @@ class AllRowsSerializer(JSONSerializer):
         ]
 
 
-def serialize_model(model, config, excluded: set[str], carried=frozenset()) -> list[dict]:
-    queryset = config.get_queryset(model).order_by("pk")
+def serialize_model(
+    model, config, excluded: set[str], carried=frozenset(), using: str | None = None
+) -> list[dict]:
+    queryset = config.get_queryset(model)
+    if using is not None:
+        queryset = queryset.using(using)
     payload = AllRowsSerializer(carried).serialize(
-        queryset.iterator(), use_natural_foreign_keys=False
+        queryset.order_by("pk").iterator(), use_natural_foreign_keys=False
     )
     records = json.loads(payload)
     if excluded:
