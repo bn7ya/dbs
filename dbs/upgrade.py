@@ -24,7 +24,7 @@ SKIP = "skip"
 MIDDLEWARE_PATH = "dbs.security.middleware.DBSSecurityMiddleware"
 
 PYPI = "https://pypi.org/pypi/django-dbs"
-VERSION_PATTERN = re.compile(r"^\d+(\.\d+){0,3}((a|b|rc)\d+)?(\.post\d+)?(\.dev\d+)?$")
+VERSION_PATTERN = re.compile(r"\d+(\.\d+){0,3}((a|b|rc)\d+)?(\.post\d+)?(\.dev\d+)?")
 CHECKOUT_MARKERS = ("pyproject.toml", "setup.py", ".git")
 PROJECT_FILES = (
     "requirements.in",
@@ -531,7 +531,7 @@ def is_system_interpreter(prefix: str | None = None, base_prefix: str | None = N
 
 
 def is_version(text: str) -> bool:
-    return bool(VERSION_PATTERN.match(text or ""))
+    return bool(VERSION_PATTERN.fullmatch(text or ""))
 
 
 def pinned_install_command(version: str, installed_extras=()) -> list:

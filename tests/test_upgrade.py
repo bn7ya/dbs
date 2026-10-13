@@ -393,7 +393,9 @@ def test_version_numbers_are_accepted(text):
     assert upgrade.is_version(text)
 
 
-@pytest.mark.parametrize("text", ["", "latest", "0.7.0; rm -rf /", ">=0.7", "0.7.0 --pre"])
+@pytest.mark.parametrize(
+    "text", ["", "latest", "0.7.0; rm -rf /", ">=0.7", "0.7.0 --pre", "0.7.0\n"]
+)
 def test_anything_else_is_not_a_version(text):
     assert not upgrade.is_version(text)
 
