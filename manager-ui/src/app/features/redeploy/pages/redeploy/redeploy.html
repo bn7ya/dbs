@@ -130,6 +130,9 @@
           @if (outcome().usedChosenBackup) {
             <app-notice severity="warning">{{ 'redeploy.progress.chosenBackup' | t }}</app-notice>
           }
+          @if (outcome().sourceSilent) {
+            <app-notice severity="warning">{{ 'redeploy.progress.sourceSilent' | t }}</app-notice>
+          }
         }
         @case ('failed') {
           <app-notice severity="danger">

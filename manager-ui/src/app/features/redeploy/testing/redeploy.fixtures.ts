@@ -66,6 +66,11 @@ export const MOVED_FROM_CHOSEN: Job = {
   error_code: '',
 };
 
+export const REHEARSED_WITHOUT_SOURCE: Job = {
+  ...MOVED_FROM_CHOSEN,
+  detail: { rehearsal: true, source_reachable: false, steps: [{ step: 'restore', status: 'succeeded' }] },
+};
+
 export const REVERTED: Job = {
   id: REVERT_ID,
   action: 'redeploy.revert',

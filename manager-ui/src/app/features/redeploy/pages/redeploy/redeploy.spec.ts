@@ -21,6 +21,7 @@ import {
   ENV_VERSIONS,
   MOVED_FROM_CHOSEN,
   MOVE_ID,
+  REHEARSED_WITHOUT_SOURCE,
   REVERTED,
   REVERT_ID,
   RUNNING,
@@ -231,5 +232,14 @@ describe('RedeployPage', () => {
 
     expect(html().textContent).toContain('This server did not answer, so the chosen backup was restored.');
     expect(html().textContent).not.toContain('Revert the new server');
+  });
+
+  it('says when a rehearsal found this server silent', () => {
+    watched.set(MOVE_ID, REHEARSED_WITHOUT_SOURCE);
+    page.target.set(TARGET.id);
+    page.rehearse();
+    started(MOVE_ID);
+
+    expect(html().textContent).toContain('A move now would restore the chosen backup instead of a fresh one.');
   });
 });

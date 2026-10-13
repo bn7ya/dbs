@@ -45,6 +45,7 @@ export interface MoveOutcome {
   readonly failedStep: string | null;
   readonly revertable: boolean;
   readonly usedChosenBackup: boolean;
+  readonly sourceSilent: boolean;
 }
 
 export const REDEPLOY_LIST_SIZE = 100;
@@ -69,5 +70,6 @@ export function outcomeOf(detail: Readonly<Record<string, unknown>>): MoveOutcom
     failedStep: typeof failed === 'string' ? failed : null,
     revertable: detail['revertable'] === true,
     usedChosenBackup: detail['fresh_backup'] === false,
+    sourceSilent: detail['source_reachable'] === false,
   };
 }

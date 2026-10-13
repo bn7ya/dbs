@@ -23,6 +23,7 @@
       "done": "The move finished.",
       "rehearsed": "The rehearsal finished. Nothing was changed on either server.",
       "chosenBackup": "This server did not answer, so the chosen backup was restored.",
+      "sourceSilent": "This server did not answer. A move now would restore the chosen backup instead of a fresh one.",
       "stoppedAt": "The move stopped at: {step}."
     },
     "steps": {
