@@ -15,7 +15,6 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from ..conf import setting
 from ..exceptions import (
     ConfigurationError,
     ConnectionLost,
@@ -243,13 +242,6 @@ class SSHTarget:
             io_timeout=float(data.get("io_timeout", DEFAULT_IO_TIMEOUT)),
             command_timeout=float(data.get("command_timeout", DEFAULT_COMMAND_TIMEOUT)),
         )
-
-    @classmethod
-    def from_settings(cls, name: str) -> "SSHTarget":
-        targets = setting("DBS_SSH_TARGETS", {}) or {}
-        if name not in targets:
-            raise ConfigurationError(f"No DBS_SSH_TARGETS entry named {name!r}.")
-        return cls.from_dict(targets[name])
 
     @property
     def host_key_policy(self) -> str:

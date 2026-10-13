@@ -209,21 +209,18 @@ class Opening:
         return self.handle
 
 
-def test_the_upgrade_names_targets_that_rely_on_the_default_command_limit(settings):
+def test_the_upgrade_explains_the_default_limits_without_reading_removed_settings(settings):
     from dbs import upgrade
 
-    settings.DBS_SSH_TARGETS = {
-        "nightly": {"host": "h", "username": "u"},
-        "archive": {"host": "h", "username": "u", "command_timeout": 86400},
-    }
+    settings.DBS_SSH_TARGETS = {"nightly": {"host": "h", "username": "u"}}
 
     finding = upgrade.RemoteCommandLimits().check()
 
     assert finding.level == upgrade.OK
-    assert "nightly" in finding.message and "archive" not in finding.message
+    assert "nightly" not in finding.message
+    assert "15 seconds" in finding.message
     assert "6 hours" in finding.message
-    settings.DBS_SSH_TARGETS = {}
-    assert upgrade.RemoteCommandLimits().check().message == "no SSH targets are configured"
+    assert "command_timeout" in finding.message
 
 
 def test_files_opened_on_a_metered_channel_count_reads_windows_and_writes():

@@ -6,7 +6,6 @@ import posixpath
 import time
 
 import pytest
-from django.test import override_settings
 
 from dbs.exceptions import ConfigurationError, DBSError
 from dbs.naming import backup_filename
@@ -122,22 +121,19 @@ def test_a_target_with_no_authentication_method_is_refused():
         SSHTarget(host="h", username="u", use_agent=False)
 
 
-@override_settings(
-    DBS_SSH_TARGETS={
-        "offsite": {
-            "host": "backups.example.com",
-            "username": "deploy",
-            "key_filename": "/keys/id_ed25519",
-            "remote_dir": "/var/backups/app",
-        }
-    }
-)
-def test_from_settings():
-    parsed = SSHTarget.from_settings("offsite")
-    assert parsed.host == "backups.example.com"
-    assert parsed.remote_dir == "/var/backups/app"
-    with pytest.raises(ConfigurationError):
-        SSHTarget.from_settings("missing")
+def test_a_target_is_built_from_explicit_values_never_from_settings(settings):
+    settings.DBS_SSH_TARGETS = {"offsite": {"host": "elsewhere.example.com", "username": "x"}}
+
+    built = SSHTarget(
+        host="backups.example.com",
+        username="deploy",
+        key_filename="/keys/id_ed25519",
+        remote_dir="/var/backups/app",
+    )
+
+    assert built.host == "backups.example.com"
+    assert built.remote_dir == "/var/backups/app"
+    assert not hasattr(SSHTarget, "from_settings")
 
 
 def test_missing_paramiko_names_the_extra(monkeypatch):
