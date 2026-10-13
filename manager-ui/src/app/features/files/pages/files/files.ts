@@ -32,9 +32,12 @@ import { Breadcrumb } from '@shared/breadcrumb/breadcrumb';
 import type { BreadcrumbItem } from '@shared/breadcrumb/breadcrumb.types';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
+import { Downloader } from '@shared/downloader/downloader';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
 import { Notice } from '@shared/notice/notice';
+import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
+import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { Skeleton } from '@shared/skeleton/skeleton';
 import { StatusTag } from '@shared/status-tag/status-tag';
 import { uniqueId } from '@shared/unique-id';
@@ -89,6 +92,7 @@ export class FilesPage {
   private readonly dialogs = inject(Dialogs);
   private readonly confirmation = inject(Confirmation);
   private readonly locale = inject(LocaleStore);
+  private readonly downloader = inject(Downloader);
 
   readonly serverId = serverIdOf(this.route);
 
@@ -170,8 +174,37 @@ export class FilesPage {
     return KIND_ICONS[entry.kind];
   }
 
-  downloadUrl(entry: Entry): string {
-    return this.store.downloadUrl(entry);
+  isPreparing(entry: Entry): boolean {
+    return this.store.isPreparing(entry);
+  }
+
+  async download(entry: Entry): Promise<void> {
+    const url = await this.store.downloadLink(entry);
+    if (url !== null) {
+      this.downloader.start(url);
+      return;
+    }
+    if (!this.store.downloadNeedsPassword()) {
+      return;
+    }
+    const data: PasswordPromptData = {
+      titleKey: 'files.download.prompt.title',
+      bodyKey: 'files.download.prompt.body',
+      bodyValues: { name: `⁨${entry.name}⁩` },
+      submitKey: 'files.download.action',
+      submit: async (password) => {
+        const link = await this.store.downloadLink(entry, password);
+        if (link === null) {
+          return false;
+        }
+        this.downloader.start(link);
+        return true;
+      },
+      error: this.store.downloadError,
+    };
+    await this.dialogs
+      .open<boolean, PasswordPromptData>(PasswordPrompt, { titleKey: data.titleKey, data, size: 'sm' })
+      .whenClosed();
   }
 
   isDeleting(entry: Entry): boolean {

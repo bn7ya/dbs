@@ -45,8 +45,8 @@ test.describe('files', () => {
 
     await expect(page).toHaveURL(new RegExp(`${filesUrl}\\?path=${encodeURIComponent(uploads).replace(/%/g, '%')}`));
     await expect(page.getByRole('navigation', { name: t('folderPath') })).toContainText('uploads');
-    await expect(page.getByRole('link', { name: journey.named('download', 'a.txt') })).toBeVisible();
-    await expect(page.getByRole('link', { name: journey.named('download', 'b.bin') })).toBeVisible();
+    await expect(page.getByRole('button', { name: journey.named('download', 'a.txt') })).toBeVisible();
+    await expect(page.getByRole('button', { name: journey.named('download', 'b.bin') })).toBeVisible();
     await journey.shot(page, 'files-uploads');
   });
 
@@ -56,7 +56,7 @@ test.describe('files', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('link', { name: journey.named('download', 'a.txt') }).click(),
+      page.getByRole('button', { name: journey.named('download', 'a.txt') }).click(),
     ]);
 
     expect(download.suggestedFilename()).toBe('a.txt');
@@ -78,7 +78,7 @@ test.describe('files', () => {
     await chooser.setFiles(file);
 
     await expect(journey.toast(page, 'fileUploaded')).toBeVisible();
-    await expect(page.getByRole('link', { name: journey.named('download', fileName) })).toBeVisible();
+    await expect(page.getByRole('button', { name: journey.named('download', fileName) })).toBeVisible();
     if (remoteReachable) expect(remoteExists(`${uploads}/${fileName}`)).toBe(true);
   });
 
@@ -134,7 +134,7 @@ test.describe('files', () => {
     await confirmFile.getByRole('button', { name: t('delete'), exact: true }).click();
 
     await expect(journey.toast(page, 'fileDeleted')).toBeVisible();
-    await expect(page.getByRole('link', { name: journey.named('download', fileName) })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: journey.named('download', fileName) })).toHaveCount(0);
     if (remoteReachable) {
       expect(remoteExists(`${uploads}/${folderName}`)).toBe(false);
       expect(remoteExists(`${uploads}/${fileName}`)).toBe(false);

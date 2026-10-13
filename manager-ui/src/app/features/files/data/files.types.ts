@@ -25,6 +25,10 @@ export interface ListingQuery {
   readonly page_size: number;
 }
 
+export interface DownloadLink {
+  readonly url: string;
+}
+
 export type UploadEvent =
   | { readonly kind: 'progress'; readonly sent: number; readonly total: number }
   | { readonly kind: 'uploaded'; readonly entry: Entry };

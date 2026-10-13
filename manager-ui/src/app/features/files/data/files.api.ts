@@ -2,7 +2,7 @@ import { HttpClient, HttpEventType, HttpParams, type HttpEvent } from '@angular/
 import { Injectable, inject } from '@angular/core';
 import { filter, map, type Observable } from 'rxjs';
 
-import type { Entry, Listing, ListingQuery, NewFolder, UploadEvent } from './files.types';
+import type { DownloadLink, Entry, Listing, ListingQuery, NewFolder, UploadEvent } from './files.types';
 
 @Injectable({ providedIn: 'root' })
 export class FilesApi {
@@ -16,8 +16,11 @@ export class FilesApi {
     return this.http.get<Listing>(this.base(query.server), { params });
   }
 
-  downloadUrl(server: string, path: string): string {
-    return `${this.base(server)}download/?path=${encodeURIComponent(path)}`;
+  downloadLink(server: string, path: string, accountPassword: string): Observable<DownloadLink> {
+    return this.http.post<DownloadLink>(`${this.base(server)}download/`, {
+      path,
+      ...(accountPassword ? { account_password: accountPassword } : {}),
+    });
   }
 
   // Bytes sent are reported by the XHR backend only (`withXhr()` in `app.config.ts`); fetch has no upload progress.

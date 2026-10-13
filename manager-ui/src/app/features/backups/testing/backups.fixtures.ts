@@ -29,7 +29,7 @@ export const PLAN: BackupPlan = {
   paths: [],
   pattern: '',
   interval_minutes: 1440,
-  keep: 7,
+  keep: 3,
   keep_remote: 1,
   enabled: true,
   next_run_at: '2026-10-01T12:00:00Z',
@@ -76,7 +76,7 @@ export const COLLECT_PLAN: BackupPlan = {
   kind: 'collect',
   paths: ['/var/backups/postgres'],
   pattern: '*.sql.gz',
-  keep: 14,
+  keep: 4,
   keep_remote: 0,
 };
 

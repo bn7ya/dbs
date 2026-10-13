@@ -15,6 +15,9 @@ import { JobWatcher } from '@core/jobs/job-watcher';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import type { DialogHandle } from '@shared/dialogs/dialogs.types';
+import { Downloader } from '@shared/downloader/downloader';
+import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
+import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { Toaster } from '@shared/toaster/toaster';
 import { PlanForm } from '../../components/plan-form/plan-form';
 import { RestoreForm } from '../../components/restore-form/restore-form';
@@ -103,6 +106,15 @@ describe('BackupsPage', () => {
     return vi.spyOn(harness.routeDebugElement!.injector.get(Dialogs), 'open').mockReturnValue(handle);
   };
 
+  const promptOf = (open: ReturnType<typeof spyOnDialogs>): PasswordPromptData => {
+    const [component, options] = open.mock.calls[0];
+    expect(component).toBe(PasswordPrompt);
+    return options.data as PasswordPromptData;
+  };
+
+  const refusedFor = (code: string) =>
+    [{ error: { code, message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' }] as const;
+
   const fileRows = (): HTMLTableRowElement[] =>
     Array.from(element().querySelectorAll('table')[1].querySelectorAll<HTMLTableRowElement>('tr[mat-row]'));
 
@@ -149,6 +161,39 @@ describe('BackupsPage', () => {
     const download = element().querySelector<HTMLAnchorElement>(`a[href="/api/backups/${FILE.id}/download/"]`);
     expect(download?.getAttribute('download')).toBe(FILE.name);
     expect(download?.getAttribute('aria-label')).toBe(`Download ${FILE.name}`);
+  });
+
+  it('downloads a sealed file through the password, and a django-dbs backup straight from its link', async () => {
+    const page = await showWith([FILE, ARCHIVE_FILE, UPLOADED_FILE]);
+    const started = vi.spyOn(TestBed.inject(Downloader), 'start').mockReturnValue(undefined);
+    const open = spyOnDialogs();
+
+    const links = Array.from(element().querySelectorAll<HTMLAnchorElement>('a[href*="/download/"]'));
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([`Download ${FILE.name}`]);
+    const buttons = Array.from(element().querySelectorAll<HTMLButtonElement>('button[aria-label^="Download "]'));
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      `Download ${ARCHIVE_FILE.name}`,
+      `Download ${UPLOADED_FILE.name}`,
+    ]);
+    expect(page.sealed(FILE)).toBe(false);
+
+    buttons[0].click();
+    await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
+    const prompt = promptOf(open);
+    expect(prompt.titleKey).toBe('backups.download.prompt.title');
+
+    const refusing = prompt.submit('wrong');
+    http.expectOne(`/api/backups/${ARCHIVE_FILE.id}/download/`).flush(...refusedFor('invalid_password'));
+    await expect(refusing).resolves.toBe(false);
+    expect(started).not.toHaveBeenCalled();
+
+    const linking = prompt.submit('hunter2');
+    const request = http.expectOne(`/api/backups/${ARCHIVE_FILE.id}/download/`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ account_password: 'hunter2' });
+    request.flush({ url: `/api/backups/${ARCHIVE_FILE.id}/download/?ticket=t1` });
+    await expect(linking).resolves.toBe(true);
+    expect(started).toHaveBeenCalledWith(`/api/backups/${ARCHIVE_FILE.id}/download/?ticket=t1`);
   });
 
   it('leaves the pages out while one page holds every file', async () => {
@@ -287,7 +332,7 @@ describe('BackupsPage', () => {
       const [daily, manual] = planRows();
       expect(daily.textContent).toContain('django-dbs');
       expect(daily.textContent).toContain('Daily');
-      expect(daily.textContent).toContain('Here: 7');
+      expect(daily.textContent).toContain('Here: 3');
       expect(daily.textContent).toContain('On the server: 1');
       expect(daily.textContent).toContain('Succeeded');
       expect(daily.querySelectorAll('time').length).toBe(2);
@@ -317,7 +362,7 @@ describe('BackupsPage', () => {
       const rows = planRows();
       for (const row of rows) {
         expect(row.textContent).toContain('Existing files');
-        expect(row.textContent).toContain('Here: 14');
+        expect(row.textContent).toContain('Here: 4');
         expect(row.textContent).not.toContain('On the server');
         const source = row.querySelector('bdi.backups__code');
         expect(source?.getAttribute('dir')).toBe('ltr');
@@ -439,21 +484,31 @@ describe('BackupsPage', () => {
     expect(element().querySelector('app-notice')?.textContent).toContain('A backup is running.');
   });
 
-  it('asks before deleting, and deletes only on yes', async () => {
+  it('asks for the password before deleting, keeps a wrong one in the prompt, and deletes with the right one', async () => {
     const page = await showWith([FILE]);
-    const ask = vi.spyOn(TestBed.inject(Confirmation), 'ask').mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const open = spyOnDialogs();
 
     await page.remove(FILE);
-    expect(ask).toHaveBeenCalledWith(
-      expect.objectContaining({ title: `Delete ⁨${FILE.name}⁩?`, acceptSeverity: 'danger' }),
-    );
+    const prompt = promptOf(open);
+    expect(prompt).toMatchObject({
+      titleKey: 'backups.delete.prompt.title',
+      bodyValues: { name: `⁨${FILE.name}⁩` },
+      submitKey: 'actions.delete',
+      destructive: true,
+    });
     http.expectNone(`/api/backups/${FILE.id}/`);
 
-    const removing = page.remove(FILE);
-    await vi.waitFor(() => http.expectOne(`/api/backups/${FILE.id}/`)).then((request) =>
-      request.flush(null, { status: 204, statusText: 'No Content' }),
-    );
-    await removing;
+    const refusing = prompt.submit('wrong');
+    http.expectOne(`/api/backups/${FILE.id}/`).flush(...refusedFor('invalid_password'));
+    await expect(refusing).resolves.toBe(false);
+    expect(prompt.error()?.code).toBe('invalid_password');
+
+    const removing = prompt.submit('hunter2');
+    const request = http.expectOne(`/api/backups/${FILE.id}/`);
+    expect(request.request.method).toBe('DELETE');
+    expect(request.request.body).toEqual({ account_password: 'hunter2' });
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await expect(removing).resolves.toBe(true);
     TestBed.tick();
     listRequest().flush(pageOf([]));
     await settle();

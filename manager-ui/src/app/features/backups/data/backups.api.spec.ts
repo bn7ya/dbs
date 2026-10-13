@@ -64,10 +64,11 @@ describe('BackupsApi', () => {
     await expect(restoring).resolves.toEqual({ activity: JOB_ID });
   });
 
-  it('deletes a file and brings it back', async () => {
-    const removing = firstValueFrom(api.remove(FILE.id));
+  it('deletes a file with the password and brings it back', async () => {
+    const removing = firstValueFrom(api.remove(FILE.id, 'hunter2'));
     const removal = http.expectOne(`/api/backups/${FILE.id}/`);
     expect(removal.request.method).toBe('DELETE');
+    expect(removal.request.body).toEqual({ account_password: 'hunter2' });
     removal.flush(null, { status: 204, statusText: 'No Content' });
     await removing;
 
@@ -130,6 +131,16 @@ describe('BackupsApi', () => {
     http.expectNone(() => true);
   });
 
+  it('asks for a link to a file, sending the password', async () => {
+    const linking = firstValueFrom(api.downloadLink(FILE.id, 'hunter2'));
+    const request = http.expectOne(`/api/backups/${FILE.id}/download/`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ account_password: 'hunter2' });
+    request.flush({ url: `/api/backups/${FILE.id}/download/?ticket=t1` });
+
+    await expect(linking).resolves.toEqual({ url: `/api/backups/${FILE.id}/download/?ticket=t1` });
+  });
+
   describe('plans', () => {
     it("lists one server's plans a page at a time", async () => {
       const listing = firstValueFrom(api.plans({ server: SERVER_ID, page: 1, page_size: 20 }));
@@ -146,7 +157,7 @@ describe('BackupsApi', () => {
         kind: 'dbs',
         name: PLAN.name,
         interval_minutes: 1440,
-        keep: 7,
+        keep: 5,
         keep_remote: 1,
         enabled: true,
         paths: [],
@@ -167,7 +178,7 @@ describe('BackupsApi', () => {
         kind: 'archive',
         name: ARCHIVE_PLAN.name,
         interval_minutes: 10080,
-        keep: 7,
+        keep: 5,
         keep_remote: 1,
         enabled: true,
         paths: ['/srv/app/media', '/srv/app/uploads'],
@@ -192,13 +203,13 @@ describe('BackupsApi', () => {
     });
 
     it('changes only what it is given', async () => {
-      const updating = firstValueFrom(api.updatePlan(PLAN.id, { keep: 14 }));
+      const updating = firstValueFrom(api.updatePlan(PLAN.id, { keep: 4 }));
       const request = http.expectOne(`/api/backups/plans/${PLAN.id}/`);
       expect(request.request.method).toBe('PATCH');
-      expect(request.request.body).toEqual({ keep: 14 });
-      request.flush({ ...PLAN, keep: 14 });
+      expect(request.request.body).toEqual({ keep: 4 });
+      request.flush({ ...PLAN, keep: 4 });
 
-      await expect(updating).resolves.toEqual({ ...PLAN, keep: 14 });
+      await expect(updating).resolves.toEqual({ ...PLAN, keep: 4 });
     });
 
     it('deletes a plan', async () => {

@@ -366,14 +366,25 @@
                 <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.actions' | t }}</th>
                 <td mat-cell *matCellDef="let row">
                   <div class="backups__actions">
-                    <a
-                      matButton
-                      [href]="downloadUrl(row)"
-                      [attr.download]="row.name"
-                      [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
-                    >
-                      {{ 'backups.download.action' | t }}
-                    </a>
+                    @if (sealed(row)) {
+                      <button
+                        matButton
+                        type="button"
+                        [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
+                        (click)="download(row)"
+                      >
+                        {{ 'backups.download.action' | t }}
+                      </button>
+                    } @else {
+                      <a
+                        matButton
+                        [href]="downloadUrl(row)"
+                        [attr.download]="row.name"
+                        [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
+                      >
+                        {{ 'backups.download.action' | t }}
+                      </a>
+                    }
                     <button
                       matButton
                       type="button"

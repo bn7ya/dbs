@@ -49,11 +49,19 @@ describe('FilesApi', () => {
     await expect(listing).resolves.toEqual(listingOf([], { path }));
   });
 
-  it('points a download at the file, without a request of its own', () => {
-    expect(api.downloadUrl(SERVER_ID, FILE.path)).toBe(
-      `${base}download/?path=%2Fsrv%2Fapp%2Fmedia%2Freport%202026%2Bfinal.pdf`,
-    );
-    http.expectNone(() => true);
+  it('asks for a link to a file, with the password only when there is one', async () => {
+    const plain = firstValueFrom(api.downloadLink(SERVER_ID, FILE.path, ''));
+    const first = http.expectOne(`${base}download/`);
+    expect(first.request.method).toBe('POST');
+    expect(first.request.body).toEqual({ path: FILE.path });
+    first.flush({ url: `${base}download/?path=x` });
+    await expect(plain).resolves.toEqual({ url: `${base}download/?path=x` });
+
+    const guarded = firstValueFrom(api.downloadLink(SERVER_ID, FILE.path, 'hunter2'));
+    const second = http.expectOne(`${base}download/`);
+    expect(second.request.body).toEqual({ path: FILE.path, account_password: 'hunter2' });
+    second.flush({ url: `${base}download/?path=x&ticket=t1` });
+    await expect(guarded).resolves.toEqual({ url: `${base}download/?path=x&ticket=t1` });
   });
 
   it('creates a folder inside another', async () => {

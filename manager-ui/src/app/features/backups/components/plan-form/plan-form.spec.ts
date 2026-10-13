@@ -68,7 +68,7 @@ describe('PlanForm', () => {
     vi.restoreAllMocks();
   });
 
-  it('starts a new plan daily, keeping seven here and one on the server, enabled, with the name given', () => {
+  it('starts a new plan daily, keeping five here and none on the server, enabled, with the name given', () => {
     const form = open({ plan: null, name: 'django-dbs' });
 
     expect(form.draft()).toEqual({
@@ -78,8 +78,8 @@ describe('PlanForm', () => {
       pattern: '*',
       name: 'django-dbs',
       schedule: 'daily',
-      keep: 7,
-      keep_remote: 1,
+      keep: 5,
+      keep_remote: 0,
       enabled: true,
     });
     expect(form.scheduleOptions().map((option) => option.label)).toEqual([
@@ -97,7 +97,7 @@ describe('PlanForm', () => {
     const form = open({ plan: null });
     expect(form.error('name')).toBeNull();
     form.update('keep', null);
-    form.update('keep_remote', 400);
+    form.update('keep_remote', 6);
 
     await form.save();
 
@@ -108,12 +108,16 @@ describe('PlanForm', () => {
 
     form.update('keep', 0);
     expect(form.error('keep')).toBe('keep_range');
+    form.update('keep', 6);
+    expect(form.error('keep')).toBe('keep_range');
+    form.update('keep', 5);
+    expect(form.error('keep')).toBeNull();
   });
 
   it('sends the interval of the schedule chosen, then closes with the plan', async () => {
     const form = open({ plan: null, name: 'django-dbs' });
     form.setSchedule('every6Hours');
-    form.update('keep_remote', 0);
+    form.update('keep_remote', 2);
 
     const saving = form.save();
     const request = http.expectOne('/api/backups/plans/');
@@ -123,16 +127,16 @@ describe('PlanForm', () => {
       kind: 'dbs',
       name: 'django-dbs',
       interval_minutes: 360,
-      keep: 7,
-      keep_remote: 0,
+      keep: 5,
+      keep_remote: 2,
       enabled: true,
       paths: [],
       pattern: '',
     });
-    request.flush({ ...PLAN, interval_minutes: 360, keep_remote: 0 }, { status: 201, statusText: 'Created' });
+    request.flush({ ...PLAN, interval_minutes: 360, keep_remote: 2 }, { status: 201, statusText: 'Created' });
     await saving;
 
-    expect(close).toHaveBeenCalledWith({ ...PLAN, interval_minutes: 360, keep_remote: 0 });
+    expect(close).toHaveBeenCalledWith({ ...PLAN, interval_minutes: 360, keep_remote: 2 });
   });
 
   it('edits a plan from its settings, a manual one sending no interval', async () => {
@@ -238,8 +242,8 @@ describe('PlanForm', () => {
         kind: 'archive',
         name: 'Media',
         interval_minutes: 10080,
-        keep: 7,
-        keep_remote: 1,
+        keep: 5,
+        keep_remote: 0,
         enabled: true,
         paths: ['/srv/app/media', '/srv/app/uploads'],
         pattern: '',
@@ -360,9 +364,9 @@ describe('PlanForm', () => {
       form.update('name', 'Database dumps');
       form.update('folder', ' /var/backups/postgres ');
       form.update('pattern', '*.sql.gz ');
-      form.update('keep', 14);
+      form.update('keep', 4);
+      form.update('keep_remote', 2);
       form.setAccountPassword(PASSWORD);
-      expect(form.draft().keep_remote).toBe(1);
 
       const saving = form.save();
       const request = http.expectOne('/api/backups/plans/');
@@ -371,7 +375,7 @@ describe('PlanForm', () => {
         kind: 'collect',
         name: 'Database dumps',
         interval_minutes: 1440,
-        keep: 14,
+        keep: 4,
         keep_remote: 0,
         enabled: true,
         paths: ['/var/backups/postgres'],
@@ -397,7 +401,7 @@ describe('PlanForm', () => {
       form.setAccountPassword(PASSWORD);
       const saving = form.save();
       const request = http.expectOne('/api/backups/plans/');
-      expect(request.request.body).toMatchObject({ kind: 'archive', paths: ['/srv/app/media'], pattern: '', keep_remote: 1 });
+      expect(request.request.body).toMatchObject({ kind: 'archive', paths: ['/srv/app/media'], pattern: '', keep_remote: 0 });
       request.flush(ARCHIVE_PLAN, { status: 201, statusText: 'Created' });
       await saving;
     });
@@ -421,7 +425,7 @@ describe('PlanForm', () => {
       expect(request.request.body).toEqual({
         name: COLLECT_PLAN.name,
         interval_minutes: 1440,
-        keep: 14,
+        keep: COLLECT_PLAN.keep,
         keep_remote: 0,
         enabled: true,
         paths: ['/var/backups/postgres'],
@@ -478,19 +482,59 @@ describe('PlanForm', () => {
       expect(form.passwordShown()).toBe(false);
     });
 
-    it("is not asked for when a plan's folders stay as they are", async () => {
+    it("is not asked for when a plan's folders stay as they are and it keeps as many", async () => {
       const form = open({ plan: ARCHIVE_PLAN });
-      form.update('keep', 3);
+      form.update('keep', 5);
+      form.update('keep_remote', 2);
       expect(form.passwordShown()).toBe(false);
 
       const saving = form.save();
       const request = http.expectOne(`/api/backups/plans/${ARCHIVE_PLAN.id}/`);
       expect(request.request.body).not.toHaveProperty('account_password');
-      request.flush({ ...ARCHIVE_PLAN, keep: 3 });
+      request.flush({ ...ARCHIVE_PLAN, keep: 5, keep_remote: 2 });
       await saving;
 
       form.update('paths', [...ARCHIVE_PLAN.paths, '/srv/app/static']);
       expect(form.passwordShown()).toBe(true);
+    });
+
+    it('is asked for before a plan keeps fewer here or on the server, which deletes the oldest', async () => {
+      const form = open({ plan: PLAN });
+
+      form.update('keep', PLAN.keep - 1);
+      expect(form.passwordShown()).toBe(true);
+      expect(rendered().textContent).toContain('Keeping fewer backups deletes the oldest ones on the next run');
+
+      form.update('keep', PLAN.keep);
+      expect(form.passwordShown()).toBe(false);
+      form.update('keep_remote', PLAN.keep_remote - 1);
+      expect(form.passwordShown()).toBe(true);
+
+      await form.save();
+      http.expectNone(`/api/backups/plans/${PLAN.id}/`);
+      expect(form.passwordMissing()).toBe(true);
+
+      form.setAccountPassword(PASSWORD);
+      const saving = form.save();
+      const request = http.expectOne(`/api/backups/plans/${PLAN.id}/`);
+      expect(request.request.body).toMatchObject({ keep: PLAN.keep, keep_remote: 0, account_password: PASSWORD });
+      request.flush({ ...PLAN, keep_remote: 0 });
+      await saving;
+      expect(close).toHaveBeenCalledWith({ ...PLAN, keep_remote: 0 });
+    });
+
+    it("asks for its password when the backend says a change needs it", async () => {
+      const form = open({ plan: MANUAL_PLAN });
+
+      const saving = form.save();
+      http.expectOne(`/api/backups/plans/${MANUAL_PLAN.id}/`).flush(
+        { error: { code: 'invalid', message: 'Server prose', fields: { account_password: ['required'] } } },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await saving;
+
+      expect(form.passwordShown()).toBe(true);
+      expect(form.passwordMissing()).toBe(true);
     });
 
     it('says a wrong password under its field, and stops once it is typed again', async () => {

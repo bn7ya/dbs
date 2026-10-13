@@ -67,9 +67,9 @@ export class Api {
       await this.delete(`/api/backups/plans/${plan.id}/`);
     }
     for (const file of await this.backups(id)) {
-      await this.delete(`/api/backups/${file.id}/`);
+      await this.delete(`/api/backups/${file.id}/`, { account_password: ADMIN.password });
     }
-    await this.delete(`/api/servers/${id}/`);
+    await this.delete(`/api/servers/${id}/`, { account_password: ADMIN.password });
   }
 
   async capturePassphrase(server: string): Promise<void> {
@@ -113,8 +113,8 @@ export class Api {
     return (await response.json()) as T;
   }
 
-  private async delete(path: string): Promise<void> {
-    const response = await this.http.delete(path, { headers: { 'X-CSRFToken': this.csrf } });
+  private async delete(path: string, data?: Record<string, string>): Promise<void> {
+    const response = await this.http.delete(path, { headers: { 'X-CSRFToken': this.csrf }, data });
     if (!response.ok() && response.status() !== 404) {
       throw new Error(`DELETE ${path}: ${response.status()} ${await response.text()}`);
     }
