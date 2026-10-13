@@ -19,6 +19,6 @@ ffmpeg -y -loglevel error -i "$WORK/silent.mp4" -i "$WORK/music.wav" \
   -af "loudnorm=$TARGET:$MEASURED:linear=true" -c:a aac -b:a 192k -ar 48000 \
   -movflags +faststart -shortest "$OUT"
 
-node render.cjs stills 2.4 "$WORK" > /dev/null
-mv "$WORK/still-02.40.png" cover.png
+node render.cjs stills 2.8 "$WORK" > /dev/null
+mv "$WORK/still-02.80.png" cover.png
 echo "$OUT and cover.png written"
