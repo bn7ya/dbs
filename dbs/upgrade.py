@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import os
 import sys
 from dataclasses import dataclass, field
@@ -9,6 +10,8 @@ from . import extras
 from .conf import setting
 from .container.format import FORMAT_VERSION, container_version
 from .exceptions import DBSError
+from .io import write_new
+from .naming import BACKUP_SUFFIX
 
 OK = "ok"
 ACTION = "action"
@@ -510,6 +513,7 @@ class BackupState:
     path: Path
     version: int | None
     converted_to: Path | None = None
+    converted_earlier: bool = False
     error: str = ""
 
     @property
@@ -532,8 +536,47 @@ def inspect_backup(path: Path) -> BackupState:
     return BackupState(path, version)
 
 
-def convert_backup(state: BackupState, passphrase: str | None) -> BackupState:
+class ConversionRejected(Exception):
+    pass
+
+
+def conversion_name(path: Path, version: int, copy: int = 1) -> Path:
+    name = path.name
+    stem = name[: -len(BACKUP_SUFFIX)] if name.endswith(BACKUP_SUFFIX) else name
+    marker = f".v{version}" if copy <= 1 else f".v{version}-{copy}"
+    return path.with_name(f"{stem}{marker}{BACKUP_SUFFIX}")
+
+
+def conversion_names(path: Path, version: int):
+    return (conversion_name(path, version, copy) for copy in itertools.count(1))
+
+
+def existing_conversion(path: Path) -> Path | None:
+    for candidate in conversion_names(path, FORMAT_VERSION):
+        if not candidate.exists():
+            return None
+        if inspect_backup(candidate).current:
+            return candidate
+    return None
+
+
+def require_valid(data: bytes, passphrase: str | None) -> None:
     from .engine import validate_backup
+
+    version = container_version(data)
+    if version != FORMAT_VERSION:
+        raise ConversionRejected(f"it is format version {version}, not {FORMAT_VERSION}")
+    result = validate_backup(data, passphrase)
+    if not result.ok:
+        raise ConversionRejected(result.summary())
+
+
+def convert_backup(state: BackupState, passphrase: str | None) -> BackupState:
+    earlier = existing_conversion(state.path)
+    if earlier is not None:
+        state.converted_to = earlier
+        state.converted_earlier = True
+        return state
 
     data = state.path.read_bytes()
     version = state.version
@@ -559,17 +602,18 @@ def convert_backup(state: BackupState, passphrase: str | None) -> BackupState:
             return state
 
     try:
-        result = validate_backup(data, passphrase)
-    except DBSError as exc:
+        written = write_new(
+            data,
+            (str(name) for name in conversion_names(state.path, FORMAT_VERSION)),
+            verify=lambda on_disk: require_valid(on_disk, passphrase),
+        )
+    except (ConversionRejected, DBSError) as exc:
         state.error = f"the converted file did not validate: {exc}"
         return state
-    if not result.ok:
-        state.error = f"the converted file did not validate: {result.summary()}"
+    except OSError as exc:
+        state.error = f"could not write the converted file: {exc}"
         return state
-
-    destination = state.path.with_name(state.path.name + ".converted")
-    destination.write_bytes(data)
-    state.converted_to = destination
+    state.converted_to = Path(written)
     state.version = FORMAT_VERSION
     return state
 

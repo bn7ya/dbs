@@ -1,5 +1,6 @@
 """`manage.py dbs upgrade`: the checks, the fixes, and the refusal to lose backups."""
 
+import stat
 import struct
 from io import StringIO
 from pathlib import Path
@@ -354,9 +355,15 @@ def test_a_registered_converter_rewrites_and_keeps_the_original(backups, monkeyp
 
     assert "original is untouched" in printed
     assert source.read_bytes() == original
-    converted = backups / "old.dbs.converted"
+    converted = backups / f"old.v{FORMAT_VERSION}.dbs"
     assert converted.is_file()
     assert container_version(converted.read_bytes()) == FORMAT_VERSION
+    assert stat.S_IMODE(converted.stat().st_mode) == 0o600
+    assert sorted(path.name for path in backups.iterdir()) == [
+        "current.dbs",
+        "old.dbs",
+        converted.name,
+    ]
 
 
 @pytest.mark.django_db
@@ -366,7 +373,7 @@ def test_conversion_chains_across_several_versions(backups, monkeypatch):
 
     run(backups=str(backups))
 
-    converted = backups / "ancient.dbs.converted"
+    converted = backups / f"ancient.v{FORMAT_VERSION}.dbs"
     assert container_version(converted.read_bytes()) == FORMAT_VERSION
     assert container_version(source.read_bytes()) == 3
 
@@ -390,7 +397,63 @@ def test_a_converter_that_destroys_the_payload_beyond_repair_is_caught(backups, 
     with pytest.raises(CommandError, match="cannot be read"):
         run(backups=str(backups))
 
-    assert not (backups / "old.dbs.converted").exists()
+    assert sorted(path.name for path in backups.iterdir()) == ["current.dbs", "old.dbs"]
+
+
+@pytest.mark.django_db
+def test_a_conversion_never_takes_a_name_that_is_in_use(backups, monkeypatch):
+    stamp_version(backups / "current.dbs", backups / "old.dbs", 2)
+    squatter = backups / f"old.v{FORMAT_VERSION}.dbs"
+    squatter.write_bytes(b"someone else's file")
+    monkeypatch.setattr(upgrade, "CONVERTERS", {2: restamp(FORMAT_VERSION)})
+
+    with pytest.raises(CommandError, match="cannot be read"):
+        run(backups=str(backups))
+
+    assert squatter.read_bytes() == b"someone else's file"
+    converted = backups / f"old.v{FORMAT_VERSION}-2.dbs"
+    assert container_version(converted.read_bytes()) == FORMAT_VERSION
+
+
+@pytest.mark.django_db
+def test_a_converted_backup_is_converted_once(backups, monkeypatch):
+    stamp_version(backups / "current.dbs", backups / "old.dbs", 2)
+    monkeypatch.setattr(upgrade, "CONVERTERS", {2: restamp(FORMAT_VERSION)})
+
+    run(backups=str(backups))
+    printed = run(backups=str(backups), check=True)
+
+    assert f"old.dbs was converted earlier to old.v{FORMAT_VERSION}.dbs" in printed
+    assert sorted(path.name for path in backups.iterdir()) == [
+        "current.dbs",
+        "old.dbs",
+        f"old.v{FORMAT_VERSION}.dbs",
+    ]
+
+
+@pytest.mark.django_db
+def test_a_converted_backup_keeps_a_backup_name(backups, monkeypatch):
+    from dbs.naming import backup_prefix, is_backup_name, parse_backup_moment
+
+    name = "nightly-20260101-020000Z.dbs"
+    stamp_version(backups / "current.dbs", backups / name, 2)
+    monkeypatch.setattr(upgrade, "CONVERTERS", {2: restamp(FORMAT_VERSION)})
+
+    run(backups=str(backups))
+
+    converted = f"nightly-20260101-020000Z.v{FORMAT_VERSION}.dbs"
+    assert (backups / converted).is_file()
+    assert is_backup_name(converted, "nightly")
+    assert backup_prefix(converted) == "nightly"
+    assert parse_backup_moment(converted) == parse_backup_moment(name)
+
+
+def test_conversion_names():
+    source = Path("/backups/site-20260101-020000Z.dbs")
+
+    assert upgrade.conversion_name(source, 2).name == "site-20260101-020000Z.v2.dbs"
+    assert upgrade.conversion_name(source, 2, 3).name == "site-20260101-020000Z.v2-3.dbs"
+    assert upgrade.conversion_name(Path("plain"), 2).name == "plain.v2.dbs"
 
 
 @pytest.mark.django_db

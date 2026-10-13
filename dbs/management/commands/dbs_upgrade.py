@@ -15,6 +15,7 @@ from dbs.upgrade import (
     abandonment_phrase,
     confirm_abandonment,
     convert_backup,
+    existing_conversion,
     installed_version,
     is_editable_install,
     is_newer,
@@ -167,11 +168,21 @@ class Command(BaseCommand):
 
         stale = [s for s in states if not s.current and not s.unreadable]
         broken = [s for s in states if s.unreadable]
+        for state in stale:
+            state.converted_to = existing_conversion(state.path)
+            state.converted_earlier = state.converted_to is not None
+            if state.converted_earlier:
+                self.stdout.write(
+                    f"{self.style.SUCCESS('[ok]'):<8} {'backups':<18} "
+                    f"{state.path.name} was converted earlier to {state.converted_to.name}"
+                )
+        stale = [s for s in stale if not s.converted_earlier]
 
         if not stale and not broken:
             self.stdout.write(
                 f"{self.style.SUCCESS('[ok]'):<8} {'backups':<18} "
-                f"{len(states)} backup(s), all at format version {FORMAT_VERSION}"
+                f"{len(states)} backup(s), all at format version {FORMAT_VERSION} "
+                "or converted to it"
             )
             return []
 

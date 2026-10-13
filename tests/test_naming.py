@@ -78,3 +78,21 @@ def test_sorted_backups_filters_and_orders():
 
     assert sorted_backups(names, "prod") == [older, newer]
     assert sorted_backups(names) == [older, other, newer]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["backup-20260728-020000Z.v2.dbs", "backup-20260728-020000Z-3.v2-2.dbs"],
+)
+def test_a_converted_backup_keeps_its_prefix_and_moment(name):
+    assert is_backup_name(name, "backup")
+    assert backup_prefix(name) == "backup"
+    assert parse_backup_moment(name) == MOMENT
+
+
+def test_a_conversion_sorts_after_the_backup_it_came_from():
+    original = backup_filename(moment=MOMENT)
+    converted = original.replace(".dbs", ".v2.dbs")
+
+    assert sorted_backups([converted, original]) == [original, converted]
+    assert not is_backup_name(original + ".converted")
