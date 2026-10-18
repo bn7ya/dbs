@@ -1,0 +1,98 @@
+<div class="console">
+  <header class="console__header">
+    <h1>{{ 'console.title' | t }}</h1>
+    <p class="text-secondary">{{ 'console.subtitle' | t }}</p>
+    <p class="text-secondary">{{ 'console.terminalOnly' | t }}</p>
+  </header>
+
+  <div
+    #log
+    class="console__log"
+    role="log"
+    aria-live="polite"
+    tabindex="0"
+    dir="ltr"
+    [attr.aria-label]="'console.log' | t"
+  >
+    @for (entry of entries(); track entry.id) {
+      <div class="console__entry" [class.console__entry--failed]="failed(entry)">
+        <div class="console__command">
+          <span class="console__prompt" aria-hidden="true">{{ prompt }}</span>
+          <span class="console__line">{{ program }} {{ entry.line }}</span>
+        </div>
+
+        @if (entry.output !== '') {
+          <pre class="console__output">{{ entry.output }}</pre>
+        }
+
+        <div class="console__status" [attr.dir]="direction()">
+          @let status = look(entry);
+          <app-status-tag [severity]="status.severity" [icon]="status.icon" [label]="status.labelKey | t: status.values" />
+          @if (entry.state === 'refused') {
+            <span>{{ entry.error | errorText }}</span>
+          } @else if (explained(entry)) {
+            <span>{{ entry.errorCode | errorText }}</span>
+          }
+          @if (entry.state === 'password') {
+            <button matButton type="button" [disabled]="busy()" (click)="askPassword(entry)">
+              {{ 'console.password.again' | t }}
+            </button>
+          }
+        </div>
+
+        @if (entry.activities.length > 0) {
+          <ul class="console__jobs" [attr.dir]="direction()">
+            @for (id of entry.activities; track id) {
+              @let followed = job(id);
+              @let jobStatus = jobLook(followed);
+              <li class="console__job">
+                <span>{{ 'console.job.label' | t: { id: id } }}</span>
+                <app-status-tag [severity]="jobStatus.severity" [icon]="jobStatus.icon" [label]="jobStatus.labelKey | t" />
+                @if (followed?.job?.error_code; as code) {
+                  <span>{{ code | errorText }}</span>
+                }
+                <a routerLink="/activity">{{ 'console.job.follow' | t }}</a>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    } @empty {
+      <p class="console__empty" [attr.dir]="direction()">{{ 'console.empty' | t }}</p>
+    }
+  </div>
+
+  <form class="console__form" (ngSubmit)="run()">
+    <mat-form-field class="console__field">
+      <mat-label>{{ 'console.command' | t }}</mat-label>
+      <span matTextPrefix class="console__program" dir="ltr">{{ program }}</span>
+      <input
+        #field
+        matInput
+        name="line"
+        dir="ltr"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        [ngModel]="line()"
+        (ngModelChange)="line.set($event)"
+        (keydown.arrowup)="previous($event)"
+        (keydown.arrowdown)="next($event)"
+      />
+      <mat-hint>{{ 'console.hint' | t }}</mat-hint>
+    </mat-form-field>
+
+    <div class="console__actions">
+      <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+        @if (busy()) {
+          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        }
+        {{ (busy() ? 'console.running' : 'console.run') | t }}
+      </button>
+      <button matButton="tonal" type="button" [disabled]="busy()" (click)="help()">{{ 'console.help' | t }}</button>
+      <button matButton type="button" [disabled]="entries().length === 0" (click)="clear()">
+        {{ 'console.clear' | t }}
+      </button>
+    </div>
+  </form>
+</div>
