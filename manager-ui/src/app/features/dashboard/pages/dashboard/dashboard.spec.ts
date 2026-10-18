@@ -16,7 +16,7 @@ import type { Dashboard } from '../../data/dashboard.types';
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
 import { DashboardStore } from '../../state/dashboard.store';
-import { DASHBOARD, NOW } from '../../testing/dashboard.fixtures';
+import { DASHBOARD, NOW, SHOP, STAGING, WEB } from '../../testing/dashboard.fixtures';
 import { DashboardPage } from './dashboard';
 
 describe('DashboardPage', () => {
@@ -55,40 +55,61 @@ describe('DashboardPage', () => {
     localStorage.clear();
   });
 
-  it('shows each server with its check, health, last backup, next run, failures and storage', async () => {
+  it('shows each server with its connection and check, and a card per application', async () => {
     const page = await show(DASHBOARD);
 
-    const cards = Array.from(page.querySelectorAll('mat-card'));
-    expect(cards).toHaveLength(2);
-    const [web, staging] = cards.map((card) => card.textContent ?? '');
+    const sections = Array.from(page.querySelectorAll('section.dashboard__server'));
+    expect(sections).toHaveLength(2);
+    const [web, staging] = sections.map((section) => section.textContent ?? '');
     expect(web).toContain('Production web');
-    expect(web).toContain('Check: Ready');
+    expect(web).toContain('web-1.example.com');
     expect(web).toContain('Online');
     expect(staging).toContain('Offline, last seen 3 hours ago');
-    expect(web).toContain('Health: Warning');
-    expect(web).toContain('3 hours ago');
-    expect(web).toContain('5 MB');
-    expect(staging).toContain('Check: Not checked');
-    expect(staging).toContain('Health: No report');
-    expect(staging).toContain('None yet');
-    expect(staging).toContain('No plan scheduled');
-    expect(cards[0].querySelector('a')?.getAttribute('href')).toBe(`/servers/${DASHBOARD.servers[0].id}`);
+    expect(sections[0].querySelector('h2 a')?.getAttribute('href')).toBe(`/servers/${WEB.id}`);
+
+    const cards = Array.from(sections[0].querySelectorAll('mat-card'));
+    expect(cards).toHaveLength(2);
+    const [shop, blog] = cards.map((card) => card.textContent ?? '');
+    expect(shop).toContain('Compose service, Docker');
+    expect(shop).toContain('Check: Ready');
+    expect(shop).toContain('Health: Warning');
+    expect(shop).toContain('3 hours ago');
+    expect(shop).toContain('Verified');
+    expect(shop).toContain('5 MB');
+    expect(blog).toContain('On the server');
+    expect(blog).toContain('Check: Not checked');
+    expect(blog).toContain('Health: No report');
+    expect(blog).toContain('None yet');
+    expect(blog).toContain('No plan scheduled');
+    expect(cards[0].querySelector('a')?.getAttribute('href')).toBe(`/applications/${SHOP.id}`);
+    expect(cards[0].querySelector('.fa-cube')).not.toBeNull();
+    expect(cards[1].querySelector('.fa-server')).not.toBeNull();
   });
 
-  it('adds up the servers, the storage and the failures of the week', async () => {
+  it('offers adding an application to a server that runs none', async () => {
+    const page = await show(DASHBOARD);
+
+    const staging = page.querySelectorAll('section.dashboard__server')[1];
+    expect(staging.textContent).toContain('No applications on this server yet.');
+    expect(staging.querySelector(`a[href="/servers/${STAGING.id}/applications/new"]`)).not.toBeNull();
+  });
+
+  it('adds up the servers, the applications, the storage and the failures of the week', async () => {
     const page = await show(DASHBOARD);
 
     const figures = Array.from(page.querySelectorAll('.dashboard__total dd'), (each) => each.textContent?.trim());
-    expect(figures).toEqual(['2', '5 MB', '3', 'yesterday']);
+    expect(figures).toEqual(['2', '2', '5 MB', '3', 'yesterday']);
   });
 
-  it('lists the recent failures with their reasons', async () => {
-    await show(DASHBOARD);
+  it('lists the recent failures with what failed and why', async () => {
+    const page = await show(DASHBOARD);
 
     const table = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatTableHarness);
     const rows = await table.getCellTextByColumnName();
-    expect(rows['server'].text).toEqual(['Production web']);
-    expect(rows['reason'].text).toEqual(['The server did not answer over SSH.']);
+    expect(rows['subject'].text).toEqual(['shop', 'Staging']);
+    expect(rows['reason'].text).toEqual(['The server did not answer over SSH.', 'The server did not answer over SSH.']);
+    expect(page.querySelector(`td a[href="/applications/${SHOP.id}"]`)).not.toBeNull();
+    expect(page.querySelector(`td a[href="/servers/${STAGING.id}"]`)).not.toBeNull();
   });
 
   it('reminds the developer to export once the last export is a week old or missing', async () => {
@@ -143,6 +164,7 @@ describe('DashboardPage', () => {
     const page = await show(DASHBOARD);
 
     expect(page.querySelector('a[href="/servers/new"]')).toBeNull();
+    expect(page.querySelector(`a[href="/servers/${STAGING.id}/applications/new"]`)).toBeNull();
     expect(page.querySelectorAll('mat-card')).toHaveLength(2);
   });
 

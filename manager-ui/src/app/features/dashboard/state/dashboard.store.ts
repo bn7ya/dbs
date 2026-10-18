@@ -3,7 +3,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 
 import { apiErrorOf } from '@core/http/api-error';
 import { DashboardApi } from '../data/dashboard.api';
-import type { Dashboard, DashboardFailure, DashboardServer } from '../data/dashboard.types';
+import type { Dashboard, DashboardApplication, DashboardFailure, DashboardServer } from '../data/dashboard.types';
 
 export const EXPORT_STALE_DAYS = 7;
 
@@ -25,10 +25,15 @@ export class DashboardStore {
 
   readonly servers = computed<readonly DashboardServer[]>(() => this.dashboard()?.servers ?? []);
   readonly failures = computed<DashboardFailure[]>(() => [...(this.dashboard()?.recent_failures ?? [])]);
+  readonly applications = computed<readonly DashboardApplication[]>(() =>
+    this.servers().flatMap((server) => server.applications),
+  );
   readonly empty = computed(() => this.dashboard() !== undefined && this.servers().length === 0);
 
   readonly storageBytes = computed(() => this.dashboard()?.storage_bytes ?? 0);
-  readonly failuresThisWeek = computed(() => this.servers().reduce((sum, server) => sum + server.failures_7d, 0));
+  readonly failuresThisWeek = computed(() =>
+    this.applications().reduce((sum, application) => sum + application.failures_7d, 0),
+  );
   readonly lastExportAt = computed(() => this.dashboard()?.last_export_at ?? null);
   readonly keyInFile = computed(() => this.dashboard()?.key_store === 'file');
 

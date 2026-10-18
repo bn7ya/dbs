@@ -7,7 +7,8 @@
 }
 
 .dashboard__header,
-.dashboard__section-header {
+.dashboard__section-header,
+.dashboard__server-header {
   display: flex;
   flex-wrap: wrap;
   gap: var(--app-space-4);
@@ -26,6 +27,19 @@
 
 .dashboard__section {
   gap: var(--app-space-4);
+}
+
+// A server is a band of its own: its name and state, then the cards of what it runs.
+.dashboard__server {
+  padding-block-start: var(--app-space-5);
+  border-block-start: var(--app-border-width) solid var(--app-color-outline);
+}
+
+.dashboard__none {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  align-items: center;
 }
 
 .dashboard__export {
@@ -57,13 +71,16 @@
   font-weight: var(--app-weight-bold);
 }
 
-.dashboard__servers {
+.dashboard__applications {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min($card-max, 100%), 1fr));
   gap: var(--app-space-5);
+  padding: 0;
+  margin: 0;
+  list-style: none;
 }
 
-.dashboard__server {
+.dashboard__application {
   block-size: 100%;
 }
 
@@ -73,10 +90,18 @@
   gap: var(--app-space-4);
 }
 
-.dashboard__tags {
+.dashboard__place {
+  display: inline-flex;
+  gap: var(--app-space-2);
+  align-items: center;
+}
+
+.dashboard__tags,
+.dashboard__backup {
   display: flex;
   flex-wrap: wrap;
   gap: var(--app-space-2);
+  align-items: center;
 }
 
 .dashboard__facts {

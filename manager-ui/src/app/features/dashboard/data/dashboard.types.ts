@@ -6,6 +6,10 @@ export type HealthStatus = 'ok' | 'warn' | 'error';
 
 export type DashboardValidation = 'structure_ok' | 'verified' | 'failed';
 
+export type ApplicationKind = 'host' | 'compose' | 'container';
+
+export type ApplicationEngine = '' | 'docker' | 'podman';
+
 export interface DashboardBackup {
   readonly id: string;
   readonly name: string;
@@ -20,11 +24,23 @@ export interface HealthCheck {
   readonly message: string;
 }
 
-export interface ServerHealth {
+export interface ApplicationHealth {
   readonly status: HealthStatus;
   readonly checks: readonly HealthCheck[];
-  readonly last_backup_at: string | null;
-  readonly generated_at: string;
+}
+
+export interface DashboardApplication {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: ApplicationKind;
+  readonly engine: ApplicationEngine;
+  readonly check_status: DashboardCheckStatus;
+  readonly checked_at: string | null;
+  readonly last_backup: DashboardBackup | null;
+  readonly next_plan_run: string | null;
+  readonly failures_7d: number;
+  readonly storage_bytes: number;
+  readonly health: ApplicationHealth | null;
 }
 
 export interface DashboardServer {
@@ -35,11 +51,7 @@ export interface DashboardServer {
   readonly checked_at: string | null;
   readonly connection_state: ConnectionState;
   readonly last_seen_at: string | null;
-  readonly last_backup: DashboardBackup | null;
-  readonly next_plan_run: string | null;
-  readonly failures_7d: number;
-  readonly storage_bytes: number;
-  readonly health: ServerHealth | null;
+  readonly applications: readonly DashboardApplication[];
 }
 
 export interface DashboardFailure {
@@ -50,6 +62,8 @@ export interface DashboardFailure {
   readonly error_code: string;
   readonly server: string | null;
   readonly server_name: string | null;
+  readonly application: string | null;
+  readonly application_name: string | null;
   readonly created_at: string;
 }
 
