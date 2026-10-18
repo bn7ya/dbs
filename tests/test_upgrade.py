@@ -72,11 +72,16 @@ def empty_converters(monkeypatch):
     monkeypatch.setattr(upgrade, "CONVERTERS", {})
 
 
+@pytest.fixture(autouse=True)
+def own_folder(tmp_path_factory, monkeypatch):
+    monkeypatch.chdir(tmp_path_factory.mktemp("project"))
+
+
 @pytest.mark.django_db
 def test_a_correctly_configured_project_is_up_to_date():
     report = upgrade.run_steps(apply_fixes=False)
 
-    assert not report.blocked
+    assert not report.blocked, [f for f in report.findings if f.level == "action"]
     assert levels(report)["installed app"] == OK
     assert levels(report)["session guard"] == OK
     assert levels(report)["passphrase"] == OK
