@@ -85,6 +85,7 @@ def report(now=None):
     result.checks.extend(_backup_directory(last_backup))
     result.checks.append(_passphrase())
     result.checks.append(_scheduler(schedule, now))
+    result.checks.append(_job_process())
     failure = _recent_failure(now)
     if failure is not None:
         result.checks.append(failure)
@@ -100,6 +101,29 @@ def _schedule_facts(schedule):
         "keep": int(schedule.keep),
         "mode": mode(),
     }
+
+
+def _job_process():
+    from . import job_process
+    from .exceptions import ConfigurationError
+
+    if not job_process.isolated():
+        return Check(
+            "job process",
+            INFO,
+            "Panel backups and restores run inside the web process (DBS_JOB_PROCESS is off).",
+        )
+    try:
+        seconds, memory = job_process.time_limit(), job_process.memory_limit()
+    except ConfigurationError as exc:
+        return Check("job process", ERROR, str(exc))
+    limit = f"{memory // (1024 * 1024)} MiB" if memory else "no memory limit"
+    return Check(
+        "job process",
+        OK,
+        f"Panel backups and restores run in their own process with {job_process.interpreter()}, "
+        f"stopped after {_age(timedelta(seconds=seconds))} or {limit}.",
+    )
 
 
 def _last_success(action):

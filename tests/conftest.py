@@ -12,15 +12,19 @@ from dbs.crypto.kdf import KDFParams
 from tests.fake_ssh import FakeParamiko
 
 CLOCK_ENV = "DBS_TEST_HOUR"
-MANAGER_SETTINGS = "tests.manager.settings"
-MANAGER_TESTS = Path(__file__).parent / "manager"
+SESSIONS = {
+    Path(__file__).parent / "manager": "tests.manager.settings",
+    Path(__file__).parent / "isolation": "tests.isolation.settings",
+}
 
 
 def pytest_ignore_collect(collection_path, config):
-    if os.environ.get("DJANGO_SETTINGS_MODULE") == MANAGER_SETTINGS:
-        return None
-    inside = Path(collection_path) == MANAGER_TESTS or MANAGER_TESTS in Path(collection_path).parents
-    return True if inside else None
+    active = os.environ.get("DJANGO_SETTINGS_MODULE")
+    path = Path(collection_path)
+    for folder, settings_module in SESSIONS.items():
+        if path == folder or folder in path.parents:
+            return None if active == settings_module else True
+    return None
 
 # Fast KDF parameters so the suite isn't dominated by Argon2 cost. Real backups
 # use the much stronger defaults in ``KDFParams``.

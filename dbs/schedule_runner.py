@@ -293,9 +293,20 @@ def run_due(*, force=False, now=None):
             return None
         if not force and not is_due(schedule, now):
             return None
-        return _run(schedule, runner, now)
+        return _run_isolated(schedule, runner, now)
     finally:
         runner.release()
+
+
+def _run_isolated(schedule, runner, now):
+    from . import job_process
+
+    if not job_process.isolated():
+        return _run(schedule, runner, now)
+    result = job_process.run_and_wait(
+        job_process.spec_for(kind="scheduled", owner=runner.owner, now=now.isoformat())
+    )
+    return result.get("output")
 
 
 def _resume(schedule, now):

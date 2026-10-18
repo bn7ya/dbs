@@ -1237,3 +1237,59 @@ def test_a_small_mysql_packet_is_warned(monkeypatch):
     assert finding.level == WARN
     assert "16 MiB" in finding.message
     assert "max_allowed_packet = 256M" in finding.remedy
+
+
+def test_panel_jobs_in_the_web_process_are_named(settings):
+    settings.DBS_JOB_PROCESS = False
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == OK
+    assert "inside the web process" in finding.message
+
+
+def test_panel_jobs_whose_interpreter_cannot_load_the_project_warn(settings, monkeypatch):
+    from dbs import job_process
+
+    settings.DBS_JOB_PROCESS = True
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "tests.settings")
+    monkeypatch.setattr(job_process, "probe", lambda: "ModuleNotFoundError: No module named 'site'")
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == WARN
+    assert "ModuleNotFoundError" in finding.message
+    assert "DBS_JOB_PYTHON" in finding.remedy
+
+
+def test_panel_jobs_that_can_start_report_their_limits(settings, monkeypatch):
+    from dbs import job_process
+
+    settings.DBS_JOB_PROCESS = True
+    settings.DBS_JOB_TIME_LIMIT = "2h"
+    settings.DBS_JOB_MEMORY_LIMIT = "1G"
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "tests.settings")
+    monkeypatch.setattr(job_process, "probe", lambda: "")
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == OK
+    assert "2 h" in finding.message and "1024 MiB" in finding.message
+
+
+def test_an_unreadable_job_limit_needs_action(settings):
+    settings.DBS_JOB_PROCESS = True
+    settings.DBS_JOB_MEMORY_LIMIT = "lots"
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == ACTION
+    assert "512M" in finding.message
+
+
+def test_the_probe_starts_the_project_in_a_fresh_interpreter(monkeypatch):
+    from dbs import job_process
+
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "tests.settings")
+
+    assert job_process.probe() == ""

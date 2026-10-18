@@ -101,3 +101,5 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 DBS_SCHEDULER = "off"
+
+DBS_JOB_PROCESS = False

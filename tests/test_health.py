@@ -134,3 +134,23 @@ def test_the_panel_shows_the_report(backup_dir, settings):
 
     assert response.status_code == 200
     assert b"Backup health" in response.content
+
+
+@pytest.mark.django_db
+def test_the_job_process_is_described(settings, monkeypatch):
+    settings.DBS_JOB_PROCESS = True
+    settings.DBS_JOB_TIME_LIMIT = "2h"
+    settings.DBS_JOB_MEMORY_LIMIT = "1G"
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "tests.settings")
+
+    check = checks(health.report())["job process"]
+
+    assert check.status == health.OK
+    assert "2 hours" in check.message and "1024 MiB" in check.message
+
+
+@pytest.mark.django_db
+def test_jobs_in_the_web_process_are_named(settings):
+    settings.DBS_JOB_PROCESS = False
+
+    assert checks(health.report())["job process"].status == health.INFO

@@ -37,7 +37,7 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`, `dbs/files.py`, everything under
 `dbs/security/`, `dbs/audit.py`, `dbs/leases.py`, `dbs/jobs.py`, `dbs/tee.py`,
 `dbs/extras.py`, `dbs/upgrade.py`, `dbs/schedule_runner.py`, `dbs/health.py`,
-`dbs/connection.py`, the internals of `dbs/engine/`, `dbs/container/` and `dbs/crypto/`
+`dbs/connection.py`, `dbs/job_process.py`, the internals of `dbs/engine/`, `dbs/container/` and `dbs/crypto/`
 (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `stream.py`, `rs.py`,
 `sources.py`, `chunked.py`) and everything under `dbs/manager/`.
 
@@ -81,7 +81,11 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   schedule and its in-process runner, the health report, and the connection details the
   manager reads.
 - `dbs/tee.py` — `dbs backup --stream`: standard output and a private partial file in the
-  backup folder, linked into place under a backup name.
+  backup folder, linked into place under a backup name; `--progress-seconds` lines.
+- `dbs/job_process.py` — panel backups, restores and scheduled runs in a low-priority child
+  process (`python -m dbs.job_process`) that reads its spec, passphrase included, from stdin,
+  holds the job's leases and stops itself at `DBS_JOB_TIME_LIMIT` or `DBS_JOB_MEMORY_LIMIT`;
+  the parent settles whatever a killed child left. `DBS_JOB_PROCESS = False` keeps the thread.
 - `dbs/files.py` — the files a backup reads and a restore stages, checks and places, within
   the restore roots and `DBS_RESTORE_PATH_MAP`.
 - `dbs/manager/` — the standalone DBS manager (`django_dbs run`, `django-dbs[manager]`): its
@@ -199,7 +203,9 @@ dependency gets an upper bound below its next major version.
 
 ```bash
 pip install -e ".[dev]"  # every extra and the test tools
-scripts/test.sh          # pytest, then pytest tests/manager --ds=tests.manager.settings
+scripts/test.sh          # pytest, tests/manager (--ds=tests.manager.settings), then
+                         # tests/isolation (--ds=tests.isolation.settings, a file database a
+                         # child process can open)
 ```
 
 `DBS_TEST_DB=postgres|mysql` runs the library suite on another database and

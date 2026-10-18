@@ -783,6 +783,47 @@ class LegacyPartials(Step):
         )
 
 
+class PanelJobProcess(Step):
+    name = "panel jobs"
+    since = "0.8.0"
+    remedy = (
+        'DBS_JOB_PYTHON = "/path/to/your/venv/bin/python"  # the interpreter that runs this '
+        "project, or DBS_JOB_PROCESS = False to keep jobs in the web process"
+    )
+
+    def check(self):
+        from . import job_process
+        from .exceptions import ConfigurationError
+
+        if not setting("DBS_JOB_PROCESS", True):
+            return self.ok(
+                "DBS_JOB_PROCESS is off, so panel backups and restores run inside the web "
+                "process without a time or memory limit"
+            )
+        try:
+            limits = (job_process.time_limit(), job_process.memory_limit())
+        except ConfigurationError as exc:
+            return self.action(str(exc), "DBS_JOB_TIME_LIMIT = \"6h\"; DBS_JOB_MEMORY_LIMIT = \"2G\"")
+        if not job_process.settings_module():
+            return self.warn(
+                "DJANGO_SETTINGS_MODULE is not set, so panel jobs cannot start a process of "
+                "their own and run inside the web process",
+                self.remedy,
+            )
+        failure = job_process.probe()
+        if failure:
+            return self.warn(
+                f"{job_process.interpreter()} cannot load this project ({failure}), so panel "
+                "backups and restores would fail to start",
+                self.remedy,
+            )
+        return self.ok(
+            f"panel backups and restores run in a process of their own with "
+            f"{job_process.interpreter()}, stopped after {limits[0] // 3600 or 1} h or "
+            f"{limits[1] // (1024 * 1024) or 'unlimited'} MiB"
+        )
+
+
 class MySQLReads(Step):
     name = "mysql reads"
     since = "0.8.0"
@@ -889,6 +930,7 @@ STEPS = (
     ContribViewsRemoved,
     CommandNames,
     LegacyPartials,
+    PanelJobProcess,
     MySQLReads,
     SSHTargetKeys,
 )

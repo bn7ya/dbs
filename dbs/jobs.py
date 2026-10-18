@@ -24,9 +24,6 @@ RESTORE = "backup.restore"
 PANEL_ACTIONS = (BACKUP, RESTORE)
 UPLOAD_PREFIX = ".restore-upload.dbs."
 
-_runs_here = threading.Lock()
-
-
 class Busy(DBSError):
     code = "busy"
 
@@ -40,17 +37,16 @@ class Runner:
         self.owner = leases.unique_owner()
         self.held = False
 
+    @classmethod
+    def adopt(cls, owner):
+        runner = cls()
+        runner.owner = owner
+        runner.held = True
+        return runner
+
     def take(self):
         recover()
-        if not _runs_here.acquire(blocking=False):
-            raise Busy("A backup or restore is already running in this process.")
-        try:
-            taken = leases.acquire(RUNNER_LEASE, self.owner, LEASE_SECONDS)
-        except BaseException:
-            _runs_here.release()
-            raise
-        if not taken:
-            _runs_here.release()
+        if not leases.acquire(RUNNER_LEASE, self.owner, LEASE_SECONDS):
             raise Busy("Another backup or restore is running; try again when it finishes.")
         self.held = True
         return self
@@ -59,10 +55,7 @@ class Runner:
         if not self.held:
             return
         self.held = False
-        try:
-            leases.release(RUNNER_LEASE, self.owner)
-        finally:
-            _runs_here.release()
+        leases.release(RUNNER_LEASE, self.owner)
 
 
 class Job:
@@ -72,6 +65,12 @@ class Job:
         self.owner = owner
         self.lease = job_lease(event.pk)
         self.held = [self.lease, *hold]
+
+    @classmethod
+    def adopt(cls, event_id, owner, hold=()):
+        from .models import AuditEvent
+
+        return cls(AuditEvent.objects.get(pk=event_id), owner, hold)
 
     @classmethod
     def begin(cls, action, *, target, data, owner, hold=(), actor=None, remote_addr=""):
@@ -194,6 +193,16 @@ def start_backup(*, database, passphrase="", note="", actor=None, remote_addr=""
         runner,
         lambda: _take_backup(job, runner, output, stem, database, passphrase, note, actor),
         cleanup=lambda: discard_reservation(output),
+        spec={
+            "kind": "backup",
+            "output": output,
+            "outputs": [output],
+            "stem": stem,
+            "database": database,
+            "passphrase": passphrase,
+            "note": note,
+            "actor": getattr(actor, "pk", None),
+        },
     )
     return job.event_id
 
@@ -228,13 +237,31 @@ def start_restore(
         runner,
         lambda: _restore(job, runner, path, passphrase, dry_run, flush, owned),
         cleanup=(lambda: _remove(path)) if owned else None,
+        spec={
+            "kind": "restore",
+            "path": path,
+            "passphrase": passphrase,
+            "dry_run": dry_run,
+            "flush": flush,
+            "owned": owned,
+        },
     )
     return job.event_id
 
 
-def _start(job, runner, work, cleanup=None):
+def _start(job, runner, work, cleanup=None, spec=None):
+    from . import job_process
+
     try:
-        launch(work)
+        if spec is not None and job_process.isolated():
+            child = job_process.Child(
+                job_process.spec_for(
+                    event_id=job.event_id, lease=job.lease, owner=runner.owner, **spec
+                )
+            )
+            job_process.supervise(child, outputs=spec.get("outputs", ()), cleanup=cleanup)
+        else:
+            launch(work)
     except BaseException as exc:
         job.fail(exc)
         job.close()
