@@ -17,6 +17,7 @@ api_patterns = [
     path("backups/", include("dbs.manager.backups.urls")),
     path("files/", include("dbs.manager.files.urls")),
     path("envfiles/", include("dbs.manager.envfiles.urls")),
+    path("terminals/", include("dbs.manager.shell.urls")),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("about/", AboutView.as_view(), name="about"),
     path("redeploy/", RedeployView.as_view(), name="redeploy"),

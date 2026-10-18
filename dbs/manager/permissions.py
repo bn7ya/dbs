@@ -57,6 +57,7 @@ class Capability:
     FILES_CHANGE = "files.change"
     REDEPLOY_REHEARSE = "redeploy.rehearse"
     REDEPLOY_RUN = "redeploy.run"
+    SHELL_OPEN = "shell.open"
 
 
 MINIMUM_ROLE = {
@@ -82,6 +83,7 @@ MINIMUM_ROLE = {
     Capability.FILES_CHANGE: Role.ADMIN,
     Capability.REDEPLOY_REHEARSE: Role.OPERATOR,
     Capability.REDEPLOY_RUN: Role.ADMIN,
+    Capability.SHELL_OPEN: Role.ADMIN,
 }
 
 REHEARSALS = {

@@ -117,6 +117,9 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   plan|activity|env|files|redeploy`). Like the REST views, each verb validates with the slice's
   serializer and calls the slice's service; neither adapter holds business logic.
   `parsers.py` imports no Django, so `--help` stays instant.
+- `dbs/manager/shell/` — the interactive terminal on a server or inside an application's
+  container: `sessions.py` holds each shell's SSH channel and output buffer in the manager
+  process, `service.py` opens, polls, sweeps and closes them.
 - `dbs/manager/mcp/` — `django_dbs mcp`, the MCP server Claude drives: `protocol.py` is
   JSON-RPC over stdio with no Django, `tools.py` the tools, each calling a slice's service.
 - `dbs/manager/adapters/` — the glue the terminal and MCP share: references by name or id,
@@ -154,7 +157,7 @@ Changes to `dbs/security/` must preserve these:
   working no matter what the guard decided.
 - **The panel runs no remote command.** It keeps backups in `DBS_BACKUP_DIR` and pushes
   nothing; the DBS manager pulls them. Do not bring back a console, a stored SSH credential
-  or any path from a browser to a shell.
+  or any path from the panel to a shell.
 - **A flagged session changes nothing.** While a session is flagged, every unsafe method
   anywhere in the admin, and every download or export, is refused.
 - **Learning never switches enforcement off.** It mutes only the anomaly model; the rules and
@@ -209,6 +212,12 @@ version to read them before it offers giving them up.
   re-pins a host key. It pins a new server's host key only after a person confirmed it, cannot
   make a plan keep fewer backups, and cannot save a file the manager keeps encrypted.
   `tests/manager/mcp/test_tools.py` enforces the list; keep it when adding tools.
+- The terminal opens for a signed-in admin only (`DBS_MANAGER_TERMINAL` or
+  `django_dbs run --terminal` narrows it to the master or switches it off), asks the account
+  password for every shell, and closes on sign-out, a password or role change, 15 minutes
+  without input, a minute without a poll or two hours in all; at most four run at once, two
+  per account. Its audit row records where, the size, how long, the bytes each way and why it
+  closed, never what was typed or shown. The MCP server and the console never reach it.
 - The built interface is generated at release time and never committed.
 
 ## Install constraint

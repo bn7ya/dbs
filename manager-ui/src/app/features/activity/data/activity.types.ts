@@ -77,6 +77,7 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'auth.sign_in_failed',
   'auth.sign_out',
   'auth.recovery_code_used',
+  'shell.session',
 ];
 
 export interface ActivityEntry {

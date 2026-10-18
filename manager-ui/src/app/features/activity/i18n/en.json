@@ -134,6 +134,9 @@
       "manager": {
         "export": "Export DBS data",
         "import": "Import DBS data"
+      },
+      "shell": {
+        "session": "Use a terminal"
       }
     }
   }

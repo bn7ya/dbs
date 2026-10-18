@@ -40,6 +40,8 @@ TASKS = {
     ),
 }
 
+LOCAL_TASKS = ("dbs.manager.shell.service.sweep_terminals",)
+
 
 def owner():
     return leases.process_owner()
@@ -48,6 +50,14 @@ def owner():
 def run_task(name):
     _, handler = TASKS[name]
     return import_string(handler)()
+
+
+def housekeep():
+    for handler in LOCAL_TASKS:
+        try:
+            import_string(handler)()
+        except Exception as exc:
+            logger.exception("%s failed: %s", handler, exc)
 
 
 def claim(name, scheduled, following):
@@ -113,4 +123,5 @@ class Scheduler:
             logger.exception("the scheduler tick failed: %s", exc)
             return []
         finally:
+            housekeep()
             close_old_connections()

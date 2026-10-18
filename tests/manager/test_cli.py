@@ -404,3 +404,32 @@ def test_createuser_refuses_a_weak_password(tmp_path):
 
     assert result.returncode == 1
     assert "too short" in result.stderr
+
+
+@pytest.mark.parametrize("policy", ["admins", "master", "off"])
+def test_run_hands_the_terminal_switch_to_the_manager_before_it_starts(
+    monkeypatch, tmp_path, policy
+):
+    seen = {}
+
+    def setup(*args, **kwargs):
+        seen["terminal"] = os.environ.get("DBS_MANAGER_TERMINAL")
+        raise cli.CommandFailed("stopped before starting")
+
+    monkeypatch.delenv("DBS_MANAGER_TERMINAL", raising=False)
+    monkeypatch.setattr(cli, "setup_django", setup)
+    args = cli.build_parser().parse_args(
+        ["run", "--no-browser", "--terminal", policy, "--data-dir", str(tmp_path)]
+    )
+
+    with pytest.raises(cli.CommandFailed):
+        cli.command_run(args)
+
+    assert seen["terminal"] == policy
+
+
+def test_run_refuses_an_unknown_terminal_switch(capsys):
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args(["run", "--terminal", "everyone"])
+
+    assert "invalid choice" in capsys.readouterr().err

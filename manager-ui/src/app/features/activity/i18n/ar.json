@@ -134,6 +134,9 @@
       "manager": {
         "export": "تصدير بيانات DBS",
         "import": "استيراد بيانات DBS"
+      },
+      "shell": {
+        "session": "استخدام طرفية"
       }
     }
   }

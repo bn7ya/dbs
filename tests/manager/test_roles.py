@@ -84,6 +84,7 @@ def test_each_role_holds_every_capability_of_the_roles_below_it():
         Capability.ENV_PUSH,
         Capability.FILES_CHANGE,
         Capability.REDEPLOY_RUN,
+        Capability.SHELL_OPEN,
     }
 
 

@@ -23,6 +23,7 @@ from .conf import (
     INSTANCE_LEASE,
     LEASE_SECONDS,
     SETTINGS_MODULE,
+    TERMINAL_ENV,
     TRUSTED_PROXY_ENV,
     is_loopback,
 )
@@ -32,6 +33,7 @@ NAMES = ("django-dbs", "django_dbs", "dbs")
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
 SERVER_THREADS = 16
 ROLES = ("master", "admin", "operator", "viewer")
+TERMINAL_POLICIES = ("admins", "master", "off")
 ASSIGNABLE_ROLES = ("admin", "operator", "viewer")
 
 
@@ -113,6 +115,12 @@ def build_parser():
         action="store_true",
         help="Listen beyond this computer over plain HTTP. Passwords and sessions then "
         "cross the network unencrypted.",
+    )
+    run.add_argument(
+        "--terminal",
+        choices=TERMINAL_POLICIES,
+        help="Who may open a shell on a server from the interface: admins (the "
+        f"default), only the master, or no one. Defaults to ${TERMINAL_ENV}.",
     )
     data_dir_option(run)
     database_option(run)
@@ -730,6 +738,8 @@ def command_run(args):
         [os.environ.get(TRUSTED_PROXY_ENV, "")]
     )
     exposure(args.host, proxies, args.allow_insecure_http)
+    if args.terminal:
+        os.environ[TERMINAL_ENV] = args.terminal
     data_dir = resolve(args)
     setup_django(data_dir, args.database_url, args.host, proxies)
     from dbs import leases
@@ -737,6 +747,7 @@ def command_run(args):
     from .recovery import recover
     from .runner import get_runner
     from .scheduler import Scheduler
+    from .shell.service import stop_terminals
 
     owner = leases.process_owner()
     if not take_instance_lease(owner):
@@ -776,6 +787,7 @@ def command_run(args):
     finally:
         if server is not None:
             server.close()
+        stop_terminals()
         scheduler.stop()
         runner.shutdown(wait=False)
         leases.release(INSTANCE_LEASE, owner)
