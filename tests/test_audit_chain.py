@@ -1,11 +1,13 @@
 """The audit trail: every DBS write recorded, the actor's name kept, and rows chained by hash."""
 
+import errno
 from io import StringIO
 
 import pytest
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import OperationalError
 from django.test import Client
 
 from dbs import audit, jobs
@@ -244,12 +246,32 @@ def test_an_unexpected_failure_in_a_panel_job_is_audited_as_unexpected(
         (CorruptionError("x"), "CorruptionError"),
         (CommandError("x"), "CommandError"),
         (ValueError("x"), "unexpected"),
+        (OSError(errno.ENOSPC, "No space left on device"), "disk_full"),
+        (OSError(errno.EDQUOT, "Disk quota exceeded"), "disk_full"),
+        (PermissionError(errno.EACCES, "Permission denied"), "permission_denied"),
+        (OSError(errno.EROFS, "Read-only file system"), "read_only"),
+        (OSError(errno.EIO, "Input/output error"), "unexpected"),
+        (OperationalError("server closed the connection unexpectedly"), "database_failed"),
         (KeyboardInterrupt(), "interrupted"),
         (jobs.Busy("x"), "busy"),
     ],
 )
 def test_error_codes_name_what_failed(exc, code):
     assert audit.error_code_for(exc) == code
+
+
+def test_a_command_error_carries_the_code_of_a_full_disk_but_not_of_any_os_error():
+    def wrapped(cause):
+        try:
+            try:
+                raise cause
+            except OSError as found:
+                raise CommandError("Cannot write") from found
+        except CommandError as exc:
+            return audit.error_code_for(exc)
+
+    assert wrapped(OSError(errno.ENOSPC, "No space left on device")) == "disk_full"
+    assert wrapped(OSError(errno.EIO, "Input/output error")) == "CommandError"
 
 
 def test_a_command_error_carries_the_code_of_its_cause():

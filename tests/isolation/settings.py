@@ -25,3 +25,6 @@ else:
     DATABASES["default"]["NAME"] = DATABASES["default"]["TEST"]["NAME"]
 
 DBS_JOB_PROCESS = True
+
+if os.environ.get("DBS_ISOLATION_BACKUP_DIR"):
+    DBS_BACKUP_DIR = os.environ["DBS_ISOLATION_BACKUP_DIR"]
