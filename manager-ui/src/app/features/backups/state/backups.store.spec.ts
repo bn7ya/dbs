@@ -693,7 +693,7 @@ describe('BackupsStore', () => {
       expect(store.restoring(FILE)).toBeNull();
       expect(lastToast()).toEqual({
         severity: 'danger',
-        summary: 'django-dbs on the server is too old for this. Upgrade it to the version this manager runs.',
+        summary: 'django-dbs in this application is too old for this. Upgrade it to the version this manager runs.',
         detail: `⁨${FILE.name}⁩`,
       });
     });

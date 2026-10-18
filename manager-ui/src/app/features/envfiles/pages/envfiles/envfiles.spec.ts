@@ -230,7 +230,7 @@ describe('EnvfilesPage', () => {
   it('keeps the versions of an application whose .env file is no longer set, with nothing to pull or push', async () => {
     await showWith(pageOf([VERSION]), '');
 
-    expect(element().querySelector('app-notice')?.textContent).toContain('This server has no .env file set.');
+    expect(element().querySelector('app-notice')?.textContent).toContain('This application has no .env file set.');
     expect(rows()).toHaveLength(1);
     expect(buttonNamed('Pull now')).toBeUndefined();
     expect(buttonNamed('Push this version to the application')).toBeUndefined();

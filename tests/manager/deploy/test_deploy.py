@@ -211,7 +211,6 @@ def test_restoring_the_safety_backup_after_a_failed_deploy_leaves_the_env_alone(
     assert job["status"] == "succeeded", job
     assert statuses(job) == [
         ("check", "succeeded"),
-        ("env", "skipped"),
         ("restore", "succeeded"),
     ]
     [restore] = deployable["sent"]["restores"]
@@ -345,3 +344,21 @@ def test_steps_that_no_longer_fit_the_application_stop_the_deploy_before_it_star
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {"steps.0": ["project_dir_required"]}
+
+
+@pytest.mark.django_db
+def test_putting_back_a_deploy_plans_only_the_check_and_the_restore(
+    api, deployable, run_jobs
+):
+    deployable["hosts"].answer(TARGET, MIGRATE, (1, "", "relation exists"))
+    failed = deployed(api, deployable, run_jobs)
+
+    with run_jobs():
+        response = api.post(
+            f"/api/redeploy/{failed['id']}/revert/", {"rehearsal": True}, format="json"
+        )
+
+    assert statuses(job_of(api, response)) == [
+        ("check", "succeeded"),
+        ("restore", "succeeded"),
+    ]

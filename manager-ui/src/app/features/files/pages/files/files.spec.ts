@@ -273,7 +273,7 @@ describe('FilesPage', () => {
     harness.detectChanges();
 
     expect(element().querySelector('app-notice')?.textContent).toContain(
-      "This path is outside the server's allowed folders.",
+      "This path is outside the application's allowed folders.",
     );
     // A refusal about the path, not a lost session: the reader stays on the page.
     expect(TestBed.inject(Router).url).toBe(`/applications/${APPLICATION_ID}/files?path=%2Fetc`);

@@ -211,7 +211,6 @@
     }
   },
   "errors": {
-    "passphrase_missing": "The backup passphrase of this application is not saved here.",
     "confirm_name_mismatch": "Type the application's name exactly as shown.",
     "same_application": "Choose an application other than this one.",
     "target_not_ready": "django-dbs is not installed, or the project is not ready, in the application being changed.",

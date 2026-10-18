@@ -14,7 +14,7 @@ from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.services import ApplicationService
-from dbs.manager.backups.exceptions import BackupMissing
+from dbs.manager.backups.exceptions import BackupMissing, BackupQuarantined
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
@@ -68,6 +68,7 @@ MOVE_REHEARSAL_STEPS = ("check", "source_backup", "safety_backup", "restore")
 CHANGING_STEPS = ("env", "migrate", "restore", "final_check")
 REVERT_STEPS = ("check", "env", "restore")
 REVERT_REHEARSAL_STEPS = ("check", "restore")
+DEPLOY_REVERT_STEPS = ("check", "restore")
 PENDING = "pending"
 RUNNING = "running"
 SUCCEEDED = "succeeded"
@@ -184,9 +185,10 @@ class RedeployService:
             "backup": move.data.get("safety_backup"),
             "rehearsal": rehearsal,
         }
-        runs = REVERT_REHEARSAL_STEPS if rehearsal else REVERT_STEPS
+        planned = REVERT_STEPS if move.action == RUN else DEPLOY_REVERT_STEPS
+        runs = REVERT_REHEARSAL_STEPS if rehearsal else planned
         detail["steps"] = _planned(
-            REVERT_STEPS, [step for step in runs if _has_material(step, detail)]
+            planned, [step for step in runs if _has_material(step, detail)]
         )
         if not rehearsal:
             self._confirm(REVERT, target, detail, password, confirm_name)
@@ -509,6 +511,8 @@ class RedeployService:
             or file.removed_at is not None
         ):
             raise _not_found("backup")
+        if file.validation == BackupFile.Validation.FAILED:
+            raise BackupQuarantined(output=file.failure, backup=str(file.pk))
         return str(file.pk)
 
     def _source_version(self, version_id: UUID, source: Application) -> None:

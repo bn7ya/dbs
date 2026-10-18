@@ -754,6 +754,20 @@ def test_files_must_belong_to_the_source(api, world, admin):
 
 
 @pytest.mark.django_db
+def test_a_quarantined_backup_is_never_moved(api, world):
+    BackupFileRepository().update(
+        world["backup"],
+        validation=BackupFile.Validation.FAILED,
+        failure="Copy 1 and copy 2 differ.",
+    )
+
+    response = api.post(REDEPLOY, body(world), format="json")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "backup_quarantined"
+
+
+@pytest.mark.django_db
 def test_a_new_application_without_an_env_path_cannot_take_a_env(api, world):
     ApplicationRepository().update(world["target"], env_path="")
 
