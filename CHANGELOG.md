@@ -6,6 +6,132 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - Unreleased
+
+A server and the Django projects on it are now separate things: the DBS manager adds a server
+by its SSH address, then finds each application on it from a folder, on the server itself, in
+a Compose service or in a container, under Docker or Podman. It backs them up, schedules and
+reschedules them, deploys them in place or moves them, keeps their backups on the manager's
+own machine and restores them, all without SSH or the Django admin, and offers a console and
+a terminal in the browser. Panel backups and restores leave the web process for a limited
+child process, large tables are read in pages, a 100 MB row costs about three times its size,
+and a stream whose connection broke resumes where it stopped. `pip install django-dbs`
+installs everything, and the manager answers to `django-dbs`, `django_dbs` and `dbs`.
+
+### Added
+
+- **Applications.** A server holds its address, pinned host key, sealed credentials and the
+  container engines it has; an application is one Django project on it, with where it runs
+  (`kind`: host, compose or container; `engine`: docker or podman), its paths inside and on
+  the host, its mounts, its `.env` and where that file lives. Backups, plans, `.env`
+  versions, files, deploys and moves belong to an application, so one server runs several.
+  `/api/applications/`, the terminal's `app` area and the MCP tools follow the split.
+- **Discovery from a folder.** Given a server and a folder, the manager lists the folder,
+  asks Docker and Podman which containers belong to it (Compose labels, working folder, bind
+  mounts), joins replicas, finds each container's Python and `manage.py`, asks django-dbs
+  for its settings, maps container paths to host paths through the mounts and offers the
+  `.env` files Compose and django-dbs name, best candidate first. Nothing runs in a folder,
+  or a project below it, that another account can write to.
+- **Docker and Podman.** Every command in a container goes through the engine; a restore
+  streams the backup into the container over standard input as the container's own user, a
+  `.env` kept in the image is read and replaced in place, and stale partials and restore
+  leftovers are swept inside the container. The check reports each engine, its Compose and
+  whether the SSH user may use it (`engine_permission_denied`).
+- **Scheduling.** A plan has a first run and an IANA time zone; daily and weekly plans keep
+  their local time across daylight saving. Plans can be rescheduled (later runs follow from
+  the new time), paused and resumed (at the next beat after now, with no catch-up) from the
+  interface, the API (`…/reschedule/`, `…/pause/`, `…/resume/`) and the terminal.
+- **Deploy in place.** An application keeps up to twelve deploy steps from a fixed catalogue:
+  `git_pull` (fast-forward only), `compose_pull`, `compose_build`, `compose_up`, `restart`,
+  `systemd_user_restart`, `pip_install`, `migrate` and `collectstatic`, each a fixed argument
+  list with validated names and its own time limit. A deploy checks the application, takes a
+  safety backup, records its `.env`, runs the steps and checks it again (`manage.py check`,
+  `migrate --check`), recording the git HEAD and image before and after. Its rehearsal only
+  reads. One that stopped after a step ran offers its safety backup back.
+- **A console** at `/console` and `POST /api/console/` runs one `django_dbs` command line as
+  the signed-in account, without the commands that read the manager's own disk or stdin.
+- **A terminal.** An admin opens a shell on a server, or inside an application's container
+  or folder, from the browser, with the account password every time. It closes on sign-out,
+  a password or role change, 15 minutes without input, a minute without a poll or two hours
+  in all; at most four run at once, two per account. The audit row records where, how long
+  and the bytes each way, never what was typed or shown. `django_dbs run --terminal` (or
+  `DBS_MANAGER_TERMINAL`) narrows it to the master or switches it off.
+- **Every backup in one place.** `/backups` lists every application's backups beside the
+  storage each uses.
+- **Resumed transfers.** A 0.8 server names the backup it is writing and reports progress
+  every 30 seconds; when the connection breaks, the manager reconnects after 5, 15 and 45
+  seconds, waits while the server finishes, pulls only the rest and checks the whole digest
+  before it decrypts to verify. A stream stops early only when nothing arrives for 15
+  minutes; a backup has a day in all.
+- **Panel jobs in their own process.** Panel backups, restores and scheduled runs run in
+  `python -m dbs.job_process`, which reads its spec and passphrase from standard input,
+  lowers its priority (`DBS_JOB_NICE`) and stops at `DBS_JOB_TIME_LIMIT` (6 hours) or
+  `DBS_JOB_MEMORY_LIMIT` (2 GiB). A child that dies fails its job as killed and frees its
+  leases. `DBS_JOB_PROCESS = False` keeps jobs in the web process; `DBS_JOB_PYTHON` and
+  `DBS_JOB_BOOTSTRAP` cover servers whose interpreter or setup differs.
+- **`dbs backup --stream --progress-seconds N`** names the backup on standard error at once
+  and reports the bytes written; `dbs connection --json` says whether the project runs in a
+  container; `dbs health --json` carries the panel's schedule; `dbs validate
+  --passphrase-stdin`.
+- **Failure codes.** A backup that fails for lack of space, a refused folder or a lost
+  database records `disk_full`, `permission_denied`, `read_only` or `database_failed`.
+- **Upgrade steps.** `ContribViewsRemoved`, `CommandNames`, `LegacyPartials`,
+  `SSHTargetKeys`, `RetiredExtras`, `PanelJobProcess`, `MySQLReads` and `SQLiteWrites`.
+- **Test suites** for 1,000 tables and a million rows, 100 MB rows, failing backups in real
+  child processes, a Django site under load during a backup (with a published report),
+  several instances of one project, two hundred applications in one manager, Docker and
+  rootless Podman Compose projects over OpenSSH, and an upgrade from 0.7.0.
+
+### Changed
+
+- **`pip install django-dbs` installs everything DBS uses**: scikit-learn for the guard,
+  paramiko for SSH, and djangorestframework, waitress and keyring for the manager. The
+  `guard`, `manager`, `ssh` and `all` extras remain as empty names for this release. The
+  core still imports none of them outside `dbs/security`, `dbs/transports` and
+  `dbs/manager`.
+- **Three command names.** `django-dbs`, `django_dbs` and `dbs` all start the manager's
+  command line, and `manage.py dbs`, `manage.py django_dbs` and `manage.py django-dbs` are
+  the same command.
+- **Large tables and large values.** Rows are read in pages keyed on the primary key, so
+  MySQL no longer buffers a whole table; models with binary, text or JSON fields start with
+  one-row pages and grow from the measured row size; values of 1 MiB or more are spliced
+  into the frame without copies. A 100 MB row costs about 3 times its size to back up and
+  restore, down from 5 to 6.5.
+- **MySQL reads one snapshot.** A backup opens `REPEATABLE READ` with a consistent snapshot,
+  so every page sees the same moment.
+- **The interface** is rebuilt around servers and applications, blue, light and minimal.
+- **The manager's SQLite** starts write transactions immediately on Django 5.1 or later, so
+  concurrent jobs no longer fail with "database is locked".
+- **Remote django-dbs** must be 0.7.0 or newer; health always runs.
+- The manager serves on 16 threads.
+
+### Removed
+
+- **`dbs.contrib`**, the original in-request backup and restore views.
+- The `dbs-upgrade` command alias and the hyphen-alias shim; `SSHTarget.from_dict` no
+  longer reads `user` and `key_file`; the sweep of pre-0.7 `.part` files; the
+  `HiddenRows` upgrade step; `retention.prune_directory`, `prune_remote` and
+  `stale_backups`; the format 1 writers (format 1 backups still restore, validate and
+  convert).
+- The connection snippet in the manager's wizard: give it the SSH address and the folder.
+
+### Fixed
+
+- A podman-compose project read as stopped, and its backups as failed, because the manager
+  asked Compose for flags podman-compose lacks and read the last line of its output.
+- A move could restore a backup that failed verification; it now refuses with
+  `backup_quarantined`.
+- `dbs validate` with a wrong passphrase ended in a traceback.
+
+### Security
+
+- The terminal is admin only, asks the account password for every shell, closes on
+  sign-out, a password or role change, and records no keystroke or output. The MCP server
+  and the console never reach it.
+- Deploy steps are fixed argument lists from a catalogue; no command line or argument list
+  is taken from a request.
+- The panel's invariant stays: it runs no remote command and keeps no SSH credential.
+
 ## [0.7.0] - 2026-10-13
 
 Backups now stream: a multi-threaded engine writes container format 2 with flat memory
