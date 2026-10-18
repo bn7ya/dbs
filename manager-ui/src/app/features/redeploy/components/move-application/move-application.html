@@ -1,0 +1,107 @@
+<mat-card appearance="outlined">
+  <mat-card-content class="move">
+    <header class="move__header">
+      <h2>{{ 'redeploy.move.title' | t }}</h2>
+      <p class="text-secondary">{{ 'redeploy.move.body' | t }}</p>
+      <app-notice severity="info">{{ 'redeploy.move.needsCode' | t }}</app-notice>
+      <p class="text-sm text-secondary">{{ 'redeploy.move.how' | t }}</p>
+    </header>
+
+    @if (loadError(); as failure) {
+      <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+      <div>
+        <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+      </div>
+    } @else {
+      <div [attr.aria-busy]="loading()">
+        <app-confirmed-run
+          prefix="redeploy.move.run"
+          [expectedName]="targetName()"
+          [ready]="target() !== null"
+          [busy]="moving.busy()"
+          [rehearsing]="moving.rehearsal()"
+          [error]="moving.error()"
+          (attempted)="onAttempt()"
+          (run)="move($event)"
+          (edited)="clearError()"
+        >
+          <div class="move__target">
+            <mat-form-field class="move__grow">
+              <mat-label>{{ 'redeploy.move.target' | t }}</mat-label>
+              <mat-select
+                name="target"
+                [appFieldError]="targetMissing() ? ('redeploy.move.targetRequired' | t) : ''"
+                [ngModel]="target()"
+                (ngModelChange)="target.set($event)"
+              >
+                @for (option of targets(); track option.id) {
+                  <mat-option [value]="option.id">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+              @if (targetMissing()) {
+                <mat-error>{{ 'redeploy.move.targetRequired' | t }}</mat-error>
+              }
+            </mat-form-field>
+            <a matButton routerLink="/servers">{{ 'redeploy.move.addTarget' | t }}</a>
+          </div>
+
+          <mat-form-field>
+            <mat-label>{{ 'redeploy.move.backup' | t }}</mat-label>
+            <mat-select name="backup" [canSelectNullableOptions]="true" [ngModel]="backup()" (ngModelChange)="backup.set($event)">
+              <mat-option [value]="null">{{ 'redeploy.move.noBackup' | t }}</mat-option>
+              @for (each of backups(); track each.id) {
+                <mat-option [value]="each.id">
+                  <bdi dir="ltr">{{ each.name }}</bdi> · {{ each.created_at | appDate }}
+                </mat-option>
+              }
+            </mat-select>
+            <mat-hint>{{ 'redeploy.move.backupHint' | t }}</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ 'redeploy.move.env' | t }}</mat-label>
+            <mat-select
+              name="env_version"
+              [canSelectNullableOptions]="true"
+              [ngModel]="envVersion()"
+              (ngModelChange)="envVersion.set($event)"
+            >
+              <mat-option [value]="null">{{ 'redeploy.move.noEnv' | t }}</mat-option>
+              @for (version of envVersions(); track version.id) {
+                <mat-option [value]="version.id">{{ version.created_at | appDate }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-checkbox name="flush" [ngModel]="flush()" (ngModelChange)="flush.set($event)">
+            {{ 'redeploy.move.flush' | t }}
+          </mat-checkbox>
+        </app-confirmed-run>
+      </div>
+    }
+
+    @if (moving.job(); as job) {
+      <app-job-progress [job]="job" prefix="redeploy.move.progress" labels="redeploy.move.steps">
+        @if (job.status === 'succeeded' && outcome().usedChosenBackup) {
+          <app-notice severity="warning">{{ 'redeploy.move.progress.chosenBackup' | t }}</app-notice>
+        }
+        @if (job.status === 'succeeded' && outcome().sourceSilent) {
+          <app-notice severity="warning">{{ 'redeploy.move.progress.sourceSilent' | t }}</app-notice>
+        }
+      </app-job-progress>
+
+      @if (outcome().revertable) {
+        <app-revert-panel
+          prefix="redeploy.move.revert"
+          [expectedName]="movedToName()"
+          [busy]="reverting.busy()"
+          [rehearsing]="reverting.rehearsal()"
+          [error]="reverting.error()"
+          [job]="reverting.job()"
+          (run)="revert($event)"
+          (edited)="clearRevertError()"
+        />
+      }
+    }
+  </mat-card-content>
+</mat-card>

@@ -1,0 +1,114 @@
+<mat-card appearance="outlined">
+  <mat-card-content class="deploy">
+    <header class="deploy__header">
+      <div class="deploy__intro">
+        <h2>{{ 'redeploy.deploy.title' | t }}</h2>
+        <p class="text-secondary">{{ 'redeploy.deploy.body' | t }}</p>
+      </div>
+      @if (savedSteps().length > 0 && !editing()) {
+        <button *appCan="'applications.manage'" matButton="outlined" type="button" (click)="edit()">
+          {{ 'redeploy.deploy.edit' | t }}
+        </button>
+      }
+    </header>
+
+    @if (loadError(); as failure) {
+      <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+      <div>
+        <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+      </div>
+    } @else if (application(); as current) {
+      @if (editing()) {
+        <app-deploy-steps-editor [application]="current" (closed)="closeEditor()" />
+      } @else if (savedSteps().length === 0) {
+        <app-empty-state
+          icon="fa-solid fa-list-check"
+          [headingLevel]="3"
+          [title]="'redeploy.deploy.empty.title' | t"
+          [description]="'redeploy.deploy.empty.body' | t"
+        >
+          <button *appCan="'applications.manage'" matButton="outlined" type="button" (click)="edit()">
+            {{ 'redeploy.deploy.choose' | t }}
+          </button>
+        </app-empty-state>
+      } @else {
+        <ol class="deploy__steps" role="list" [attr.aria-label]="'redeploy.deploy.list.label' | t">
+          @for (row of savedSteps(); track row.position) {
+            <li class="deploy__step">
+              <span class="deploy__position" aria-hidden="true">{{ row.position }}</span>
+              <div class="deploy__stack">
+                <span class="text-label">{{ row.label }}</span>
+                @for (detail of row.details; track $index) {
+                  <span class="text-sm text-secondary">{{ detail }}</span>
+                }
+                @for (problem of row.problems; track problem) {
+                  <app-notice severity="warning">{{ problem }}</app-notice>
+                }
+              </div>
+            </li>
+          }
+        </ol>
+
+        <p class="text-sm text-secondary">{{ 'redeploy.deploy.how' | t }}</p>
+
+        @if (stepsInvalid()) {
+          <app-notice severity="warning">{{ 'redeploy.deploy.stepsInvalid' | t }}</app-notice>
+        }
+
+        <app-confirmed-run
+          primary
+          prefix="redeploy.deploy.run"
+          [expectedName]="current.name"
+          [busy]="deploying.busy()"
+          [rehearsing]="deploying.rehearsal()"
+          [error]="runError()"
+          (run)="deploy($event)"
+          (edited)="clearRunError()"
+        >
+          <p class="text-sm text-secondary">{{ 'redeploy.deploy.rehearsalHow' | t }}</p>
+        </app-confirmed-run>
+      }
+
+      @if (deploying.job(); as job) {
+        <app-job-progress [job]="job" prefix="redeploy.deploy.progress" labels="redeploy.deploy.steps">
+          @if (revisions().length > 0) {
+            <dl class="deploy__revisions">
+              @for (row of revisions(); track row.kind) {
+                <div class="deploy__revision">
+                  <dt class="text-label text-secondary">{{ 'redeploy.deploy.revisions.' + row.kind | t }}</dt>
+                  <dd class="deploy__pair">
+                    <span class="text-sm text-secondary">{{ 'redeploy.deploy.revisions.before' | t }}</span>
+                    <bdi class="deploy__code" dir="ltr">{{ row.before ?? ('redeploy.deploy.revisions.unknown' | t) }}</bdi>
+                  </dd>
+                  <dd class="deploy__pair">
+                    <span class="text-sm text-secondary">{{ 'redeploy.deploy.revisions.after' | t }}</span>
+                    <bdi class="deploy__code" dir="ltr">{{ row.after ?? ('redeploy.deploy.revisions.unknown' | t) }}</bdi>
+                  </dd>
+                </div>
+              }
+            </dl>
+          }
+        </app-job-progress>
+
+        @if (outcome().revertable) {
+          <app-revert-panel
+            prefix="redeploy.deploy.revert"
+            [expectedName]="current.name"
+            [busy]="reverting.busy()"
+            [rehearsing]="reverting.rehearsal()"
+            [error]="reverting.error()"
+            [job]="reverting.job()"
+            (run)="restore($event)"
+            (edited)="clearRevertError()"
+          />
+        }
+      }
+    } @else {
+      <div class="deploy__skeleton" aria-busy="true">
+        <app-skeleton />
+        <app-skeleton />
+        <app-skeleton />
+      </div>
+    }
+  </mat-card-content>
+</mat-card>

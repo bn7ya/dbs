@@ -1,41 +1,5 @@
 {
   "redeploy": {
-    "title": "Move to another server",
-    "body": "Move this project onto a new server. This server is left as it is.",
-    "needsCode": "The new server must already run the project's code with the same environment: its virtual environment, django-dbs and the same settings.",
-    "how": "When this server answers, a fresh backup of it is taken now and restored. The new server's .env file and data are recorded first; then the .env file is pushed, the migrations run, the backup is restored and the new server is checked.",
-    "target": "Move to",
-    "addTarget": "Add a server",
-    "backup": "Backup to restore if this server does not answer",
-    "backupHint": "The newest is chosen. When this server answers, a fresh backup is restored instead.",
-    "noBackup": "None: stop if this server does not answer",
-    "env": ".env version to push",
-    "noEnv": "Do not push a .env file",
-    "flush": "Replace the data on the new server instead of merging",
-    "passwordHint": "Needed to move for real. A rehearsal needs no password.",
-    "confirmName": "Name of the new server",
-    "confirmNameHint": "Type {name} to move for real.",
-    "rehearse": "Rehearse",
-    "move": "Move for real",
-    "progress": {
-      "title": "Moving",
-      "rehearsal": "Rehearsal",
-      "done": "The move finished.",
-      "rehearsed": "The rehearsal finished. Nothing was changed on either server.",
-      "chosenBackup": "This server did not answer, so the chosen backup was restored.",
-      "sourceSilent": "This server did not answer. A move now would restore the chosen backup instead of a fresh one.",
-      "stoppedAt": "The move stopped at: {step}."
-    },
-    "steps": {
-      "check": "Check the new server",
-      "source_backup": "Back up this server now",
-      "record_env": "Record the new server's .env file",
-      "safety_backup": "Back up the new server's data",
-      "env": "Push the .env file",
-      "migrate": "Run the migrations",
-      "restore": "Restore the backup",
-      "final_check": "Check again"
-    },
     "status": {
       "pending": "Waiting",
       "running": "Running",
@@ -43,34 +7,217 @@
       "failed": "Failed",
       "skipped": "Skipped"
     },
-    "revert": {
-      "title": "Revert the new server",
-      "body": "Push the new server's recorded .env file back and restore the backup of its data taken before the move, replacing what the move left there.",
-      "passwordHint": "Needed to revert for real. A rehearsal needs no password.",
-      "confirmNameHint": "Type {name} to revert for real.",
-      "rehearse": "Rehearse the revert",
-      "action": "Revert the new server",
-      "progress": "Reverting",
-      "rehearsal": "Revert rehearsal",
-      "done": "The new server is back as it was before the move.",
-      "rehearsed": "The revert rehearsal finished. Nothing was changed.",
+    "deploy": {
+      "title": "Deploy here",
+      "body": "Update this application where it runs, with the steps it keeps for a deploy.",
+      "edit": "Edit steps",
+      "choose": "Choose the steps",
+      "how": "A deploy checks the application, takes a safety backup and records its .env file, runs these steps in order, then checks the application again. It stops at the first step that fails.",
+      "rehearsalHow": "A rehearsal needs no password and changes nothing. Each step only reads: git fetch --dry-run, compose config, migrate --plan, collectstatic --dry-run.",
+      "stepsInvalid": "A saved step no longer fits this application. Edit the steps, then deploy.",
+      "empty": {
+        "title": "No deploy steps yet",
+        "body": "Choose what a deploy runs here, in order: pull the code, pull or build images, restart, migrate, collect static files."
+      },
+      "list": {
+        "label": "Deploy steps",
+        "timeLimit": "Time limit: {minutes} min",
+        "remoteBranch": "From {remote}, branch {branch}",
+        "branch": "Branch {branch}",
+        "upstream": "The current branch's upstream",
+        "everyService": "Every service",
+        "services": "Services: {services}",
+        "pullBase": "Pulls newer base images",
+        "unit": "Unit {unit}",
+        "requirements": "From {file}"
+      },
       "steps": {
-        "check": "Check the new server",
-        "env": "Push the recorded .env file back",
-        "restore": "Restore the data from before the move"
+        "check": "Check the application",
+        "safety_backup": "Take a safety backup",
+        "record_env": "Record the .env file",
+        "git_pull": "Pull the code (git pull)",
+        "compose_pull": "Pull images (compose pull)",
+        "compose_build": "Build images (compose build)",
+        "compose_up": "Start services (compose up)",
+        "restart": "Restart the container or service",
+        "systemd_user_restart": "Restart a user service (systemctl --user)",
+        "pip_install": "Install requirements (pip install)",
+        "migrate": "Run the migrations",
+        "collectstatic": "Collect static files",
+        "final_check": "Check again"
+      },
+      "run": {
+        "rehearse": "Rehearse",
+        "rehearsing": "Rehearsing…",
+        "run": "Deploy",
+        "running": "Deploying…",
+        "passwordHint": "Needed to deploy for real. A rehearsal needs no password.",
+        "confirmName": "Name of this application",
+        "confirmNameHint": "Type {name} to deploy for real."
+      },
+      "progress": {
+        "title": "Deploying",
+        "rehearsal": "Rehearsal",
+        "done": "The deploy finished.",
+        "rehearsed": "The rehearsal finished. Nothing was changed.",
+        "stoppedAt": "The deploy stopped at: {step}."
+      },
+      "revisions": {
+        "git_head": "Code commit",
+        "image": "Image",
+        "before": "Before",
+        "after": "After",
+        "unknown": "Not read"
+      },
+      "revert": {
+        "title": "Restore the safety backup",
+        "body": "Restore the backup taken before this deploy began. It puts the data back only: the code and the images stay as the deploy left them.",
+        "run": {
+          "rehearse": "Rehearse the restore",
+          "rehearsing": "Rehearsing…",
+          "run": "Restore the safety backup",
+          "running": "Restoring…",
+          "passwordHint": "Needed to restore for real. A rehearsal needs no password.",
+          "confirmName": "Name of this application",
+          "confirmNameHint": "Type {name} to restore for real."
+        },
+        "progress": {
+          "title": "Restoring",
+          "rehearsal": "Restore rehearsal",
+          "done": "The data is back as it was before the deploy. The code and the images are as the deploy left them.",
+          "rehearsed": "The restore rehearsal finished. Nothing was changed.",
+          "stoppedAt": "The restore stopped at: {step}."
+        }
       }
     },
-    "errors": {
-      "targetRequired": "Choose the server to move to."
+    "editor": {
+      "label": "Deploy steps",
+      "none": "No steps. Saving leaves nothing to deploy.",
+      "position": "Step {position}: {step}",
+      "moveUp": "Move step {position} up",
+      "moveDown": "Move step {position} down",
+      "remove": "Remove step {position}",
+      "remote": "Remote",
+      "remoteHint": "Optional, such as origin. Name a branch with it.",
+      "branch": "Branch",
+      "branchHint": "Optional, such as main. Left empty, the current branch's upstream is pulled.",
+      "services": "Services",
+      "servicesHint": "Left empty, every service. Press Enter after each name.",
+      "servicesPlaceholder": "Add a service",
+      "removeService": "Remove {name}",
+      "pull": "Pull newer base images",
+      "unit": "User unit",
+      "unitHint": "A unit that ends in .service, such as app.service.",
+      "requirements": "Requirements file",
+      "requirementsHint": "A file inside the application's folder, such as requirements.txt.",
+      "timeout": "Time limit in minutes",
+      "timeoutHint": "From 1 to 120.",
+      "add": "Add a step",
+      "full": "A deploy runs at most twelve steps.",
+      "folderMissing": "Git pull and pip install need the application's folder. Set it in the application's settings.",
+      "save": "Save steps",
+      "saving": "Saving…",
+      "saved": "Deploy steps saved.",
+      "prompt": {
+        "title": "Save the deploy steps",
+        "body": "Enter your password to save the deploy steps of this application."
+      }
+    },
+    "problems": {
+      "unknown_step": "Choose one of the steps offered here.",
+      "unknown_option": "This step takes no such option.",
+      "invalid_name": "Use letters, digits, dots, dashes, underscores and slashes.",
+      "branch_required": "Name the branch together with its remote.",
+      "invalid_service": "Name Compose services with letters, digits, dots, dashes and underscores.",
+      "invalid_unit": "Name a user unit that ends in .service.",
+      "invalid_requirements": "Name a file inside the application's folder, such as requirements.txt.",
+      "invalid_timeout": "Allow 1 to 120 minutes.",
+      "too_many_steps": "A deploy runs at most twelve steps.",
+      "project_dir_required": "This step runs in the application's folder. Set the folder first.",
+      "compose_required": "This step runs only for an application in a Compose service.",
+      "container_required": "This step restarts a container or a Compose service, and this application runs on the server itself.",
+      "host_required": "This step runs only for an application on the server itself."
+    },
+    "move": {
+      "title": "Move to another application",
+      "body": "Move this project onto another application, on this server or another one. This application is left as it is.",
+      "needsCode": "The new application must already run the project's code with the same environment: its virtual environment or image, django-dbs and the same settings.",
+      "how": "When this application answers, a fresh backup of it is taken now and restored. The new application's .env file and data are recorded first; then the .env file is pushed, the migrations run, the backup is restored and the new application is checked.",
+      "target": "Move to",
+      "targetOption": "{name} on {server}",
+      "targetRequired": "Choose the application to move to.",
+      "addTarget": "Add an application",
+      "backup": "Backup to restore if this application does not answer",
+      "backupHint": "The newest is chosen. When this application answers, a fresh backup is restored instead.",
+      "noBackup": "None: stop if this application does not answer",
+      "env": ".env version to push",
+      "noEnv": "Do not push a .env file",
+      "flush": "Replace the data of the new application instead of merging",
+      "run": {
+        "rehearse": "Rehearse",
+        "rehearsing": "Rehearsing…",
+        "run": "Move for real",
+        "running": "Moving…",
+        "passwordHint": "Needed to move for real. A rehearsal needs no password.",
+        "confirmName": "Name of the new application",
+        "confirmNameHint": "Type {name} to move for real."
+      },
+      "progress": {
+        "title": "Moving",
+        "rehearsal": "Rehearsal",
+        "done": "The move finished.",
+        "rehearsed": "The rehearsal finished. Nothing was changed on either application.",
+        "stoppedAt": "The move stopped at: {step}.",
+        "chosenBackup": "This application did not answer, so the chosen backup was restored.",
+        "sourceSilent": "This application did not answer. A move now would restore the chosen backup instead of a fresh one."
+      },
+      "steps": {
+        "check": "Check the new application",
+        "source_backup": "Back up this application now",
+        "record_env": "Record the new application's .env file",
+        "safety_backup": "Back up the new application's data",
+        "env": "Push the .env file",
+        "migrate": "Run the migrations",
+        "restore": "Restore the backup",
+        "final_check": "Check again"
+      },
+      "revert": {
+        "title": "Revert the new application",
+        "body": "Push the new application's recorded .env file back and restore the backup of its data taken before the move, replacing what the move left there.",
+        "run": {
+          "rehearse": "Rehearse the revert",
+          "rehearsing": "Rehearsing…",
+          "run": "Revert the new application",
+          "running": "Reverting…",
+          "passwordHint": "Needed to revert for real. A rehearsal needs no password.",
+          "confirmName": "Name of the new application",
+          "confirmNameHint": "Type {name} to revert for real."
+        },
+        "progress": {
+          "title": "Reverting",
+          "rehearsal": "Revert rehearsal",
+          "done": "The new application is back as it was before the move.",
+          "rehearsed": "The revert rehearsal finished. Nothing was changed.",
+          "stoppedAt": "The revert stopped at: {step}."
+        }
+      }
+    },
+    "revert": {
+      "steps": {
+        "check": "Check the application",
+        "env": "Push the recorded .env file back",
+        "restore": "Restore the safety backup"
+      }
     }
   },
   "errors": {
-    "passphrase_missing": "The backup passphrase of this server is not saved here.",
-    "confirm_name_mismatch": "Type the new server's name exactly as shown.",
-    "same_server": "Choose a server other than this one.",
-    "target_not_ready": "django-dbs is not installed on the new server, or the project is not ready there.",
-    "source_unreachable": "This server did not answer and no backup of it was chosen.",
-    "no_backup_to_rehearse": "There is no backup of this server here for the rehearsal to restore. Take one first.",
-    "move_not_revertable": "Only a move that stopped after it changed the new server can be reverted."
+    "passphrase_missing": "The backup passphrase of this application is not saved here.",
+    "confirm_name_mismatch": "Type the application's name exactly as shown.",
+    "same_application": "Choose an application other than this one.",
+    "target_not_ready": "django-dbs is not installed, or the project is not ready, in the application being changed.",
+    "source_unreachable": "This application did not answer and no backup of it was chosen.",
+    "no_backup_to_rehearse": "There is no backup of this application here for the rehearsal to restore. Take one first.",
+    "move_not_revertable": "Only a move or a deploy that stopped after it changed the application can be reverted.",
+    "no_deploy_steps": "This application has no deploy steps yet. Choose them first."
   }
 }

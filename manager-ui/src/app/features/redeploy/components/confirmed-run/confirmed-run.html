@@ -1,0 +1,68 @@
+<form class="confirmed-run" novalidate (ngSubmit)="runForReal()">
+  @if (failure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <ng-content />
+
+  <ng-container *appCan="'redeploy.run'">
+    <app-password-input
+      [label]="'password.label' | t"
+      [hint]="prefix() + '.passwordHint' | t"
+      [error]="passwordError()"
+      name="password"
+      autocomplete="current-password"
+      [ngModel]="password()"
+      (ngModelChange)="setPassword($event)"
+    />
+
+    <mat-form-field>
+      <mat-label>{{ prefix() + '.confirmName' | t }}</mat-label>
+      <input
+        matInput
+        name="confirm_name"
+        dir="auto"
+        autocomplete="off"
+        spellcheck="false"
+        [appFieldError]="nameError()"
+        [ngModel]="typedName()"
+        (ngModelChange)="setTypedName($event)"
+      />
+      @if (nameHint(); as hint) {
+        <mat-hint>{{ hint }}</mat-hint>
+      }
+      @if (nameError(); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
+  </ng-container>
+
+  <div class="confirmed-run__actions">
+    <button
+      *appCan="'redeploy.rehearse'"
+      matButton="outlined"
+      type="button"
+      [disabled]="busy()"
+      [attr.aria-busy]="rehearsalBusy()"
+      (click)="rehearse()"
+    >
+      @if (rehearsalBusy()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ prefix() + (rehearsalBusy() ? '.rehearsing' : '.rehearse') | t }}
+    </button>
+    <button
+      *appCan="'redeploy.run'"
+      [matButton]="primary() ? 'filled' : 'outlined'"
+      class="app-danger"
+      type="submit"
+      [disabled]="busy()"
+      [attr.aria-busy]="realBusy()"
+    >
+      @if (realBusy()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ prefix() + (realBusy() ? '.running' : '.run') | t }}
+    </button>
+  </div>
+</form>

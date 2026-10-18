@@ -1,0 +1,25 @@
+<section class="job-progress" aria-live="polite">
+  @if (headingLevel() === 3) {
+    <h3>{{ title() }}</h3>
+  } @else {
+    <h4>{{ title() }}</h4>
+  }
+  <app-steps-list [steps]="steps()" />
+  @if (job().connection; as connection) {
+    <app-job-connection [connection]="connection" />
+  }
+  <ng-content />
+  @switch (job().status) {
+    @case ('succeeded') {
+      <app-notice severity="success">{{ done() }}</app-notice>
+    }
+    @case ('failed') {
+      <app-notice severity="danger">
+        @if (stoppedAt(); as stopped) {
+          {{ stopped }}
+        }
+        {{ job().error_code | errorText }}
+      </app-notice>
+    }
+  }
+</section>

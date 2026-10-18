@@ -4,37 +4,56 @@ import type { Observable } from 'rxjs';
 
 import type { Page } from '@core/http/api.types';
 import type { JobStarted } from '@core/jobs/job.types';
-import {
-  REDEPLOY_LIST_SIZE,
-  type RedeployBackup,
-  type RedeployEnvVersion,
-  type RedeployRequest,
-  type RedeployServer,
-  type RevertRequest,
+import type {
+  DeployApplication,
+  DeployStepsRequest,
+  MoveRequest,
+  RedeployApplication,
+  RedeployBackup,
+  RedeployEnvVersion,
+  RunRequest,
 } from './redeploy.types';
+
+const REDEPLOY_LIST_SIZE = 100;
 
 @Injectable({ providedIn: 'root' })
 export class RedeployApi {
   private readonly http = inject(HttpClient);
 
-  servers(): Observable<Page<RedeployServer>> {
-    return this.http.get<Page<RedeployServer>>('/api/servers/', { params: firstPage() });
+  application(id: string): Observable<DeployApplication> {
+    return this.http.get<DeployApplication>(`/api/applications/${id}/`);
   }
 
-  backups(server: string): Observable<Page<RedeployBackup>> {
-    return this.http.get<Page<RedeployBackup>>('/api/backups/', { params: firstPage().set('server', server) });
+  applications(): Observable<Page<RedeployApplication>> {
+    return this.http.get<Page<RedeployApplication>>('/api/applications/', { params: firstPage() });
   }
 
-  envVersions(server: string): Observable<Page<RedeployEnvVersion>> {
-    return this.http.get<Page<RedeployEnvVersion>>('/api/envfiles/', { params: firstPage().set('server', server) });
+  backups(application: string): Observable<Page<RedeployBackup>> {
+    return this.http.get<Page<RedeployBackup>>('/api/backups/', {
+      params: firstPage().set('application', application),
+    });
   }
 
-  run(request: RedeployRequest): Observable<JobStarted> {
+  envVersions(application: string): Observable<Page<RedeployEnvVersion>> {
+    return this.http.get<Page<RedeployEnvVersion>>('/api/envfiles/', {
+      params: firstPage().set('application', application),
+    });
+  }
+
+  saveSteps(application: string, request: DeployStepsRequest): Observable<DeployApplication> {
+    return this.http.put<DeployApplication>(`/api/applications/${application}/deploy-steps/`, request);
+  }
+
+  deploy(application: string, request: RunRequest): Observable<JobStarted> {
+    return this.http.post<JobStarted>(`/api/applications/${application}/deploy/`, request);
+  }
+
+  move(request: MoveRequest): Observable<JobStarted> {
     return this.http.post<JobStarted>('/api/redeploy/', request);
   }
 
-  revert(move: number, request: RevertRequest): Observable<JobStarted> {
-    return this.http.post<JobStarted>(`/api/redeploy/${move}/revert/`, request);
+  revert(job: number, request: RunRequest): Observable<JobStarted> {
+    return this.http.post<JobStarted>(`/api/redeploy/${job}/revert/`, request);
   }
 }
 

@@ -12,22 +12,11 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
-import { MASTER_ACCOUNT } from '@core/auth/testing/identity.fixtures';
+import { MASTER, OPERATOR } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { redeployGuard } from './redeploy.guard';
 
-const IDENTITY: Identity = {
-  id: 1,
-  username: 'sara',
-  email: 'sara@example.com',
-  first_name: 'Sara',
-  last_name: 'Hassan',
-  is_staff: false,
-  is_superuser: false,
-  groups: [],
-  permissions: [],
-  ...MASTER_ACCOUNT,
-};
+const VIEWER: Identity = { ...OPERATOR, id: 3, username: 'lina', role: 'viewer', capabilities: ['console.run'] };
 
 describe('redeployGuard', () => {
   let http: HttpTestingController;
@@ -37,6 +26,8 @@ describe('redeployGuard', () => {
       () =>
         redeployGuard({} as ActivatedRouteSnapshot, { url } as RouterStateSnapshot) as Promise<GuardResult>,
     );
+
+  const serialized = (result: GuardResult): string => TestBed.inject(Router).serializeUrl(result as UrlTree);
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -54,22 +45,37 @@ describe('redeployGuard', () => {
     TestBed.resetTestingModule();
   });
 
-  it('lets a signed-in user in', async () => {
-    const entering = enter('/servers/abc/move');
-    http.expectOne('/api/auth/me/').flush(IDENTITY);
-
+  it('lets in a role that may rehearse, an operator as well as the master', async () => {
+    const entering = enter('/applications/abc/deploy');
+    http.expectOne('/api/auth/me/').flush(OPERATOR);
     await expect(entering).resolves.toBe(true);
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([errorInterceptor])), provideHttpClientTesting(), provideRouter([])],
+    });
+    http = TestBed.inject(HttpTestingController);
+    const again = enter('/applications/abc/deploy');
+    http.expectOne('/api/auth/me/').flush(MASTER);
+    await expect(again).resolves.toBe(true);
   });
 
-  it('sends a signed-out visitor to sign in, with the way back to the move page', async () => {
-    const entering = enter('/servers/abc/move');
+  it('sends a role that may not even rehearse to the forbidden page', async () => {
+    const entering = enter('/applications/abc/deploy');
+    http.expectOne('/api/auth/me/').flush(VIEWER);
+
+    const result = await entering;
+    expect(result).toBeInstanceOf(UrlTree);
+    expect(serialized(result)).toBe('/forbidden');
+  });
+
+  it('sends a signed-out visitor to sign in, with the way back to the deploy page', async () => {
+    const entering = enter('/applications/abc/deploy');
     http.expectOne('/api/auth/me/').flush(null, { status: 403, statusText: 'Forbidden' });
     (await vi.waitFor(() => http.expectOne('/api/setup/'))).flush({ needed: false });
 
     const result = await entering;
     expect(result).toBeInstanceOf(UrlTree);
-    expect(TestBed.inject(Router).serializeUrl(result as UrlTree)).toBe(
-      '/sign-in?next=%2Fservers%2Fabc%2Fmove',
-    );
+    expect(serialized(result)).toBe('/sign-in?next=%2Fapplications%2Fabc%2Fdeploy');
   });
 });

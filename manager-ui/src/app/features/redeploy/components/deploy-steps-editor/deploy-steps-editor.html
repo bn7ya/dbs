@@ -1,0 +1,230 @@
+<form class="editor" novalidate (ngSubmit)="save()">
+  @for (message of listMessages(); track message) {
+    <app-notice severity="danger">{{ message }}</app-notice>
+  }
+
+  @if (rows().length === 0) {
+    <p class="text-secondary">{{ 'redeploy.editor.none' | t }}</p>
+  } @else {
+    <ol class="editor__steps" role="list" [attr.aria-label]="'redeploy.editor.label' | t">
+      @for (row of rows(); track row.draft.key; let index = $index) {
+        <li class="editor__step">
+          <div class="editor__step-header">
+            <span class="text-label">
+              {{ 'redeploy.editor.position' | t: { position: row.position, step: ('redeploy.deploy.steps.' + row.draft.kind | t) } }}
+            </span>
+            <div class="editor__step-actions">
+              <button
+                matIconButton
+                type="button"
+                disabledInteractive
+                [disabled]="row.first"
+                [attr.aria-label]="'redeploy.editor.moveUp' | t: { position: row.position }"
+                (click)="moveUp(index)"
+              >
+                <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+              </button>
+              <button
+                matIconButton
+                type="button"
+                disabledInteractive
+                [disabled]="row.last"
+                [attr.aria-label]="'redeploy.editor.moveDown' | t: { position: row.position }"
+                (click)="moveDown(index)"
+              >
+                <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+              </button>
+              <button
+                matIconButton
+                type="button"
+                [attr.aria-label]="'redeploy.editor.remove' | t: { position: row.position }"
+                (click)="remove(index)"
+              >
+                <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          @for (message of row.messages; track message) {
+            <app-notice severity="danger">{{ message }}</app-notice>
+          }
+
+          <div class="editor__fields">
+            @if (row.draft.kind === 'git_pull') {
+              @let remoteError = row.fields.remote ? ('redeploy.problems.' + row.fields.remote | t) : '';
+              <mat-form-field>
+                <mat-label>{{ 'redeploy.editor.remote' | t }}</mat-label>
+                <input
+                  matInput
+                  [name]="'remote-' + row.draft.key"
+                  dir="ltr"
+                  autocomplete="off"
+                  spellcheck="false"
+                  [appFieldError]="remoteError"
+                  [ngModel]="row.draft.remote"
+                  (ngModelChange)="update(index, { remote: $event })"
+                />
+                <mat-hint>{{ 'redeploy.editor.remoteHint' | t }}</mat-hint>
+                @if (remoteError) {
+                  <mat-error>{{ remoteError }}</mat-error>
+                }
+              </mat-form-field>
+
+              @let branchError = row.fields.branch ? ('redeploy.problems.' + row.fields.branch | t) : '';
+              <mat-form-field>
+                <mat-label>{{ 'redeploy.editor.branch' | t }}</mat-label>
+                <input
+                  matInput
+                  [name]="'branch-' + row.draft.key"
+                  dir="ltr"
+                  autocomplete="off"
+                  spellcheck="false"
+                  [appFieldError]="branchError"
+                  [ngModel]="row.draft.branch"
+                  (ngModelChange)="update(index, { branch: $event })"
+                />
+                <mat-hint>{{ 'redeploy.editor.branchHint' | t }}</mat-hint>
+                @if (branchError) {
+                  <mat-error>{{ branchError }}</mat-error>
+                }
+              </mat-form-field>
+            }
+
+            @if (row.services) {
+              @let servicesError = row.fields.services ? ('redeploy.problems.' + row.fields.services | t) : '';
+              <mat-form-field class="editor__wide">
+                <mat-label>{{ 'redeploy.editor.services' | t }}</mat-label>
+                <mat-chip-grid #services [appFieldError]="servicesError" [attr.aria-label]="'redeploy.editor.services' | t">
+                  @for (service of row.draft.services; track service) {
+                    <mat-chip-row (removed)="removeService(index, service)">
+                      <bdi dir="ltr">{{ service }}</bdi>
+                      <button matChipRemove type="button" [attr.aria-label]="'redeploy.editor.removeService' | t: { name: service }">
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                      </button>
+                    </mat-chip-row>
+                  }
+                  <input
+                    [name]="'services-' + row.draft.key"
+                    dir="ltr"
+                    autocomplete="off"
+                    spellcheck="false"
+                    [placeholder]="'redeploy.editor.servicesPlaceholder' | t"
+                    [matChipInputFor]="services"
+                    [matChipInputSeparatorKeyCodes]="separators"
+                    [matChipInputAddOnBlur]="true"
+                    (matChipInputTokenEnd)="addService(index, $event)"
+                  />
+                </mat-chip-grid>
+                <mat-hint>{{ 'redeploy.editor.servicesHint' | t }}</mat-hint>
+                @if (servicesError) {
+                  <mat-error>{{ servicesError }}</mat-error>
+                }
+              </mat-form-field>
+            }
+
+            @if (row.draft.kind === 'compose_build') {
+              <mat-checkbox
+                class="editor__wide"
+                [name]="'pull-' + row.draft.key"
+                [ngModel]="row.draft.pull"
+                (ngModelChange)="update(index, { pull: $event })"
+              >
+                {{ 'redeploy.editor.pull' | t }}
+              </mat-checkbox>
+            }
+
+            @if (row.draft.kind === 'systemd_user_restart') {
+              @let unitError = row.fields.unit ? ('redeploy.problems.' + row.fields.unit | t) : '';
+              <mat-form-field>
+                <mat-label>{{ 'redeploy.editor.unit' | t }}</mat-label>
+                <input
+                  matInput
+                  [name]="'unit-' + row.draft.key"
+                  dir="ltr"
+                  autocomplete="off"
+                  spellcheck="false"
+                  [appFieldError]="unitError"
+                  [ngModel]="row.draft.unit"
+                  (ngModelChange)="update(index, { unit: $event })"
+                />
+                <mat-hint>{{ 'redeploy.editor.unitHint' | t }}</mat-hint>
+                @if (unitError) {
+                  <mat-error>{{ unitError }}</mat-error>
+                }
+              </mat-form-field>
+            }
+
+            @if (row.draft.kind === 'pip_install') {
+              @let requirementsError = row.fields.requirements ? ('redeploy.problems.' + row.fields.requirements | t) : '';
+              <mat-form-field>
+                <mat-label>{{ 'redeploy.editor.requirements' | t }}</mat-label>
+                <input
+                  matInput
+                  [name]="'requirements-' + row.draft.key"
+                  dir="ltr"
+                  autocomplete="off"
+                  spellcheck="false"
+                  [appFieldError]="requirementsError"
+                  [ngModel]="row.draft.requirements"
+                  (ngModelChange)="update(index, { requirements: $event })"
+                />
+                <mat-hint>{{ 'redeploy.editor.requirementsHint' | t }}</mat-hint>
+                @if (requirementsError) {
+                  <mat-error>{{ requirementsError }}</mat-error>
+                }
+              </mat-form-field>
+            }
+
+            @let timeoutError = row.fields.timeout ? ('redeploy.problems.' + row.fields.timeout | t) : '';
+            <mat-form-field class="editor__timeout">
+              <mat-label>{{ 'redeploy.editor.timeout' | t }}</mat-label>
+              <input
+                matInput
+                type="number"
+                inputmode="numeric"
+                step="1"
+                [min]="timeoutMin"
+                [max]="timeoutMax"
+                [name]="'timeout-' + row.draft.key"
+                [appFieldError]="timeoutError"
+                [ngModel]="row.draft.timeout"
+                (ngModelChange)="update(index, { timeout: $event })"
+              />
+              <mat-hint>{{ 'redeploy.editor.timeoutHint' | t }}</mat-hint>
+              @if (timeoutError) {
+                <mat-error>{{ timeoutError }}</mat-error>
+              }
+            </mat-form-field>
+          </div>
+        </li>
+      }
+    </ol>
+  }
+
+  <div class="editor__add">
+    <button matButton="tonal" type="button" [disabled]="full()" [matMenuTriggerFor]="kindMenu">
+      <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
+      {{ 'redeploy.editor.add' | t }}
+    </button>
+    <mat-menu #kindMenu="matMenu">
+      @for (kind of kinds(); track kind) {
+        <button mat-menu-item type="button" (click)="add(kind)">{{ 'redeploy.deploy.steps.' + kind | t }}</button>
+      }
+    </mat-menu>
+    @if (full()) {
+      <p class="text-sm text-secondary">{{ 'redeploy.editor.full' | t }}</p>
+    } @else if (folderMissing()) {
+      <p class="text-sm text-secondary">{{ 'redeploy.editor.folderMissing' | t }}</p>
+    }
+  </div>
+
+  <div class="editor__actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="saving()" [attr.aria-busy]="saving()">
+      @if (saving()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (saving() ? 'redeploy.editor.saving' : 'redeploy.editor.save') | t }}
+    </button>
+  </div>
+</form>

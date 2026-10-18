@@ -1,0 +1,24 @@
+@use "layout" as *;
+
+.move {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.move__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.move__target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  align-items: center;
+}
+
+.move__grow {
+  flex: 1 1 calc($card-max / 2);
+}

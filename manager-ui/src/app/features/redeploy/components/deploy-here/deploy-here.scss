@@ -1,0 +1,81 @@
+@use "layout" as *;
+
+.deploy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.deploy__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+.deploy__intro,
+.deploy__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.deploy__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding: 0;
+  margin: 0;
+}
+
+.deploy__step {
+  display: flex;
+  gap: var(--app-space-3);
+  align-items: baseline;
+  padding-block: var(--app-space-2);
+  border-block-end: var(--app-border-width) solid var(--app-color-outline);
+}
+
+.deploy__position {
+  flex: none;
+  min-inline-size: var(--app-space-5);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-color-on-surface-variant);
+}
+
+.deploy__stack {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.deploy__revisions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(#{$card-max * 0.5}, 100%), 1fr));
+  gap: var(--app-space-3) var(--app-space-6);
+  margin: 0;
+}
+
+.deploy__revision {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.deploy__pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  align-items: baseline;
+  margin: 0;
+}
+
+// A commit or an image id is code: one family, and a long one wraps rather than widen the card.
+.deploy__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}
