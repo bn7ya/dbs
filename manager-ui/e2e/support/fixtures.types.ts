@@ -5,8 +5,8 @@ export interface Journey {
   lang: Lang;
   dir: 'ltr' | 'rtl';
   t: (key: CopyKey) => string;
-  named: (action: CopyKey, target: string, suffix?: CopyKey) => string;
-  unique: (what: string) => string;
+  say: (key: CopyKey, values: Record<string, string>) => string;
+  matching: (key: CopyKey, name: string) => RegExp;
   signIn: (page: Page, user?: { username: string; password: string }) => Promise<void>;
   shot: (page: Page, name: string) => Promise<void>;
   toast: (page: Page, key: CopyKey) => Locator;

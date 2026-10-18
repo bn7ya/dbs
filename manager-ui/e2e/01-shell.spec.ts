@@ -40,10 +40,11 @@ test.describe('the shell', () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(journey.t('dashboardTitle'));
     await expect(page.getByRole('banner')).toContainText(ADMIN.username);
-    const nav = page.getByRole('navigation', { name: /.+/ }).first();
-    await expect(nav.getByRole('link', { name: journey.t('navDashboard') })).toBeVisible();
-    await expect(nav.getByRole('link', { name: journey.t('navServers') })).toBeVisible();
-    await expect(nav.getByRole('link', { name: journey.t('navActivity') })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: journey.t('navMain') });
+    const sections = ['navDashboard', 'navServers', 'navApplications', 'navBackups', 'navConsole', 'navActivity'] as const;
+    for (const section of sections) {
+      await expect(nav.getByRole('link', { name: journey.t(section) })).toBeVisible();
+    }
     await journey.shot(page, 'dashboard');
   });
 
@@ -103,15 +104,16 @@ test.describe('the shell', () => {
     await expect(page.getByRole('link', { name: journey.t('skipToContent') })).toBeFocused();
 
     // The main navigation is a few stops in; every stop must be a named control.
-    const dashboard = page.getByRole('link', { name: journey.t('navDashboard') });
+    const nav = page.getByRole('navigation', { name: journey.t('navMain') });
+    const dashboard = nav.getByRole('link', { name: journey.t('navDashboard') });
     for (let stop = 0; stop < 8 && !(await dashboard.evaluate((el) => el === document.activeElement)); stop += 1) {
       await page.keyboard.press('Tab');
     }
     await expect(dashboard).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: journey.t('navServers') })).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(page.getByRole('link', { name: journey.t('navActivity') })).toBeFocused();
+    for (const section of ['navServers', 'navApplications', 'navBackups', 'navConsole', 'navActivity'] as const) {
+      await page.keyboard.press('Tab');
+      await expect(nav.getByRole('link', { name: journey.t(section) })).toBeFocused();
+    }
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/activity$/);
   });
