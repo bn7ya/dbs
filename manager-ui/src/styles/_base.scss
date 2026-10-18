@@ -26,6 +26,11 @@ a {
   color: var(--app-color-primary);
 }
 
+// Material keeps the gap beside a button's icon for mat-icon only; the glyphs here are Font Awesome.
+[matButtonIcon] {
+  margin-inline-end: var(--app-space-2);
+}
+
 :focus-visible {
   outline: var(--app-focus-width) solid var(--app-color-focus);
   outline-offset: var(--app-focus-width);

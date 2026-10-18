@@ -183,7 +183,8 @@ screen and the wrapper scrolls sideways. The table carries `[attr.aria-label]`; 
 in a labelled `<nav>`.
 
 **Busy buttons** are `[disabled]` with `aria-busy` and a `matButtonIcon` spinner before their text,
-and the text says what is happening.
+and the text says what is happening. Material spaces only a `mat-icon` from the label, so `_base.scss`
+gives every `[matButtonIcon]` glyph its gap.
 
 **Do not write a focus ring.** `_base.scss` draws one `:focus-visible` outline for the document.
 
