@@ -217,7 +217,10 @@
     "nextPage": "الصفحة التالية",
     "previousPage": "الصفحة السابقة",
     "rowsPerPage": "عدد الصفوف في الصفحة",
-    "range": "{start}–{end} من {total}"
+    "range": "{start}–{end} من {total}",
+    "optional": "اختيارية",
+    "completed": "مكتملة",
+    "editable": "يمكن تعديلها"
   },
   "copy": {
     "done": "تم النسخ.",

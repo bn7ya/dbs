@@ -4,13 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppDirectionality } from './app-directionality';
 import { AppPaginatorIntl } from './app-paginator-intl';
+import { AppStepperIntl } from './app-stepper-intl';
 import { LocaleStore } from './locale.store';
 
 describe('runtime language for Material', () => {
   beforeEach(() => {
     localStorage.setItem('locale', 'en');
     TestBed.configureTestingModule({
-      providers: [{ provide: Directionality, useExisting: AppDirectionality }, AppPaginatorIntl],
+      providers: [{ provide: Directionality, useExisting: AppDirectionality }, AppPaginatorIntl, AppStepperIntl],
     });
   });
 
@@ -46,6 +47,28 @@ describe('runtime language for Material', () => {
 
     expect(intl.nextPageLabel).toBe('الصفحة التالية');
     expect(intl.getRangeLabel(2, 20, 45)).toBe('41–45 من 45');
+    expect(changes).toHaveBeenCalled();
+  });
+
+  it('labels the stepper in the reader language, the optional step and the state each icon stands for', () => {
+    const intl = TestBed.inject(AppStepperIntl);
+    TestBed.tick();
+    expect([intl.optionalLabel, intl.completedLabel, intl.editableLabel]).toEqual([
+      'Optional',
+      'Completed',
+      'Can be edited',
+    ]);
+
+    const changes = vi.fn();
+    intl.changes.subscribe(changes);
+    TestBed.inject(LocaleStore).setLocale('ar');
+    TestBed.tick();
+
+    expect([intl.optionalLabel, intl.completedLabel, intl.editableLabel]).toEqual([
+      'اختيارية',
+      'مكتملة',
+      'يمكن تعديلها',
+    ]);
     expect(changes).toHaveBeenCalled();
   });
 });

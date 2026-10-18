@@ -170,7 +170,8 @@ subscript sizing (`MAT_FORM_FIELD_DEFAULT_OPTIONS`).
 
 **Direction.** `LocaleStore` writes `lang` and `dir` on the document. `AppDirectionality` replaces
 the CDK `Directionality` app-wide and follows `LocaleStore.isRtl()`, so dialogs, menus, snack bars
-and steppers flip on a runtime language switch. `AppPaginatorIntl` translates the paginator.
+and steppers flip on a runtime language switch. `AppPaginatorIntl` translates the paginator and
+`AppStepperIntl` the stepper's Optional and the states its icons announce.
 
 **Fields.** A text field is `mat-form-field` + `mat-label` + `matInput`, a `mat-hint`, and a
 `mat-error` shown through `[appFieldError]="message"` (`shared/field/field-error.ts`), which puts
@@ -262,7 +263,8 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
 - **`routeParam(route, name)`** (`core/routing/route-param.ts`) — a signal of a route parameter read
   from whichever ancestor route holds it, `null` when none does.
 - **`LocaleStore`, `TranslatePipe` (`t`), `ErrorTextPipe` (`errorText`), `provideTranslations()`,
-  `LocaleSwitcher`** (a `mat-button-toggle-group`), **`AppDirectionality`, `AppPaginatorIntl`**.
+  `LocaleSwitcher`** (a `mat-button-toggle-group`), **`AppDirectionality`, `AppPaginatorIntl`,
+  `AppStepperIntl`**.
 - **`csrfInterceptor`, `errorInterceptor`, `apiErrorOf()`** — CSRF on unsafe requests; failures as
   `ApiError`.
 - **`JobsApi`, `JobWatcher`** — follow a background job to its end.

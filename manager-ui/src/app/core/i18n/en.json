@@ -217,7 +217,10 @@
     "nextPage": "Next page",
     "previousPage": "Previous page",
     "rowsPerPage": "Rows per page",
-    "range": "{start}–{end} of {total}"
+    "range": "{start}–{end} of {total}",
+    "optional": "Optional",
+    "completed": "Completed",
+    "editable": "Can be edited"
   },
   "copy": {
     "done": "Copied.",

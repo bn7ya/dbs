@@ -8,12 +8,14 @@ import {
 } from '@angular/core';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS, type MatFormFieldDefaultOptions } from '@angular/material/form-field';
 import { MatPaginatorIntl } from '@angular/material/paginator';
+import { MatStepperIntl } from '@angular/material/stepper';
 import { provideRouter, withComponentInputBinding, withViewTransitions } from '@angular/router';
 
 import { csrfInterceptor } from '@core/http/csrf.interceptor';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { AppDirectionality } from '@core/i18n/app-directionality';
 import { AppPaginatorIntl } from '@core/i18n/app-paginator-intl';
+import { AppStepperIntl } from '@core/i18n/app-stepper-intl';
 import { routes } from './app.routes';
 
 const FORM_FIELD_DEFAULTS: MatFormFieldDefaultOptions = { appearance: 'outline', subscriptSizing: 'dynamic' };
@@ -33,6 +35,7 @@ export const appConfig: ApplicationConfig = {
 
     { provide: Directionality, useExisting: AppDirectionality },
     { provide: MatPaginatorIntl, useClass: AppPaginatorIntl },
+    { provide: MatStepperIntl, useClass: AppStepperIntl },
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: FORM_FIELD_DEFAULTS },
   ],
 };
