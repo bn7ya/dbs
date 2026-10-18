@@ -61,6 +61,7 @@ const addApplication = async (
   await expect(form.getByRole('textbox', { name: t('projectFolder') })).toHaveValue(folder);
   await expect(form.getByRole('combobox', { name: t('pythonCommand') })).toHaveValue(python);
   await form.getByRole('button', { name: t('addApplicationSubmit'), exact: true }).click();
+  await journey.confirmPassword(page, 'continue');
 
   await stepIs(form, t('stepCheck'));
   await expect(form.getByText(t('versionsWork'))).toBeVisible({ timeout: 120_000 });

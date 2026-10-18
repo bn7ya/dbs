@@ -78,6 +78,7 @@ export class Api {
     return this.post<ApplicationRecord>('/api/applications/', {
       server,
       name,
+      account_password: ADMIN.password,
       kind: 'host',
       project_dir: SSH.projectDir,
       python_path: SSH.python,

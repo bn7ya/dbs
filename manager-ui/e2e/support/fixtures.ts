@@ -50,6 +50,12 @@ export const test = base.extend<{ journey: Journey }>({
           await button.click().catch(() => undefined);
         }
       },
+      confirmPassword: async (page, submit) => {
+        const prompt = page.getByRole('dialog');
+        await prompt.getByLabel(t('yourPassword'), { exact: true }).fill(ADMIN.password);
+        await prompt.getByRole('button', { name: t(submit), exact: true }).click();
+        await expect(prompt).toBeHidden();
+      },
     });
   },
 });

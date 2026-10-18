@@ -147,6 +147,7 @@ test.describe('adding a server and its application', () => {
     }
     await journey.shot(page, 'add-application-review');
     await form.getByRole('button', { name: t('addApplicationSubmit'), exact: true }).click();
+    await journey.confirmPassword(page, 'continue');
 
     await stepIs(form, t('stepCheck'));
     await expect(form.getByText(t('versionsWork'))).toBeVisible({ timeout: 120_000 });

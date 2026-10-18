@@ -41,6 +41,7 @@ test.describe('an application in a Compose service', () => {
 
     await form.getByRole('textbox', { name: t('name'), exact: true }).fill(name);
     await form.getByRole('button', { name: t('addApplicationSubmit'), exact: true }).click();
+    await journey.confirmPassword(page, 'continue');
     await expect(form.getByText(t('versionsWork'))).toBeVisible({ timeout: 180_000 });
     await journey.shot(page, 'compose-check');
     await next.click();
