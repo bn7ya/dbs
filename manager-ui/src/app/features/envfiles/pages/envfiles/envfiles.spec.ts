@@ -18,9 +18,9 @@ import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
 import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { Toaster } from '@shared/toaster/toaster';
 import type { ToastMessage } from '@shared/toaster/toaster.types';
-import type { EnvVersion } from '../../data/envfiles.types';
+import type { EnvLocation, EnvVersion } from '../../data/envfiles.types';
 import { EnvfilesStore } from '../../state/envfiles.store';
-import { COMPARISON, CONTENT, ENV_PATH, OLDER, OLDEST, SERVER_ID, VERSION, pageOf } from '../../testing/envfiles.fixtures';
+import { COMPARISON, CONTENT, ENV_PATH, OLDER, OLDEST, APPLICATION_ID, VERSION, pageOf } from '../../testing/envfiles.fixtures';
 import { EnvfilesPage } from './envfiles';
 
 const IDENTITY: Identity = {
@@ -38,7 +38,7 @@ const IDENTITY: Identity = {
 
 const ROUTES: Routes = [
   {
-    path: 'servers/:serverId',
+    path: 'applications/:applicationId',
     children: [
       { path: 'environment', loadChildren: () => import('../../envfiles.routes').then((m) => m.routes) },
       { path: 'files', children: [] },
@@ -85,13 +85,19 @@ describe('EnvfilesPage', () => {
   const listRequest = (): TestRequest =>
     http.expectOne((request) => request.url === '/api/envfiles/' && request.method === 'GET');
 
-  const showWith = async (page: Page<EnvVersion>, envPath = ENV_PATH): Promise<EnvfilesPage> => {
+  const showWith = async (
+    page: Page<EnvVersion>,
+    envPath = ENV_PATH,
+    envLocation: EnvLocation = 'host',
+  ): Promise<EnvfilesPage> => {
     harness = await RouterTestingHarness.create();
-    const navigating = harness.navigateByUrl(`/servers/${SERVER_ID}/environment`, EnvfilesPage);
+    const navigating = harness.navigateByUrl(`/applications/${APPLICATION_ID}/environment`, EnvfilesPage);
     (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush(IDENTITY);
     const shown = await navigating;
     TestBed.tick();
-    http.expectOne(`/api/servers/${SERVER_ID}/`).flush({ id: SERVER_ID, env_path: envPath });
+    http
+      .expectOne(`/api/applications/${APPLICATION_ID}/`)
+      .flush({ id: APPLICATION_ID, env_path: envPath, env_location: envLocation });
     listRequest().flush(page);
     await settle();
     harness.detectChanges();
@@ -161,7 +167,7 @@ describe('EnvfilesPage', () => {
   it('lists the versions under a second-level title, with where the file is, and shows the newest', async () => {
     const page = await showWith(pageOf([VERSION, OLDER, OLDEST]));
 
-    expect(page.serverId()).toBe(SERVER_ID);
+    expect(page.applicationId()).toBe(APPLICATION_ID);
     expect(element().querySelector('h1')).toBeNull();
     expect(element().querySelector('h2')?.textContent?.trim()).toBe('.env file');
     const path = cards()[0].querySelector('bdi[dir="ltr"]');
@@ -211,23 +217,23 @@ describe('EnvfilesPage', () => {
     expect(cards()[1].textContent).toContain('This is the first version kept.');
   });
 
-  it('sends a server with no .env file set to its overview, with nothing to pull', async () => {
+  it('sends an application with no .env file set to its overview, with nothing to pull', async () => {
     await showWith(pageOf([]), '');
 
     const empty = element().querySelector('app-empty-state');
     expect(empty?.textContent).toContain('No .env file set');
-    expect(empty?.querySelector('a')?.getAttribute('href')).toBe(`/servers/${SERVER_ID}`);
+    expect(empty?.querySelector('a')?.getAttribute('href')).toBe(`/applications/${APPLICATION_ID}`);
     expect(buttonNamed('Pull now')).toBeUndefined();
     expect(cards()).toHaveLength(1);
   });
 
-  it('keeps the versions of a server whose .env file is no longer set, with nothing to pull or push', async () => {
+  it('keeps the versions of an application whose .env file is no longer set, with nothing to pull or push', async () => {
     await showWith(pageOf([VERSION]), '');
 
     expect(element().querySelector('app-notice')?.textContent).toContain('This server has no .env file set.');
     expect(rows()).toHaveLength(1);
     expect(buttonNamed('Pull now')).toBeUndefined();
-    expect(buttonNamed('Push this version to the server')).toBeUndefined();
+    expect(buttonNamed('Push this version to the application')).toBeUndefined();
     expect(buttonNamed('Show values')).toBeDefined();
   });
 
@@ -332,7 +338,7 @@ describe('EnvfilesPage', () => {
       await reveal();
       expect(store?.content()).toBe(CONTENT);
 
-      await TestBed.inject(Router).navigateByUrl(`/servers/${SERVER_ID}/files`);
+      await TestBed.inject(Router).navigateByUrl(`/applications/${APPLICATION_ID}/files`);
 
       expect(store?.content()).toBeNull();
       expect(revokeObjectURL).toHaveBeenCalledWith(BLOB_URL);
@@ -385,13 +391,13 @@ describe('EnvfilesPage', () => {
       rows()[1].querySelector('button')?.click();
       harness.detectChanges();
 
-      buttonNamed('Push this version to the server')?.click();
+      buttonNamed('Push this version to the application')?.click();
 
       await vi.waitFor(() => expect(ask).toHaveBeenCalledOnce());
       expect(ask.mock.calls[0][0]).toMatchObject({
-        title: 'Replace the .env file on the server?',
+        title: "Replace the application's .env file?",
         message: `⁦${ENV_PATH}⁩`,
-        detail: 'The file on the server now is kept as a version first. Then this version takes its place.',
+        detail: 'The file there now is kept as a version first. Then this version takes its place.',
         acceptLabel: 'Continue',
       });
       await vi.waitFor(() => expect(open).toHaveBeenCalledOnce());
@@ -402,7 +408,7 @@ describe('EnvfilesPage', () => {
       const pushed: EnvVersion = { ...OLDER, id: '7a1e4c20-5555-4d3b-8c9f-1e2d3c4b0009', source: 'pushed' };
       http.expectOne(`/api/envfiles/${OLDER.id}/push/`).flush({ version: pushed });
       await expect(pushing).resolves.toBe(true);
-      expect(toasts).toHaveBeenCalledWith({ severity: 'success', summary: 'Version pushed to the server.' });
+      expect(toasts).toHaveBeenCalledWith({ severity: 'success', summary: 'Version pushed to the application.' });
       TestBed.tick();
       listRequest().flush(pageOf([pushed, VERSION, OLDER]));
       await settle();
@@ -410,12 +416,34 @@ describe('EnvfilesPage', () => {
       expect(rows()[0].querySelector('button')?.getAttribute('aria-current')).toBe('true');
     });
 
+    it('says a version pushed inside the container is lost when the container is recreated', async () => {
+      await showWith(pageOf([VERSION]), ENV_PATH, 'container');
+      const ask = vi.spyOn(TestBed.inject(Confirmation), 'ask').mockResolvedValue(false);
+
+      expect(cards()[1].querySelector('app-notice')?.textContent).toContain(
+        'This application keeps its .env file inside the container. A version pushed there is lost when the container is recreated.',
+      );
+      buttonNamed('Push this version to the application')?.click();
+
+      await vi.waitFor(() => expect(ask).toHaveBeenCalledOnce());
+      expect(ask.mock.calls[0][0].detail).toBe(
+        'The file there now is kept as a version first. Then this version takes its place. ' +
+          'This application keeps its .env file inside the container. A version pushed there is lost when the container is recreated.',
+      );
+    });
+
+    it('says nothing of a container when the .env file is on the server', async () => {
+      await showWith(pageOf([VERSION]));
+
+      expect(cards()[1].querySelector('app-notice')).toBeNull();
+    });
+
     it('pushes nothing when the reader says no', async () => {
       await showWith(pageOf([VERSION]));
       const ask = vi.spyOn(TestBed.inject(Confirmation), 'ask').mockResolvedValue(false);
       const open = stubDialog();
 
-      buttonNamed('Push this version to the server')?.click();
+      buttonNamed('Push this version to the application')?.click();
 
       await vi.waitFor(() => expect(ask).toHaveBeenCalledOnce());
       expect(open).not.toHaveBeenCalled();
@@ -425,11 +453,13 @@ describe('EnvfilesPage', () => {
 
   it('says why the versions could not be listed, and tries again', async () => {
     harness = await RouterTestingHarness.create();
-    const navigating = harness.navigateByUrl(`/servers/${SERVER_ID}/environment`, EnvfilesPage);
+    const navigating = harness.navigateByUrl(`/applications/${APPLICATION_ID}/environment`, EnvfilesPage);
     (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush(IDENTITY);
     await navigating;
     TestBed.tick();
-    http.expectOne(`/api/servers/${SERVER_ID}/`).flush({ id: SERVER_ID, env_path: ENV_PATH });
+    http
+      .expectOne(`/api/applications/${APPLICATION_ID}/`)
+      .flush({ id: APPLICATION_ID, env_path: ENV_PATH, env_location: 'host' });
     listRequest().flush({ error: { code: 'network', message: 'Server prose' } }, { status: 503, statusText: 'Down' });
     await settle();
     harness.detectChanges();

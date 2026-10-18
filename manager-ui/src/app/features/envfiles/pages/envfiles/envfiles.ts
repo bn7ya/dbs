@@ -1,6 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal, type Signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButton } from '@angular/material/button';
 import { MatCard, MatCardContent } from '@angular/material/card';
@@ -8,17 +7,18 @@ import { MatFormField, MatLabel } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 import { MatPaginator, type PageEvent } from '@angular/material/paginator';
 import { MatTableModule } from '@angular/material/table';
-import { map } from 'rxjs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { Can } from '@core/auth/directives/can';
+import { routeParam } from '@core/routing/route-param';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Confirmation } from '@shared/confirm/confirmation';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
+import { isolated } from '@shared/isolated/isolated';
 import { Notice } from '@shared/notice/notice';
 import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
 import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
@@ -68,10 +68,11 @@ export class EnvfilesPage {
   private readonly clipboard = inject(DOCUMENT).defaultView?.navigator.clipboard;
   private readonly locale = inject(LocaleStore);
 
-  readonly serverId = serverIdOf(inject(ActivatedRoute));
+  readonly applicationId = routeParam(inject(ActivatedRoute), 'applicationId');
 
   readonly envPath = this.store.envPath;
   readonly noPath = this.store.noPath;
+  readonly inContainer = this.store.inContainer;
   readonly count = this.store.count;
   readonly page = this.store.page;
   readonly pageSize = this.store.pageSize;
@@ -92,7 +93,7 @@ export class EnvfilesPage {
 
   readonly offerPull = computed(() => !this.noPath() && !this.empty());
 
-  readonly overviewLink = computed(() => ['/servers', this.serverId() ?? '']);
+  readonly overviewLink = computed(() => ['/applications', this.applicationId() ?? '']);
 
   readonly paginated = computed(() => this.count() > ENV_PAGE_SIZES[0]);
 
@@ -122,9 +123,9 @@ export class EnvfilesPage {
 
   constructor() {
     effect(() => {
-      const server = this.serverId();
-      if (server !== null) {
-        this.store.open(server);
+      const application = this.applicationId();
+      if (application !== null) {
+        this.store.open(application);
       }
     });
     inject(DestroyRef).onDestroy(() => this.store.close());
@@ -191,10 +192,11 @@ export class EnvfilesPage {
   }
 
   async push(version: EnvVersion): Promise<void> {
+    const lost = this.inContainer() ? ` ${this.locale.translate('envfiles.container.lost')}` : '';
     const accepted = await this.confirmation.ask({
       title: this.locale.translate('envfiles.push.confirmTitle'),
       message: leftToRight(this.envPath() || version.path),
-      detail: this.locale.translate('envfiles.push.confirmBody'),
+      detail: `${this.locale.translate('envfiles.push.confirmBody')}${lost}`,
       acceptLabel: this.locale.translate('envfiles.push.confirmAccept'),
       rejectLabel: this.locale.translate('actions.cancel'),
       acceptSeverity: 'danger',
@@ -227,20 +229,7 @@ export class EnvfilesPage {
   }
 }
 
-function isolated(text: string): string {
-  return `⁨${text}⁩`;
-}
-
 // The confirmation takes a plain string, so the path carries its own left-to-right isolate.
 function leftToRight(text: string): string {
   return `⁦${text}⁩`;
-}
-
-// Param inheritance stops at the server page (a route with its own component), so read the route that declares it.
-function serverIdOf(route: ActivatedRoute): Signal<string | null> {
-  const owner = route.pathFromRoot.find((step) => step.snapshot.paramMap.has('serverId'));
-  if (!owner) {
-    return signal(null).asReadonly();
-  }
-  return toSignal(owner.paramMap.pipe(map((params) => params.get('serverId'))), { requireSync: true });
 }

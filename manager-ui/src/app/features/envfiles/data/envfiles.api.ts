@@ -6,11 +6,11 @@ import type { Page } from '@core/http/api.types';
 import type {
   EnvComparison,
   EnvListQuery,
+  EnvPlace,
   EnvVersion,
   PullResult,
   PushResult,
   RevealedEnv,
-  ServerEnvPath,
 } from './envfiles.types';
 
 @Injectable({ providedIn: 'root' })
@@ -20,14 +20,14 @@ export class EnvfilesApi {
 
   list(query: EnvListQuery): Observable<Page<EnvVersion>> {
     const params = new HttpParams()
-      .set('server', query.server)
+      .set('application', query.application)
       .set('page', query.page)
       .set('page_size', query.page_size);
     return this.http.get<Page<EnvVersion>>(`${this.base}/`, { params });
   }
 
-  pull(server: string): Observable<PullResult> {
-    return this.http.post<PullResult>(`${this.base}/pull/`, { server });
+  pull(application: string): Observable<PullResult> {
+    return this.http.post<PullResult>(`${this.base}/pull/`, { application });
   }
 
   compare(from: string, to: string): Observable<EnvComparison> {
@@ -42,7 +42,9 @@ export class EnvfilesApi {
     return this.http.post<PushResult>(`${this.base}/${id}/push/`, { password });
   }
 
-  envPath(server: string): Observable<string> {
-    return this.http.get<ServerEnvPath>(`/api/servers/${server}/`).pipe(map((found) => found.env_path));
+  place(application: string): Observable<EnvPlace> {
+    return this.http
+      .get<EnvPlace>(`/api/applications/${application}/`)
+      .pipe(map(({ env_path, env_location }) => ({ env_path, env_location })));
   }
 }

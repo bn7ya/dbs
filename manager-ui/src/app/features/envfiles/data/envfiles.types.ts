@@ -2,7 +2,7 @@ export type EnvSource = 'pulled' | 'pushed' | 'scheduled';
 
 export interface EnvVersion {
   readonly id: string;
-  readonly server: string;
+  readonly application: string;
   readonly path: string;
   readonly size: number;
   readonly keys: readonly string[];
@@ -12,7 +12,7 @@ export interface EnvVersion {
 }
 
 export interface EnvListQuery {
-  readonly server: string;
+  readonly application: string;
   readonly page: number;
   readonly page_size: number;
 }
@@ -38,8 +38,11 @@ export interface PushResult {
   readonly version: EnvVersion;
 }
 
-export interface ServerEnvPath {
+export type EnvLocation = 'host' | 'container';
+
+export interface EnvPlace {
   readonly env_path: string;
+  readonly env_location: EnvLocation;
 }
 
 export function envFileName(path: string): string {

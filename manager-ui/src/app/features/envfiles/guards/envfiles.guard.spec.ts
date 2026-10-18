@@ -54,14 +54,14 @@ describe('envfilesGuard', () => {
   });
 
   it('lets a signed-in user in', async () => {
-    const entering = enter('/servers/abc/environment');
+    const entering = enter('/applications/abc/environment');
     http.expectOne('/api/auth/me/').flush(IDENTITY);
 
     await expect(entering).resolves.toBe(true);
   });
 
   it('sends a signed-out visitor to sign in, with the way back to the tab they asked for', async () => {
-    const entering = enter('/servers/abc/environment');
+    const entering = enter('/applications/abc/environment');
     http
       .expectOne('/api/auth/me/')
       .flush({ error: { code: 'not_authenticated', message: 'Server prose' } }, { status: 403, statusText: 'Forbidden' });
@@ -70,7 +70,7 @@ describe('envfilesGuard', () => {
     const result = await entering;
     expect(result).toBeInstanceOf(UrlTree);
     expect(TestBed.inject(Router).serializeUrl(result as UrlTree)).toBe(
-      '/sign-in?next=%2Fservers%2Fabc%2Fenvironment',
+      '/sign-in?next=%2Fapplications%2Fabc%2Fenvironment',
     );
   });
 });

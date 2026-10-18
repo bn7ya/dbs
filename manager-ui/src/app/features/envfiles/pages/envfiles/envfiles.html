@@ -230,6 +230,12 @@
           <p class="text-sm text-muted">{{ 'envfiles.compare.first' | t }}</p>
         }
 
+        @if (inContainer() && !noPath()) {
+          <ng-container *appCan="'env.push'">
+            <app-notice severity="warning">{{ 'envfiles.container.lost' | t }}</app-notice>
+          </ng-container>
+        }
+
         <div class="envfiles__actions">
           <!-- One button that changes its word: focus returns to it from the password prompt. -->
           <button *appCan="'env.reveal'" matButton="outlined" type="button" (click)="toggleValues(version)">

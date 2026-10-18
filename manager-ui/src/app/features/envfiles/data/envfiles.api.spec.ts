@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { COMPARISON, CONTENT, ENV_PATH, OLDER, SERVER_ID, VERSION, pageOf } from '../testing/envfiles.fixtures';
+import { COMPARISON, CONTENT, ENV_PATH, OLDER, APPLICATION_ID, VERSION, pageOf } from '../testing/envfiles.fixtures';
 import { EnvfilesApi } from './envfiles.api';
 import { envFileName } from './envfiles.types';
 
@@ -25,20 +25,20 @@ describe('EnvfilesApi', () => {
     TestBed.resetTestingModule();
   });
 
-  it("lists one server's versions a page at a time", async () => {
-    const listing = firstValueFrom(api.list({ server: SERVER_ID, page: 2, page_size: 20 }));
-    const request = http.expectOne(`/api/envfiles/?server=${SERVER_ID}&page=2&page_size=20`);
+  it("lists one application's versions a page at a time", async () => {
+    const listing = firstValueFrom(api.list({ application: APPLICATION_ID, page: 2, page_size: 20 }));
+    const request = http.expectOne(`/api/envfiles/?application=${APPLICATION_ID}&page=2&page_size=20`);
     expect(request.request.method).toBe('GET');
     request.flush(pageOf([VERSION, OLDER], 22));
 
     await expect(listing).resolves.toEqual(pageOf([VERSION, OLDER], 22));
   });
 
-  it('pulls the file of a server', async () => {
-    const pulling = firstValueFrom(api.pull(SERVER_ID));
+  it('pulls the file of an application', async () => {
+    const pulling = firstValueFrom(api.pull(APPLICATION_ID));
     const request = http.expectOne('/api/envfiles/pull/');
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({ server: SERVER_ID });
+    expect(request.request.body).toEqual({ application: APPLICATION_ID });
     request.flush({ created: true, version: VERSION });
 
     await expect(pulling).resolves.toEqual({ created: true, version: VERSION });
@@ -73,13 +73,13 @@ describe('EnvfilesApi', () => {
     await expect(pushing).resolves.toEqual({ version: { ...OLDER, source: 'pushed' } });
   });
 
-  it("reads where the server's .env file is from the server itself", async () => {
-    const reading = firstValueFrom(api.envPath(SERVER_ID));
-    const request = http.expectOne(`/api/servers/${SERVER_ID}/`);
+  it("reads where the application's .env file is, and whether it is inside the container, from the application", async () => {
+    const reading = firstValueFrom(api.place(APPLICATION_ID));
+    const request = http.expectOne(`/api/applications/${APPLICATION_ID}/`);
     expect(request.request.method).toBe('GET');
-    request.flush({ id: SERVER_ID, name: 'web', env_path: ENV_PATH });
+    request.flush({ id: APPLICATION_ID, name: 'web', env_path: ENV_PATH, env_location: 'container', kind: 'compose' });
 
-    await expect(reading).resolves.toBe(ENV_PATH);
+    await expect(reading).resolves.toEqual({ env_path: ENV_PATH, env_location: 'container' });
   });
 });
 

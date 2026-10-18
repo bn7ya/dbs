@@ -1,13 +1,13 @@
 import type { Page } from '@core/http/api.types';
 import type { EnvComparison, EnvVersion } from '../data/envfiles.types';
 
-export const SERVER_ID = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001';
+export const APPLICATION_ID = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001';
 
 export const ENV_PATH = '/srv/app/.env';
 
 export const VERSION: EnvVersion = {
   id: '7a1e4c20-5555-4d3b-8c9f-1e2d3c4b0003',
-  server: SERVER_ID,
+  application: APPLICATION_ID,
   path: ENV_PATH,
   size: 1_200,
   keys: ['DEBUG', 'DATABASE_URL', 'SECRET_KEY'],
