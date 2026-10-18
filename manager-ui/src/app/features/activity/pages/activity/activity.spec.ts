@@ -213,6 +213,21 @@ describe('ActivityPage', () => {
     expect(page.actionLabel('account.master')).toBe('تعيين الحساب الرئيسي');
   });
 
+  it('offers each action once, under a name no other one has, in English and in Arabic', async () => {
+    const page = await show('/activity');
+    listRequest().flush(pageOf([]));
+    await settle();
+    const labels = () => page.actionOptions().map((option) => option.label);
+
+    expect(new Set(labels()).size).toBe(labels().length);
+    expect(labels().filter((label) => label === 'Show backup passphrase')).toHaveLength(1);
+    expect(page.actionLabel('server.passphrase_reveal')).toBe('Show backup passphrase');
+
+    TestBed.inject(LocaleStore).setLocale('ar');
+
+    expect(new Set(labels()).size).toBe(labels().length);
+  });
+
   it('shows a backup kept on the server as its own outcome, not a failure', async () => {
     const page = await show('/activity');
     const kept = { ...ENTRY, id: 3, action: 'backup.take', detail: { outcome: 'kept_on_server', pulled: 0 } };

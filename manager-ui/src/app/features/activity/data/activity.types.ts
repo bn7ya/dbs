@@ -2,19 +2,18 @@ export type ActivityStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 
 export const ACTIVITY_STATUSES: readonly ActivityStatus[] = ['queued', 'running', 'succeeded', 'failed'];
 
+// What the filter offers. The codes a 0.7 server recorded, now an application's, are left out:
+// their entries still read in words, and the filter does not offer one name twice.
 export const ACTIVITY_ACTIONS: readonly string[] = [
   'server.create',
   'server.update',
   'server.delete',
   'server.check',
   'server.repin',
-  'server.passphrase_reveal',
   'server.fingerprint',
   'server.host_key_confirm',
   'server.host_key_reject',
   'server.keypair',
-  'server.discover',
-  'server.passphrase_capture',
   'server.merge',
   'application.create',
   'application.update',
