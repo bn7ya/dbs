@@ -184,7 +184,7 @@ def test_partial_names_are_recognised():
 
     assert made.startswith(".web-20261013-093000Z.dbs.part-")
     assert is_partial_name(made)
-    assert is_partial_name("web-20261013-093000Z.dbs.part")
+    assert not is_partial_name("web-20261013-093000Z.dbs.part")
     assert not is_partial_name("web-20261013-093000Z.dbs")
     assert not is_partial_name("notes.part")
     assert not is_partial_name(".notes.part-xyz")
@@ -204,8 +204,8 @@ def test_only_stale_partials_are_swept(tmp_path):
 
     removed = sweep_partials(str(tmp_path))
 
-    assert removed == sorted([stale.name, legacy.name])
-    assert names_in(tmp_path) == sorted([fresh.name, unrelated.name, backup.name])
+    assert removed == [stale.name]
+    assert names_in(tmp_path) == sorted([legacy.name, fresh.name, unrelated.name, backup.name])
 
 
 def test_sweeping_a_folder_that_is_not_there_removes_nothing(tmp_path):
@@ -472,12 +472,13 @@ def test_stdout_that_takes_no_bytes_is_refused(tmp_path):
 
 
 @pytest.mark.django_db
-def test_the_old_command_name_keeps_its_tip_off_the_stream(tmp_path):
+@pytest.mark.parametrize("name", ["django_dbs", "django-dbs"])
+def test_every_command_name_streams_the_same_backup(tmp_path, name):
     receiver = Receiver()
     stderr = io.StringIO()
 
     call_command(
-        "django_dbs",
+        name,
         "backup",
         "--stream",
         "--output-dir",
@@ -489,7 +490,7 @@ def test_the_old_command_name_keeps_its_tip_off_the_stream(tmp_path):
         stderr=stderr,
     )
 
-    assert "manage.py dbs" in stderr.getvalue()
+    assert "Tip" not in stderr.getvalue()
     summary = json.loads(stderr.getvalue().splitlines()[-1])
     assert (tmp_path / summary["name"]).read_bytes() == bytes(receiver.received)
 

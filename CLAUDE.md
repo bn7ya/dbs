@@ -60,7 +60,6 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 - `dbs/management/commands/` — the `dbs` umbrella and its `django_dbs` alias, plus
   `dbs_backup`, `dbs_restore`, `dbs_validate`, `dbs_schedule`, `dbs_connection`,
   `dbs_health`, `dbs_audit`, `dbs_key`, `dbs_security`, `dbs_ai`, `dbs_upgrade`.
-- `dbs/contrib/` — the original standalone download/upload views, kept working.
 - `dbs/models.py`, `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`,
   `dbs/templates/admin/dbs/`, `dbs/static/dbs/` — the control panel mounted at
   `/admin/dbs/`. Superusers only, enforced in `dbs/security/decorators.py` and in

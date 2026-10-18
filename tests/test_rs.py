@@ -5,7 +5,8 @@ import random
 import pytest
 from reedsolo import RSCodec
 
-from dbs.container import encode_copy, repair_copies, rs
+from dbs.container import repair_copies, rs
+from tests.format1 import encode_copy
 from dbs.container.blocks import _decode_block, _decode_with_reedsolo, _hash
 
 SIZES = [0, 1, 2, 100, 238, 239, 240, 478, 479, 1000, 4096, 65535, 65536, 65537]

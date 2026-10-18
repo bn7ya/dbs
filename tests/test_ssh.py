@@ -73,12 +73,11 @@ def test_from_dict_rejects_unknown_keys():
     assert "known_host" in str(excinfo.value)
 
 
-def test_user_and_key_file_aliases():
-    parsed = SSHTarget.from_dict(
-        {"host": "h", "user": "deploy", "key_file": "/keys/id_ed25519"}
-    )
-    assert parsed.username == "deploy"
-    assert parsed.key_filename == "/keys/id_ed25519"
+@pytest.mark.parametrize("old_key", ["user", "key_file"])
+def test_the_old_key_names_are_refused(old_key):
+    with pytest.raises(ConfigurationError) as excinfo:
+        SSHTarget.from_dict({"host": "h", "username": "u", old_key: "x"})
+    assert old_key in str(excinfo.value)
 
 
 def test_home_relative_paths_are_expanded():
@@ -86,7 +85,7 @@ def test_home_relative_paths_are_expanded():
         {
             "host": "h",
             "username": "u",
-            "key_file": "~/keys/prod.pem",
+            "key_filename": "~/keys/prod.pem",
             "known_hosts": "~/.ssh/known_hosts",
         }
     )
@@ -661,7 +660,7 @@ def test_push_uses_a_partial_name_of_its_own_and_sweeps_stale_ones(fake_ssh, mon
     (partial,) = set(written)
     assert is_partial_name(partial) and partial.startswith(f".{name}.part-")
     assert sorted(os.listdir(fake_ssh.remote_path(REMOTE_DIR))) == sorted(
-        [name, fresh, "notes.part"]
+        [name, fresh, legacy, "notes.part"]
     )
 
 

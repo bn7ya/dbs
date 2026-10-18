@@ -11,14 +11,13 @@ import time
 from dataclasses import dataclass
 
 from .exceptions import DBSError
-from .naming import backup_filename, is_backup_name
+from .naming import backup_filename
 
 CHUNK_SIZE = 1024 * 1024
 FILE_MODE = 0o600
 DIRECTORY_MODE = 0o700
 PARTIAL_TOKEN_BYTES = 8
 PARTIAL_STALE_SECONDS = 3600
-LEGACY_PARTIAL_SUFFIX = ".part"
 MAX_ORDINAL = 999
 NO_HARD_LINKS = {errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOSYS, errno.EXDEV}
 
@@ -30,11 +29,7 @@ def partial_name(name: str) -> str:
 
 
 def is_partial_name(name: str) -> bool:
-    if _PARTIAL_NAME.match(name):
-        return True
-    return name.endswith(LEGACY_PARTIAL_SUFFIX) and is_backup_name(
-        name[: -len(LEGACY_PARTIAL_SUFFIX)]
-    )
+    return bool(_PARTIAL_NAME.match(name))
 
 
 def is_stale(modified: float, now: float | None = None) -> bool:

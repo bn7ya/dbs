@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from dbs import audit, schedule_runner
-from dbs.container.format import write_container
+from tests.format1 import write_container
 from dbs.forms import BackupScheduleForm
 from dbs.models import AuditEvent, BackupRecord, BackupSchedule
 from dbs.naming import backup_filename, backup_stem, reserve_backup_name

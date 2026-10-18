@@ -619,9 +619,9 @@ def test_only_partials_left_for_an_hour_are_swept_from_the_backup_folder(tmp_pat
 
     removed = RemoteHost(FakeSession(sftp=LocalSftp())).sweep_partials(str(folder))
 
-    assert removed == sorted([stale.name, legacy.name])
+    assert removed == [stale.name]
     assert sorted(path.name for path in folder.iterdir()) == sorted(
-        [fresh.name, unrelated.name]
+        [legacy.name, fresh.name, unrelated.name]
     )
 
 

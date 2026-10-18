@@ -4,7 +4,8 @@ import pytest
 from django.db.models.signals import post_save
 
 from dbs.engine import create_backup, restore_backup
-from dbs.engine.restore import ordered_records, read_payload
+from dbs.engine.restore import ordered_records
+from tests.payloads import read_payload
 from dbs.introspect import backup_plan, discover_models
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF

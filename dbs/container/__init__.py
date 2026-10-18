@@ -3,10 +3,9 @@ from .blocks import (
     DEFAULT_NSYM,
     BlockPlan,
     RepairReport,
-    encode_copy,
     repair_copies,
 )
-from .format import read_container, read_format_version, write_container
+from .format import read_container, read_format_version
 from .stream import (
     DEFAULT_INTERLEAVE,
     DEFAULT_WORKERS,
@@ -29,9 +28,7 @@ __all__ = [
     "StreamRepairReport",
     "StreamSummary",
     "StreamWriter",
-    "encode_copy",
     "repair_copies",
     "read_container",
     "read_format_version",
-    "write_container",
 ]

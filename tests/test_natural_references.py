@@ -6,7 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from dbs import serialize
 from dbs.engine import create_backup, restore_backup
-from dbs.engine.restore import read_payload
+from tests.payloads import read_payload
 from dbs.exceptions import RestoreError
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF

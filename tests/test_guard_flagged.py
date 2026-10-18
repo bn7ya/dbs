@@ -17,7 +17,6 @@ ADD_USER = "/admin/auth/user/add/"
 ADD_GROUP = "/admin/auth/group/add/"
 ADD_LOCATION = "/admin/dbs/knownlocation/add/"
 PASSWORD_CHANGE = "/admin/password_change/"
-CONTRIB_BACKUP = "/dbs/backup/"
 
 UNREACHABLE = 2.0
 
@@ -119,16 +118,6 @@ def test_a_flagged_session_cannot_download_a_backup(panel, stored_backup):
 
 
 @pytest.mark.django_db
-def test_a_flagged_session_cannot_export_through_the_contrib_views(panel):
-    flag(panel)
-
-    response = panel.post(CONTRIB_BACKUP, {"passphrase": "p", "passphrase2": "p"})
-
-    assert refused(response)
-    assert not response.has_header("Content-Disposition")
-
-
-@pytest.mark.django_db
 def test_a_flagged_session_can_still_read_and_poll(panel):
     flag(panel)
 
@@ -206,8 +195,8 @@ def test_admin_writes_are_named_by_the_page_they_change(rf, path, action):
 
 
 def test_every_named_action_has_a_risk():
-    from dbs.security.middleware import ADMIN_ACTIONS, CONTRIB_ACTIONS
+    from dbs.security.middleware import ADMIN_ACTIONS
 
-    named = {action for _, action in ADMIN_ACTIONS + CONTRIB_ACTIONS}
+    named = {action for _, action in ADMIN_ACTIONS}
 
     assert named <= set(ACTION_RISK)

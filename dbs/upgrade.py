@@ -4,6 +4,7 @@ import itertools
 import json
 import os
 import re
+import shlex
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -136,34 +137,6 @@ class Migrations(Step):
 
         call_command("migrate", "dbs", verbosity=0)
         return self.fixed("applied the pending dbs migrations")
-
-
-class AuditTrail(Step):
-    name = "audit trail"
-    since = "0.5.0"
-    fixable = True
-    migration = ("dbs", "0003_audit_outcome")
-
-    def check(self):
-        from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
-        from django.db.migrations.recorder import MigrationRecorder
-
-        try:
-            applied = MigrationRecorder(connections[DEFAULT_DB_ALIAS]).applied_migrations()
-        except DatabaseError as exc:
-            return self.warn(f"could not read migration state: {exc}")
-        if self.migration in applied:
-            return self.ok("backups, restores and validations record their outcome")
-        return self.action(
-            "the audit trail cannot record outcomes until dbs.0003 is applied",
-            "python manage.py migrate dbs",
-        )
-
-    def fix(self):
-        from django.core.management import call_command
-
-        call_command("migrate", "dbs", verbosity=0)
-        return self.fixed("applied the audit trail migration")
 
 
 class ScheduleInDatabase(Step):
@@ -443,37 +416,6 @@ class RestoreRoots(Step):
         return self.ok("restores are confined to DBS_RESTORE_ROOTS")
 
 
-class HiddenRows(Step):
-    name = "hidden rows"
-    since = "0.4.0"
-
-    def _filtered_models(self):
-        from .introspect import config_for, discover_models
-        from .registry import ModelBackup, backup_registry
-
-        filtered = []
-        for model in discover_models(backup_registry):
-            config = config_for(backup_registry, model)
-            if type(config).get_queryset is not ModelBackup.get_queryset:
-                continue
-            if str(model._default_manager.all().query) != str(model._base_manager.all().query):
-                filtered.append(model._meta.label_lower)
-        return filtered
-
-    def check(self):
-        try:
-            filtered = self._filtered_models()
-        except Exception as exc:
-            return self.warn(f"could not inspect the default managers: {exc}")
-        if not filtered:
-            return self.ok("no backed-up model has a default manager that hides rows")
-        return self.ok(
-            "since 0.4.0 backups include the rows hidden by the default manager of "
-            + ", ".join(filtered)
-            + "; override ModelBackup.get_queryset to leave them out"
-        )
-
-
 class UnmanagedModels(Step):
     name = "unmanaged models"
     since = "0.7.0"
@@ -740,26 +682,131 @@ class PulledBackups(Step):
             return []
 
 
-class AuditChain(AuditTrail):
+class AuditChain(Step):
     name = "audit chain"
     since = "0.7.0"
+    fixable = True
     migration = ("dbs", "0005_pull_only_retention_chain")
 
     def check(self):
-        finding = super().check()
-        if finding.level == OK:
+        from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
+        from django.db.migrations.recorder import MigrationRecorder
+
+        try:
+            applied = MigrationRecorder(connections[DEFAULT_DB_ALIAS]).applied_migrations()
+        except DatabaseError as exc:
+            return self.warn(f"could not read migration state: {exc}")
+        if self.migration in applied:
             return self.ok(
                 "every finished audit row is sealed in a hash chain; "
                 "`manage.py dbs audit verify` checks it"
             )
         return self.action(
             "the audit trail cannot be sealed in a hash chain until dbs.0005 is applied",
-            finding.remedy,
+            "python manage.py migrate dbs",
         )
 
     def fix(self):
-        super().fix()
+        from django.core.management import call_command
+
+        call_command("migrate", "dbs", verbosity=0)
         return self.fixed("applied the migration that seals the audit trail")
+
+
+class ContribViewsRemoved(Step):
+    name = "contrib views"
+    since = "0.8.0"
+    module = "dbs.contrib"
+
+    def check(self):
+        found = [name for name, source in _url_sources() if self.module in source]
+        if not found:
+            return self.ok("nothing refers to the removed dbs.contrib views")
+        return self.action(
+            "0.8.0 removed dbs.contrib, but " + ", ".join(found) + " still name it, "
+            "so the project would not start",
+            'delete include("dbs.contrib.urls"); take and restore backups at /admin/dbs/ '
+            "or from the DBS manager",
+        )
+
+
+class CommandNames(Step):
+    name = "command names"
+    since = "0.8.0"
+    retired = "dbs-upgrade"
+    patterns = (
+        "Makefile",
+        "Procfile",
+        "Dockerfile*",
+        "Containerfile*",
+        "*compose*.yml",
+        "*compose*.yaml",
+        "*.sh",
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml",
+    )
+
+    def check(self):
+        root = project_folder()
+        mentions = sorted(
+            {
+                str(path.relative_to(root))
+                for pattern in self.patterns
+                for path in root.glob(pattern)
+                if _mentions(path, self.retired)
+            }
+        )
+        if not mentions:
+            return self.ok(
+                "manage.py dbs, manage.py django_dbs and manage.py django-dbs are the same "
+                "command"
+            )
+        return self.warn(
+            f"0.8.0 removed the {self.retired} command name, which "
+            + ", ".join(mentions)
+            + " still run",
+            "use `python manage.py dbs upgrade` instead",
+        )
+
+
+class LegacyPartials(Step):
+    name = "old partial files"
+    since = "0.8.0"
+    suffix = ".part"
+
+    def check(self):
+        from .naming import is_backup_name
+        from .schedule_runner import backup_directory
+
+        directory = backup_directory()
+        try:
+            names = sorted(os.listdir(directory)) if directory else []
+        except OSError:
+            names = []
+        left = [
+            name
+            for name in names
+            if name.endswith(self.suffix) and is_backup_name(name[: -len(self.suffix)])
+        ]
+        if not left:
+            return self.ok("no partial file from before 0.7 is left in DBS_BACKUP_DIR")
+        shown = " ".join(shlex.quote(os.path.join(directory, name)) for name in left[:20])
+        return self.warn(
+            f"{len(left)} partial file(s) left by a backup before 0.7 sit in {directory}; "
+            "they are no backups and DBS no longer sweeps them",
+            f"rm {shown}" + (" ..." if len(left) > 20 else ""),
+        )
+
+
+class SSHTargetKeys(Step):
+    name = "ssh target keys"
+    since = "0.8.0"
+
+    def check(self):
+        return self.ok(
+            "SSHTarget.from_dict reads username and key_filename; the old user and key_file "
+            "names are refused"
+        )
 
 
 class KeepAtMostFive(Step):
@@ -801,7 +848,6 @@ class KeepAtMostFive(Step):
 STEPS = (
     InstalledApp,
     Migrations,
-    AuditTrail,
     ScheduleInDatabase,
     SchedulerMode,
     BackupDirectory,
@@ -815,7 +861,6 @@ STEPS = (
     ExcludeSemantics,
     Passphrase,
     RestoreRoots,
-    HiddenRows,
     UnmanagedModels,
     SourceFiles,
     BackupPaths,
@@ -827,6 +872,10 @@ STEPS = (
     PulledBackups,
     KeepAtMostFive,
     AuditChain,
+    ContribViewsRemoved,
+    CommandNames,
+    LegacyPartials,
+    SSHTargetKeys,
 )
 
 
@@ -909,6 +958,45 @@ def pinned_install_command(version: str, installed_extras=()) -> list:
         "install",
         extras.requirement(sorted(installed_extras), version),
     ]
+
+
+def project_folder() -> Path:
+    base = setting("BASE_DIR", None)
+    return Path(base) if base else Path.cwd()
+
+
+def _mentions(path: Path, text: str) -> bool:
+    try:
+        return path.is_file() and text in path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+def _module_source(name: str) -> str | None:
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ValueError):
+        return None
+    if spec is None or not spec.origin or not os.path.isfile(spec.origin):
+        return None
+    try:
+        return Path(spec.origin).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _url_sources():
+    from django.apps import apps
+    from django.conf import settings
+
+    names = [getattr(settings, "ROOT_URLCONF", "") or ""]
+    names += [f"{config.name}.urls" for config in apps.get_app_configs()]
+    for name in dict.fromkeys(name for name in names if name and not name.startswith("dbs.")):
+        source = _module_source(name)
+        if source is not None:
+            yield name, source
 
 
 def requirement_files(root: Path) -> list:

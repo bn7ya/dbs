@@ -132,7 +132,7 @@ def test_the_v1_reader_and_the_stream_reader_refuse_each_other(sample):
     _data, blob, _summary = sample
     with pytest.raises(ContainerError, match="StreamReader"):
         read_container(blob)
-    from dbs.container import encode_copy, write_container
+    from tests.format1 import encode_copy, write_container
 
     encoded, plan = encode_copy(b"v1 payload")
     v1 = write_container(

@@ -2,7 +2,7 @@ import pytest
 from django.db import connection
 
 from dbs.engine import create_backup, restore_backup
-from dbs.engine.restore import read_payload
+from tests.payloads import read_payload
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF
 from tests.softdeleteapp.models import Category, Item

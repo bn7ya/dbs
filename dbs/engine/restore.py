@@ -66,13 +66,6 @@ class RestoreResult:
         return bool(self.repair_report and self.repair_report.healed)
 
 
-def read_payload(data, passphrase: str) -> ReadResult:
-    with opened(data) as handle:
-        if read_format_version(handle) == STREAM_FORMAT_VERSION:
-            return _read_stream_payload(handle, passphrase)
-        return _read_v1_payload(whole(handle), passphrase)
-
-
 def _read_v1_payload(data: bytes, passphrase: str) -> ReadResult:
     manifest, copy_a, copy_b = read_container(data)
     if int(manifest.get("version", 0)) != SUPPORTED_MANIFEST_VERSION:
@@ -105,30 +98,6 @@ def _read_v1_payload(data: bytes, passphrase: str) -> ReadResult:
 
     document, records, files = unpack_payload(payload)
     return ReadResult(manifest, document, records, files, report)
-
-
-def _read_stream_payload(handle, passphrase: str) -> ReadResult:
-    records: list = []
-    files: list = []
-    with open_stream(handle, passphrase) as (reader, payload):
-        header = payload.read_header()
-        payload.read_manifest()
-        for stream in payload.files():
-            data = b"".join(stream.chunks())
-            if not stream.skipped:
-                files.append((stream.entry, data))
-        for batch in payload.record_batches():
-            records.extend(batch)
-        payload.read_trailer()
-        payload.finish()
-    document = {
-        **header,
-        "stats": payload.stats,
-        "records": records,
-        "files": [entry.to_dict() for entry, _data in files],
-    }
-    manifest = {"format": "DBS", "version": STREAM_FORMAT_VERSION, "flags": reader.flags}
-    return ReadResult(manifest, document, records, files, reader.report)
 
 
 def backup_files(data, passphrase: str):

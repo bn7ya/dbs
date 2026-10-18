@@ -36,6 +36,7 @@ MARKS = {OK: "ok", ACTION: "todo", WARN: "warn", FIXED: "done"}
 
 class Command(BaseCommand):
     help = "Bring this project up to date with the installed version of DBS."
+    requires_system_checks = []
 
     def add_arguments(self, parser):
         parser.add_argument(

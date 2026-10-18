@@ -68,22 +68,6 @@ def open_sealed_header(raw: bytes) -> tuple[int, bytes] | None:
     return version, unsealed[SEALED_PREFIX.size :]
 
 
-def _pack_header(
-    *, flags: int, block_size: int, manifest_offset: int, manifest_len: int,
-    manifest_dup_offset: int, manifest_hash: bytes,
-) -> bytes:
-    return HEADER_STRUCT.pack(
-        MAGIC,
-        FORMAT_VERSION,
-        flags,
-        block_size,
-        manifest_offset,
-        manifest_len,
-        manifest_dup_offset,
-        manifest_hash,
-    )
-
-
 def _parse_header(raw: bytes) -> dict | None:
     if len(raw) < HEADER_SIZE:
         return None
@@ -235,33 +219,6 @@ def _resolve_v1(data: bytes) -> VerifiedHeader:
     if found.version != FORMAT_VERSION:
         raise ContainerError(unsupported_version_message(found.version))
     return found
-
-
-def write_container(manifest: dict, copy_a: bytes, copy_b: bytes, *, flags: int) -> bytes:
-    manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
-    manifest_len = len(manifest_bytes)
-    manifest_offset = HEADER_SIZE
-    manifest_dup_offset = manifest_offset + manifest_len
-
-    header = _pack_header(
-        flags=flags,
-        block_size=int(manifest["blocks"]["block_size"]),
-        manifest_offset=manifest_offset,
-        manifest_len=manifest_len,
-        manifest_dup_offset=manifest_dup_offset,
-        manifest_hash=_manifest_hash(manifest_bytes),
-    )
-
-    return b"".join(
-        [
-            header,
-            manifest_bytes,
-            manifest_bytes,
-            copy_a,
-            copy_b,
-            header,
-        ]
-    )
 
 
 def _copy_len(manifest: dict) -> int:

@@ -10,7 +10,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from dbs.engine import create_backup
-from dbs.engine.restore import read_payload
+from tests.payloads import read_payload
 from dbs.exceptions import MissingSourceFiles
 from dbs.files import list_root_files, read_chunks
 from dbs.registry import BackupRegistry

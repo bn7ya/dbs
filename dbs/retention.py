@@ -62,21 +62,6 @@ def current_backup_names(
     ]
 
 
-def stale_backups(
-    names: Iterable[str],
-    keep: int,
-    prefix: str | None = None,
-    *,
-    now: datetime.datetime | None = None,
-) -> list[str]:
-    if keep < 1:
-        raise ConfigurationError("Retention must keep at least one backup.")
-    ordered = current_backup_names(names, prefix, now=now)
-    if len(ordered) <= keep:
-        return []
-    return ordered[: len(ordered) - keep]
-
-
 def stale_stored_backups(backups: Iterable[StoredBackup], keep: int) -> list[str]:
     if keep < 1:
         raise ConfigurationError("Retention must keep at least one backup.")
@@ -125,42 +110,6 @@ def remove_backups(directory: str, names: Iterable[str]) -> list[str]:
         removed.append(name)
     if removed:
         logger.info("retention removed %d backups in %s", len(removed), directory)
-    return removed
-
-
-def prune_directory(
-    directory: str,
-    keep: int,
-    prefix: str | None = None,
-    *,
-    dry_run: bool = False,
-) -> list[str]:
-    try:
-        names = os.listdir(directory)
-    except OSError:
-        return []
-    stale = stale_backups(names, keep, prefix)
-    if dry_run:
-        return stale
-    return remove_backups(directory, stale)
-
-
-def prune_remote(
-    session,
-    keep: int,
-    prefix: str | None = None,
-    *,
-    dry_run: bool = False,
-) -> list[str]:
-    stale = stale_backups(session.names(), keep, prefix)
-    if dry_run:
-        return stale
-    removed = []
-    for name in stale:
-        session.delete(name)
-        removed.append(name)
-    if removed:
-        logger.info("retention removed %d remote backups", len(removed))
     return removed
 
 

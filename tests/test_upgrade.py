@@ -105,23 +105,6 @@ def test_an_unapplied_dbs_migration_is_reported_and_applied():
         call_command("migrate", "dbs", verbosity=0)
 
 
-@pytest.mark.django_db(transaction=True)
-def test_the_audit_trail_step_applies_its_migration():
-    call_command("migrate", "dbs", "0002", verbosity=0)
-    try:
-        step = upgrade.AuditTrail()
-
-        reported = step.check()
-        applied = step.fix()
-
-        assert reported.level == ACTION
-        assert reported.remedy == "python manage.py migrate dbs"
-        assert applied.level == FIXED
-        assert step.check().level == OK
-    finally:
-        call_command("migrate", "dbs", verbosity=0)
-
-
 @pytest.mark.django_db
 def test_a_schedule_left_in_settings_points_at_the_panel(settings):
     settings.DBS_SCHEDULE_INTERVAL = "6h"
@@ -843,9 +826,9 @@ def test_every_command_name_reaches_the_upgrade_command():
     from django.core.management import get_commands, load_command_class
 
     commands = get_commands()
-    for name in ("dbs_upgrade", "dbs-upgrade"):
-        assert commands[name] == "dbs", name
-    assert load_command_class("dbs", "dbs-upgrade").__module__.endswith("dbs_upgrade")
+    assert commands["dbs_upgrade"] == "dbs"
+    assert "dbs-upgrade" not in commands
+    assert load_command_class("dbs", "dbs_upgrade").__module__.endswith("dbs_upgrade")
 
 
 def test_the_umbrella_lists_upgrade():
@@ -855,47 +838,6 @@ def test_the_umbrella_lists_upgrade():
     out = StringIO()
     call_command("dbs", stdout=out)
     assert "manage.py dbs upgrade" in out.getvalue()
-
-
-@pytest.mark.django_db
-def test_models_whose_default_manager_hides_rows_are_named(monkeypatch):
-    from dbs.registry import BackupRegistry
-    from tests.softdeleteapp.models import Category, Item
-
-    registry = BackupRegistry()
-    for model in (Author, Category, Item):
-        registry.register(model)
-    monkeypatch.setattr("dbs.registry.backup_registry", registry)
-
-    finding = next(
-        f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == "hidden rows"
-    )
-
-    assert finding.level == OK
-    assert "softdeleteapp.category" in finding.message
-    assert "softdeleteapp.item" in finding.message
-    assert "testapp.author" not in finding.message
-
-
-@pytest.mark.django_db
-def test_a_custom_get_queryset_is_left_alone(monkeypatch):
-    from dbs import ModelBackup
-    from dbs.registry import BackupRegistry
-    from tests.softdeleteapp.models import Category
-
-    class LiveOnly(ModelBackup):
-        def get_queryset(self, model):
-            return model._default_manager.all()
-
-    registry = BackupRegistry()
-    registry.register(Category)(LiveOnly)
-    monkeypatch.setattr("dbs.registry.backup_registry", registry)
-
-    finding = next(
-        f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == "hidden rows"
-    )
-
-    assert finding.message == "no backed-up model has a default manager that hides rows"
 
 
 def without(monkeypatch, *modules):
@@ -1179,3 +1121,99 @@ def test_the_audit_chain_step_applies_its_migration():
         assert "dbs audit verify" in step.check().message
     finally:
         call_command("migrate", "dbs", verbosity=0)
+
+
+@pytest.mark.django_db
+def test_nothing_naming_the_contrib_views_is_ok():
+    finding = upgrade.ContribViewsRemoved().check()
+
+    assert finding.level == OK
+
+
+@pytest.mark.django_db
+def test_an_urlconf_that_still_includes_the_contrib_views_needs_action(
+    tmp_path, settings, monkeypatch
+):
+    package = tmp_path / "oldsite"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "urls.py").write_text(
+        'from django.urls import include, path\n'
+        'urlpatterns = [path("dbs/", include("dbs.contrib.urls"))]\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    settings.ROOT_URLCONF = "oldsite.urls"
+
+    finding = upgrade.ContribViewsRemoved().check()
+
+    assert finding.level == ACTION
+    assert "oldsite.urls" in finding.message
+    assert 'include("dbs.contrib.urls")' in finding.remedy
+    assert "oldsite.urls" not in sys.modules
+
+
+@pytest.mark.django_db
+def test_upgrade_reports_a_broken_urlconf_instead_of_crashing(tmp_path, settings, monkeypatch):
+    package = tmp_path / "brokensite"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "urls.py").write_text(
+        'from django.urls import include, path\n'
+        'urlpatterns = [path("dbs/", include("dbs.contrib.urls"))]\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    settings.ROOT_URLCONF = "brokensite.urls"
+    out = StringIO()
+
+    with pytest.raises(CommandError):
+        call_command("dbs", "upgrade", "--check", offline=True, stdout=out, skip_checks=False)
+
+    assert "contrib views" in out.getvalue()
+
+
+def test_a_script_still_running_the_old_upgrade_name_is_named(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "deploy.sh").write_text("python manage.py dbs-upgrade --check\n")
+    (tmp_path / "Makefile").write_text("upgrade:\n\tpython manage.py dbs upgrade\n")
+
+    finding = upgrade.CommandNames().check()
+
+    assert finding.level == WARN
+    assert "deploy.sh" in finding.message
+    assert "Makefile" not in finding.message
+
+
+def test_no_old_command_name_is_ok(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+
+    assert upgrade.CommandNames().check().level == OK
+
+
+def test_old_partial_files_are_named_and_left_alone(tmp_path, settings):
+    from dbs.naming import backup_filename
+
+    settings.DBS_BACKUP_DIR = str(tmp_path)
+    old = tmp_path / (backup_filename("web") + ".part")
+    old.write_bytes(b"x")
+    (tmp_path / "notes.part").write_bytes(b"x")
+
+    finding = upgrade.LegacyPartials().check()
+
+    assert finding.level == WARN
+    assert finding.remedy.startswith("rm ")
+    assert old.name in finding.remedy
+    assert "notes.part" not in finding.remedy
+    assert old.exists()
+
+
+def test_no_old_partial_files_is_ok(tmp_path, settings):
+    settings.DBS_BACKUP_DIR = str(tmp_path)
+
+    assert upgrade.LegacyPartials().check().level == OK
+
+
+def test_the_ssh_target_keys_step_names_the_current_keys():
+    finding = upgrade.SSHTargetKeys().check()
+
+    assert finding.level == OK
+    assert "key_filename" in finding.message

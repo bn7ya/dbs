@@ -6,7 +6,8 @@ import struct
 
 import pytest
 
-from dbs.container import encode_copy, read_container, write_container
+from dbs.container import read_container
+from tests.format1 import encode_copy, write_container
 from dbs.container.format import (
     FLAG_ENCRYPTED,
     FLAG_FEC,

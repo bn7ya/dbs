@@ -46,10 +46,8 @@ PRIVATE_MODE = 0o600
 _TARGET_KEYS = {
     "host",
     "username",
-    "user",
     "port",
     "key_filename",
-    "key_file",
     "key_passphrase",
     "key_passphrase_env",
     "password",
@@ -216,14 +214,14 @@ class SSHTarget:
             )
         try:
             host = data["host"]
-            username = data.get("username") or data["user"]
+            username = data["username"]
         except KeyError as exc:
             raise ConfigurationError(f"SSH target missing required key: {exc}") from exc
         return cls(
             host=host,
             username=username,
             port=int(data.get("port", 22)),
-            key_filename=data.get("key_filename") or data.get("key_file"),
+            key_filename=data.get("key_filename"),
             key_passphrase=(
                 _from_env(data.get("key_passphrase_env"))
                 or data.get("key_passphrase")
