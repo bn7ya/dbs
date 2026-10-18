@@ -68,8 +68,10 @@ test.describe('the schedule', () => {
     await expect(page.getByRole('heading', { name: t('noPlansYet') })).toBeVisible();
     await page.getByRole('button', { name: t('createDbsPlan') }).click();
     const dialog = page.getByRole('dialog');
+    const nameField = dialog.getByRole('textbox', { name: t('name'), exact: true });
 
-    await dialog.getByRole('textbox', { name: t('name'), exact: true }).fill('');
+    await expect(nameField).toHaveValue('django-dbs');
+    await nameField.fill('');
     await dialog.getByRole('spinbutton', { name: t('keepHere') }).fill('0');
     await dialog.getByRole('button', { name: t('addPlanSubmit'), exact: true }).click();
 
