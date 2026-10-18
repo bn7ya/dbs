@@ -100,7 +100,7 @@ manager-ui/
   scripts/check-icons.mjs   every fa-* used exists in Font Awesome Free
   e2e/                      Playwright journeys; e2e/support/ is what they share
   src/
-    styles/_tokens.scss     the --app-* tokens, light and dark through light-dark()
+    styles/_tokens.scss     the --app-* tokens: one light, blue scheme
     styles/_material.scss   the one Material theme and its overrides
     styles/_layout.scss     page, dialog and nav widths, breakpoints
     styles/_reset.scss  _base.scss  _typography.scss  _dialog.scss  _table.scss
@@ -133,11 +133,14 @@ Path aliases: `@core/*`, `@shared/*`, `@features/*`, `@styles/*`.
 
 ## Conventions
 
-**Theme.** `_material.scss` calls `mat.theme` with an orange primary and yellow tertiary palette,
-`theme-type: color-scheme` (light and dark follow the operating system through `light-dark()`),
-Tajawal through `--app-font-family` and density 0, then maps the system tokens (primary, error,
-surface, outline, corners) onto the `--app-*` tokens. Form fields default to `outline` with dynamic
-subscript sizing (`MAT_FORM_FIELD_DEFAULT_OPTIONS`). Look at a change in both colour schemes.
+**Theme.** Blue, light and minimal. `_material.scss` calls `mat.theme` with a blue primary and
+azure tertiary palette, `theme-type: light`, Tajawal through `--app-font-family` and density 0, then
+maps the system tokens (primary and its container, error, surface and every surface container,
+outline, corners) onto the `--app-*` tokens. Surfaces are white on a pale ground, flat, separated by
+one-pixel outlines; `--app-shadow-1` is `none` and only menus and dialogs float. One blue accent marks
+what can be acted on; status colours stay muted. A page has one filled button, its main action;
+the rest are tonal, outlined or text. Form fields default to `outline` with dynamic
+subscript sizing (`MAT_FORM_FIELD_DEFAULT_OPTIONS`).
 
 **Direction.** `LocaleStore` writes `lang` and `dir` on the document. `AppDirectionality` replaces
 the CDK `Directionality` app-wide and follows `LocaleStore.isRtl()`, so dialogs, menus, snack bars

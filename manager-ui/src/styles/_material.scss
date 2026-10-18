@@ -4,9 +4,9 @@ html {
   @include mat.theme(
     (
       color: (
-        primary: mat.$orange-palette,
-        tertiary: mat.$yellow-palette,
-        theme-type: color-scheme,
+        primary: mat.$blue-palette,
+        tertiary: mat.$azure-palette,
+        theme-type: light,
       ),
       typography: (
         plain-family: var(--app-font-family),
@@ -23,6 +23,10 @@ html {
     (
       primary: var(--app-color-primary),
       on-primary: var(--app-color-on-primary),
+      primary-container: var(--app-color-primary-container),
+      on-primary-container: var(--app-color-on-primary-container),
+      secondary-container: var(--app-color-primary-container),
+      on-secondary-container: var(--app-color-on-primary-container),
       error: var(--app-color-danger),
       on-error: var(--app-color-on-danger),
       error-container: var(--app-color-danger-container),
@@ -33,6 +37,12 @@ html {
       on-surface: var(--app-color-on-surface),
       on-surface-variant: var(--app-color-on-surface-variant),
       outline: var(--app-color-outline),
+      outline-variant: var(--app-color-outline),
+      surface-container-lowest: var(--app-color-surface),
+      surface-container-low: var(--app-color-surface),
+      surface-container: var(--app-color-surface),
+      surface-container-high: var(--app-color-surface),
+      surface-container-highest: var(--app-color-neutral-container),
       corner-extra-small: var(--app-radius-sm),
       corner-small: var(--app-radius-sm),
       corner-medium: var(--app-radius-md),
