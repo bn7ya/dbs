@@ -158,7 +158,12 @@ def test_a_terminal_that_exits_reports_its_status_and_records_no_keystroke(
 
     assert last["closed"] is True and last["exit_status"] == 3
     assert last["reason"] == "exited"
-    assert gone.status_code == 404
+    assert gone.status_code == 200
+    assert (gone.json()["closed"], gone.json()["reason"], gone.json()["exit_status"]) == (
+        True,
+        "exited",
+        3,
+    )
     entry = AuditEvent.objects.get(action="shell.session")
     assert entry.status == "succeeded"
     assert entry.data["reason"] == "exited" and entry.data["exit_status"] == 3
@@ -179,6 +184,8 @@ def test_closing_a_terminal_ends_it_and_frees_its_connection(api, ssh, server):
     assert closed.status_code == 204
     assert ssh.channels[0].closed is True and ssh.closed == 1
     assert api.get("/api/terminals/").json() == {"results": []}
+    told = output(api, terminal).json()
+    assert (told["closed"], told["reason"]) == (True, "closed")
     entry = AuditEvent.objects.get(action="shell.session")
     assert entry.status == "succeeded" and entry.data["reason"] == "closed"
 
@@ -381,3 +388,32 @@ def test_input_larger_than_64_kib_is_refused(api, ssh, server):
 
     assert response.status_code == 400
     assert bytes(ssh.channels[0].sent) == b""
+
+
+@pytest.mark.django_db
+def test_how_a_terminal_ended_is_told_its_owner_for_a_minute_only(
+    api, ssh, server, other_api, monkeypatch
+):
+    terminal = opened(api, mode="server", server=str(server.pk)).json()["id"]
+    api.delete(f"/api/terminals/{terminal}/")
+    now = SHELLS.clock()
+
+    theirs = output(other_api, terminal)
+    monkeypatch.setattr(SHELLS, "clock", lambda: now + sessions.REMEMBERED_SECONDS)
+    later = output(api, terminal)
+
+    assert theirs.status_code == 404
+    assert later.status_code == 404
+
+
+@pytest.mark.django_db
+def test_a_terminal_says_the_last_keystrokes_it_took(api, ssh, server):
+    terminal = opened(api, mode="server", server=str(server.pk)).json()
+    api.post(
+        f"/api/terminals/{terminal['id']}/input/", {"seq": 7, "data": "ls\r"}, format="json"
+    )
+
+    [listed] = api.get("/api/terminals/").json()["results"]
+
+    assert terminal["last_seq"] == -1
+    assert listed["last_seq"] == 7

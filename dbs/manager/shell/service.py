@@ -164,6 +164,21 @@ class ShellService:
         return session
 
     def output(self, identifier: str, cursor: int) -> dict[str, Any]:
+        ending = SHELLS.ending(identifier)
+        if (
+            ending is not None
+            and self._signed_in()
+            and ending.user_id == self.user.pk
+            and ending.session_key == self.session_key
+        ):
+            return {
+                "data": "",
+                "cursor": max(cursor, ending.cursor),
+                "skipped": cursor < ending.cursor,
+                "closed": True,
+                "reason": ending.reason,
+                "exit_status": ending.exit_status,
+            }
         session = self.get(identifier)
         with SHELLS.waiting(session) as waits:
             data, following, skipped = session.read(cursor, LONG_POLL if waits else 0)

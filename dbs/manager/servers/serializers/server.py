@@ -38,6 +38,7 @@ class ServerListSerializer(serializers.ModelSerializer):
             "host",
             "port",
             "username",
+            "host_key_fingerprint",
             "engines",
             "application_count",
             "last_check_status",
@@ -50,6 +51,7 @@ class ServerListSerializer(serializers.ModelSerializer):
 
 
 class ServerSerializer(serializers.ModelSerializer):
+    application_count = serializers.SerializerMethodField()
     has_private_key = serializers.BooleanField(read_only=True)
     has_key_passphrase = serializers.BooleanField(read_only=True)
     has_password = serializers.BooleanField(read_only=True)
@@ -72,6 +74,7 @@ class ServerSerializer(serializers.ModelSerializer):
             "host_key_type",
             "host_key_fingerprint",
             "engines",
+            "application_count",
             "last_check_status",
             "last_check_error",
             "last_checked_at",
@@ -84,6 +87,9 @@ class ServerSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_application_count(self, server: Server) -> int:
+        return server.applications.filter(deleted_at__isnull=True).count()
 
 
 class ServerSettingsSerializer(serializers.Serializer):

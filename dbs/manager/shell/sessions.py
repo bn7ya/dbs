@@ -19,6 +19,7 @@ MAX_WAITERS = 6
 IDLE_SECONDS = 900
 UNPOLLED_SECONDS = 60
 LIFETIME_SECONDS = 7200
+REMEMBERED_SECONDS = 60
 CONNECTION_ERRORS = (OSError, EOFError)
 
 
@@ -40,6 +41,16 @@ class Owner:
     session_key: str
     password: str
     role: str | None
+
+
+@dataclass(frozen=True)
+class Ending:
+    user_id: Any
+    session_key: str
+    cursor: int
+    reason: str
+    exit_status: int | None
+    at: float
 
 
 @dataclass(frozen=True)
@@ -189,8 +200,10 @@ class ShellSession:
 
 
 class Shells:
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self.clock = clock
         self.sessions: dict[str, ShellSession] = {}
+        self.endings: dict[str, Ending] = {}
         self.reserved: dict[Any, int] = {}
         self.waiters = 0
         self.lock = threading.Lock()
@@ -236,8 +249,29 @@ class Shells:
             return list(self.sessions.values())
 
     def forget(self, session: ShellSession) -> None:
+        now = self.clock()
         with self.lock:
             self.sessions.pop(session.id, None)
+            self.endings = {
+                identifier: ending
+                for identifier, ending in self.endings.items()
+                if now - ending.at < REMEMBERED_SECONDS
+            }
+            self.endings[session.id] = Ending(
+                session.owner.user_id,
+                session.owner.session_key,
+                session.buffer.end,
+                session.reason,
+                session.exit_status,
+                now,
+            )
+
+    def ending(self, identifier: str) -> Ending | None:
+        with self.lock:
+            found = self.endings.get(identifier)
+        if found is None or self.clock() - found.at >= REMEMBERED_SECONDS:
+            return None
+        return found
 
     @contextmanager
     def waiting(self, session: ShellSession) -> Iterator[bool]:

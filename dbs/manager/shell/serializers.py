@@ -41,6 +41,7 @@ class TerminalSerializer(serializers.Serializer):
     cols = serializers.IntegerField(read_only=True)
     rows = serializers.IntegerField(read_only=True)
     closed = serializers.BooleanField(read_only=True)
+    last_seq = serializers.IntegerField(read_only=True)
 
 
 class OutputQuerySerializer(serializers.Serializer):
