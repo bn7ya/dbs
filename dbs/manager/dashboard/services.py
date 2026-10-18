@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import shutil
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from django.conf import settings
@@ -19,6 +21,8 @@ from dbs.manager.servers.versions import local_version
 EXPORT = "manager.export"
 FAILURE_WINDOW = timedelta(days=7)
 RECENT_FAILURES = 10
+LOW_DISK_BYTES = 1024**3
+LOW_DISK_SHARE = 0.05
 
 
 class DashboardService:
@@ -73,6 +77,7 @@ class DashboardService:
                 for server in servers
             ],
             "storage_bytes": sum(stored.values()),
+            "disk": disk_space(settings.BACKUP_STORAGE_DIR),
             "last_export_at": self.last_export_at(),
             "recent_failures": recent,
             "recent_failure_subjects": self.activity.subjects_for(recent),
@@ -106,6 +111,21 @@ class DashboardService:
             "created_at": file.created_at,
             "validation": file.validation,
         }
+
+
+def disk_space(folder: str) -> dict[str, Any] | None:
+    place = Path(folder)
+    while not place.exists() and place != place.parent:
+        place = place.parent
+    try:
+        usage = shutil.disk_usage(place)
+    except OSError:
+        return None
+    return {
+        "total_bytes": usage.total,
+        "free_bytes": usage.free,
+        "low": usage.free < max(LOW_DISK_BYTES, usage.total * LOW_DISK_SHARE),
+    }
 
 
 def key_store() -> str:

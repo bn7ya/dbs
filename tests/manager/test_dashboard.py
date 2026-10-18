@@ -1,4 +1,6 @@
+import shutil
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 from django.db import connection
@@ -10,11 +12,14 @@ from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
+from dbs.manager.dashboard import services as dashboard_services
+from dbs.manager.dashboard.services import disk_space
 from dbs.manager.servers.repositories import ServerRepository
 from dbs.models import AuditEvent
 from tests.manager.factories import make_application, make_server
 
 DASHBOARD = "/api/dashboard/"
+GIB = 1024**3
 HEALTH = {
     "status": "ok",
     "checks": [],
@@ -85,13 +90,59 @@ def test_the_dashboard_needs_a_session(anonymous):
 
 @pytest.mark.django_db
 def test_an_empty_manager_has_an_empty_dashboard(api):
-    assert api.get(DASHBOARD).json() == {
+    body = api.get(DASHBOARD).json()
+
+    assert body == {
         "servers": [],
         "storage_bytes": 0,
+        "disk": body["disk"],
         "last_export_at": None,
         "recent_failures": [],
         "key_store": "file",
     }
+    assert set(body["disk"]) == {"total_bytes", "free_bytes", "low"}
+    assert 0 <= body["disk"]["free_bytes"] <= body["disk"]["total_bytes"]
+
+
+@pytest.mark.parametrize(
+    ("free", "low"),
+    [
+        (GIB * 50, False),
+        (GIB * 4, True),
+        (GIB // 2, True),
+    ],
+)
+def test_the_disk_is_low_under_a_gibibyte_or_a_twentieth_of_its_size(
+    monkeypatch, tmp_path, free, low
+):
+    monkeypatch.setattr(
+        dashboard_services.shutil,
+        "disk_usage",
+        lambda path: SimpleNamespace(total=GIB * 100, used=GIB * 100 - free, free=free),
+    )
+
+    assert disk_space(str(tmp_path)) == {
+        "total_bytes": GIB * 100,
+        "free_bytes": free,
+        "low": low,
+    }
+
+
+def test_a_backups_folder_not_made_yet_reports_the_disk_it_will_be_on(tmp_path):
+    expected = shutil.disk_usage(tmp_path)
+
+    found = disk_space(str(tmp_path / "not" / "made" / "yet"))
+
+    assert found["total_bytes"] == expected.total
+
+
+def test_a_disk_that_cannot_be_read_reports_nothing(monkeypatch, tmp_path):
+    def refused(path):
+        raise PermissionError(path)
+
+    monkeypatch.setattr(dashboard_services.shutil, "disk_usage", refused)
+
+    assert disk_space(str(tmp_path)) is None
 
 
 @pytest.mark.django_db
