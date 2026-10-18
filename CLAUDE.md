@@ -88,10 +88,23 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   the parent settles whatever a killed child left. `DBS_JOB_PROCESS = False` keeps the thread.
 - `dbs/files.py` — the files a backup reads and a restore stages, checks and places, within
   the restore roots and `DBS_RESTORE_PATH_MAP`.
-- `dbs/manager/` — the standalone DBS manager (`django_dbs run`, `django-dbs[manager]`): its
+- `dbs/manager/` — the standalone DBS manager (`django_dbs run`): its
   own Django project (`dbs/manager/settings.py`), one app labelled `dbs_manager` with a
   subpackage per slice, the job runner and scheduler that replace Celery, and the built
   interface in `dbs/manager/static/dbs_manager/` (generated, not committed).
+- `dbs/manager/servers/` and `dbs/manager/applications/` — a server is an SSH machine (address,
+  pinned host key, sealed credentials, the container engines it has); an application is one
+  Django project on it, run on the server itself, in a Compose service or in a container, with
+  Docker or Podman. Backups, plans, `.env` versions, files and redeploys belong to an
+  application. `applications/services/discovery_service.py` finds an application from a
+  folder (containers by Compose labels and bind mounts, its Python, `manage.py`,
+  `dbs connection --json`, `.env` candidates); `applications/paths.py` maps container paths to
+  host paths through the mounts. `servers/gateways/ssh_gateway.py` runs every remote command,
+  and inside a container streams files over stdin (`RECEIVE_FILE`, `READ_SMALL`) instead of
+  copying them through the host.
+- `dbs/manager/legacy.py` — reads a 0.7 export into the 0.8 shape (each old server becomes a
+  server and an application with the old id) and keeps a copy of a SQLite database before
+  the 0.8.0 migrations split it.
 - `dbs/manager/permissions.py` — the one role policy: each capability names the least role
   (viewer, operator, admin, master) that may use it, and `@requires` on a service method
   enforces it for the REST views, the terminal and the MCP server alike.
@@ -100,21 +113,27 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   built in a staging folder and swapped in, the old installation moved aside.
   `dbs/manager/recovery.py` — at start, interrupts jobs no live process runs and frees their
   locks.
-- `dbs/manager/terminal/` — the manager's terminal commands (`django_dbs server|backup|plan|
-  activity|env|files|redeploy`). Like the REST views, each verb validates with the slice's
+- `dbs/manager/terminal/` — the manager's terminal commands (`django_dbs server|app|backup|
+  plan|activity|env|files|redeploy`). Like the REST views, each verb validates with the slice's
   serializer and calls the slice's service; neither adapter holds business logic.
   `parsers.py` imports no Django, so `--help` stays instant.
 - `dbs/manager/mcp/` — `django_dbs mcp`, the MCP server Claude drives: `protocol.py` is
   JSON-RPC over stdio with no Django, `tools.py` the tools, each calling a slice's service.
 - `dbs/manager/adapters/` — the glue the terminal and MCP share: references by name or id,
-  serializer validation, job results, the check summary, multi-server takes.
+  serializer validation, job results, the check summary, discovery and multi-application
+  takes.
 - `manager-ui/` — the manager's Angular source (Angular Material, Font Awesome Free).
   `scripts/build_manager_ui.sh` builds it into the package; `manager-ui/CLAUDE.md` holds
   its rules.
 - `tests/` — pytest suite (pytest-django); `tests/fake_ssh.py` is the paramiko
   stand-in used by the transport and manager tests, and `tests/test_ssh_openssh.py` runs
   against a real OpenSSH server when `DBS_TEST_SSH_*` names one. `tests/manager/` is the
-  manager's suite, run as a second session with its own settings.
+  manager's suite, run as a second session with its own settings; `tests/manager/factories.py`
+  makes servers and applications. `tests/isolation/` (panel jobs in real child processes,
+  failing backups, several instances on one database), `tests/scaling/` (many applications on
+  one manager, a file database), `tests/scale/` (a thousand tables and a large table) and
+  `tests/load/` (a backup under web load; `scripts/load_backup.py` writes `load-report.md`)
+  each run as their own session with their own settings.
 - `RELEASE_NOTES.md` — the developer-facing notes for the current release, used as the GitHub
   Release body. `THIRD_PARTY_LICENSES.md` — the license of every dependency; update it in
   the same commit that adds, removes or bundles one.
@@ -174,12 +193,15 @@ version to read them before it offers giving them up.
 - Manager code is Python 3.9 syntax and Django 4.2–6.x compatible, like the rest of the
   package: no PEP 695 generics, `Self`, `StrEnum`, `datetime.UTC` or
   `CheckConstraint(condition=...)`.
-- Remote commands are fixed argument lists; passphrases travel on stdin. A server's backup
-  passphrase is stored once, before its first backup, and never changed: older backups would
-  no longer open.
+- Remote commands are fixed argument lists; passphrases travel on stdin. An application's
+  backup passphrase is stored once, before its first backup, and never changed: older backups
+  would no longer open. Discovery runs nothing in a folder, or a project below it, that others
+  can write to.
 - The manager pulls; a server never pushes. It removes a server's copy only after its own
-  copy is verified, keeps at most five good backups per server and plan, and never deletes
-  the newest one that passed verification.
+  copy is verified, keeps at most five good backups per application and plan, and never
+  deletes the newest one that passed verification.
+- Application ids are the ids of the 0.7 servers they came from, so the hash-chained audit
+  rows keep pointing at the right thing. Never rewrite an audit row's subject or data.
 - Every service method that acts names its capability with `@requires`. The interface hides
   what a role cannot do, but the service is the boundary.
 - The MCP server never accepts the account password, never returns a secret, and offers no

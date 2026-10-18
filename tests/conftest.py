@@ -15,6 +15,9 @@ CLOCK_ENV = "DBS_TEST_HOUR"
 SESSIONS = {
     Path(__file__).parent / "manager": "tests.manager.settings",
     Path(__file__).parent / "isolation": "tests.isolation.settings",
+    Path(__file__).parent / "scale": "tests.scale.settings",
+    Path(__file__).parent / "load": "tests.load.settings",
+    Path(__file__).parent / "scaling": "tests.scaling.settings",
 }
 
 

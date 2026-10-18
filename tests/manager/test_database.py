@@ -1,17 +1,24 @@
 import pytest
 
 from dbs.manager.apps import SQLITE_PRAGMAS, tune_sqlite
+import django
+
 from dbs.manager.database import DatabaseURLError, parse_database_url, sqlite_database
 
 
 def test_the_default_database_is_sqlite_with_a_generous_timeout(tmp_path):
     database = sqlite_database(tmp_path / "manager.sqlite3")
 
-    assert database == {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": str(tmp_path / "manager.sqlite3"),
-        "OPTIONS": {"timeout": 30},
-    }
+    assert database["ENGINE"] == "django.db.backends.sqlite3"
+    assert database["NAME"] == str(tmp_path / "manager.sqlite3")
+    assert database["OPTIONS"]["timeout"] == 30
+
+
+@pytest.mark.skipif(django.VERSION < (5, 1), reason="Django 5.1 added transaction_mode")
+def test_sqlite_transactions_take_the_write_lock_when_they_begin(tmp_path):
+    database = sqlite_database(tmp_path / "manager.sqlite3")
+
+    assert database["OPTIONS"]["transaction_mode"] == "IMMEDIATE"
 
 
 @pytest.mark.parametrize(
