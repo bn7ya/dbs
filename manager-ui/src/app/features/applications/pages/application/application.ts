@@ -23,7 +23,7 @@ const TABS: readonly ApplicationTab[] = [
   { path: 'schedule', labelKey: 'applications.page.schedule' },
   { path: 'files', labelKey: 'applications.page.files' },
   { path: 'environment', labelKey: 'applications.page.environment' },
-  { path: 'deploy', labelKey: 'applications.page.deploy' },
+  { path: 'deploy', labelKey: 'applications.page.deploy', capability: 'redeploy.rehearse' },
   { path: 'terminal', labelKey: 'applications.page.terminal', capability: 'shell.open' },
   { path: 'activity', labelKey: 'applications.page.activity' },
 ];

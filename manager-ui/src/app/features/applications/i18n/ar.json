@@ -356,9 +356,6 @@
     "engine_required": "اختر Docker أو Podman.",
     "compose_service_required": "اكتب اسم خدمة Compose التي تشغل التطبيق.",
     "compose_folder_required": "أدخل المجلد الذي يحتوي على ملف Compose.",
-    "container_required": "اكتب اسم الحاوية التي تشغل التطبيق.",
-    "container_not_running": "حاوية التطبيق لا تعمل.",
-    "container_engine_missing": "لا يستجيب Docker ولا Podman على هذا الخادم.",
-    "engine_permission_denied": "لا يسمح لمستخدم SSH باستخدام محرك الحاويات. أضفه إلى مجموعة المحرك، أو شغل الحاويات عبر Podman بلا صلاحيات الجذر بهذا المستخدم."
+    "container_required": "اكتب اسم الحاوية التي تشغل التطبيق."
   }
 }

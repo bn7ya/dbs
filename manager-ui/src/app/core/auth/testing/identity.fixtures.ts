@@ -72,3 +72,12 @@ export const OPERATOR: Identity = {
   role: 'operator',
   capabilities: OPERATOR_CAPABILITIES,
 };
+
+export const VIEWER: Identity = {
+  ...MASTER,
+  id: 3,
+  username: 'vera',
+  is_superuser: false,
+  role: 'viewer',
+  capabilities: ['console.run'],
+};

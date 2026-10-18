@@ -104,7 +104,7 @@ manager-ui/
     styles/_material.scss   the one Material theme and its overrides
     styles/_layout.scss     page, dialog and nav widths, breakpoints
     styles/_reset.scss  _base.scss  _typography.scss  _dialog.scss  _table.scss
-    styles.scss             cascade layers: reset, base, material, app
+    styles.scss             cascade layers: reset, base, vendor, material, app
     app/
       app.{ts,html,scss}    the root: skip link, direction, router outlet
       app.config.ts         providers
@@ -255,9 +255,11 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   behind the password.
 - **`AppLayout`** — the signed-in frame: a `mat-toolbar` header with the product name, the language
   switch and an account `mat-menu` holding Your account, About and sign-out; a `mat-nav-list` of
-  `SECTIONS` (dashboard, servers, activity, and accounts for the master), each section shown only
-  for its capability; the one `<main id="main">`. It provides `SHELL_FRAME`, so `StatusPage` knows
-  it is inside.
+  `SECTIONS` (dashboard, servers, applications, backups, console for `console.run`, activity, and
+  accounts for the master), each section shown only for its capability; the one `<main id="main">`.
+  It provides `SHELL_FRAME`, so `StatusPage` knows it is inside.
+- **`routeParam(route, name)`** (`core/routing/route-param.ts`) — a signal of a route parameter read
+  from whichever ancestor route holds it, `null` when none does.
 - **`LocaleStore`, `TranslatePipe` (`t`), `ErrorTextPipe` (`errorText`), `provideTranslations()`,
   `LocaleSwitcher`** (a `mat-button-toggle-group`), **`AppDirectionality`, `AppPaginatorIntl`**.
 - **`csrfInterceptor`, `errorInterceptor`, `apiErrorOf()`** — CSRF on unsafe requests; failures as
@@ -296,6 +298,18 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   `app-danger`.
 - **`isolated(text)`** — wraps a name in FSI … PDI so it keeps its own direction inside a sentence of
   either language.
+- **`StepsList`** (`<app-steps-list [steps]>`) — a job's steps in order, each `{key, label, status,
+  statusLabel}`, with its status as a `StatusTag`: pending, running, succeeded, failed, skipped. The
+  caller translates both words, so it holds no strings of its own.
+- **`TerminalView`** (`<app-terminal-view [label] [tooMuchOutput] [interactive] (typed) (resized)>`)
+  — one xterm.js terminal with the fit addon in a `dir="ltr"` frame, `screenReaderMode` on, its
+  theme read from the computed `--app-color-*` tokens and its font from `--app-font-mono`.
+  `interactive` false sets `disableStdin`. It emits typed data and its `{cols, rows}` once open and
+  after each refit (a debounced `ResizeObserver`), and offers `write(bytes)`, `clear()` and
+  `focus()`; it disposes xterm on destroy. xterm sits behind `TERMINAL_SCREENS`, so specs provide
+  `FakeTerminalScreens` from `shared/terminal-view/testing/`; nothing else imports xterm, and its
+  stylesheet loads in the `vendor` cascade layer. xterm cannot lay out right-to-left text, so pages
+  put their notices beside the terminal, never in it.
 - **`PasswordInput`**, **`EmptyState`**, **`StatusPage`**, **`FieldError`**, **`AppDatePipe`**,
   **`FileSizePipe`**, **`uniqueId()`**.
 
@@ -305,80 +319,147 @@ Every feature is mounted under `AppLayout` and its guard mirrors the backend's `
 (and, for accounts, the master's capability); the backend permission is the boundary. Actions the
 role cannot take are left out with `*appCan`.
 
-- **dashboard** (`/`) — every server as a card (connection dot, check, health, last backup, next
-  plan run, failures in the last 7 days, storage), the totals, recent failures, a reminder to export
-  when the last export is missing or older than 7 days, and a warning when `key_store` says the
-  sealing key sits in a file because no system keychain works. With no server it offers "Add a
-  server".
+- **dashboard** (`/`) — one section per server (name and link, address, connection dot, check) with
+  a card per application: where it runs (a server or cube icon with the engine), check, health, the
+  last backup with its validation, the next plan run, failures in the last 7 days and storage. A
+  server with no application offers "Add an application". Above them the totals (servers,
+  applications, storage, failures of the week, last export); below them the recent failures, each
+  linking to the application or server it hit; a reminder to export when the last export is missing
+  or older than 7 days, and a warning when `key_store` says the sealing key sits in a file because
+  no system keychain works. With no server it offers "Add a server".
 - **accounts** (`/accounts`, master only) — every account with its role, status, two-factor state
   and password expiry; add one with a first password (`AccountForm`, `RoleChoice`); change a role
   (`RoleForm`); disable or enable; reset two-factor sign-in; ask for a new password; hand the master
   role over with the password and a code (`HandOverForm`).
-- **servers** (`/servers`, `/servers/:serverId`) — list, search and page servers, with a Connection
-  column. Above the list, the host keys Claude read and a person has not decided yet: address, key
-  type, fingerprint and the command to compare it, with Confirm (asked once more) and Reject. The
-  server page has a `ConnectionDot` in its header and a `mat-tab-nav-bar` (overview, backups, files,
-  environment, activity) over the child route. The overview runs the connection check, shows the
-  settings and whether the server has the `timeout` command, edits them in a two-step dialog
-  (connection, django-dbs and folders), re-pins a changed host key (`HostKeyReview`,
-  `HostKeyFacts`), reveals the backup passphrase behind the account password with a warning that it
-  must never change, links to the move, and deletes behind the account password. Secrets are
-  write-only; an edit that changes more than the name asks for the account password. Every path
-  field in the dialog has a browse button. Where the project runs (on the server, or in a Docker Compose service with its
-  service name and compose files) is `components/runtime-fields/`, which the dialog and the wizard
-  share with `composeProblems()`; the check of a Compose server adds Docker Compose's version and
-  whether the service is running, and what Docker said when it would not run.
-- **server browser** (`components/server-browser/`, a dialog in the servers feature) — the server's
-  folders and files as the SSH user sees them, through `ServerBrowserStore` (provided by the dialog
-  itself) and `GET /api/servers/{id}/browse/`: Home, Up, a left-to-right trail, the projects
-  discovery found as quick picks, a notice when the folder holds `manage.py`, and a paged
-  `mat-table`, with a notice when the folder was cut at 5000 entries. In `folder` mode it closes with the folder on screen; in `file` mode a file row closes
-  it with that file. `browseServer()` in `browse-server.ts` opens it for one path field and picks
-  where it starts; the wizard and the edit dialog both call it.
-- **server wizard** (`/servers/new`, in the servers feature) — a linear vertical `mat-stepper`:
-  the optional connection snippet (`manage.py dbs connection --json`, parsed in
-  `connection-snippet.ts`), address and host key (fingerprint compared with the snippet's), sign-in
-  (create a key pair, paste a key, or a password; the server is created here, and a generated
-  public key is shown to copy into `authorized_keys`), project (discovery runs on arrival, inside
-  the snippet's folder when there is one; several projects found are a radio group, and choosing
-  one, or one picked in the server browser, discovers inside it; a search that finds django-dbs in
-  a Compose service switches the runtime to Compose with that service, and the services found are
-  offered to pick from; the folders and `.env` sit behind
-  "Show more settings", opened by itself when one of them has an error), check (runs on arrival;
-  the two django-dbs versions must be compatible; when the saved Python cannot import django-dbs
-  it shows the error and offers the Python discovery found with it, saved and re-checked in one
-  click), the optional backup passphrase capture (warning that it must be read before the first
-  backup and never changed), and a test backup. Steps up to sign-in lock once
-  the server exists. A discovery the developer did not ask for keeps a snippet's Python unless it
-  found one that imports django-dbs. When discovery or "Use this Python" answers that the account
-  password is required (the setup window is over), the wizard asks through `PasswordPrompt` and
-  retries with it; that ask is kept out of the page's own notices.
-- **redeploy** (`/servers/:serverId/move`) — move a project onto a new server with the same
-  environment: the new server, the backup to restore if this server does not answer (the newest,
-  or none), the `.env` version and whether to replace the data. A rehearsal needs no password; a
-  real move needs the account password and the new server's name typed out. The job's steps
-  (`MoveSteps`) render as a list with a status each, with `JobConnection` while it runs and a note
-  when the old server did not answer. A move that stopped after changing the new server offers
-  "Revert the new server", rehearsed or real, with its own steps.
-- **backups** (`/servers/:serverId/backups`) — plans (django-dbs, folders, or existing files
-  collected from one folder) with a schedule, keeping 1 to 5 here (5 for a new plan) and 0 to 5 on
-  the server (none for a new plan); an edit that keeps fewer asks for the password and says the next
-  run deletes the oldest. Files, newest first: take, upload with progress, download, verify, restore
-  (rehearsal by default, the server name typed for a real one; optionally onto another server, whose
-  name is then the one typed), delete behind the password with undo. A django-dbs backup downloads
-  through its plain link; a folder archive, a collected or an uploaded file through the password
-  prompt and `Downloader`. A running take or restore shows `JobConnection`; a run whose connection
-  broke says the backup is kept on the server and collected next time; a quarantined file shows its
-  reason and is never offered for restore.
-- **files** (`/servers/:serverId/files?path=`) — the server's allowed folders: a breadcrumb, open,
-  download (the store asks the server for a link and prompts for the password only when the file
-  holds secrets), upload, new folder, delete an empty folder or a file.
-- **envfiles** (`/servers/:serverId/environment`) — versions of the server's `.env`: pull, show
-  key names masked, reveal values behind the password, compare with the version before, push one
-  back.
-- **activity** (`/activity`, `/servers/:serverId/activity`) — the audit trail, newest first, with
-  status and action filters; scoped to one server on its tab, which leaves out the account,
-  sign-in and `manager.*` actions. An unknown action code renders as itself.
+- **servers** (`/servers`, `/servers/:serverId`) — a server is an SSH host. The list searches and
+  pages servers with their address and SSH user, the container engines the last check found (Docker
+  or Podman with its version, "no access" when the user may not use it), how many applications each
+  runs and its connection and check. Above it sit the host keys Claude read and a person has not
+  decided yet, with Confirm (asked once more) and Reject. The server page has its check and a
+  `ConnectionDot` in the header and a `mat-tab-nav-bar`: overview, applications
+  (`server-applications.routes.ts` of the applications feature), terminal (only with `shell.open`)
+  and activity. The overview runs the check and shows `EnginesReport` (the system, each engine
+  installed, usable, its version and Compose, `engine_permission_denied` explained, and the
+  `timeout` command), edits the connection in `ServerForm` (only what changed is sent; the account
+  password field appears when the backend asks), re-pins a changed host key (`HostKeyReview`,
+  `HostKeyFacts`), shows a key server's public key, offers to merge into another server with the
+  same host, port, user and host key (`POST …/merge/` behind the account password) and deletes
+  behind the account password; `server_has_applications` reads as "remove its applications first".
+- **server wizard** (`/servers/new`) — a linear vertical `mat-stepper`: address (name, host, port,
+  user); host key, read on arrival, shown with `HostKeyFacts` and the command to compare it, and
+  confirmed; sign-in (create a key pair, paste a key with an optional passphrase, or a password —
+  the server is created here, and a generated key's `authorized_keys` line is shown to copy); check,
+  with `EnginesReport`, saying to add a generated key the server refused; and a last step whose main
+  action is "Add an application". Steps up to sign-in lock once the server exists.
+- **applications** (`/applications`, `/applications/:applicationId`,
+  `/servers/:serverId/applications`, `/servers/:serverId/applications/new`) — an application is one
+  Django project on a server: on the host, in a Compose service or in a container, under Docker or
+  Podman. The list (every application, or one server's on its tab) shows the name, the server, where
+  it runs (`WhereItRuns`) and the check (`CheckTag`). The application page heads the name, its
+  check, its server and where it runs over a `mat-tab-nav-bar`: overview, then `loadChildren` of
+  backups, schedule, files, environment, deploy (only with `redeploy.rehearse`), terminal (only with
+  `shell.open`) and activity. The overview runs the check and shows `CheckReport` (the system,
+  django-dbs here and in the application, the engine and whether the container runs, the backup
+  command, the `.env` file, the backup folder, the timeout command and each allowed folder; a
+  warning when the application's own panel also schedules backups; "Use this Python" when
+  `python_suggestion` is set), the settings with mounts read-only and a warning that a `.env`
+  written inside a container is lost when it is created again, edits them in `ApplicationForm`
+  (`SettingsFields` with browse buttons, only what changed sent), shows the backup passphrase behind
+  the account password with the warning that it must never change or reads it from the application
+  while there is none, and removes the application behind the account password.
+- **application wizard** (`/servers/:serverId/applications/new`, `ApplicationWizardStore`) — a
+  linear vertical `mat-stepper`: folder, with the server browser; discovery (`POST
+  /api/applications/discover/` on arrival, asking the account password through `PasswordPrompt` once
+  the setup window is over), which says when the folder is not there and offers the suggested
+  `folders`, says when `trusted: false` means nothing was run, and offers the candidates as a
+  `mat-radio-group`, best first, each with `CandidateFacts` (running, replicas, django-dbs and
+  compatibility, folders on the host and inside the container, Python, settings module, the backup
+  folder and its host path, the `.env` candidates, and `problems` in words); review (the name, and
+  `SettingsFields` with `RuntimeFields` behind "Show more settings", opened by itself on an error),
+  where the application is created with `discovered`; check; the optional passphrase capture with
+  its warning; and a test backup followed with `JobWatcher` and `JobConnection`. Steps before
+  creation lock once the application exists.
+- **server browser** (`features/applications/components/server-browser/`, a dialog) — the server's
+  folders and files as the SSH user sees them, through `ServerBrowserStore` (provided by the dialog)
+  and `GET /api/servers/{id}/browse/`: Home, Up, a left-to-right trail, the project folders
+  discovery suggested as quick picks, a notice when the folder holds `manage.py`, a paged
+  `mat-table`, and a notice when the folder was cut at 5000 entries. In `folder` mode it closes with
+  the folder on screen; in `file` mode a file row closes it with that file. `browseServer()` opens
+  it for the wizard's folder and each server path in `SettingsFields`.
+- **backups** (`/applications/:applicationId/backups` from `backups.routes.ts`,
+  `/applications/:applicationId/schedule` from `plans.routes.ts`) — one application's files and its
+  schedule, with `BackupsStore` and `PlansStore` provided by their routes and `BackupsApi` and
+  `PlansApi` the only HttpClients. The backups tab lists the files newest first in `BackupTable`:
+  take, upload with progress, download, verify, restore (rehearsal by default; a real one asks the
+  account password and the application's name typed out; optionally onto another application, whose
+  name is then the one typed), delete behind the password with undo (`BackupNotices`). A django-dbs
+  backup downloads through its plain link; an archive, a collected or an uploaded file through the
+  password prompt and `Downloader`. A running job shows `JobConnection`; a run whose connection
+  broke says the backup is kept on the server and collected next time, one that resumed after it
+  broke says so; a quarantined file shows its reason and is never offered for restore. The schedule
+  tab lists the plans (django-dbs, folders, or files collected from one folder): how often or
+  manual, keeping 1 to 5 here and 0 to 5 on the server, on or paused, the next run in the plan's
+  time zone with the reader's own time beside it when it differs (`NextRun`), and the last run. Run
+  now needs `plans.run`; the row's menu (Pause or Resume, Reschedule, Edit, Delete) needs
+  `plans.manage`. `PlanForm` adds a first run (`MomentFields`: a `mat-datepicker` and a
+  `mat-timepicker` read as the wall clock in the plan's zone and sent as `anchor_at` with its
+  offset) and a time zone (an autocomplete over `Intl.supportedValuesOf('timeZone')`, starting on
+  the browser's zone; daily and weekly plans keep their local time across daylight saving); an edit
+  that keeps fewer asks for the password and says the next run deletes the oldest. `RescheduleForm`
+  moves the next run within a year; resuming runs at the next beat after now. `data/zoned-time.ts`
+  holds the zone arithmetic and `LOCAL_TIME_ZONE`.
+- **all backups** (`/backups`, `all-backups.routes.ts`) — every application's backups in the same
+  `BackupTable`, with application and server columns linking to their pages, a filter by application
+  and the same row actions, under a storage card with the manager's total and each application's
+  share from `GET /api/dashboard/`.
+- **files** (`/applications/:applicationId/files?path=`) — the application's allowed folders, as
+  host paths: a breadcrumb, open, download (the store asks for a link and prompts for the password
+  only when the file holds secrets, such as a `.env`), upload with progress, new folder, delete an
+  empty folder or a file. An application with no allowed folders links to its overview.
+- **envfiles** (`/applications/:applicationId/environment`) — versions of the application's `.env`:
+  pull, show key names masked, reveal values behind the password, compare with the version before,
+  push one back. When the file lives inside the container, the selected version and the push
+  confirmation say a pushed file is lost when the container is created again.
+- **activity** (`/activity`, `/servers/:serverId/activity`, `/applications/:applicationId/activity`)
+  — the audit trail, newest first, with status and action filters. Each entry names its application
+  and server, linked to their pages, or marked removed once gone. The server tab (`?server=`) covers
+  the server and every application on it; the application tab (`?application=`) only that
+  application. Scoped tabs leave out the account, sign-in and `manager.*` actions. An unknown action
+  code renders as itself.
+- **redeploy** (`/applications/:applicationId/deploy`, `capabilityGuard('redeploy.rehearse')`) — one
+  page, two cards, each with its store (`DeployStore`, `MoveStore`). *Deploy here* lists the saved
+  `deploy_steps` with what each does and its time limit, and marks one that no longer fits the
+  application. `DeployStepsEditor` (`applications.manage`) adds a step from the kinds `kindsFor()`
+  allows (`data/deploy-catalogue.ts` mirrors the manager's catalogue), edits its options and a 1–120
+  minute limit, reorders and removes, at most twelve, checks every field before asking the password
+  through `PasswordPrompt`, and puts `steps.N` refusals on their rows. Rehearse needs no password;
+  Deploy needs the password and the application's name typed out. `JobProgress` lists the job's
+  steps with `StepsList` and `JobConnection`, and the git HEAD and image before and after. A deploy
+  that stopped after a step ran offers "Restore the safety backup", rehearsed or real, saying it
+  puts the data back only. *Move to another application* picks the target from every other
+  application, the backup to restore if this one does not answer (the newest, or none), the `.env`
+  version and whether to replace the data; a real move types the target's name, and a move that
+  stopped after changing the target offers "Revert the new application".
+- **console** (`/console`, `console.run`) — one `django_dbs` line at a time as the signed-in account
+  (`POST /api/console/`). A `role="log"` area (`aria-live="polite"`, monospace, `dir="ltr"`) keeps
+  the commands, their output and exit codes, newest at the bottom; a failure carries a danger edge
+  and its `error_code` translated. The field (prefix `django_dbs`) runs on Enter and walks the
+  history with Up and Down. A `password_required` answer asks through `PasswordPrompt` and sends the
+  same line with `password`. Each id in `activities` is followed with `JobWatcher`, with a link to
+  `/activity`. `console_busy` and a refused line show on the entry; Help sends `help`; Clear empties
+  the log but keeps the history. `ConsoleStore` keys log, history and watchers to the signed-in
+  account. The page says that commands which read the manager's own disk or ask for another secret
+  run only in a terminal on that computer.
+- **terminal** (`/servers/:serverId/terminal` with `data: {mode: 'server'}`,
+  `/applications/:applicationId/terminal` with `{mode: 'application'}`, `shell.open`) — a shell over
+  SSH. The page says where it runs and that what is typed and shown is never recorded while the
+  session is. Open asks the account password every time and posts the view's size; a terminal this
+  session already has open in the same place is offered to reattach (no password) or close.
+  `TerminalStore` long-polls `…/output/?cursor=` back to back, carrying the cursor, and feeds
+  decoded bytes to `TerminalView`; `skipped` and `closed` (with `reason` and `exit_status`) are
+  notices beside the terminal. Keystrokes batch with `bufferTime` into posts of at most 64 KiB with
+  an increasing `seq` a retry reuses; resizes are debounced and clamped to 20–500 × 5–200. Close,
+  and leaving the page, `DELETE` it.
 - **about** (`/about`, from the account menu) — the version, data folder, database, backups folder
   and last export, then the export, export with backups and import commands with copy buttons.
 

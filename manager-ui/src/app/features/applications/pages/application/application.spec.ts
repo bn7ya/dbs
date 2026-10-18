@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Identity } from '@core/auth/data/auth.types';
 import { AuthStore } from '@core/auth/state/auth.store';
-import { MASTER, OPERATOR } from '@core/auth/testing/identity.fixtures';
+import { MASTER, OPERATOR, VIEWER } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import ar from '../../i18n/ar.json';
@@ -94,6 +94,13 @@ describe('ApplicationPage', () => {
 
     expect(links(page)).not.toContain(`/applications/${APPLICATION.id}/terminal`);
     expect(links(page)).toHaveLength(TABS.length - 1);
+  });
+
+  it('leaves the deploy and terminal tabs out for a role that may not rehearse a deploy', async () => {
+    const page = await show(`/applications/${APPLICATION.id}`, VIEWER);
+
+    expect(links(page)).not.toContain(`/applications/${APPLICATION.id}/deploy`);
+    expect(links(page)).toHaveLength(TABS.length - 2);
   });
 
   it('says when the application is gone', async () => {

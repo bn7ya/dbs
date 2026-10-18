@@ -195,7 +195,10 @@
     "own_account": "You cannot change your own account this way.",
     "account_inactive": "That account is disabled. Enable it first.",
     "too_many_attempts": "Too many attempts. Wait a few minutes and try again.",
-    "passphrase_missing": "The backup passphrase of this application is not saved here."
+    "passphrase_missing": "The backup passphrase of this application is not saved here.",
+    "container_not_running": "The application's container is not running.",
+    "container_engine_missing": "Neither Docker nor Podman answers on this server.",
+    "engine_permission_denied": "The SSH user may not use the container engine. Add it to the engine's group, or run the containers with rootless Podman as that user."
   },
   "actions": {
     "cancel": "Cancel",

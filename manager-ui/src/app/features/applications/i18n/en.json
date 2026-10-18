@@ -356,9 +356,6 @@
     "engine_required": "Choose Docker or Podman.",
     "compose_service_required": "Name the Compose service that runs the application.",
     "compose_folder_required": "Enter the folder that holds the compose file.",
-    "container_required": "Name the container that runs the application.",
-    "container_not_running": "The application's container is not running.",
-    "container_engine_missing": "Neither Docker nor Podman answers on this server.",
-    "engine_permission_denied": "The SSH user may not use the container engine. Add it to the engine's group, or run the containers with rootless Podman as that user."
+    "container_required": "Name the container that runs the application."
   }
 }
