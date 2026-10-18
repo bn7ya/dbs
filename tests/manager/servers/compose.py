@@ -116,7 +116,16 @@ class ComposeHost(LocalSftpSession):
         self.owners[path] = HOST_UID
         return RemoteResult(0, "", "")
 
-    def stream(self, script, sink, stdin_line=None, timeout=None, progress=None):
+    def stream(
+        self,
+        script,
+        sink,
+        stdin_line=None,
+        timeout=None,
+        progress=None,
+        idle_timeout=None,
+        on_stderr_line=None,
+    ):
         argv, setup = argv_of(script)
         self.runs.append(
             {"argv": argv, "setup": setup, "stdin": stdin_line, "streamed": True}
@@ -127,6 +136,10 @@ class ComposeHost(LocalSftpSession):
             return RemoteResult(1, "", f'service "{service}" is not running')
         if command[:2] == ["cat", "--"]:
             sink.write(self.inside(command[2]).read_bytes())
+            return RemoteResult(0, "", "")
+        if command[:2] == ["tail", "-c"] and command[3] == "--":
+            start = int(command[2].lstrip("+")) - 1
+            sink.write(self.inside(command[4]).read_bytes()[start:])
             return RemoteResult(0, "", "")
         if self.backup_fails:
             return RemoteResult(1, "", self.backup_fails)

@@ -396,10 +396,28 @@ class StreamingSession(FakeSession):
         self.raised = failure
         self.streams: list[dict] = []
 
-    def stream(self, command, sink, *, stdin_line=None, timeout=None, progress=None):
+    def stream(
+        self,
+        command,
+        sink,
+        *,
+        stdin_line=None,
+        timeout=None,
+        progress=None,
+        idle_timeout=None,
+        on_stderr_line=None,
+    ):
         self.streams.append(
-            {"command": command, "stdin": stdin_line, "timeout": timeout}
+            {
+                "command": command,
+                "stdin": stdin_line,
+                "timeout": timeout,
+                "idle": idle_timeout,
+            }
         )
+        if on_stderr_line is not None and self.answer is not None:
+            for line in self.answer.stderr.splitlines():
+                on_stderr_line(line)
         sink.write(self.sent)
         if progress is not None:
             progress(len(self.sent))
@@ -423,7 +441,8 @@ def streamed(session, folder=BACKUP_DIR, prefix="web-1"):
 
 
 def test_a_backup_is_streamed_with_its_passphrase_on_stdin(settings):
-    settings.BACKUP_EXEC_TIMEOUT = 1234
+    settings.BACKUP_TOTAL_TIMEOUT = 1234
+    settings.BACKUP_QUIET_TIMEOUT = 77
     name = backup_filename("web-1")
     session = StreamingSession(
         result=RemoteResult(0, "", f"Streamed it.\n{summary_line(name)}\n")
@@ -437,7 +456,7 @@ def test_a_backup_is_streamed_with_its_passphrase_on_stdin(settings):
     assert seen == [len(CONTENT)]
     [sent] = session.streams
     assert sent["stdin"] == BACKUP_PASSPHRASE
-    assert sent["timeout"] == 1234
+    assert (sent["timeout"], sent["idle"]) == (1234, 77)
     argv, setup = argv_and_setup(sent["command"])
     assert argv == [
         PYTHON,
@@ -455,6 +474,94 @@ def test_a_backup_is_streamed_with_its_passphrase_on_stdin(settings):
         f"export DJANGO_SETTINGS_MODULE={SETTINGS_MODULE}",
     ]
     assert BACKUP_PASSPHRASE not in sent["command"]
+
+
+def test_a_backup_that_reports_progress_names_itself_first(settings):
+    settings.BACKUP_IDLE_TIMEOUT = 55
+    name = backup_filename("web-1")
+    partial = partial_name(name)
+    started = json.dumps({"progress": {"name": name, "partial": partial, "moment": "x"}})
+    beat = json.dumps({"progress": {"bytes": 10}})
+    session = StreamingSession(
+        result=RemoteResult(0, "", f"{started}\n{beat}\n{summary_line(name)}\n")
+    )
+    told = []
+
+    found = RemoteHost(session).stream_dbs_backup(
+        PROFILE,
+        passphrase=BACKUP_PASSPHRASE,
+        prefix="web-1",
+        folder=BACKUP_DIR,
+        sink=io.BytesIO(),
+        progress_seconds=30,
+        on_started=told.append,
+    )
+
+    assert found.name == name
+    assert told == [{"name": name, "partial": partial}]
+    [sent] = session.streams
+    assert sent["idle"] == 55
+    argv, _ = argv_and_setup(sent["command"])
+    assert argv[-2:] == ["--progress-seconds", "30"]
+
+
+@pytest.mark.parametrize(
+    "progress",
+    [
+        {"name": "../web-1.dbs", "partial": ".x.part-0123456789abcdef"},
+        {"name": "other-20261018-030000Z.dbs", "partial": ".x.part-0123456789abcdef"},
+        {"partial": ".x.part-0123456789abcdef"},
+    ],
+)
+def test_a_start_line_that_does_not_name_this_backup_is_ignored(progress):
+    name = backup_filename("web-1")
+    started = json.dumps({"progress": progress})
+    session = StreamingSession(
+        result=RemoteResult(0, "", f"{started}\n{summary_line(name)}\n")
+    )
+    told = []
+
+    RemoteHost(session).stream_dbs_backup(
+        PROFILE,
+        passphrase=BACKUP_PASSPHRASE,
+        prefix="web-1",
+        folder=BACKUP_DIR,
+        sink=io.BytesIO(),
+        progress_seconds=30,
+        on_started=told.append,
+    )
+
+    assert told == []
+
+
+def test_a_remote_without_progress_reports_is_asked_again_without_them():
+    name = backup_filename("web-1")
+
+    class OlderRemote(StreamingSession):
+        def stream(self, command, sink, **options):
+            if "--progress-seconds" in command:
+                self.streams.append({"command": command})
+                return RemoteResult(
+                    2, "", "error: unrecognized arguments: --progress-seconds 30"
+                )
+            return super().stream(command, sink, **options)
+
+    session = OlderRemote(result=RemoteResult(0, "", summary_line(name)))
+
+    found = RemoteHost(session).stream_dbs_backup(
+        PROFILE,
+        passphrase=BACKUP_PASSPHRASE,
+        prefix="web-1",
+        folder=BACKUP_DIR,
+        sink=io.BytesIO(),
+        progress_seconds=30,
+    )
+
+    assert found.name == name
+    assert ["--progress-seconds" in sent["command"] for sent in session.streams] == [
+        True,
+        False,
+    ]
 
 
 def test_without_a_folder_the_server_keeps_its_copy_in_dbs_backup_dir():
@@ -585,6 +692,38 @@ def test_a_waiting_backup_is_pulled_whole_and_its_digest_read(tmp_path):
     assert sink.getvalue() == CONTENT
     assert seen[-1] == len(CONTENT)
     assert remote.backup_sha256(PROFILE, str(path)) == DIGEST
+
+
+def test_the_rest_of_a_backup_is_pulled_from_where_the_stream_broke(tmp_path):
+    folder = server_folder(tmp_path)
+    path = folder / backup_filename("web-1")
+    path.write_bytes(CONTENT)
+    remote = RemoteHost(LocalSession())
+    sink = io.BytesIO()
+    seen = []
+
+    remote.pull_backup(PROFILE, str(path), sink, seen.append, offset=1000)
+
+    assert sink.getvalue() == CONTENT[1000:]
+    assert seen[-1] == len(CONTENT)
+    with pytest.raises(ValueError):
+        remote.pull_backup(PROFILE, str(path), sink, offset=-1)
+
+
+def test_every_file_in_a_backup_folder_is_listed_partials_too(tmp_path):
+    folder = server_folder(tmp_path)
+    name = backup_filename("web-1")
+    partial = partial_name(name)
+    (folder / name).write_bytes(CONTENT)
+    (folder / partial).write_bytes(b"half")
+    remote = RemoteHost(FakeSession(sftp=LocalSftp()))
+
+    listed = {found.name: found.size for found in remote.folder_files(PROFILE, str(folder))}
+
+    assert listed == {name: len(CONTENT), partial: 4}
+    assert [found.name for found in remote.waiting_backups(PROFILE, str(folder), "web-1")] == [
+        name
+    ]
 
 
 def test_a_backup_gone_before_it_is_pulled_is_not_found(tmp_path):

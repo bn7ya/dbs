@@ -817,3 +817,75 @@ def test_a_connection_that_drops_while_reading_is_interrupted(fake_ssh, monkeypa
         with pytest.raises(StreamInterrupted, match="lost"):
             session.stream("dbs backup --stream", io.BytesIO())
 
+
+
+def stalling(fake_ssh, *, head, rest, quiet, stderr="", every=0.0):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    def handle(command, session):
+        session.quiet_for = quiet
+        session.after_quiet_bytes = rest
+        session.stderr_every = every
+        return 0, head, stderr
+
+    fake_ssh.on_exec(handle)
+
+
+def test_a_stream_with_nothing_arriving_for_the_idle_limit_is_interrupted(fake_ssh):
+    stalling(fake_ssh, head=b"first", rest=b"never", quiet=5.0)
+    sink = io.BytesIO()
+
+    with open_session(target()) as session:
+        with pytest.raises(StreamInterrupted, match="Nothing arrived for 0.2s"):
+            session.stream("dbs backup --stream", sink, idle_timeout=0.2)
+
+    assert sink.getvalue() == b"first"
+    assert fake_ssh.executions[0].channel_closed is True
+
+
+def test_a_quiet_stdout_that_resumes_within_the_idle_limit_is_kept(fake_ssh):
+    stalling(fake_ssh, head=b"first", rest=b"-second", quiet=0.15)
+    sink = io.BytesIO()
+
+    with open_session(target()) as session:
+        result = session.stream("dbs backup --stream", sink, idle_timeout=1.0)
+
+    assert result.exit_status == 0
+    assert sink.getvalue() == b"first-second"
+
+
+def test_progress_on_stderr_keeps_a_quiet_stream_alive_and_is_seen_line_by_line(
+    fake_ssh,
+):
+    beats = "".join(f'{{"progress": {{"bytes": {n}}}}}\n' for n in range(8))
+    stalling(
+        fake_ssh, head=b"first", rest=b"-second", quiet=0.6, stderr=beats, every=0.1
+    )
+    sink = io.BytesIO()
+    lines = []
+
+    with open_session(target()) as session:
+        result = session.stream(
+            "dbs backup --stream",
+            sink,
+            idle_timeout=0.3,
+            on_stderr_line=lines.append,
+        )
+
+    assert result.exit_status == 0
+    assert sink.getvalue() == b"first-second"
+    assert lines[:2] == ['{"progress": {"bytes": 0}}', '{"progress": {"bytes": 1}}']
+
+
+def test_a_failing_stderr_handler_never_stops_the_stream(fake_ssh):
+    streaming(fake_ssh, (0, b"payload", "one\ntwo\n"))
+    sink = io.BytesIO()
+
+    def broken(line):
+        raise ValueError(line)
+
+    with open_session(target()) as session:
+        result = session.stream("dbs backup --stream", sink, on_stderr_line=broken)
+
+    assert result.exit_status == 0 and result.stderr == "one\ntwo\n"
+    assert sink.getvalue() == b"payload"

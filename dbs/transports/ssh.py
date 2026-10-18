@@ -12,7 +12,7 @@ import socket
 import threading
 import time
 from collections.abc import Callable
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 
 from .. import extras
@@ -37,6 +37,7 @@ logger = logging.getLogger("dbs")
 MAX_CAPTURED_OUTPUT = 64 * 1024
 STREAM_CHUNK = 256 * 1024
 STDERR_WAIT = 5.0
+STDERR_LINE_MAX = 4096
 DEFAULT_KEEPALIVE_INTERVAL = 15.0
 DEFAULT_IO_TIMEOUT = 30.0
 DEFAULT_COMMAND_TIMEOUT = 6 * 60 * 60.0
@@ -589,20 +590,25 @@ class SSHSession:
         stdin_line: str | None = None,
         timeout: float | None = None,
         progress=None,
+        idle_timeout: float | None = None,
+        on_stderr_line: Callable[[str], None] | None = None,
     ) -> RemoteResult:
-        guarded = _Guarded(self.target.command_timeout if timeout is None else timeout)
+        """Run ``command`` and write its standard output to ``sink``; ``idle_timeout`` stops it after that many seconds with no output on either stream, and ``on_stderr_line`` sees each line of standard error as it arrives."""
+        guarded = _Guarded(
+            self.target.command_timeout if timeout is None else timeout, idle=idle_timeout
+        )
         stdin, stdout, stderr = guarded(
             lambda: self._client.exec_command(command, get_pty=False)
         )
         channel = stdout.channel
-        tail = _StderrTail(stderr)
+        tail = _StderrTail(stderr, on_line=on_stderr_line, on_activity=self._moved)
         finished = False
         try:
             guarded(lambda: _send_line(stdin, stdin_line))
             tail.start()
             received = 0
             while True:
-                data = guarded(lambda: guarded.receive(channel))
+                data = guarded(lambda: guarded.receive(channel, tail))
                 if not data:
                     break
                 sink.write(data)
@@ -964,8 +970,9 @@ def _require_backup(path: str, name: str) -> None:
 
 
 class _Guarded:
-    def __init__(self, timeout: float | None):
+    def __init__(self, timeout: float | None, idle: float | None = None):
         self.timeout = timeout
+        self.idle = idle or None
         self.deadline = None if not timeout else time.monotonic() + timeout
         self.lost = _connection_gone()
 
@@ -987,9 +994,25 @@ class _Guarded:
             raise socket.timeout()
         return left
 
-    def receive(self, channel) -> bytes:
-        channel.settimeout(self.remaining())
-        return channel.recv(STREAM_CHUNK)
+    def receive(self, channel, tail: _StderrTail | None = None) -> bytes:
+        if self.idle is None:
+            channel.settimeout(self.remaining())
+            return channel.recv(STREAM_CHUNK)
+        heard = time.monotonic()
+        while True:
+            left = self.remaining()
+            wait = self.idle if left is None else min(left, self.idle)
+            channel.settimeout(wait)
+            try:
+                return channel.recv(STREAM_CHUNK)
+            except socket.timeout:
+                now = time.monotonic()
+                if tail is not None:
+                    heard = max(heard, tail.last_activity)
+                if now - heard >= self.idle:
+                    raise StreamInterrupted(
+                        f"Nothing arrived for {self.idle:g}s."
+                    ) from None
 
     def send(self, channel, data: bytes) -> None:
         channel.settimeout(self.remaining())
@@ -1026,10 +1049,21 @@ def _close_quietly(channel) -> None:
 
 
 class _StderrTail:
-    def __init__(self, stream, limit: int = MAX_CAPTURED_OUTPUT):
+    def __init__(
+        self,
+        stream,
+        limit: int = MAX_CAPTURED_OUTPUT,
+        *,
+        on_line: Callable[[str], None] | None = None,
+        on_activity: Callable[[int], None] | None = None,
+    ):
         self._stream = stream
         self._limit = limit
         self._kept = bytearray()
+        self._line = bytearray()
+        self._on_line = on_line
+        self._on_activity = on_activity
+        self.last_activity = time.monotonic()
         self._thread = threading.Thread(target=self._read, daemon=True)
 
     def start(self) -> None:
@@ -1048,10 +1082,23 @@ class _StderrTail:
                 chunk = self._stream.read(STREAM_CHUNK)
                 if not chunk:
                     return
+                self.last_activity = time.monotonic()
+                if self._on_activity is not None:
+                    self._on_activity(0)
                 self._kept += chunk
                 del self._kept[: max(len(self._kept) - self._limit, 0)]
+                if self._on_line is not None:
+                    self._lines(chunk)
         except Exception:
             return
+
+    def _lines(self, chunk: bytes) -> None:
+        self._line += chunk
+        *complete, rest = bytes(self._line).split(b"\n")
+        self._line = bytearray(rest[-STDERR_LINE_MAX:])
+        for line in complete:
+            with suppress(Exception):
+                self._on_line(line[:STDERR_LINE_MAX].decode("utf-8", "replace"))
 
 
 def _ensure_remote_dir(sftp, remote_dir: str) -> None:

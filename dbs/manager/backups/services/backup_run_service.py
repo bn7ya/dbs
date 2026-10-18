@@ -34,6 +34,7 @@ from dbs.manager.backups.services.dbs_runs import DbsOutcome, DbsRun, moment_of
 from dbs.manager.backups.services.plan_runs import last_run, run_detail
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.common.uploads import upload_name
+from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import StreamBroken, failure_facts
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.services import ApplicationService
@@ -191,17 +192,22 @@ class BackupRunService:
         profile = connections.dbs_profile(application)
         passphrase = connections.backup_passphrase(application)
         self.storage.directory(application.pk)
-        with connections.open(application) as remote:
-            return DbsRun(
-                job,
-                application,
-                plan,
-                remote=remote,
-                profile=profile,
-                passphrase=passphrase,
-                prefix=prefix,
-                keep_remote=keep_remote,
-            ).run()
+        reported = (application.last_check_report or {}).get("dbs_version")
+        return DbsRun(
+            job,
+            application,
+            plan,
+            connect=lambda: connections.open(application),
+            profile=profile,
+            passphrase=passphrase,
+            prefix=prefix,
+            keep_remote=keep_remote,
+            progress_seconds=(
+                settings.BACKUP_PROGRESS_SECONDS
+                if versions.at_least(reported, versions.PROGRESS_FROM)
+                else 0
+            ),
+        ).run()
 
     def _reported(self, job: AuditEvent, outcome: DbsOutcome) -> Detail:
         detail: Detail = {"pulled": len(outcome.pulled)}
@@ -217,6 +223,7 @@ class BackupRunService:
             "backup": str(streamed.pk),
             "size": streamed.size,
             **detail,
+            **({"resumed": True} if outcome.resumed else {}),
             "released": len(outcome.released),
         }
 

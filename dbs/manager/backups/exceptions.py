@@ -38,6 +38,15 @@ class ArchiveMismatch(APIException):
     )
 
 
+class BackupLostOnServer(APIException):
+    status_code = status.HTTP_502_BAD_GATEWAY
+    default_code = "backup_lost_on_server"
+    default_detail = (
+        "The connection broke while the backup was arriving, and the server did not "
+        "finish it."
+    )
+
+
 class BackupQuarantined(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "backup_quarantined"

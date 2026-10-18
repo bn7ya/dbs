@@ -228,7 +228,17 @@ class StreamingSession(Session):
         super().__init__(result=result, failure=failure)
         self.streams: list[tuple[list[str], float]] = []
 
-    def stream(self, script, sink, *, stdin_line=None, timeout=None, progress=None):
+    def stream(
+        self,
+        script,
+        sink,
+        *,
+        stdin_line=None,
+        timeout=None,
+        progress=None,
+        idle_timeout=None,
+        on_stderr_line=None,
+    ):
         self.streams.append((argv_of(script)[0], timeout))
         if self.failure is not None:
             raise self.failure
@@ -242,7 +252,7 @@ def streamed(session, profile=HOST, **limits):
 
 
 def test_a_streamed_backup_is_stopped_at_the_backup_deadline(settings):
-    settings.BACKUP_EXEC_TIMEOUT = 3600
+    settings.BACKUP_TOTAL_TIMEOUT = 3600
     session = StreamingSession(result=(124, "", "Terminated"))
 
     with pytest.raises(RemoteCommandTimedOut):
@@ -255,7 +265,7 @@ def test_a_streamed_backup_is_stopped_at_the_backup_deadline(settings):
 
 
 def test_a_streamed_compose_backup_is_stopped_inside_the_container(settings):
-    settings.BACKUP_EXEC_TIMEOUT = 3600
+    settings.BACKUP_TOTAL_TIMEOUT = 3600
     session = StreamingSession(result=(137, "", ""))
 
     with pytest.raises(RemoteCommandTimedOut):
@@ -267,7 +277,7 @@ def test_a_streamed_compose_backup_is_stopped_inside_the_container(settings):
 
 
 def test_a_streamed_backup_without_timeout_waits_the_backup_deadline(settings):
-    settings.BACKUP_EXEC_TIMEOUT = 3600
+    settings.BACKUP_TOTAL_TIMEOUT = 3600
     session = StreamingSession(result=(124, "", ""))
 
     with pytest.raises(RemoteCommandFailed) as failed:

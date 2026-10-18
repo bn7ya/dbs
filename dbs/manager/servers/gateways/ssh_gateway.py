@@ -78,6 +78,7 @@ FLUSHED = re.compile(r"Flushed (\d+) existing rows")
 WOULD_FLUSH = re.compile(r"Flush would first delete (\d+) existing rows")
 HEALED = "Corruption detected and repaired"
 UNKNOWN_OPTION = "unrecognized arguments"
+PROGRESS_OPTION = "unrecognized arguments: --progress-seconds"
 RESTORE_FILE_PREFIX = ".dbs-restore-"
 RESTORE_FILE_MODE = 0o600
 NEW_FILE_MODE = 0o600
@@ -518,6 +519,8 @@ class RemoteHost:
         timeout: float | None = None,
         progress: Callable[[int], None] | None = None,
         limited: bool = False,
+        idle_timeout: float | None = None,
+        on_stderr_line: Callable[[str], None] | None = None,
     ) -> RemoteResult:
         seconds = timeout or settings.BACKUP_EXEC_TIMEOUT
         if self.timeout_on_host and not limited:
@@ -531,6 +534,8 @@ class RemoteHost:
                 stdin_line=stdin_line,
                 timeout=_waited(seconds, limited),
                 progress=progress,
+                idle_timeout=idle_timeout,
+                on_stderr_line=on_stderr_line,
             )
         except StreamInterrupted as exc:
             raise StreamBroken(output=_tail(str(exc), secret)) from exc
@@ -555,19 +560,25 @@ class RemoteHost:
     ) -> list[ServerBackup]:
         if not folder:
             return []
+        found = [
+            backup
+            for backup in self.folder_files(profile, folder)
+            if is_backup_name(backup.name, prefix)
+        ]
+        return sorted(
+            found, key=lambda backup: (parse_backup_moment(backup.name), backup.name)
+        )
+
+    def folder_files(self, profile: DbsProfile, folder: str) -> list[ServerBackup]:
         listed = (
             self._listed_on_host(folder)
             if profile.container is None
             else self._listed_in_container(profile, folder)
         )
-        found = [
+        return [
             ServerBackup(name, posixpath.join(folder, name), size, mtime)
             for name, size, mtime in listed
-            if is_backup_name(name, prefix)
         ]
-        return sorted(
-            found, key=lambda backup: (parse_backup_moment(backup.name), backup.name)
-        )
 
     def backup_sha256(self, profile: DbsProfile, path: str) -> str:
         if profile.container is None:
@@ -583,19 +594,23 @@ class RemoteHost:
         path: str,
         sink: Writable,
         progress: Callable[[int], None] | None = None,
+        *,
+        offset: int = 0,
     ) -> None:
+        if offset < 0:
+            raise ValueError(f"Not an offset: {offset!r}")
         if profile.container is None:
-            received = 0
-            with self.stream_file(path) as chunks:
+            received = offset
+            with self.stream_file(path, start=offset) as chunks:
                 for chunk in chunks:
                     sink.write(chunk)
                     received += len(chunk)
                     if progress is not None:
                         progress(received)
             return
-        seconds = settings.BACKUP_EXEC_TIMEOUT
+        seconds = settings.BACKUP_TOTAL_TIMEOUT
         inside = self.timeout_in_container
-        command = ["cat", "--", path]
+        command = ["tail", "-c", f"+{offset + 1}", "--", path] if offset else ["cat", "--", path]
         try:
             result = self.stream(
                 profile.container.exec_argv(
@@ -606,6 +621,7 @@ class RemoteHost:
                 timeout=seconds,
                 progress=progress,
                 limited=inside,
+                idle_timeout=settings.BACKUP_IDLE_TIMEOUT,
             )
         except StreamBroken as exc:
             raise RemoteCommandFailed(output=exc.output) from exc
@@ -622,11 +638,19 @@ class RemoteHost:
         folder: str,
         sink: Writable,
         progress: Callable[[int], None] | None = None,
+        progress_seconds: int = 0,
+        on_started: Callable[[dict[str, str]], None] | None = None,
     ) -> StreamedBackup:
         arguments = ["dbs_backup", "--stream", "--prefix", prefix, "--passphrase-stdin"]
         arguments += ["--output-dir", folder] if folder else []
+        arguments += ["--progress-seconds", str(progress_seconds)] if progress_seconds else []
         command = [profile.python, profile.manage, *arguments]
-        seconds = settings.BACKUP_EXEC_TIMEOUT
+        seconds = settings.BACKUP_TOTAL_TIMEOUT
+        idle = (
+            settings.BACKUP_IDLE_TIMEOUT
+            if progress_seconds
+            else settings.BACKUP_QUIET_TIMEOUT
+        )
         inside = profile.container is not None and self.timeout_in_container
         if profile.container is None:
             argv = command
@@ -651,9 +675,20 @@ class RemoteHost:
             timeout=seconds,
             progress=progress,
             limited=inside,
+            idle_timeout=idle,
+            on_stderr_line=None if on_started is None else _started(prefix, on_started),
         )
         output = _tail(result.stderr, passphrase)
         if not result.ok:
+            if progress_seconds and PROGRESS_OPTION in result.stderr:
+                return self.stream_dbs_backup(
+                    profile,
+                    passphrase=passphrase,
+                    prefix=prefix,
+                    folder=folder,
+                    sink=sink,
+                    progress=progress,
+                )
             if UNKNOWN_OPTION in result.stderr:
                 raise DbsTooOld(versions.MINIMUM_REMOTE, output=output)
             raise RemoteCommandFailed(output=output)
@@ -981,7 +1016,7 @@ class RemoteHost:
 
     @contextmanager
     def stream_file(
-        self, path: str, limit: int | None = None
+        self, path: str, limit: int | None = None, *, start: int = 0
     ) -> Iterator[Iterator[bytes]]:
         sftp = self.sftp
         try:
@@ -989,7 +1024,7 @@ class RemoteHost:
         except SFTP_ERRORS as exc:
             raise _translated(exc, path) from exc
         try:
-            yield _windows(handle, limit)
+            yield _windows(handle, limit, start)
         finally:
             with suppress(*TRANSPORT_ERRORS):
                 handle.close()
@@ -1197,6 +1232,34 @@ def _is_listed(row: object) -> bool:
     )
 
 
+def _started(
+    prefix: str, on_started: Callable[[dict[str, str]], None]
+) -> Callable[[str], None]:
+    told = []
+
+    def heard(line: str) -> None:
+        if told:
+            return
+        found = _json_of(line)
+        reported = found.get("progress") if isinstance(found, dict) else None
+        if not isinstance(reported, dict):
+            return
+        name, partial = reported.get("name"), reported.get("partial")
+        if not (
+            isinstance(name, str)
+            and isinstance(partial, str)
+            and "/" not in name
+            and "/" not in partial
+            and is_backup_name(name, prefix)
+            and is_partial_name(partial)
+        ):
+            return
+        told.append(name)
+        on_started({"name": name, "partial": partial})
+
+    return heard
+
+
 def _stream_summary(stderr: str, prefix: str) -> dict | None:
     lines = [line for line in stderr.splitlines() if line.strip()]
     summary = _json_of(lines[-1]) if lines else None
@@ -1278,8 +1341,8 @@ def _partial_name(name: str) -> str:
     return f".{kept}.part-{secrets.token_hex(8)}"
 
 
-def _windows(handle: SFTPFile, limit: int | None) -> Iterator[bytes]:
-    offset = 0
+def _windows(handle: SFTPFile, limit: int | None, start: int = 0) -> Iterator[bytes]:
+    offset = start
     while limit is None or offset < limit:
         size = (
             TRANSFER_WINDOW if limit is None else min(TRANSFER_WINDOW, limit - offset)

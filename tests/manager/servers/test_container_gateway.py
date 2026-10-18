@@ -194,6 +194,26 @@ def test_the_service_names_where_it_keeps_its_backups(folders):
     assert host.runs[0]["argv"][-3:] == ["manage.py", "dbs_connection", "--json"]
 
 
+def test_the_rest_of_a_backup_in_a_container_is_read_from_an_offset(folders):
+    host = ComposeHost(folders["container"])
+    folder = host.inside(CONTAINER_BACKUP_DIR)
+    folder.mkdir(parents=True)
+    name = backup_filename("shop")
+    (folder / name).write_bytes(b"kept by the server")
+    remote = RemoteHost(host)
+    sink = io.BytesIO()
+
+    remote.pull_backup(PROFILE, f"{CONTAINER_BACKUP_DIR}/{name}", sink, offset=8)
+
+    assert sink.getvalue() == b"the server"
+    assert host.runs[-1]["argv"][-4:] == [
+        "-c",
+        "+9",
+        "--",
+        f"{CONTAINER_BACKUP_DIR}/{name}",
+    ]
+
+
 def test_backups_waiting_in_the_container_are_listed_pulled_checked_and_removed(
     folders,
 ):
