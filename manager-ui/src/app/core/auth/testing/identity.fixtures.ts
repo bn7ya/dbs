@@ -5,6 +5,9 @@ export const EVERY_CAPABILITY: readonly Capability[] = [
   'servers.manage',
   'servers.check',
   'servers.passphrase',
+  'applications.manage',
+  'applications.check',
+  'applications.passphrase',
   'backups.take',
   'backups.verify',
   'backups.download',
@@ -21,10 +24,14 @@ export const EVERY_CAPABILITY: readonly Capability[] = [
   'files.change',
   'redeploy.rehearse',
   'redeploy.run',
+  'shell.open',
+  'console.run',
 ];
 
 export const OPERATOR_CAPABILITIES: readonly Capability[] = [
+  'console.run',
   'servers.check',
+  'applications.check',
   'backups.take',
   'backups.verify',
   'backups.download',

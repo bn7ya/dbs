@@ -5,6 +5,9 @@ export type Capability =
   | 'servers.manage'
   | 'servers.check'
   | 'servers.passphrase'
+  | 'applications.manage'
+  | 'applications.check'
+  | 'applications.passphrase'
   | 'backups.take'
   | 'backups.verify'
   | 'backups.download'
@@ -20,7 +23,9 @@ export type Capability =
   | 'files.download'
   | 'files.change'
   | 'redeploy.rehearse'
-  | 'redeploy.run';
+  | 'redeploy.run'
+  | 'shell.open'
+  | 'console.run';
 
 export interface Identity {
   readonly id: number;

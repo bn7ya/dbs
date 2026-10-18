@@ -131,6 +131,32 @@ features/<feature>/
 
 Path aliases: `@core/*`, `@shared/*`, `@features/*`, `@styles/*`.
 
+## Routes
+
+A server is an SSH host; an application is one Django project on it, on the host itself, in a
+Compose service or in a container, under Docker or Podman. Every page that acts on a project
+hangs off its application.
+
+```
+/                                    dashboard: every server with its applications
+/servers                             servers, and host keys waiting for a person
+/servers/new                         add a server: address and host key, sign-in, check
+/servers/:serverId                   tabs: overview | applications | terminal | activity
+/servers/:serverId/applications/new  add an application: folder, discovery, review, check, passphrase, test backup
+/applications                        every application
+/applications/:applicationId         tabs: overview | backups | schedule | files | environment | deploy | terminal | activity
+/backups                             every application's backups and the storage they use
+/console                             django_dbs commands as the signed-in account
+/activity                            the audit trail
+```
+
+`routeParam(route, 'serverId' | 'applicationId')` (`core/routing/route-param.ts`) reads the
+parameter from whichever ancestor route holds it. A tab that another feature provides is a
+`loadChildren` of that feature's routes file: backups (`backups.routes.ts`, one application's
+files; `plans.routes.ts`, its schedule; `all-backups.routes.ts`, the `/backups` page), files,
+envfiles, redeploy (deploy in place and move), terminal (`data: {mode: 'server' |
+'application'}`) and activity.
+
 ## Conventions
 
 **Theme.** Blue, light and minimal. `_material.scss` calls `mat.theme` with a blue primary and
@@ -378,48 +404,91 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/accounts/{id}/two-factor/reset/` | → `Account` |
 | POST | `/api/accounts/{id}/password/expire/` | → `Account` |
 | POST | `/api/accounts/{id}/master/` | `{password, code}` → `Account`, the new master |
-| GET | `/api/dashboard/` | → `{servers, storage_bytes, last_export_at, recent_failures, key_store}` |
-| GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at}` |
-| GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` (with `connection_state`, `last_seen_at`, `last_connection_error`) |
-| POST | `/api/servers/` | `ServerCreate` (`host_key`, `generate_key?`, project fields, `runtime`, `compose_service`, `compose_files`) → `Server` with `public_key?`, `authorized_keys_hint?` |
-| GET/PATCH | `/api/servers/{id}/` | `ServerUpdate` → `Server` |
-| DELETE | `/api/servers/{id}/` | `{account_password}` → 204 |
+| GET | `/api/dashboard/` | → `{servers: [{id, name, host, check_status, checked_at, connection_state, last_seen_at, applications: [{id, name, kind, engine, check_status, checked_at, last_backup: {id, name, size, created_at, validation} \| null, next_plan_run, failures_7d, storage_bytes, health}]}], storage_bytes, last_export_at, recent_failures, key_store}` |
+| GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at, key_store}` |
+| GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` (`id, name, host, port, username, engines, application_count, last_check_status, last_checked_at, connection_state, last_seen_at, last_connection_error`) |
+| POST | `/api/servers/` | `{name, host, port?, username, host_key, auth_method?: key\|password, private_key?, key_passphrase?, password?, generate_key?}` → `Server`, plus `public_key` and `authorized_keys_hint` when the key was generated |
+| GET/PATCH | `/api/servers/{id}/` | `{name, host, port?, username, auth_method, private_key?, key_passphrase?, password?, account_password?}` → `Server` (`…ServerSummary`, `auth_method, has_private_key, has_key_passphrase, has_password, host_key, host_key_type, host_key_fingerprint, last_check_error, last_check_report, timeout_on_host, created_at, updated_at`) |
+| DELETE | `/api/servers/{id}/` | `{account_password}` → 204; `server_has_applications` (409) while it runs any |
+| POST | `/api/servers/{id}/check/` | → `Server`; `last_check_report` is `{system, engines: {docker\|podman: {installed, usable, version, compose, error}}, timeout}` |
+| POST | `/api/servers/{id}/merge/` | `{into, account_password}` → `Server`, the one kept; refused unless both are the same machine |
 | POST | `/api/servers/fingerprint/` | `{host, port}` → `{key_type, line, fingerprint}` |
 | GET | `/api/servers/host-keys/?page=&page_size=` | → page of `HostKeyConfirmation` (`id`, `host`, `port`, `key_type`, `fingerprint`, `status`, `requested_at`, `expires_at`) |
 | POST | `/api/servers/host-keys/{id}/confirm/` · `…/reject/` | `{}` → `HostKeyConfirmation` |
 | GET | `/api/servers/{id}/public-key/` | → `{public_key}`; `no_private_key` on a password server |
-| POST | `/api/servers/{id}/discover/` | `{project_dir?, account_password?}` → `Discovery` (fields with `runtime`, `compose_service`, `compose_files`; `dbs_version`, `is_project`, `candidates` with `compose_services`); the password is required once setup is over |
-| GET | `/api/servers/{id}/browse/?path=&page=&page_size=` | → `RemoteFolder` (`path`, `parent`, `home`, `project`, `truncated`, page of entries); no `path` is the home folder |
-| POST | `/api/servers/{id}/passphrase/capture/` | `{}` → `{captured}` |
-| POST | `/api/servers/{id}/check/` | → `Server` with `local_version`, `remote_version`, `installed`, `compatible`, `last_health`; the report adds `dbs_error`, `python_suggestion` and, for a Compose server, `compose: {version, error, running}` |
 | POST | `/api/servers/{id}/host-key/` | `{host_key, password}` → `Server` |
-| POST | `/api/servers/{id}/passphrase/` | `{password}` → `{passphrase}` |
-| GET | `/api/backups/?server=&page=&page_size=` | → page of `BackupFile` |
-| POST | `/api/backups/take/` | `{server}` → 202 `{activity}` |
-| POST | `/api/backups/upload/` | multipart `server`, `file` → 201 `BackupFile` |
+| GET | `/api/servers/{id}/browse/?path=&page=&page_size=` | → `RemoteFolder` (`path`, `parent`, `home`, `project`, `truncated`, page of entries); no `path` is the home folder |
+| GET | `/api/applications/?server=&search=&page=&page_size=` | → page of `ApplicationSummary` (`id, name, server: {id, name, host, port, connection_state}, kind, engine, compose_service, container_name, project_dir, last_check_status, last_checked_at`) |
+| POST | `/api/applications/discover/` | `{server, folder?, account_password?}` → `Discovery` `{folder, trusted, listing, engines, candidates, folders}`; the password is required once the server's setup window is over |
+| POST | `/api/applications/` | `ApplicationSettings` + `server` → 201 `Application` |
+| GET/PATCH | `/api/applications/{id}/` | `ApplicationSettings` + `account_password?` → `Application` |
+| DELETE | `/api/applications/{id}/` | `{account_password}` → 204 |
+| POST | `/api/applications/{id}/check/` | → `Application` + `{local_version, remote_version, installed, compatible}` |
+| POST | `/api/applications/{id}/passphrase/` | `{password}` → `{passphrase}` |
+| POST | `/api/applications/{id}/passphrase/capture/` | `{}` → `{captured}` |
+| PUT | `/api/applications/{id}/deploy-steps/` | `{steps: DeployStep[], account_password}` → `Application`; field errors under `steps.N` |
+| POST | `/api/applications/{id}/deploy/` | `{rehearsal, password?, confirm_name?}` → 202 `{activity}`; `no_deploy_steps` (409) without steps |
+| GET | `/api/backups/?application=&page=&page_size=` | → page of `BackupFile` (`id, application, application_name, server, server_name, kind, name, size, sha256, validation, validated_at, failure, remote_path, taken_by, plan, plan_name, created_at`); without `application` every application's |
+| POST | `/api/backups/take/` | `{application}` → 202 `{activity}` |
+| POST | `/api/backups/upload/` | multipart `application`, `file` → 201 `BackupFile` |
 | GET | `/api/backups/{id}/download/` | a link, for a django-dbs backup |
 | POST | `/api/backups/{id}/download/` | `{account_password}` → `{url}`, a one-time link for a file the manager keeps encrypted |
 | POST | `/api/backups/{id}/verify/` | → 202 `{activity}` |
-| POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, server_name?, target_server?}` → 202 `{activity}` |
+| POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, application_name?, target_application?}` → 202 `{activity}` |
 | DELETE | `/api/backups/{id}/` | `{account_password}` → 204 |
 | POST | `/api/backups/{id}/undo-delete/` | → `BackupFile` |
-| GET/POST | `/api/backups/plans/` | `PlanCreate` (`keep` 1–5, `keep_remote` 0–5, `account_password?`) → `BackupPlan` |
-| PATCH/DELETE | `/api/backups/plans/{id}/` | `PlanUpdate` (`account_password` when it keeps fewer) → `BackupPlan` |
+| GET/POST | `/api/backups/plans/?application=` | `PlanCreate` (`application, name, kind, paths?, pattern?, interval_minutes\|null, keep 1–5, keep_remote 0–5, enabled?, anchor_at?, time_zone?, account_password?`) → `BackupPlan` (`…, anchor_at, time_zone, next_run_at, last_run_at, last_status, last_error_code`) |
+| PATCH/DELETE | `/api/backups/plans/{id}/` | `PlanUpdate` (`account_password` when it keeps fewer; `anchor_at` and `time_zone` move the beat) → `BackupPlan` |
 | POST | `/api/backups/plans/{id}/run/` | → 202 `{activity}` |
-| GET | `/api/files/{server}/?path=&page=&page_size=` | → `Listing` |
-| POST | `/api/files/{server}/download/` | `{path, account_password?}` → `{url}`, a one-time link; the password is required for a `.env` |
-| POST | `/api/files/{server}/upload/` | multipart `path`, `file` → 201 `Entry` |
-| POST | `/api/files/{server}/folders/` | `{path, name}` → 201 `Entry` |
-| DELETE | `/api/files/{server}/?path=` | → 204 |
-| GET | `/api/envfiles/?server=&page=&page_size=` | → page of `EnvVersion` |
-| POST | `/api/envfiles/pull/` | `{server}` → `{created, version}` |
+| POST | `/api/backups/plans/{id}/reschedule/` | `{next_run_at}` (within a year) → `BackupPlan`; later runs follow from it |
+| POST | `/api/backups/plans/{id}/pause/` · `…/resume/` | `{}` → `BackupPlan`; resuming picks the next beat after now; `manual_plan` for a plan without an interval |
+| GET | `/api/files/{application}/?path=&page=&page_size=` | → `Listing` |
+| POST | `/api/files/{application}/download/` | `{path, account_password?}` → `{url}`, a one-time link; the password is required for a `.env` |
+| POST | `/api/files/{application}/upload/` | multipart `path`, `file` → 201 `Entry` |
+| POST | `/api/files/{application}/folders/` | `{path, name}` → 201 `Entry` |
+| DELETE | `/api/files/{application}/?path=` | → 204 |
+| GET | `/api/envfiles/?application=&page=&page_size=` | → page of `EnvVersion` (`id, application, path, size, keys, source, created_at, taken_by`) |
+| POST | `/api/envfiles/pull/` | `{application}` → `{created, version}` |
 | GET | `/api/envfiles/{from}/compare/?to=` | → `{from, to, added, removed, changed}` |
 | POST | `/api/envfiles/{id}/reveal/` | `{password}` → `{content}` |
 | POST | `/api/envfiles/{id}/push/` | `{password}` → `{version}` |
-| GET | `/api/activity/?server=&action=&status=&page=&page_size=` | → page of `ActivityEntry`, a running one with `connection` |
+| GET | `/api/activity/?server=&application=&action=&status=&page=&page_size=` | → page of `ActivityEntry` (`id, action, status, target, detail, error_code, ip, actor, server, server_name, application, application_name, connection, created_at, started_at, finished_at`); `server` covers the server and its applications |
 | GET | `/api/activity/{id}/` | → `Job`; `id` is a number |
-| POST | `/api/redeploy/` | `{source_server, target_server, backup, env_version, flush, rehearsal, password, confirm_name}` → 202 `{activity}`; `backup` may be null |
-| POST | `/api/redeploy/{move}/revert/` | `{rehearsal, password, confirm_name}` → 202 `{activity}` |
+| POST | `/api/redeploy/` | `{source_application, target_application, backup, env_version, flush, rehearsal, password, confirm_name}` → 202 `{activity}`; `backup` may be null |
+| POST | `/api/redeploy/{job}/revert/` | `{rehearsal, password, confirm_name}` → 202 `{activity}`; `job` is a move or a deploy that stopped after it changed the application |
+| POST | `/api/console/` | `{line, password?}` → `{exit_code, output, activities, password_required, error_code}`; `console_busy` (429) while the account's last command runs |
+| GET | `/api/terminals/` | → `{results: Terminal[]}` (`id, mode, server, application, label, container, cols, rows, closed`), this session's open terminals |
+| POST | `/api/terminals/` | `{mode: server\|application, server?, application?, password, cols?, rows?}` → 201 `Terminal` |
+| GET | `/api/terminals/{id}/output/?cursor=` | → `{data (base64), cursor, skipped, closed, reason, exit_status}`; waits up to 15 s for output |
+| POST | `/api/terminals/{id}/input/` | `{seq, data}` → `{accepted}`; a repeated `seq` is ignored |
+| POST | `/api/terminals/{id}/resize/` | `{cols, rows}` → `Terminal` |
+| DELETE | `/api/terminals/{id}/` | → 204 |
+
+`ApplicationSettings` is `{name, kind: host|compose|container, engine: ""|docker|podman,
+compose_project, compose_service, compose_files, container_name, project_dir, workdir,
+python_path, manage_path, settings_module, remote_backup_dir, mounts: [{type, source,
+destination, rw}], file_roots, env_path, env_location: host|container, backup_passphrase?,
+discovered?}`. `Application` returns those (never the passphrase) with `server`,
+`has_backup_passphrase`, `last_check_status`, `last_check_error`, `last_checked_at`,
+`last_check_report` (`{system, dbs_version, dbs_error, python_suggestion, backup_command, env_file,
+roots, remote_backup_dir, container?, panel_schedule?: {enabled, mode}}`), `last_health`,
+`timeout_in_container`, `deploy_steps`, `discovered_at`, `created_at`, `updated_at`.
+
+A `Discovery` candidate is `{kind, engine, compose_project, compose_service, compose_files,
+container_name, replicas, running, project_dir, workdir, python_path, python_paths, manage_path,
+settings_module, remote_backup_dir, backup_dir_on_host, mounts, file_roots: [{path, on_host}],
+env: [{path, location, source}], dbs_version, compatible, problems, score}`, best first; `problems`
+holds codes (`container_not_running`, `dbs_missing`, `dbs_too_old`, `backup_dir_not_mounted`).
+With no folder, or one that is not there, `folders` suggests project folders under the home
+folder. `trusted: false` means the folder or its parent can be written by others, so nothing in
+it was run.
+
+A `DeployStep` is `{kind, options, timeout_minutes 1–120}`, at most twelve: `git_pull {remote?,
+branch?}`, `compose_pull {services?}`, `compose_build {services?, pull?}`, `compose_up
+{services?}`, `restart`, `systemd_user_restart {unit}`, `pip_install {requirements}`, `migrate`,
+`collectstatic`. A deploy job's `detail.steps` lists `check`, `safety_backup`, `record_env`, one
+entry per deploy step (`{step: kind, index}`) and `final_check`, each with a status; `before` and
+`after` hold `{git_head?, image?}`.
 
 Errors arrive as `{"error": {"code", "message", "fields"?}}`. Setup answers `setup_done` (409),
 `setup_token_invalid` (403), and `invalid` with `fields.password` codes from Django's password
@@ -427,8 +496,10 @@ validators (`password_too_short`, `password_too_common`, `password_entirely_nume
 `password_too_similar`). A role that may not do something gets `role_required` (403); an expired
 password `password_change_required`. Connection codes are `connection_lost`,
 `remote_command_timed_out` and `server_settling`; a move adds `source_unreachable`,
-`no_backup_to_rehearse` and `move_not_revertable`; a backup `backup_quarantined`, `stream_broken`
-and `dbs_too_old`.
+`no_backup_to_rehearse` and `move_not_revertable`; a backup `backup_quarantined`, `stream_broken`,
+`backup_lost_on_server` and `dbs_too_old`; a container `container_engine_missing`,
+`engine_permission_denied` and `container_not_running`; a terminal `terminal_off`,
+`too_many_terminals` (429), `terminal_closed` (410) and `terminal_not_found`.
 
 ## e2e
 
