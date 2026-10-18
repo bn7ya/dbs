@@ -63,6 +63,7 @@ def application(admin, server) -> Application:
     return ApplicationService(admin).create(
         server=server.pk,
         name="shop",
+        account_password=PASSWORD,
         project_dir=PROJECT_DIR,
         python_path=PYTHON,
         env_path=ENV_PATH,

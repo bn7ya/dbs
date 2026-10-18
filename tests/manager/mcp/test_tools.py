@@ -10,6 +10,7 @@ from dbs.manager.applications.models import Application
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile, BackupPlan
+from dbs.manager.dashboard import services as dashboard_services
 from dbs.manager.envfiles.models import EnvVersion
 from dbs.manager.mcp import tools
 from dbs.manager.mcp.server import NEEDS_PASSWORD
@@ -72,6 +73,15 @@ FORBIDDEN_PROPERTIES = {
     "backup_passphrase",
     "steps",
     "line",
+    "python_path",
+    "manage_path",
+    "project_dir",
+    "workdir",
+    "settings_module",
+    "container_name",
+    "compose_project",
+    "compose_service",
+    "compose_files",
 }
 SHELL_MODULE_WORDS = ("console", "shell", "terminal", "subprocess", "pexpect")
 TOOLS = {
@@ -220,7 +230,14 @@ def test_a_shell_module_would_be_noticed():
 
 
 @pytest.mark.django_db
-def test_reading_tools_return_what_the_api_returns(mcp, api, make_application):
+def test_reading_tools_return_what_the_api_returns(
+    mcp, api, make_application, monkeypatch
+):
+    monkeypatch.setattr(
+        dashboard_services,
+        "disk_space",
+        lambda folder: {"total_bytes": 100, "free_bytes": 60, "low": False},
+    )
     application = make_application()
     make_application(name="blog", host="10.0.0.6")
 
@@ -450,16 +467,42 @@ def test_settings_passed_to_add_application_replace_what_was_found(
         server="web-1",
         folder=PROJECT_DIR,
         name="shop",
-        settings_module="config.settings.staging",
+        env_path="/srv/app/.env.production",
         file_roots=["/srv/app/media"],
     )
 
     assert added.ok, added.text
     assert added.data["check"]["status"] == Application.CheckStatus.PROBLEM
-    assert added.data["check"]["problem"] == "/srv/app/media is missing"
+    assert added.data["check"]["problem"] == (
+        "/srv/app/.env.production is missing; /srv/app/media is missing"
+    )
     application = ApplicationRepository().active().get()
-    assert application.settings_module == "config.settings.staging"
+    assert application.env_path == "/srv/app/.env.production"
     assert application.file_roots == ["/srv/app/media"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "given",
+    [
+        {"python_path": "/usr/bin/python3"},
+        {"manage_path": "-cimport os"},
+        {"project_dir": "/tmp"},
+        {"settings_module": "evil.settings"},
+    ],
+)
+def test_what_an_added_application_runs_comes_from_discovery_alone(
+    mcp, make_server, remote, given
+):
+    make_server()
+
+    added = mcp(
+        "add_application", server="web-1", folder=PROJECT_DIR, name="shop", **given
+    )
+
+    [field] = given
+    assert not added.ok and added.text == f"add_application takes no {field}."
+    assert not ApplicationRepository().active().exists()
 
 
 @pytest.mark.django_db
@@ -579,7 +622,9 @@ def test_changes_that_need_the_account_password_are_handed_back(mcp, make_applic
     moved = mcp("update_server", server="web-1", host="10.0.0.9")
     renamed = mcp("update_server", server="web-1", name="web-2")
     guarded = mcp(
-        "update_application", application="web-1", python_path="/usr/bin/python3"
+        "update_application",
+        application="web-1",
+        remote_backup_dir="/var/backups/elsewhere",
     )
     retitled = mcp("update_application", application="web-1", name="shop")
     archive = mcp(
@@ -593,7 +638,7 @@ def test_changes_that_need_the_account_password_are_handed_back(mcp, make_applic
     assert not archive.ok and archive.text == NEEDS_PASSWORD
     assert not BackupPlan.objects.exists()
     application.refresh_from_db()
-    assert application.python_path == PYTHON
+    assert application.remote_backup_dir != "/var/backups/elsewhere"
     assert ServerRepository().active().get().host == "10.0.0.5"
 
 

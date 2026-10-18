@@ -322,7 +322,9 @@
       },
       "password": {
         "title": "Confirm it is you",
-        "body": "This server's setup is over, so searching it or changing what it runs needs your password.",
+        "body": "This server's setup is over, so searching it needs your password.",
+        "adding": "Adding an application lets the manager run its Python and manage.py on the server, so it needs your password.",
+        "running": "Changing the Python the manager runs on the server needs your password.",
         "submit": "Continue"
       }
     },

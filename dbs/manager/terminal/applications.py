@@ -141,8 +141,16 @@ def add(session: TerminalSession) -> int:
     given = _given_settings(args)
     if args.backup_passphrase:
         given["backup_passphrase"] = session.secret("Backup passphrase")
-    added = applications.add(
-        session.user, server, report, name=args.name, choice=args.candidate, given=given
+    added = session.guarded(
+        lambda password: applications.add(
+            session.user,
+            server,
+            report,
+            name=args.name,
+            choice=args.candidate,
+            given=given,
+            account_password=password,
+        )
     )
     application = added.application
     _say(session, f"Added {application.name}: {runs_in(added.candidate)}.")

@@ -9,7 +9,7 @@ from dbs.manager.servers.services import ServerConnectionService
 from dbs.manager.servers.services.pythons import VERSION_PROBE
 from tests.manager.factories import make_application
 from tests.manager.servers.compose import COMPOSE_VERSION, ComposeHost, connected_to
-from tests.manager.servers.support import BACKUP_PASSPHRASE, REMOTE_DBS_VERSION
+from tests.manager.servers.support import BACKUP_PASSPHRASE, PASSWORD, REMOTE_DBS_VERSION
 
 APPLICATIONS = "/api/applications/"
 PROJECT = "/srv/shop"
@@ -23,6 +23,7 @@ def compose_settings(server, **overrides):
     return {
         "server": str(server.pk),
         "name": "shop",
+        "account_password": PASSWORD,
         "backup_passphrase": BACKUP_PASSPHRASE,
         "kind": "compose",
         "engine": "docker",
@@ -131,6 +132,7 @@ def test_a_container_application_needs_an_engine_and_its_container(
     settings = {
         "server": str(server.pk),
         "name": "blog",
+        "account_password": PASSWORD,
         "kind": "container",
         "engine": "docker",
         "container_name": "blog-web-1",

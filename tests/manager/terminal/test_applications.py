@@ -291,12 +291,14 @@ def test_add_adds_the_place_found_and_checks_it(terminal, admin, server, remote)
 def test_settings_given_to_add_replace_what_was_found(terminal, admin, server, remote):
     ran = adding(
         terminal,
+        "--password-stdin",
         "--settings",
         "config.settings.staging",
         "--file-root",
         "/srv/app/media",
         "--file-root",
         "/srv/app/static",
+        stdin=f"{PASSWORD}\n",
     )
 
     assert ran.code == 1, ran.err
@@ -305,6 +307,26 @@ def test_settings_given_to_add_replace_what_was_found(terminal, admin, server, r
     assert application.file_roots == ["/srv/app/media", "/srv/app/static"]
     assert application.python_path == PYTHON
     assert "/srv/app/media is missing" in ran.out
+
+
+@pytest.mark.django_db
+def test_changing_what_runs_while_adding_asks_for_the_password(
+    terminal, admin, server, remote
+):
+    ran = adding(terminal, "--python", "/usr/bin/python3")
+
+    assert ran.code != 0
+    assert "--password-stdin" in ran.err
+    assert not ApplicationRepository().active().exists()
+
+
+@pytest.mark.django_db
+def test_what_discovery_found_is_added_without_the_password(
+    terminal, admin, server, remote
+):
+    ran = adding(terminal, "--file-root", "/srv/app/media")
+
+    assert ApplicationRepository().active().filter(name="shop").exists(), ran.err
 
 
 @pytest.mark.django_db

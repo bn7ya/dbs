@@ -177,7 +177,7 @@ def test_paths_found_while_adding_an_application_need_no_password_for_an_hour(
     api, admin
 ):
     application = create(admin)
-    paths = {"project_dir": "/srv/found", "python_path": "/srv/found/.venv/bin/python"}
+    paths = {"remote_backup_dir": "/srv/found/backups", "env_path": "/srv/found/.env"}
 
     allowed = api.patch(
         url(application), {**paths, "file_roots": [MEDIA_ROOT]}, format="json"
@@ -185,12 +185,17 @@ def test_paths_found_while_adding_an_application_need_no_password_for_an_hour(
     reached = api.patch(
         url(application), {"backup_passphrase": "another-passphrase"}, format="json"
     )
+    runs = api.patch(
+        url(application), {"python_path": "/srv/found/.venv/bin/python"}, format="json"
+    )
 
     assert allowed.status_code == 200
-    assert allowed.json()["project_dir"] == "/srv/found"
+    assert allowed.json()["remote_backup_dir"] == "/srv/found/backups"
     assert allowed.json()["file_roots"] == [MEDIA_ROOT]
     assert reached.status_code == 400
     assert reached.json()["error"]["fields"] == {"account_password": ["required"]}
+    assert runs.status_code == 400
+    assert runs.json()["error"]["fields"] == {"account_password": ["required"]}
 
 
 @pytest.mark.django_db
@@ -242,11 +247,11 @@ def test_a_check_that_did_not_pass_leaves_the_paths_open_to_fix(api, admin):
     )
 
     response = api.patch(
-        url(application), {"python_path": "/srv/app/venv/bin/python"}, format="json"
+        url(application), {"remote_backup_dir": "/srv/app/backups"}, format="json"
     )
 
     assert response.status_code == 200
-    assert response.json()["python_path"] == "/srv/app/venv/bin/python"
+    assert response.json()["remote_backup_dir"] == "/srv/app/backups"
 
 
 @pytest.fixture
@@ -429,6 +434,7 @@ def test_an_application_added_from_a_candidate_keeps_what_discovery_found(
         {
             "server": str(server.pk),
             "discovered": True,
+            "account_password": PASSWORD,
             **discovery_service.settings_of(candidate, "shop"),
         },
         format="json",

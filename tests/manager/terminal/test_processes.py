@@ -35,7 +35,7 @@ server = ServerService(user).create(
     private_key=sys.argv[2], host_key=sys.argv[3],
 )
 application = ApplicationService(user).create(
-    server=server.pk, name="shop", backup_passphrase="a-passphrase",
+    server=server.pk, name="shop", account_password=sys.argv[1], backup_passphrase="a-passphrase",
 )
 assert TakeLock().acquire(application.pk, uuid4())
 """

@@ -60,6 +60,7 @@ def test_valid_steps_come_back_with_their_options_and_timeouts():
         ({"kind": "git_pull", "options": {"branch": "main; rm -rf /"}}, "invalid_name"),
         ({"kind": "git_pull", "options": {"branch": "-x"}}, "invalid_name"),
         ({"kind": "git_pull", "options": {"remote": "origin"}}, "branch_required"),
+        ({"kind": "git_pull", "options": {"branch": "main"}}, "remote_required"),
         ({"kind": "git_pull", "options": {"upload_pack": "x"}}, "unknown_option"),
         ({"kind": "pip_install", "options": {"requirements": "../etc/passwd"}}, "invalid_requirements"),
         ({"kind": "pip_install", "options": {"requirements": "/abs.txt"}}, "invalid_requirements"),

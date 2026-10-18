@@ -228,7 +228,17 @@ project that reaches each server over SSH. It is never added to a host project's
   a container's environment only `DJANGO_SETTINGS_MODULE` is kept. No `.env` is read during
   discovery.
 - Nothing runs in a folder, or in a project below it, that an account other than the SSH user
-  or root can write to: a planted `manage.py` or interpreter there is never executed.
+  or root can write to: a planted `manage.py` or interpreter there is never executed. The same
+  rule covers the folder a `.env` on the server is in, and the folder it links into.
+- Adding an application, and changing what it runs (where it runs, its engine, container or
+  Compose service, its folders, its Python, its `manage.py` and its settings module), asks for
+  the account password, so a stolen session cannot point the manager at a file it uploaded.
+  The Python must be named like one and `manage.py` must be a `manage.py`, so neither can be
+  read as an option. Only an application exactly as a discovery in the same request found it
+  is added without the password; the MCP server can add nothing else.
+- Container names, Compose projects, services and files that `docker inspect` or
+  `podman inspect` reports are dropped unless they are plain names, so none can be read as an
+  option of `exec`.
 - The manager never uses `sudo`. An SSH user that cannot reach the engine's socket gets
   `engine_permission_denied`, whose remedy is the engine's own group or rootless Podman.
 - A restore into a container streams the backup over standard input into a new private file

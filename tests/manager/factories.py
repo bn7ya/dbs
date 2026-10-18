@@ -47,4 +47,6 @@ def make_application(
     settings = {key: value for key, value in fields.items() if key not in SERVER_FIELDS}
     if server is None:
         server = make_server(user, name=name, host=host, **reach)
-    return ApplicationService(user).create(server=server.pk, name=name, **settings)
+    return ApplicationService(user).create(
+        server=server.pk, name=name, found_by_discovery=True, **settings
+    )

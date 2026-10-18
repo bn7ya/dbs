@@ -206,7 +206,9 @@ def test_an_applications_unfinished_jobs_of_one_kind_can_be_found(
 @pytest.mark.django_db
 def test_a_server_with_no_applications_lists_only_its_own_entries(api, admin):
     lone = make_server(admin, name="spare", host="10.0.0.8")
-    ApplicationService(admin).create(server=make_server(admin).pk, name="shop")
+    ApplicationService(admin).create(
+        server=make_server(admin).pk, name="shop", account_password=PASSWORD
+    )
 
     results = api.get(LIST, {"server": lone.pk}).json()["results"]
 

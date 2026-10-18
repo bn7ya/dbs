@@ -129,7 +129,15 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
   sign-out, a password or role change, and records no keystroke or output. The MCP server
   and the console never reach it.
 - Deploy steps are fixed argument lists from a catalogue; no command line or argument list
-  is taken from a request.
+  is taken from a request. A `git_pull` names its remote and branch together, or neither.
+- Adding an application, and changing what it runs (where it runs, its container or Compose
+  service, its folders, its Python, its `manage.py` and its settings module), asks for the
+  account password at any time. The Python must be named like one and `manage.py` must be a
+  `manage.py`, so neither can be read as an option. The MCP server adds an application only as
+  discovery found it.
+- Discovery leaves out containers whose names or Compose labels could be read as options, and
+  the manager reads or replaces no `.env` on a server whose folder, or the folder it links
+  into, another account can write to (`env_folder_shared`).
 - The panel's invariant stays: it runs no remote command and keeps no SSH credential.
 
 ## [0.7.0] - 2026-10-13

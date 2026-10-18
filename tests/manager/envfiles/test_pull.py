@@ -432,3 +432,52 @@ def test_a_container_application_with_its_env_on_the_host_reads_it_there(
 
     assert pull(application)["version"]["keys"] == KEYS
     assert (network.runs, network.feeds) == ([], [])
+
+
+@pytest.mark.django_db
+def test_a_env_in_a_folder_others_can_write_is_never_read(
+    api, application, env_file, network, versions
+):
+    env_file.parent.chmod(0o777)
+
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "env_folder_shared"
+    assert versions(application) == []
+
+
+@pytest.mark.django_db
+def test_a_env_that_links_into_a_folder_others_can_write_is_never_read(
+    api, make_application, env_file, network, versions, tmp_path
+):
+    shared = tmp_path.resolve() / "shared"
+    shared.mkdir(mode=0o777)
+    shared.chmod(0o777)
+    (shared / "id_ed25519").write_bytes(b"PRIVATE KEY")
+    linked = env_file.parent / ".env.linked"
+    linked.symlink_to(shared / "id_ed25519")
+    application = make_application(env_path=str(linked))
+
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
+
+    assert response.json()["error"]["code"] == "env_folder_shared"
+    assert versions(application) == []
+
+
+@pytest.mark.django_db
+def test_a_env_linked_into_a_trusted_folder_is_read_where_it_points(
+    api, make_application, env_file, network, versions, tmp_path
+):
+    shared = tmp_path.resolve() / "shared"
+    shared.mkdir(mode=0o755)
+    (shared / ".env").write_bytes(ENV)
+    linked = env_file.parent / ".env.linked"
+    linked.symlink_to(shared / ".env")
+    application = make_application(env_path=str(linked))
+
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
+
+    assert response.status_code == 200, response.json()
+    [version] = versions(application)
+    assert unseal(version.content_sealed, context="envfiles.content") == ENV

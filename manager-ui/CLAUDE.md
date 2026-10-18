@@ -502,7 +502,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | GET | `/api/servers/{id}/browse/?path=&page=&page_size=` | → `RemoteFolder` (`path`, `parent`, `home`, `project`, `truncated`, page of entries); no `path` is the home folder |
 | GET | `/api/applications/?server=&search=&page=&page_size=` | → page of `ApplicationSummary` (`id, name, server: {id, name, host, port, connection_state}, kind, engine, compose_service, container_name, project_dir, last_check_status, last_checked_at`) |
 | POST | `/api/applications/discover/` | `{server, folder?, account_password?}` → `Discovery` `{folder, trusted, listing, engines, candidates, folders}`; the password is required once the server's setup window is over |
-| POST | `/api/applications/` | `ApplicationSettings` + `server` → 201 `Application` |
+| POST | `/api/applications/` | `ApplicationSettings` + `server` + `account_password` (always; the wizard asks with `PasswordPrompt` on `account_password: required`) → 201 `Application` |
 | GET/PATCH | `/api/applications/{id}/` | `ApplicationSettings` + `account_password?` → `Application` |
 | DELETE | `/api/applications/{id}/` | `{account_password}` → 204 |
 | POST | `/api/applications/{id}/check/` | → `Application` + `{local_version, remote_version, installed, compatible}` |

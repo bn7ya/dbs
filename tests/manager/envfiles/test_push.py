@@ -406,3 +406,17 @@ def test_a_container_env_on_a_bind_mount_is_replaced_on_the_host(
         "pulled",
         "pulled",
     ]
+
+
+@pytest.mark.django_db
+def test_a_env_in_a_folder_others_can_write_is_never_replaced(
+    api, application, env_file, pull
+):
+    chosen = pull(application)["version"]
+    env_file.write_bytes(CHANGED)
+    env_file.parent.chmod(0o777)
+
+    response = push(api, chosen["id"])
+
+    assert response.json()["error"]["code"] == "env_folder_shared"
+    assert env_file.read_bytes() == CHANGED

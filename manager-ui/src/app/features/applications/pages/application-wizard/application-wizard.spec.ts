@@ -244,6 +244,28 @@ describe('ApplicationWizardPage', () => {
     await settle();
   });
 
+  it('asks for the account password to add the application, and adds it with it', async () => {
+    typed = ['correct-horse'];
+    await toDiscovery();
+    await wizard.advance();
+
+    const creating = wizard.advance();
+    http.expectOne('/api/applications/').flush(
+      { error: { code: 'invalid', message: 'prose', fields: { account_password: ['required'] } } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    const given = await vi.waitFor(() => http.expectOne('/api/applications/'));
+    expect(given.request.body).toMatchObject({ server: SERVER_ID, discovered: true, account_password: 'correct-horse' });
+    given.flush(APPLICATION, { status: 201, statusText: 'Created' });
+    await creating;
+
+    expect(prompted).toHaveBeenCalledOnce();
+    expect(prompted.mock.calls[0][1].data?.bodyKey).toBe('applications.wizard.password.adding');
+    expect(wizard.step()).toBe(3);
+    http.expectOne(`${DETAIL}check/`).flush(CHECKED);
+    await settle();
+  });
+
   it('puts what the backend refused under its field and opens the settings behind it', async () => {
     await toDiscovery();
     await wizard.advance();

@@ -26,6 +26,17 @@ COMPOSE_FILE = RegexValidator(
     r"^(?!-)(?!(.*/)?\.\.(/|$))[^\x00\r\n]+$",
     message="Enter a compose file path without '..' in it, such as compose.prod.yaml.",
 )
+PYTHON_PATH = RegexValidator(
+    r"^(/(?!(.*/)?\.\.(/|$))[^\x00\r\n]*/)?(python|pypy)\d*(\.\d+)*$",
+    message=(
+        "Enter the Python that runs the application: python3 alone, or an absolute "
+        "path to it such as /srv/shop/.venv/bin/python."
+    ),
+)
+MANAGE_PATH = RegexValidator(
+    r"^(?!-)(?!(.*/)?\.\.(/|$))([^\x00\r\n]*/)?manage\.py$",
+    message="Enter the project's manage.py, such as manage.py or /srv/shop/manage.py.",
+)
 COMPOSE_FILES_MAX = 10
 FILE_ROOTS_MAX = 50
 MOUNTS_MAX = 100
@@ -137,8 +148,12 @@ class ApplicationSettingsSerializer(serializers.Serializer):
     )
     project_dir = serializers.CharField(max_length=512, allow_blank=True, required=False)
     workdir = serializers.CharField(max_length=512, allow_blank=True, required=False)
-    python_path = serializers.CharField(max_length=512, required=False)
-    manage_path = serializers.CharField(max_length=255, required=False)
+    python_path = serializers.CharField(
+        max_length=512, required=False, validators=[PYTHON_PATH]
+    )
+    manage_path = serializers.CharField(
+        max_length=255, required=False, validators=[MANAGE_PATH]
+    )
     settings_module = serializers.CharField(
         max_length=200, allow_blank=True, required=False, validators=[PYTHON_MODULE]
     )
@@ -159,6 +174,7 @@ class ApplicationSettingsSerializer(serializers.Serializer):
 
 class ApplicationCreateSerializer(ApplicationSettingsSerializer):
     server = serializers.UUIDField()
+    account_password = secret_field(ACCOUNT_PASSWORD_MAX_LENGTH)
 
 
 class ApplicationUpdateSerializer(ApplicationSettingsSerializer):

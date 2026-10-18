@@ -113,6 +113,7 @@ def application(admin, server, candidate):
     created = ApplicationService(admin).create(
         server=server.pk,
         name="shop",
+        account_password=PASSWORD,
         kind=candidate["kind"],
         engine=candidate["engine"],
         compose_project=candidate["compose_project"],

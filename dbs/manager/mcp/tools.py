@@ -74,17 +74,6 @@ ACTIVITY_LIMIT_MAX = 200
 DEFAULT_PORT = 22
 AUTH_METHODS = ("password", "key_file", "generate_key")
 SETTING_FIELDS = (
-    "kind",
-    "engine",
-    "compose_project",
-    "compose_service",
-    "compose_files",
-    "container_name",
-    "project_dir",
-    "workdir",
-    "python_path",
-    "manage_path",
-    "settings_module",
     "remote_backup_dir",
     "env_path",
     "env_location",
@@ -119,47 +108,6 @@ FOLDER = {
 }
 PORT = {"type": "integer", "minimum": 1, "maximum": 65535}
 SETTINGS = {
-    "kind": {
-        "type": "string",
-        "enum": ["host", "compose", "container"],
-        "description": (
-            "Where the application runs: host when manage.py runs on the server "
-            "itself, compose in a Compose service, container in a container."
-        ),
-    },
-    "engine": {
-        "type": "string",
-        "enum": ["docker", "podman"],
-        "description": "For compose and container: the container engine.",
-    },
-    "compose_project": {"type": "string", "description": "For compose: the project."},
-    "compose_service": {
-        "type": "string",
-        "description": "For compose: the service that runs the application.",
-    },
-    "compose_files": {
-        "type": "array",
-        "items": {"type": "string"},
-        "description": "For compose: the files to pass with -f, in order.",
-    },
-    "container_name": {
-        "type": "string",
-        "description": "For container: the container's name.",
-    },
-    "project_dir": {
-        "type": "string",
-        "description": "The folder on the server with manage.py or the compose file.",
-    },
-    "workdir": {
-        "type": "string",
-        "description": "For compose and container: the folder inside with manage.py.",
-    },
-    "python_path": {
-        "type": "string",
-        "description": "The Python that has django-dbs; inside the container for one.",
-    },
-    "manage_path": {"type": "string", "description": "The manage.py to run."},
-    "settings_module": {"type": "string", "description": "DJANGO_SETTINGS_MODULE."},
     "remote_backup_dir": {
         "type": "string",
         "description": "Where the application writes backups.",

@@ -16,6 +16,15 @@ class EnvTooLarge(APIException):
     default_detail = "The application's .env file is too large to keep."
 
 
+class EnvFolderShared(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "env_folder_shared"
+    default_detail = (
+        "Another account can write to the folder this .env is in, or the one it "
+        "points into, so the manager neither reads nor replaces it."
+    )
+
+
 class DifferentApplications(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_code = "different_applications"

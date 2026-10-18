@@ -62,6 +62,7 @@ export interface ApplicationSettings {
 export interface ApplicationCreate extends ApplicationSettings {
   readonly server: string;
   readonly discovered: boolean;
+  readonly account_password?: string;
 }
 
 export interface ApplicationUpdate extends Partial<ApplicationSettings> {

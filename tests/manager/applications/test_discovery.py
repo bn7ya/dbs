@@ -775,6 +775,7 @@ def test_the_chosen_candidate_becomes_an_application_as_found(
         **settings_of(backend, "shop"),
         "server": str(server.pk),
         "discovered": True,
+        "account_password": PASSWORD,
     }
     response = api.post("/api/applications/", body, format="json")
 
@@ -955,3 +956,38 @@ def test_a_search_enters_a_bounded_number_of_containers(
     assert [each["compose_service"] for each in report["candidates"]] == ["backend"]
     assert docker.containers["db"].ran == []
     assert not [argv for argv in ran(hosts) if "db" in argv]
+
+
+def inspected_row(name="shop-backend-1", project="shop", service="backend", **config):
+    return {
+        "Name": f"/{name}",
+        "State": {"Running": True},
+        "Config": {
+            "Labels": {
+                "com.docker.compose.project": project,
+                "com.docker.compose.service": service,
+                "com.docker.compose.project.working_dir": "/srv/shop",
+                "com.docker.compose.project.config_files": "/srv/shop/compose.yaml",
+            },
+            **config,
+        },
+    }
+
+
+def test_a_container_named_as_it_should_be_is_kept():
+    assert discovery_service.well_named(discovery_service.summary("docker", inspected_row()))
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        inspected_row(name="-u0"),
+        inspected_row(service="-u"),
+        inspected_row(project="--privileged"),
+        inspected_row(service="web; id"),
+        inspected_row(WorkingDir="-x"),
+    ],
+)
+def test_a_container_whose_names_could_be_read_as_options_is_left_out(row):
+    assert not discovery_service.well_named(discovery_service.summary("docker", row))
+

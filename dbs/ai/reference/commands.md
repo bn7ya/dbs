@@ -150,6 +150,8 @@ nothing in a folder another account can write to. `app add NAME --server S --fol
 `--engine docker|podman`, `--compose-service`, `--compose-file`, `--container`,
 `--project-dir`, `--workdir`, `--python`, `--manage`, `--settings`, `--backup-dir`,
 `--env-path`, `--env-location host|container` and `--file-root` override what was found.
+Overriding what runs (`--kind` to `--settings`) asks for the account password; what discovery
+found is added without it.
 `app capture-passphrase` runs once, before an application's first backup; an application's
 backup passphrase must never change afterwards. The SSH user needs the `docker` group or
 rootless Podman as itself; the manager never uses `sudo` (`engine_permission_denied`).

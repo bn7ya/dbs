@@ -575,9 +575,14 @@ backups taken with it would no longer open. An application added without it gets
 passphrase of the manager's own, which the backups the project writes by itself do not use.
 Then **take a test backup**, and watch it arrive.
 
-For an hour after adding a server, the account that added it searches the server without
-its password, and changes an application it added until the application's check passes;
-after that, both ask for your password.
+Adding an application asks for your password, because the manager will run its Python and
+`manage.py` on the server; so does changing what it runs (where it runs, its engine,
+container or Compose service, its folders, its Python, its `manage.py` and its settings
+module) at any time. The Python must be named `python`, `python3`, `python3.N` or `pypy3`,
+alone or as an absolute path, and `manage.py` must be a file called `manage.py`. For an hour
+after adding a server, the account that added it searches the server without its password,
+and changes the other settings of an application it added until its check passes; after
+that, those ask for your password too.
 
 ### What a server needs before the manager can reach it
 
@@ -832,7 +837,9 @@ What Claude can do:
   `django_dbs server confirm-host-key ID` in a terminal. Claude cannot confirm it itself, and a
   key waits ten minutes for you;
 - change a server's name or address, check servers and applications, discover and add an
-  application from a folder, and store a new application's backup passphrase before its
+  application from a folder, as discovery found it (Claude may choose the candidate and the
+  backup folder, `.env` and allowed folders, never its Python, `manage.py`, folders,
+  container or settings module), and store a new application's backup passphrase before its
   first backup;
 - take, verify and save backups, add and run plans, keep more backups, and keep `.env`
   versions;

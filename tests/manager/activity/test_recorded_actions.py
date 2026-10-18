@@ -68,7 +68,9 @@ def test_a_refused_server_is_not_logged(api, logged):
 @pytest.mark.django_db
 def test_adding_an_application_is_logged(api, admin, logged, server):
     response = api.post(
-        "/api/applications/", {"server": server.pk, "name": "blog"}, format="json"
+        "/api/applications/",
+        {"server": server.pk, "name": "blog", "account_password": PASSWORD},
+        format="json",
     )
 
     entry = latest(logged, "application.create")

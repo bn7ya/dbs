@@ -54,6 +54,7 @@ BAD_REQUIREMENTS = "Name a file inside the application's folder, such as require
 BAD_TIMEOUT = "Allow 1 to 120 minutes."
 UNKNOWN_OPTION = "This step takes no such option."
 REMOTE_NEEDS_BRANCH = "Name the branch together with its remote."
+BRANCH_NEEDS_REMOTE = "Name the remote the branch comes from, such as origin."
 
 
 @dataclass(frozen=True)
@@ -208,6 +209,8 @@ def _options(
                 cleaned[name] = value
         if "remote" in cleaned and "branch" not in cleaned:
             problems.append(ErrorDetail(REMOTE_NEEDS_BRANCH, code="branch_required"))
+        if "branch" in cleaned and "remote" not in cleaned:
+            problems.append(ErrorDetail(BRANCH_NEEDS_REMOTE, code="remote_required"))
     if "services" in allowed:
         services = options.get("services") or []
         if (

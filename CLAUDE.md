@@ -210,7 +210,12 @@ version to read them before it offers giving them up.
 - Remote commands are fixed argument lists; passphrases travel on stdin. An application's
   backup passphrase is stored once, before its first backup, and never changed: older backups
   would no longer open. Discovery runs nothing in a folder, or a project below it, that others
-  can write to.
+  can write to, and the manager reads or replaces no `.env` in such a folder.
+- Adding an application and changing what it runs (`RUN_FIELDS` in
+  `applications/services/application_service.py`) need the account password at any time;
+  only an application exactly as a discovery in the same call found it skips it
+  (`found_by_discovery`), so the REST API never does. `python_path` names a Python and
+  `manage_path` a `manage.py`, never an option.
 - The manager pulls; a server never pushes. It removes a server's copy only after its own
   copy is verified, keeps at most five good backups per application and plan, and never
   deletes the newest one that passed verification.

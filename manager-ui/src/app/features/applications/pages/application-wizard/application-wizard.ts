@@ -273,6 +273,7 @@ export class ApplicationWizardPage {
       (password) =>
         this.store.update({ python_path: suggestion.python_path, ...(password ? { account_password: password } : {}) }),
       this.store.saveError,
+      'applications.wizard.password.running',
     );
     if (saved) {
       this.update('python_path', suggestion.python_path);
@@ -360,13 +361,19 @@ export class ApplicationWizardPage {
       return true;
     }
     this.edited.set(new Set());
-    const created = await this.store.create({ ...settingsOf(this.draft()), discovered: this.candidate() !== null });
+    const settings = { ...settingsOf(this.draft()), discovered: this.candidate() !== null };
+    const created = await this.withPassword(
+      (password) => this.store.create({ ...settings, ...(password ? { account_password: password } : {}) }),
+      this.store.createError,
+      'applications.wizard.password.adding',
+    );
     return created !== null;
   }
 
   private async withPassword<T>(
     attempt: (password?: string) => Promise<T | null>,
     failure: Signal<ApiError | null>,
+    bodyKey = 'applications.wizard.password.body',
   ): Promise<T | null> {
     const first = await attempt();
     if (first !== null || !asksForPassword(failure())) {
@@ -375,7 +382,7 @@ export class ApplicationWizardPage {
     let answer: T | null = null;
     const data: PasswordPromptData = {
       titleKey: 'applications.wizard.password.title',
-      bodyKey: 'applications.wizard.password.body',
+      bodyKey,
       submitKey: 'applications.wizard.password.submit',
       submit: async (password) => {
         answer = await attempt(password);

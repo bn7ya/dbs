@@ -70,11 +70,85 @@ def new_application(server, **overrides) -> dict:
     return {
         "server": str(server.pk),
         "name": "shop",
+        "account_password": PASSWORD,
         "project_dir": PROJECT_DIR,
         "python_path": PYTHON,
         "backup_passphrase": BACKUP_PASSPHRASE,
         **overrides,
     }
+
+
+@pytest.mark.django_db
+def test_adding_an_application_asks_for_the_account_password(api, server):
+    payload = new_application(server)
+    del payload["account_password"]
+
+    response = api.post(LIST, payload, format="json")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["fields"] == {"account_password": ["required"]}
+    assert not Application.objects.exists()
+
+
+@pytest.mark.django_db
+def test_a_wrong_account_password_adds_nothing(api, server):
+    response = api.post(
+        LIST, new_application(server, account_password="not-it"), format="json"
+    )
+
+    assert response.json()["error"]["code"] == "invalid_password"
+    assert not Application.objects.exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("manage_path", '-cimport os; os.system("id")'),
+        ("manage_path", "-m"),
+        ("manage_path", "../other/manage.py"),
+        ("manage_path", "settings.py"),
+        ("python_path", "-c"),
+        ("python_path", "/bin/sh"),
+        ("python_path", "/usr/bin/env"),
+        ("python_path", "/srv/../tmp/python3"),
+        ("python_path", "sh"),
+    ],
+)
+def test_a_python_or_manage_py_that_is_not_one_is_refused(api, server, field, value):
+    response = api.post(LIST, new_application(server, **{field: value}), format="json")
+
+    assert response.status_code == 400
+    assert field in response.json()["error"]["fields"]
+    assert not Application.objects.exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("python_path", "manage_path"),
+    [
+        ("python3", "manage.py"),
+        ("python", "src/manage.py"),
+        ("python3.12", "/app/manage.py"),
+        ("/srv/shop/.venv/bin/python", "/srv/shop/manage.py"),
+        ("/opt/venv/bin/python3.13", "manage.py"),
+        ("/usr/local/bin/pypy3", "manage.py"),
+    ],
+)
+def test_a_python_and_a_manage_py_are_named_as_they_are(
+    api, server, python_path, manage_path
+):
+    response = api.post(
+        LIST,
+        new_application(server, python_path=python_path, manage_path=manage_path),
+        format="json",
+    )
+
+    assert response.status_code == 201, response.json()
+    assert (response.json()["python_path"], response.json()["manage_path"]) == (
+        python_path,
+        manage_path,
+    )
 
 
 @pytest.mark.django_db
@@ -105,7 +179,9 @@ def test_adding_an_application_puts_it_on_its_server_without_its_passphrase(
 @pytest.mark.django_db
 def test_an_application_left_to_its_defaults_runs_on_the_host(api, server):
     body = api.post(
-        LIST, {"server": str(server.pk), "name": "shop"}, format="json"
+        LIST,
+        {"server": str(server.pk), "name": "shop", "account_password": PASSWORD},
+        format="json",
     ).json()
 
     assert (body["kind"], body["engine"]) == ("host", "")
@@ -571,12 +647,9 @@ def fresh(admin, server):
 @pytest.mark.django_db
 def test_settings_found_while_adding_need_no_password_for_an_hour(api, fresh):
     found = {
-        "project_dir": "/srv/found",
-        "python_path": "/srv/found/.venv/bin/python",
+        "remote_backup_dir": "/srv/found/backups",
         "file_roots": [MEDIA_ROOT],
-        "kind": "compose",
-        "engine": "docker",
-        "compose_service": "backend",
+        "env_path": "/srv/found/.env",
         "discovered": True,
     }
 
@@ -584,10 +657,36 @@ def test_settings_found_while_adding_need_no_password_for_an_hour(api, fresh):
     secret = api.patch(detail(fresh.pk), {"backup_passphrase": "x"}, format="json")
 
     assert allowed.status_code == 200
-    assert allowed.json()["project_dir"] == "/srv/found"
+    assert allowed.json()["remote_backup_dir"] == "/srv/found/backups"
     assert allowed.json()["discovered_at"] is not None
     assert secret.status_code == 400
     assert secret.json()["error"]["fields"] == {"account_password": ["required"]}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"python_path": "/srv/found/.venv/bin/python"},
+        {"manage_path": "src/manage.py"},
+        {"project_dir": "/srv/found"},
+        {"workdir": "/app"},
+        {"settings_module": "found.settings"},
+        {"kind": "compose", "engine": "docker", "compose_service": "backend"},
+        {"kind": "container", "engine": "podman", "container_name": "other"},
+    ],
+)
+def test_what_runs_on_the_server_needs_the_password_even_while_adding(
+    api, fresh, changes
+):
+    asked = api.patch(detail(fresh.pk), changes, format="json")
+    given = api.patch(
+        detail(fresh.pk), {**changes, "account_password": PASSWORD}, format="json"
+    )
+
+    assert asked.status_code == 400
+    assert asked.json()["error"]["fields"] == {"account_password": ["required"]}
+    assert given.status_code == 200, given.json()
 
 
 @pytest.mark.django_db
@@ -637,11 +736,11 @@ def test_a_check_that_did_not_pass_leaves_the_settings_open_to_fix(api, fresh):
     )
 
     response = api.patch(
-        detail(fresh.pk), {"python_path": "/srv/app/venv/bin/python"}, format="json"
+        detail(fresh.pk), {"remote_backup_dir": "/srv/app/backups"}, format="json"
     )
 
     assert response.status_code == 200
-    assert response.json()["python_path"] == "/srv/app/venv/bin/python"
+    assert response.json()["remote_backup_dir"] == "/srv/app/backups"
 
 
 @pytest.mark.django_db

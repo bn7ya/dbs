@@ -32,7 +32,7 @@ server = ServerService(user).create(
     private_key=sys.argv[2], host_key=sys.argv[3],
 )
 application = ApplicationService(user).create(
-    server=server.pk, name="shop", backup_passphrase="moved-passphrase",
+    server=server.pk, name="shop", account_password=sys.argv[1], backup_passphrase="moved-passphrase",
 )
 storage = BackupStorage()
 storage.directory(application.pk)

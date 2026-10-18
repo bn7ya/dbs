@@ -232,8 +232,15 @@ Every server needs django-dbs 0.7.0 or later; resumed transfers and progress nee
 - Deploy steps come from a fixed catalogue; no command line or argument list is taken from a
   request, and editing them needs an admin and the account password. The MCP server only
   rehearses a deploy.
-- Discovery runs nothing in a folder another account can write to, reads no `.env`, and keeps
-  only `DJANGO_SETTINGS_MODULE` from a container's environment.
+- Discovery runs nothing in a folder another account can write to, reads no `.env`, keeps
+  only `DJANGO_SETTINGS_MODULE` from a container's environment, and leaves out containers
+  whose names could be read as options.
+- Adding an application, and changing what it runs (where it runs, its container or Compose
+  service, its folders, its Python, its `manage.py` and its settings module), asks for the
+  account password at any time, so a stolen session cannot point the manager at a file it
+  uploaded. The MCP server adds an application only as discovery found it.
+- The manager reads or replaces no `.env` on a server whose folder, or the folder it links
+  into, another account can write to.
 - The panel still runs no remote command and keeps no SSH credential; its job process reads the
   passphrase from standard input, never its arguments or environment.
 

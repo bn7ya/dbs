@@ -60,6 +60,21 @@ LIST_FIELDS = ("compose_files", "mounts")
 OPTIONAL_PATH_FIELDS = ("project_dir", "workdir", "env_path")
 REQUIRED_PATH_FIELDS = ("remote_backup_dir",)
 UNGUARDED_FIELDS = frozenset({"name"})
+RUN_FIELDS = frozenset(
+    {
+        "kind",
+        "engine",
+        "compose_project",
+        "compose_service",
+        "compose_files",
+        "container_name",
+        "project_dir",
+        "workdir",
+        "python_path",
+        "manage_path",
+        "settings_module",
+    }
+)
 SETUP_FIELDS = frozenset(
     {
         "kind",
@@ -96,6 +111,7 @@ COMPOSE_FOLDER_REQUIRED = "Enter the folder that holds the compose file."
 CONTAINER_REQUIRED = "Name the container that runs the application."
 ENGINE_REQUIRED = "Choose Docker or Podman."
 ACCOUNT_PASSWORD_REQUIRED = "Enter your own password to change this."
+CREATE_PASSWORD_REQUIRED = "Enter your own password to add an application."
 DELETE_PASSWORD_REQUIRED = "Enter your own password to remove an application."
 DEPLOY_STEPS_PASSWORD_REQUIRED = "Enter your own password to change the deploy steps."
 
@@ -145,7 +161,14 @@ class ApplicationService:
         return application
 
     @requires(Capability.APPLICATIONS_MANAGE)
-    def create(self, *, server: UUID, **data: Any) -> Application:
+    def create(
+        self,
+        *,
+        server: UUID,
+        account_password: str = "",
+        found_by_discovery: bool = False,
+        **data: Any,
+    ) -> Application:
         host = self.servers.get(server)
         errors: Errors = {}
         fields = {name: data[name] for name in PLAIN_FIELDS if name in data}
@@ -156,6 +179,10 @@ class ApplicationService:
             _add(errors, "name", NAME_TAKEN, "name_taken")
         if errors:
             raise ValidationError(errors)
+        if not found_by_discovery:
+            require_account_password(account_password, CREATE_PASSWORD_REQUIRED)
+        if account_password:
+            AccountService(self.user).confirm_password(account_password)
         fields["backup_passphrase_sealed"] = seal_text(
             data.get("backup_passphrase") or secrets.token_urlsafe(32),
             context=vault_contexts.BACKUP_PASSPHRASE,
@@ -197,7 +224,7 @@ class ApplicationService:
             changes["discovered_at"] = timezone.now()
         changed = changed_fields(application, changes)
         free = (
-            UNGUARDED_FIELDS | SETUP_FIELDS | {"discovered_at"}
+            UNGUARDED_FIELDS | (SETUP_FIELDS - RUN_FIELDS) | {"discovered_at"}
             if self.in_setup(application)
             else UNGUARDED_FIELDS
         )

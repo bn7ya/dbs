@@ -17,6 +17,7 @@ from dbs.manager.applications.serializers import (
     DiscoverRequestSerializer,
 )
 from dbs.manager.applications.services import ApplicationService, DiscoveryService
+from dbs.manager.applications.services.application_service import RUN_FIELDS
 from dbs.manager.applications.services.discovery_service import settings_of
 from dbs.manager.servers.models import Server
 
@@ -62,6 +63,7 @@ def add(
     name: str,
     choice: int = 1,
     given: dict[str, Any] | None = None,
+    account_password: str = "",
 ) -> Added:
     candidates = report.get("candidates") or []
     if not candidates and report.get("listing") and not report.get("trusted"):
@@ -81,7 +83,10 @@ def add(
         "discovered": True,
     }
     fields = validated(ApplicationCreateSerializer, body)
-    application = ApplicationService(user).create(**fields)
+    application = ApplicationService(user).create(
+        **{**fields, "account_password": account_password},
+        found_by_discovery=RUN_FIELDS.isdisjoint(given or {}),
+    )
     return Added(application=application, report=report, candidate=candidate)
 
 

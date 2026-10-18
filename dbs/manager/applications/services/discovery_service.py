@@ -10,6 +10,11 @@ from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.paths import on_host
+from dbs.manager.applications.serializers.application import (
+    COMPOSE_FILE,
+    COMPOSE_NAME,
+    CONTAINER_NAME,
+)
 from dbs.manager.servers import versions
 from dbs.manager.servers.gateways import (
     ENGINES,
@@ -524,7 +529,11 @@ def matched_containers(remote: RemoteHost, engine: str, folder: str) -> list[dic
         return []
     rows = json_rows(inspected.stdout)
     containers = [summary(engine, row) for row in rows if isinstance(row, dict)]
-    matched = [container for container in containers if belongs(container, folder)]
+    matched = [
+        container
+        for container in containers
+        if well_named(container) and belongs(container, folder)
+    ]
     return replicas_joined(matched)
 
 
@@ -557,6 +566,16 @@ def _container_id(row: Any) -> str:
         if isinstance(value, str):
             return value
     return ""
+
+
+def well_named(container: dict[str, Any]) -> bool:
+    names = [container["compose_project"], container["compose_service"]]
+    return (
+        bool(CONTAINER_NAME.regex.match(container["name"]))
+        and all(COMPOSE_NAME.regex.match(name) for name in names if name)
+        and all(COMPOSE_FILE.regex.match(path) for path in container["compose_files"])
+        and (not container["workdir"] or container["workdir"].startswith("/"))
+    )
 
 
 def summary(engine: str, row: dict[str, Any]) -> dict[str, Any]:

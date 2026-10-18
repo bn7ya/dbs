@@ -13,6 +13,7 @@ from dbs.manager.servers.gateways import EntryKind
 from dbs.manager.servers.models import Server
 from tests.manager.servers.support import (
     DBS_VERSION,
+    PASSWORD,
     FakeRemote,
     Result,
     connecting_to,
@@ -267,6 +268,8 @@ def test_settings_given_to_add_replace_what_was_found_in_the_service(
         COMPOSE_FILES[1],
         "--settings",
         "shop.settings.staging",
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
     )
 
     assert ran.code == 0, ran.out + ran.err

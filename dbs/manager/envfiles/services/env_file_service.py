@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import posixpath
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 from uuid import UUID
@@ -17,6 +18,7 @@ from dbs.manager.applications.services import ApplicationService
 from dbs.manager.envfiles import dotenv
 from dbs.manager.envfiles.exceptions import (
     DifferentApplications,
+    EnvFolderShared,
     EnvPathMissing,
     EnvTooLarge,
 )
@@ -24,7 +26,7 @@ from dbs.manager.envfiles.models import EnvVersion
 from dbs.manager.envfiles.repositories import EnvVersionRepository
 from dbs.manager.envfiles.services import vault_contexts
 from dbs.manager.servers.exceptions import FileTooLarge, RemoteNotFound
-from dbs.manager.servers.services import ServerConnectionService
+from dbs.manager.servers.services import ServerConnectionService, pythons
 from dbs.manager.vault import fingerprint, seal, unseal
 from dbs.manager.permissions import Capability, requires
 
@@ -151,7 +153,7 @@ class EnvFileService:
     def _replace_on_host(
         self, application: Application, remote: RemoteHost, path: str, content: bytes
     ) -> None:
-        real = remote.realpath(_on_host(application, path))
+        real = _trusted_place(remote, _on_host(application, path))
         current = _regular_file(remote, real)
         mode, owner = NEW_FILE_MODE, None
         if current is not None:
@@ -176,7 +178,9 @@ class EnvFileService:
                         ),
                     )
                 else:
-                    content = _read(remote, _on_host(application, path))
+                    content = _read(
+                        remote, _trusted_place(remote, _on_host(application, path))
+                    )
             pulled = self._keep(application, path, content, source)
             entry.detail = {"created": pulled.created}
         return pulled
@@ -240,6 +244,14 @@ def _read_in_container(
 
 def _opened(version: EnvVersion) -> bytes:
     return unseal(version.content_sealed, context=vault_contexts.CONTENT)
+
+
+def _trusted_place(remote: RemoteHost, path: str) -> str:
+    real = remote.realpath(path)
+    for folder in dict.fromkeys((posixpath.dirname(path), posixpath.dirname(real))):
+        if not pythons.trusted_with_parent(remote, folder):
+            raise EnvFolderShared()
+    return real
 
 
 def _read(remote: RemoteHost, path: str) -> bytes:
