@@ -70,6 +70,15 @@ describe('Dialogs', () => {
     expect(submit).toHaveBeenCalledWith('secret');
   });
 
+  it('names its close button, which the close directive would otherwise leave unnamed', async () => {
+    const { dialog } = await open();
+
+    const close = await dialog.getHarness(MatButtonHarness.with({ selector: '.dialog-frame__close' }));
+
+    expect(await (await close.host()).getAttribute('aria-label')).toBe('Close');
+    await dialog.close();
+  });
+
   it('closes with nothing when the reader dismisses it', async () => {
     const { handle, dialog } = await open();
 
