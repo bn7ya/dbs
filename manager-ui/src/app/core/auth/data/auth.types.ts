@@ -4,7 +4,6 @@ export type Capability =
   | 'accounts.manage'
   | 'servers.manage'
   | 'servers.check'
-  | 'servers.passphrase'
   | 'applications.manage'
   | 'applications.check'
   | 'applications.passphrase'

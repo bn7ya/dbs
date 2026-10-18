@@ -4,7 +4,6 @@ export const EVERY_CAPABILITY: readonly Capability[] = [
   'accounts.manage',
   'servers.manage',
   'servers.check',
-  'servers.passphrase',
   'applications.manage',
   'applications.check',
   'applications.passphrase',
