@@ -391,15 +391,12 @@ def test_an_interpreter_outside_a_virtual_environment_is_the_system_one(tmp_path
     assert upgrade.is_system_interpreter(str(conda), str(conda)) is False
 
 
-def test_the_install_command_pins_one_version_with_the_installed_extras():
+def test_the_install_command_pins_one_version():
     import sys
 
-    command = upgrade.pinned_install_command("0.7.0", ["manager", "guard"])
+    command = upgrade.pinned_install_command("0.7.0")
 
-    assert command == [
-        sys.executable, "-m", "pip", "install", "django-dbs[guard,manager]==0.7.0"
-    ]
-    assert upgrade.pinned_install_command("0.7.0")[-1] == "django-dbs==0.7.0"
+    assert command == [sys.executable, "-m", "pip", "install", "django-dbs==0.7.0"]
     assert "--upgrade" not in command and "-U" not in command
 
 
@@ -457,7 +454,7 @@ def test_self_installs_the_exact_version_it_shows(pip, tmp_path, monkeypatch):
 
     assert len(pip.calls) == 1
     assert pip.calls[0][1:4] == ["-m", "pip", "install"]
-    assert pip.calls[0][-1].startswith("django-dbs[") and pip.calls[0][-1].endswith("]==9.9.9")
+    assert pip.calls[0][-1] == "django-dbs==9.9.9"
     assert "--upgrade" not in pip.calls[0]
     assert pip.calls[0][-1] in printed
     assert "Pin django-dbs==9.9.9 in requirements.txt" in printed
@@ -845,67 +842,6 @@ def without(monkeypatch, *modules):
         monkeypatch.setitem(sys.modules, module, None)
 
 
-def test_the_guard_extra_is_fine_when_scikit_learn_is_installed():
-    assert upgrade.GuardExtra().check().level == OK
-
-
-def test_the_guard_middleware_without_scikit_learn_asks_for_the_guard_extra(monkeypatch):
-    without(monkeypatch, "sklearn")
-
-    finding = upgrade.GuardExtra().check()
-
-    assert finding.level == ACTION
-    assert "DBSSecurityMiddleware" in finding.message
-    assert "ModuleNotFoundError" in finding.message
-    assert finding.remedy == 'pip install "django-dbs[guard]"'
-
-
-def test_a_scikit_learn_that_fails_to_import_counts_as_missing(monkeypatch):
-    import importlib
-
-    real = importlib.import_module
-
-    def broken(name, *args, **kwargs):
-        if name == "sklearn":
-            raise ValueError("numpy.dtype size changed, may indicate binary incompatibility")
-        return real(name, *args, **kwargs)
-
-    monkeypatch.setattr(importlib, "import_module", broken)
-
-    finding = upgrade.GuardExtra().check()
-
-    assert finding.level == ACTION
-    assert "binary incompatibility" in finding.message
-
-
-@pytest.mark.django_db
-def test_without_the_guard_middleware_scikit_learn_is_not_needed(settings, monkeypatch):
-    without(monkeypatch, "sklearn")
-    settings.MIDDLEWARE = [m for m in settings.MIDDLEWARE if "DBSSecurityMiddleware" not in m]
-
-    assert upgrade.GuardExtra().check().level == OK
-    assert levels(upgrade.run_steps(apply_fixes=False))["guard extra"] == OK
-
-
-def test_the_manager_extra_is_reported_when_installed():
-    finding = upgrade.ManagerExtra().check()
-
-    assert finding.level == OK
-    assert "django_dbs run" in finding.message
-
-
-@pytest.mark.django_db
-def test_a_missing_manager_extra_is_named_but_never_demanded(monkeypatch):
-    without(monkeypatch, "waitress")
-
-    finding = upgrade.ManagerExtra().check()
-
-    assert finding.level == OK
-    assert "waitress" in finding.message and "paramiko" not in finding.message
-    assert 'pip install "django-dbs[manager]"' in finding.remedy
-    assert not upgrade.run_steps(apply_fixes=False).blocked
-
-
 def test_missing_numpy_is_reported(monkeypatch):
     import importlib
 
@@ -922,7 +858,50 @@ def test_missing_numpy_is_reported(monkeypatch):
 
     assert finding.level == ACTION
     assert "numpy" in finding.message
-    assert "django-dbs>=0.7" in finding.remedy
+    assert finding.remedy == 'pip install --force-reinstall "django-dbs"'
+
+
+def test_everything_dbs_uses_is_installed():
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == OK
+    assert "manager" in finding.message
+
+
+def test_a_scikit_learn_that_fails_to_import_is_reported(monkeypatch):
+    import importlib
+
+    real = importlib.import_module
+
+    def broken(name, *args, **kwargs):
+        if name == "sklearn":
+            raise ValueError("numpy.dtype size changed, may indicate binary incompatibility")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", broken)
+
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == ACTION
+    assert "binary incompatibility" in finding.message
+
+
+def test_a_requirement_naming_an_old_extra_is_warned(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "requirements.txt").write_text("django-dbs[guard,manager]==0.7.0\n")
+
+    finding = upgrade.RetiredExtras().check()
+
+    assert finding.level == WARN
+    assert "requirements.txt" in finding.message
+    assert "without the brackets" in finding.remedy
+
+
+def test_plain_django_dbs_requirements_are_ok(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "requirements.txt").write_text("django-dbs==0.8.0\n")
+
+    assert upgrade.RetiredExtras().check().level == OK
 
 
 def _finding(step):

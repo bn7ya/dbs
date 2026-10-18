@@ -1,6 +1,6 @@
 ---
 name: django-dbs
-description: Use when working in a Django project that has django-dbs installed — taking, validating, restoring or scheduling backups, streaming one with dbs backup --stream, the backup schedule, retention, health and hash-chained audit trail in the /admin/dbs/ panel, the session guard, any manage.py dbs command, or the django_dbs manager and its MCP server. Covers the install extras, the passphrase that must never change, restore semantics and the mistakes that lose data.
+description: Use when working in a Django project that has django-dbs installed — taking, validating, restoring or scheduling backups, streaming one with dbs backup --stream, the backup schedule, retention, health and hash-chained audit trail in the /admin/dbs/ panel, the session guard, any manage.py dbs command, or the django_dbs manager and its MCP server. Covers the one install, the passphrase that must never change, restore semantics and the mistakes that lose data.
 ---
 
 # django-dbs
@@ -11,18 +11,12 @@ silent corruption is detected and repaired on restore.
 
 ## Installing it
 
-`pip install django-dbs` is the backup library alone. The rest are extras:
-
-| Extra | Adds | Needed for |
-|---|---|---|
-| `django-dbs[guard]` | scikit-learn | the session guard's anomaly detector |
-| `django-dbs[manager]` | djangorestframework, waitress, paramiko, keyring | `django_dbs`, the DBS manager and its MCP server |
-| `django-dbs[ssh]` | paramiko | `dbs.transports` |
-| `django-dbs[all]` | all three | |
-
-A project that installs `DBSSecurityMiddleware` wants `django-dbs[guard]`. Recommend the
-manager extra only on the machine that runs `django_dbs`, never in a project's requirements
-for that reason alone.
+`pip install django-dbs` installs everything DBS uses: the backup library, the session
+guard's anomaly detector (scikit-learn), the SSH API (paramiko) and the DBS manager
+(djangorestframework, waitress, keyring). There are no extras to choose. The names
+`django-dbs[guard]`, `[manager]`, `[ssh]` and `[all]` still resolve in 0.8 but add nothing;
+write plain `django-dbs` in requirements. A project's web process imports only what it uses,
+so the manager's packages never load there.
 
 ## Setting it up
 
@@ -56,8 +50,7 @@ python manage.py dbs upgrade --check
 If it reports outstanding items, resolve them — `python manage.py dbs upgrade` applies the
 safe ones — before making other changes. A project that has skipped an upgrade step fails at
 runtime, not at install time. After upgrading the package itself, always run `dbs upgrade`.
-Pin the version you install (`pip install "django-dbs[guard]==X.Y.Z"`), with the extras the
-project uses.
+Pin the version you install (`pip install "django-dbs==X.Y.Z"`).
 
 ## Never confirm the abandonment of backups
 
@@ -89,8 +82,9 @@ python manage.py dbs ai [--agents] [--check]
 python manage.py dbs upgrade [--check] [--self [--to X.Y.Z]] [--backups DIR]
 ```
 
-`manage.py django-dbs` is the same command under its old name. The original `dbs_backup`,
-`dbs_restore`, `dbs_validate` and `dbs_schedule` commands still work and are not deprecated.
+`manage.py django_dbs` and `manage.py django-dbs` are the same command as `manage.py dbs`.
+The original `dbs_backup`, `dbs_restore`, `dbs_validate` and `dbs_schedule` commands still work
+and are not deprecated.
 
 `dbs backup PATH` refuses a path that already exists; a script must choose a new name each
 run. A missing or unreadable source file stops the backup and names it; only pass
@@ -215,8 +209,8 @@ rows.
 
 ## The DBS manager
 
-`django_dbs run` (from `django-dbs[manager]`, or `pipx install "django-dbs[manager]"`)
-starts a separate local application that manages many servers over SSH. It needs each
+`django-dbs run` (also `django_dbs run` or `dbs run`; `pipx install django-dbs` keeps it apart
+from a project) starts a separate local application that manages many servers over SSH. It needs each
 server to have django-dbs 0.7 or later, a stable `SECRET_KEY`, `DBS_BACKUP_DIR`, and an SSH
 user that owns the project. `manage.py dbs connection --json` prints the details its
 add-server wizard reads. The project never contacts the manager. Never put `dbs.manager` in
@@ -263,7 +257,7 @@ data = create_backup(passphrase)   # the whole backup as bytes, for small projec
 memory flat. `restore_backup` and `validate_backup` take bytes, a path or a seekable binary
 file. `result.files_refused` lists what a dry run would refuse.
 
-Transports (`django-dbs[ssh]`): `from dbs.transports import SSHTarget, push_backup,
+Transports: `from dbs.transports import SSHTarget, push_backup,
 pull_backup, open_session`.
 
 ## Settings
@@ -289,7 +283,7 @@ deleting them where you find them, and the DBS manager for off-site copies.
 | Restore merged instead of replacing | Pass `--flush`, or tick *Replace instead of merge* in the panel |
 | Scheduler exits immediately | It needs `--output-dir` or `DBS_BACKUP_DIR` |
 | Scheduled backups never run | `dbs health` says the scheduler has not checked in: no request has reached a worker yet, or uWSGI runs without threads. Use `DBS_SCHEDULER = "command"` and `manage.py dbs schedule` |
-| `django_dbs` says it needs `django-dbs[manager]` | `pip install "django-dbs[manager]"` on the machine that runs the manager |
+| `django-dbs` says the installation cannot import a package | `pip install --force-reinstall django-dbs` repairs it |
 | Manager backups are quarantined | The passphrase the manager stores is not the one the server's backups use. Do not change a passphrase to fix it; tell the developer |
 
 ## Testing this project
@@ -304,6 +298,6 @@ thresholds first.
 - Do not compare DBS to other backup tools in code, comments or docs.
 - Say "developer", never "end user".
 - No comments; docstrings only on the documented public API.
-- `pip install django-dbs` must keep working without the extras: code outside
-  `dbs/security/`, `dbs/transports/` and `dbs/manager/` imports none of scikit-learn,
-  paramiko, djangorestframework, waitress or keyring.
+- `pip install django-dbs` installs every dependency, but code outside `dbs/security/`,
+  `dbs/transports/` and `dbs/manager/` still imports none of scikit-learn, paramiko,
+  djangorestframework, waitress or keyring, so a project's web process stays light.

@@ -149,6 +149,25 @@ def test_version_and_help_need_no_django(capsys):
     assert cli.main([]) == 2
 
 
+@pytest.mark.parametrize(
+    "invoked, named",
+    [
+        ("/usr/local/bin/django-dbs", "django-dbs"),
+        ("/usr/local/bin/django_dbs", "django_dbs"),
+        ("/usr/local/bin/dbs", "dbs"),
+        ("/opt/venv/bin/dbs.exe", "dbs"),
+        ("/srv/app/dbs/manager/__main__.py", "django_dbs"),
+    ],
+)
+def test_the_cli_answers_to_the_name_it_was_started_by(monkeypatch, capsys, invoked, named):
+    monkeypatch.setattr(sys, "argv", [invoked])
+
+    with pytest.raises(SystemExit):
+        cli.main(["--version"])
+
+    assert capsys.readouterr().out.startswith(f"{named} ")
+
+
 def test_python_dash_m_runs_the_manager_without_the_script_on_path():
     from dbs import __version__
 
@@ -165,7 +184,7 @@ def test_python_dash_m_runs_the_manager_without_the_script_on_path():
     assert result.stdout.strip() == f"django_dbs {__version__}"
 
 
-def test_without_the_manager_extra_one_line_names_the_install(monkeypatch, capsys):
+def test_a_broken_install_names_the_repair_in_one_line(monkeypatch, capsys):
     from dbs import extras
 
     real = extras.importable
@@ -176,13 +195,13 @@ def test_without_the_manager_extra_one_line_names_the_install(monkeypatch, capsy
     printed = capsys.readouterr()
     assert printed.out == ""
     assert printed.err.splitlines() == [
-        "django_dbs: the DBS manager needs waitress, which this environment lacks; "
-        'install them with pip install "django-dbs[manager]"'
+        "django_dbs: this django-dbs installation cannot import waitress; "
+        'repair it with pip install --force-reinstall "django-dbs"'
     ]
 
 
 @pytest.mark.parametrize("entry", ["dbs.manager", "dbs.manager.cli"])
-def test_python_dash_m_without_the_manager_extra_exits_without_a_traceback(entry):
+def test_python_dash_m_with_a_broken_install_exits_without_a_traceback(entry):
     script = (
         "import runpy, sys\n"
         "sys.modules['rest_framework'] = None\n"
@@ -203,7 +222,7 @@ def test_python_dash_m_without_the_manager_extra_exits_without_a_traceback(entry
     assert result.stdout == ""
     assert len(result.stderr.splitlines()) == 1
     assert "rest_framework" in result.stderr
-    assert 'pip install "django-dbs[manager]"' in result.stderr
+    assert 'pip install --force-reinstall "django-dbs"' in result.stderr
 
 
 def test_paths_names_every_file(tmp_path, capsys):

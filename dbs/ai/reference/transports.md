@@ -1,6 +1,6 @@
 # DBS transports
 
-Requires `pip install "django-dbs[ssh]"`.
+Installed with `pip install django-dbs`; paramiko is imported only when a transport is used.
 
 ```python
 from dbs.transports import (

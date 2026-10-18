@@ -48,11 +48,11 @@ def test_every_assistant_facing_file_says_the_passphrase_never_changes():
         assert "must never change" in text, name
 
 
-def test_the_skill_names_the_install_extras():
-    text = (ASSETS / "SKILL.md").read_text()
-
-    for extra in ("guard", "manager", "ssh", "all"):
-        assert f"django-dbs[{extra}]" in text, extra
+def test_every_assistant_facing_file_says_one_install_brings_everything():
+    for name in ("SKILL.md", "AGENTS.md", "llms.txt"):
+        text = (ASSETS / name).read_text()
+        assert "pip install django-dbs" in text, name
+        assert 'pip install "django-dbs[' not in text, name
 
 
 def test_the_skill_tells_assistants_to_keep_projects_current():

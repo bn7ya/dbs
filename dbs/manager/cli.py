@@ -28,10 +28,19 @@ from .conf import (
 )
 
 PROG = "django_dbs"
+NAMES = ("django-dbs", "django_dbs", "dbs")
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
-SERVER_THREADS = 8
+SERVER_THREADS = 16
 ROLES = ("master", "admin", "operator", "viewer")
 ASSIGNABLE_ROLES = ("admin", "operator", "viewer")
+
+
+def prog() -> str:
+    invoked = os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else ""
+    for name in NAMES:
+        if invoked in (name, f"{name}.exe"):
+            return name
+    return PROG
 
 
 class VersionAction(argparse.Action):
@@ -47,7 +56,7 @@ class VersionAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         from dbs import __version__
 
-        print(f"{PROG} {__version__}")
+        print(f"{prog()} {__version__}")
         parser.exit()
 
 
@@ -75,7 +84,7 @@ def password_stdin_option(parser):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog=PROG, description="Run and maintain the standalone DBS manager."
+        prog=prog(), description="Run and maintain the standalone DBS manager."
     )
     parser.add_argument(
         "--version", action=VersionAction, help="Print the version and exit."
@@ -221,9 +230,9 @@ def location(parser):
 
 
 def main(argv=None):
-    absent = extras.missing("manager")
+    absent = extras.missing(extras.MANAGER_MODULES)
     if absent:
-        print(f"{PROG}: {extras.manager_missing_message(absent)}", file=sys.stderr)
+        print(f"{prog()}: {extras.incomplete_message(absent)}", file=sys.stderr)
         return 1
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -235,13 +244,13 @@ def main(argv=None):
             return command_terminal(args)
         return args.handler(args) or 0
     except CommandFailed as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
+        print(f"{prog()}: {exc}", file=sys.stderr)
         return 1
     except keystore.KeyStoreError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
+        print(f"{prog()}: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print(f"{PROG}: stopped.", file=sys.stderr)
+        print(f"{prog()}: stopped.", file=sys.stderr)
         return 130
 
 
@@ -342,7 +351,7 @@ def command_createuser(args):
     if not first and args.role == "master":
         raise CommandFailed(
             "there is a master account already; hand it over with: "
-            f"{PROG} account role {args.name} master"
+            f"{prog()} account role {args.name} master"
         )
     password = read_password(args.password_stdin)
     try:
@@ -358,7 +367,7 @@ def command_createuser(args):
             f"Added {args.name} as {account.role}. It sets up two-factor sign-in and "
             "chooses its own password the first time it signs in."
         )
-    print(f"Sign in at the address {PROG} run prints.")
+    print(f"Sign in at the address {prog()} run prints.")
     return 0
 
 
@@ -510,7 +519,7 @@ def command_import(args):
     if aside is not None:
         print(
             f"The installation that was there is now {aside}. DBS never deletes it; "
-            f"open it with {PROG} run --data-dir {aside}."
+            f"open it with {prog()} run --data-dir {aside}."
         )
     return 0
 

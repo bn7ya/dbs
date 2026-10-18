@@ -55,8 +55,9 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   and `chunked.py`, the per-block AES-256-GCM that format 2 uses.
 - `dbs/transports/` — the SSH/SFTP API (`django-dbs[ssh]`): host-key-checked sessions,
   streamed remote commands, transfers through private partial files.
-- `dbs/extras.py` — the one list of what each extra (`guard`, `manager`, `ssh`) must make
-  importable; `tests/test_packaging.py` keeps it in step with `pyproject.toml`.
+- `dbs/extras.py` — the one list of the packages `pip install django-dbs` brings and the
+  repair line for a broken install; `tests/test_packaging.py` keeps it in step with
+  `pyproject.toml`.
 - `dbs/management/commands/` — the `dbs` umbrella and its `django_dbs` alias, plus
   `dbs_backup`, `dbs_restore`, `dbs_validate`, `dbs_schedule`, `dbs_connection`,
   `dbs_health`, `dbs_audit`, `dbs_key`, `dbs_security`, `dbs_ai`, `dbs_upgrade`.
@@ -186,12 +187,13 @@ version to read them before it offers giving them up.
 
 ## Install constraint
 
-`pip install django-dbs` is the backup library alone. Code outside `dbs/security/`,
-`dbs/transports/` and `dbs/manager/` must import without scikit-learn, paramiko,
-djangorestframework, waitress or keyring; each extra is named in `pyproject.toml` and
-`dbs/extras.py`, and a missing one is reported with the `pip install "django-dbs[EXTRA]"`
-line that fixes it, never a traceback. A new dependency gets an upper bound below its next
-major version.
+`pip install django-dbs` installs everything DBS uses: the library, scikit-learn for the
+guard, paramiko for SSH, and djangorestframework, waitress and keyring for the manager. There
+are no extras (the old names `guard`, `manager`, `ssh`, `all` stay empty for 0.8 only). Code
+outside `dbs/security/`, `dbs/transports/` and `dbs/manager/` still imports none of those
+packages, so a project's web process stays light; a package that cannot be imported is
+reported with the `pip install --force-reinstall "django-dbs"` line, never a traceback. A new
+dependency gets an upper bound below its next major version.
 
 ## Test
 

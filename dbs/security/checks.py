@@ -3,13 +3,14 @@ from __future__ import annotations
 from django.core import checks
 from django.utils.module_loading import import_string
 
+from .. import extras
 from ..conf import setting
 
 GUARD_MIDDLEWARE = "dbs.security.middleware.DBSSecurityMiddleware"
 
 AUTH_MIDDLEWARE = "django.contrib.auth.middleware.AuthenticationMiddleware"
 
-GUARD_EXTRA = 'pip install "django-dbs[guard]"'
+REPAIR = extras.reinstall_command()
 
 
 def _middleware():
@@ -77,9 +78,9 @@ def check_session_guard(app_configs=None, **kwargs):
     if scoring_model_missing():
         found.append(
             checks.Warning(
-                "scikit-learn is not installed, so the session guard scores with its rules "
+                "scikit-learn cannot be imported, so the session guard scores with its rules "
                 "alone and the anomaly model is off.",
-                hint=GUARD_EXTRA,
+                hint=REPAIR,
                 id="dbs.security.W003",
             )
         )

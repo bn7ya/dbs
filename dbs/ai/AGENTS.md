@@ -2,16 +2,15 @@
 
 This project uses django-dbs for backups.
 
-- Install: `pip install django-dbs` is the backup library alone; `django-dbs[guard]` adds
-  the session guard's detector, `django-dbs[manager]` the `django_dbs` manager,
-  `django-dbs[ssh]` the `dbs.transports` API, `django-dbs[all]` all three.
+- Install: `pip install django-dbs` installs everything: the library, the session guard's
+  detector, the `dbs.transports` API and the manager (`django-dbs`, `django_dbs` or `dbs`).
 - Setup: `dbs` in `INSTALLED_APPS` (with `django.contrib.admin` for the panel),
   `dbs.security.middleware.DBSSecurityMiddleware` in `MIDDLEWARE` below
   `AuthenticationMiddleware` for the guard, `DBS_BACKUP_DIR`, then `manage.py migrate`.
   Upgrading from 0.2.x requires that migrate.
 - Commands: `python manage.py dbs backup|restore|validate|schedule|connection|health|audit|key|security|ai|upgrade`.
-  `manage.py django-dbs` and the older `dbs_backup`/`dbs_restore`/`dbs_validate`/
-  `dbs_schedule` names also work. `dbs backup PATH` refuses a path that exists.
+  `manage.py django_dbs`, `manage.py django-dbs` and the older `dbs_backup`/`dbs_restore`/
+  `dbs_validate`/`dbs_schedule` names also work. `dbs backup PATH` refuses a path that exists.
 - The backup passphrase is derived from `settings.SECRET_KEY` and **must never change**:
   older backups would no longer open. Never hard-code one, and never pass one as a shell
   argument. Warn before any `SECRET_KEY` or `DBS_PASSPHRASE` change: backups encrypted under

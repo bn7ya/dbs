@@ -14,7 +14,7 @@ from django.utils import timezone
 from dbs import audit, upgrade
 from dbs.models import AnomalyEvent, AuditEvent, SecurityPolicy, SessionEvent
 from dbs.security import detector, telemetry
-from dbs.security.checks import GUARD_EXTRA, check_session_guard
+from dbs.security.checks import REPAIR, check_session_guard
 from dbs.security.networks import address_digest, stored_prefix
 from dbs.security.sessions import LAST_ACTIVE
 
@@ -267,11 +267,11 @@ def without_scikit_learn(monkeypatch):
     monkeypatch.setitem(sys.modules, "sklearn.ensemble", None)
 
 
-def test_a_missing_scikit_learn_is_a_warning_naming_the_extra(without_scikit_learn):
+def test_a_scikit_learn_that_cannot_import_is_a_warning_naming_the_repair(without_scikit_learn):
     warnings = [message for message in check_session_guard() if message.id == "dbs.security.W003"]
 
     assert warnings
-    assert warnings[0].hint == GUARD_EXTRA == 'pip install "django-dbs[guard]"'
+    assert warnings[0].hint == REPAIR == 'pip install --force-reinstall "django-dbs"'
 
 
 def test_scikit_learn_is_not_demanded_without_the_guard(without_scikit_learn, settings):
@@ -303,5 +303,5 @@ def test_the_command_reports_the_missing_model(without_scikit_learn):
     call_command("dbs", "security", "status", stdout=status)
     call_command("dbs", "security", "retrain", stdout=retrain)
 
-    assert GUARD_EXTRA in status.getvalue()
-    assert GUARD_EXTRA in retrain.getvalue()
+    assert REPAIR in status.getvalue()
+    assert REPAIR in retrain.getvalue()

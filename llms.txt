@@ -4,16 +4,12 @@
 > writes an encrypted container holding two copies of the payload plus Reed-Solomon parity,
 > so silent corruption is detected and repaired on restore. Backups stream with flat memory.
 > The library comes with a panel at /admin/dbs/ (schedule, health, hash-chained audit,
-> restore); the `django_dbs run` manager for many servers is an extra.
+> restore) and the `django-dbs run` manager for many servers.
 
 ## Install
 
 ```
-pip install django-dbs                 # the backup library
-pip install "django-dbs[guard]"        # + the session guard's detector (scikit-learn)
-pip install "django-dbs[manager]"      # + django_dbs, the DBS manager
-pip install "django-dbs[ssh]"          # + dbs.transports
-pip install "django-dbs[all]"
+pip install django-dbs   # the library, the guard's detector, dbs.transports and the manager
 ```
 
 ```python

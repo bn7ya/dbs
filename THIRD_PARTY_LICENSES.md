@@ -15,7 +15,8 @@ help a developer review their dependencies; it is not legal advice.
 
 ## Installed with `pip install django-dbs`
 
-The backup library itself: what a Django project needs to back up, restore and validate.
+Everything DBS uses installs with it: the backup library, the session guard's detector, the SSH
+API and the DBS manager. A Django project's web process imports only the parts it uses.
 
 | Package | Required | License | What DBS uses it for |
 |---|---|---|---|
@@ -24,49 +25,42 @@ The backup library itself: what a Django project needs to back up, restore and v
 | [argon2-cffi](https://github.com/hynek/argon2-cffi) | `>=21.3,<26` | MIT | Argon2id key derivation from the passphrase |
 | [reedsolo](https://github.com/tomerfiliba/reedsolomon) | `>=1.7,<2` | Unlicense OR MIT-0 | Reed-Solomon parity that repairs damaged blocks |
 | [numpy](https://numpy.org/) | `>=1.21,<3` | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | Vectorised Reed-Solomon parity |
-
-## Installed with an extra
-
-Each extra adds what one part of DBS needs. `pip install "django-dbs[all]"` installs all three.
-
-| Package | Required | Extra | License | What DBS uses it for |
-|---|---|---|---|---|
-| [scikit-learn](https://scikit-learn.org/) | `>=1.4.2,<2` | `guard` | BSD-3-Clause | The session guard's IsolationForest detector |
-| [paramiko](https://github.com/paramiko/paramiko) | `>=3.2,<6` | `ssh`, `manager` | LGPL-2.1-or-later | The `dbs.transports` SSH and SFTP API, and the manager's connections to servers |
-| [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15,<4` | `manager` | BSD-3-Clause | The manager's REST API |
-| [waitress](https://github.com/Pylons/waitress) | `>=3,<4` | `manager` | ZPL-2.1 | The web server behind `django_dbs run` |
-| [keyring](https://github.com/jaraco/keyring) | `>=24,<26` | `manager` | MIT | Keeps the DBS manager's sealing key in the system keychain |
+| [scikit-learn](https://scikit-learn.org/) | `>=1.4.2,<2` | BSD-3-Clause | The session guard's IsolationForest detector |
+| [paramiko](https://github.com/paramiko/paramiko) | `>=3.2,<6` | LGPL-2.1-or-later | The `dbs.transports` SSH and SFTP API, and the manager's connections to servers |
+| [djangorestframework](https://www.django-rest-framework.org/) | `>=3.15,<4` | BSD-3-Clause | The manager's REST API |
+| [waitress](https://github.com/Pylons/waitress) | `>=3,<4` | ZPL-2.1 | The web server behind `django-dbs run` |
+| [keyring](https://github.com/jaraco/keyring) | `>=24,<26` | MIT | Keeps the DBS manager's sealing key in the system keychain |
 
 ### Brought in by those packages
 
 The exact set depends on the versions pip resolves. This is the set for the newest releases on
 2026-10-13.
 
-| Package | Brought in by | Installed with | License |
-|---|---|---|---|
-| asgiref | Django | `django-dbs` | BSD-3-Clause |
-| sqlparse | Django | `django-dbs` | BSD-3-Clause |
-| tzdata (Windows only) | Django | `django-dbs` | Apache-2.0 |
-| cffi | cryptography, argon2-cffi-bindings, PyNaCl | `django-dbs` | MIT-0 from 2.1, MIT before |
-| pycparser | cffi | `django-dbs` | BSD-3-Clause |
-| argon2-cffi-bindings | argon2-cffi | `django-dbs` | MIT |
-| typing_extensions (Python < 3.11 only) | asgiref, cryptography | `django-dbs` | PSF-2.0 |
-| scipy | scikit-learn | `guard` | BSD-3-Clause |
-| joblib | scikit-learn | `guard` | BSD-3-Clause |
-| cloudpickle | joblib (1.6 and later) | `guard` | BSD-3-Clause |
-| threadpoolctl | scikit-learn | `guard` | BSD-3-Clause |
-| narwhals | scikit-learn (1.9 and later) | `guard` | MIT |
-| bcrypt | paramiko | `ssh`, `manager` | Apache-2.0 |
-| PyNaCl | paramiko | `ssh`, `manager` | Apache-2.0 |
-| invoke | paramiko (recent releases) | `ssh`, `manager` | BSD-2-Clause |
-| jaraco.classes, jaraco.functools, jaraco.context | keyring | `manager` | MIT |
-| more-itertools | jaraco.classes, jaraco.functools | `manager` | MIT |
-| backports.tarfile (Python < 3.12 only) | jaraco.context | `manager` | MIT |
-| importlib_metadata (Python < 3.12 only) | keyring | `manager` | Apache-2.0 |
-| zipp (Python < 3.12 only) | importlib_metadata | `manager` | MIT |
-| SecretStorage (Linux only) | keyring | `manager` | BSD-3-Clause |
-| jeepney (Linux only) | keyring, SecretStorage | `manager` | MIT |
-| pywin32-ctypes (Windows only) | keyring | `manager` | BSD-3-Clause |
+| Package | Brought in by | License |
+|---|---|---|
+| asgiref | Django | BSD-3-Clause |
+| sqlparse | Django | BSD-3-Clause |
+| tzdata (Windows only) | Django | Apache-2.0 |
+| cffi | cryptography, argon2-cffi-bindings, PyNaCl | MIT-0 from 2.1, MIT before |
+| pycparser | cffi | BSD-3-Clause |
+| argon2-cffi-bindings | argon2-cffi | MIT |
+| typing_extensions (Python < 3.11 only) | asgiref, cryptography | PSF-2.0 |
+| scipy | scikit-learn | BSD-3-Clause |
+| joblib | scikit-learn | BSD-3-Clause |
+| cloudpickle | joblib (1.6 and later) | BSD-3-Clause |
+| threadpoolctl | scikit-learn | BSD-3-Clause |
+| narwhals | scikit-learn (1.9 and later) | MIT |
+| bcrypt | paramiko | Apache-2.0 |
+| PyNaCl | paramiko | Apache-2.0 |
+| invoke | paramiko (recent releases) | BSD-2-Clause |
+| jaraco.classes, jaraco.functools, jaraco.context | keyring | MIT |
+| more-itertools | jaraco.classes, jaraco.functools | MIT |
+| backports.tarfile (Python < 3.12 only) | jaraco.context | MIT |
+| importlib_metadata (Python < 3.12 only) | keyring | Apache-2.0 |
+| zipp (Python < 3.12 only) | importlib_metadata | MIT |
+| SecretStorage (Linux only) | keyring | BSD-3-Clause |
+| jeepney (Linux only) | keyring, SecretStorage | MIT |
+| pywin32-ctypes (Windows only) | keyring | BSD-3-Clause |
 
 The binary wheels of numpy and scipy also carry the native libraries they link against, each
 named with its license in the wheel's own `LICENSE.txt`. The Linux wheels, for example, carry

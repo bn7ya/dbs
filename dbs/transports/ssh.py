@@ -15,6 +15,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+from .. import extras
 from ..exceptions import (
     ConfigurationError,
     ConnectionLost,
@@ -70,7 +71,7 @@ def _paramiko():
         import paramiko
     except ImportError as exc:
         raise ConfigurationError(
-            'SSH transport requires paramiko: pip install "django-dbs[ssh]"'
+            "SSH transport requires paramiko; " + extras.incomplete_message(["paramiko"])
         ) from exc
     return paramiko
 

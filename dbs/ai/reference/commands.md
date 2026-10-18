@@ -1,7 +1,7 @@
 # DBS command reference
 
-All of these are subcommands of `manage.py dbs`. `manage.py django-dbs` is the same
-command under its old name, and the original `dbs_backup`, `dbs_restore`, `dbs_validate`
+All of these are subcommands of `manage.py dbs`. `manage.py django_dbs` and
+`manage.py django-dbs` are the same command, and the original `dbs_backup`, `dbs_restore`, `dbs_validate`
 and `dbs_schedule` commands still work unchanged.
 
 ## `dbs backup OUTPUT`
@@ -92,7 +92,7 @@ Checks the project against the installed version, applies pending DBS migrations
 refreshes installed AI instructions, and prints the exact settings lines for anything it
 will not edit itself. `--check` changes nothing and exits non-zero when an item needs
 action, which is what CI wants; warnings are printed and leave it passing. `--self`
-installs one exact release (the newest, or `--to`) with the extras installed here, after
+installs one exact release (the newest, or `--to`), after
 showing the pinned `pip install` command and asking; `--yes` answers for a script.
 
 `--backups DIR` reads each container's format version and converts anything older, writing
@@ -101,10 +101,11 @@ moves or overwrites a backup. A file it cannot read forward stops the command; a
 that loss needs an interactive terminal and an exact typed phrase, and **an assistant must
 never do it** — stop and tell the developer instead.
 
-Also reachable as `manage.py dbs_upgrade` and `manage.py dbs-upgrade`.
+Also reachable as `manage.py dbs_upgrade`.
 
-## `django_dbs` (the manager, outside any project)
-Needs `pip install "django-dbs[manager]"`.
+## `django-dbs` (the manager, outside any project)
+Installed with `pip install django-dbs` under three equal names: `django-dbs`, `django_dbs`
+and `dbs`.
 
 `run [--port] [--host] [--trusted-proxy CIDR] [--allow-insecure-http] [--no-browser]`,
 `export [FILE] [--with-backups]`, `import FILE [--replace] [--yes]`,

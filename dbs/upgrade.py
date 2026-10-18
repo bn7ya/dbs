@@ -227,65 +227,50 @@ class BackupDirectory(Step):
 
 class Dependencies(Step):
     name = "dependencies"
-    since = "0.7.0"
+    since = "0.8.0"
 
     def check(self):
-        failure = extras.import_failure("numpy")
-        if failure is None:
-            return self.ok("numpy is installed for the Reed-Solomon parity")
-        return self.action(
-            f"numpy cannot be imported ({failure}), so backups cannot compute their "
-            "Reed-Solomon parity",
-            f'pip install --upgrade "{extras.DISTRIBUTION}>=0.7"',
-        )
-
-
-class GuardExtra(Step):
-    name = "guard extra"
-    since = "0.7.0"
-
-    def check(self):
-        if MIDDLEWARE_PATH not in (setting("MIDDLEWARE", ()) or ()):
-            return self.ok("the session guard is off, so scikit-learn is not needed")
-        failure = extras.import_error("guard")
-        if failure is None:
-            return self.ok("scikit-learn is installed for the session guard")
-        return self.action(
-            f"DBSSecurityMiddleware is on, but scikit-learn cannot be imported ({failure}), "
-            "so the session guard runs without its anomaly detector",
-            extras.install_command("guard"),
-        )
-
-
-class ManagerExtra(Step):
-    name = "manager extra"
-    since = "0.7.0"
-
-    def check(self):
-        absent = extras.missing("manager")
-        if not absent:
-            return self.ok("the DBS manager can run here (django_dbs run)")
-        return self.ok(
-            f"the DBS manager is not installed here ({', '.join(absent)} missing); "
-            "this project does not need it",
-            f"to run django_dbs on this machine: {extras.install_command('manager')}",
-        )
-
-
-class ManagerKeychain(Step):
-    name = "manager keychain"
-    since = "0.7.0"
-
-    def check(self):
-        if extras.missing("manager"):
+        failures = [
+            f"{module} ({failure})"
+            for module in extras.BUNDLED
+            for failure in [extras.import_failure(module)]
+            if failure is not None
+        ]
+        if not failures:
             return self.ok(
-                "the DBS manager does not run here, so it keeps no sealing key; "
-                "the manager extra names what it needs"
+                "everything DBS uses is installed: the manager, SSH, the guard's anomaly "
+                "model and the Reed-Solomon parity"
             )
-        return self.ok(
-            "keyring is available, so the DBS manager keeps its sealing key in "
-            "the system keychain wherever one works"
+        return self.action(
+            "django-dbs installs everything it uses, but " + "; ".join(failures)
+            + " cannot be imported here",
+            extras.reinstall_command(),
         )
+
+
+class RetiredExtras(Step):
+    name = "install extras"
+    since = "0.8.0"
+    pattern = re.compile(r"django[-_]dbs\[[^\]]*\]", re.IGNORECASE)
+
+    def check(self):
+        named = [
+            path.name for path in requirement_files(project_folder()) if self._names_extras(path)
+        ]
+        if not named:
+            return self.ok("pip install django-dbs installs the manager, SSH and the guard")
+        return self.warn(
+            ", ".join(named)
+            + " still name a django-dbs extra; plain django-dbs installs everything now "
+            "and the [guard], [manager], [ssh] and [all] names are going away",
+            'write "django-dbs" without the brackets',
+        )
+
+    def _names_extras(self, path):
+        try:
+            return bool(self.pattern.search(path.read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            return False
 
 
 class AdminPanel(Step):
@@ -598,7 +583,7 @@ class ClientRetired(Step):
             "dbs-client was removed, and "
             + ", ".join(found)
             + " still lists the servers it backed up",
-            f"Install the manager on your own machine ({extras.install_command('manager')}), "
+            "Install the manager on your own machine (pip install django-dbs), "
             "add each server with `django_dbs run` or `django_dbs server add`, and back it "
             "up from there",
         )
@@ -615,7 +600,7 @@ class PulledBackups(Step):
     )
     remedy = (
         "the DBS manager pulls backups from this server now: on your own machine run "
-        f"{extras.install_command('manager')} and "
+        "pip install django-dbs and "
         "`django_dbs server add NAME --host HOST --user USER` for this server, then "
         "delete the settings listed here"
     )
@@ -852,9 +837,7 @@ STEPS = (
     SchedulerMode,
     BackupDirectory,
     Dependencies,
-    GuardExtra,
-    ManagerExtra,
-    ManagerKeychain,
+    RetiredExtras,
     AdminPanel,
     GuardMiddleware,
     ForwardedFor,
@@ -950,14 +933,8 @@ def is_version(text: str) -> bool:
     return bool(VERSION_PATTERN.fullmatch(text or ""))
 
 
-def pinned_install_command(version: str, installed_extras=()) -> list:
-    return [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        extras.requirement(sorted(installed_extras), version),
-    ]
+def pinned_install_command(version: str) -> list:
+    return [sys.executable, "-m", "pip", "install", extras.requirement(version)]
 
 
 def project_folder() -> Path:

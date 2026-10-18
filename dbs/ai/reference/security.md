@@ -13,7 +13,7 @@ in the Django admin are high-risk actions.
 
 ## The model
 
-`sklearn.ensemble.IsolationForest`, installed by `pip install "django-dbs[guard]"`. A base
+`sklearn.ensemble.IsolationForest`, installed with `pip install django-dbs`. A base
 model ships pre-trained on a synthetic corpus (`dbs/security/baseline.json.gz`, regenerated
 by `scripts/train_base_model.py`) so scoring works from the first request. Once an account
 has `DBS_ANOMALY_MIN_ROWS` events, a personal forest is fitted on its newest 2000 rows mixed
