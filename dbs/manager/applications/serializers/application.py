@@ -94,6 +94,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             "last_check_report",
             "last_health",
             "timeout_in_container",
+            "deploy_steps",
             "discovered_at",
             "created_at",
             "updated_at",

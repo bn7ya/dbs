@@ -21,6 +21,7 @@ from dbs.manager.applications.serializers import (
     DiscoverRequestSerializer,
 )
 from dbs.manager.applications.services import ApplicationService, DiscoveryService
+from dbs.manager.redeploy.serializers import DeployStepsSerializer
 from dbs.manager.servers.serializers import (
     AccountPasswordSerializer,
     PassphraseSerializer,
@@ -108,3 +109,15 @@ class PassphraseCaptureView(APIView):
     def post(self, request: Request, pk: UUID) -> Response:
         ApplicationService(request.user).capture_passphrase(pk)
         return Response({"captured": True})
+
+
+class DeployStepsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request: Request, pk: UUID) -> Response:
+        payload = DeployStepsSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        application = ApplicationService(request.user).set_deploy_steps(
+            pk, **payload.validated_data
+        )
+        return Response(ApplicationSerializer(application).data)

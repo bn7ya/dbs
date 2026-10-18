@@ -117,6 +117,9 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   plan|activity|env|files|redeploy`). Like the REST views, each verb validates with the slice's
   serializer and calls the slice's service; neither adapter holds business logic.
   `parsers.py` imports no Django, so `--help` stays instant.
+- `dbs/manager/redeploy/` — moving an application onto another, deploying one in place from
+  the step catalogue (`catalogue.py`, `deploy.py`), and putting either back from its safety
+  backup.
 - `dbs/manager/shell/` — the interactive terminal on a server or inside an application's
   container: `sessions.py` holds each shell's SSH channel and output buffer in the manager
   process, `service.py` opens, polls, sweeps and closes them.
@@ -208,10 +211,13 @@ version to read them before it offers giving them up.
 - Every service method that acts names its capability with `@requires`. The interface hides
   what a role cannot do, but the service is the boundary.
 - The MCP server never accepts the account password, never returns a secret, and offers no
-  tool that restores, redeploys or reverts for real, removes, deletes, pushes a `.env` or
-  re-pins a host key. It pins a new server's host key only after a person confirmed it, cannot
+  tool that restores, deploys, redeploys or reverts for real, changes deploy steps, removes,
+  deletes, pushes a `.env` or re-pins a host key. It pins a new server's host key only after a person confirmed it, cannot
   make a plan keep fewer backups, and cannot save a file the manager keeps encrypted.
   `tests/manager/mcp/test_tools.py` enforces the list; keep it when adding tools.
+- A deploy runs only steps from the fixed catalogue in `dbs/manager/redeploy/catalogue.py`,
+  each a fixed argument list with validated names; never accept a command line or an argument
+  list from a request. A deploy backs the application up first, and its rehearsal only reads.
 - The terminal opens for a signed-in admin only (`DBS_MANAGER_TERMINAL` or
   `django_dbs run --terminal` narrows it to the master or switches it off), asks the account
   password for every shell, and closes on sign-out, a password or role change, 15 minutes

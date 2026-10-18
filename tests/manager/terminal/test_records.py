@@ -4,6 +4,7 @@ import pytest
 
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.envfiles.models import EnvVersion
+from tests.manager.deploy.test_deploy import AFTER, ready_to_deploy
 from tests.manager.servers.support import PASSWORD
 from tests.manager.support import logged
 from tests.manager.test_redeploy import (  # noqa: F401
@@ -160,13 +161,13 @@ def test_a_move_that_stops_names_the_step_and_the_revert(terminal, admin, world)
 
 
 @pytest.mark.django_db
-def test_only_a_move_can_be_reverted(terminal, admin, world):  # noqa: F811
+def test_only_a_move_or_a_deploy_can_be_reverted(terminal, admin, world):  # noqa: F811
     ran = terminal("redeploy", "revert", "nope")
     assert ran.code == 1 and "'nope' is not a move number." in ran.err
 
     entry = ActivityService(admin).record("auth.sign_in", target="sara")
     ran = terminal("redeploy", "revert", entry.pk)
-    assert ran.code == 1 and f"{entry.pk} is not a move." in ran.err
+    assert ran.code == 1 and f"{entry.pk} is not a move or a deploy." in ran.err
 
 
 @pytest.mark.django_db
@@ -189,3 +190,73 @@ def test_a_real_redeploy_needs_the_target_name_and_password(terminal, admin, wor
 
     assert ran.code == 1
     assert world["sent"]["restores"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_app_deploy_rehearses_and_prints_each_step(terminal, admin, world):  # noqa: F811
+    ready_to_deploy(world)
+
+    ran = terminal("app", "deploy", "web-2")
+
+    assert ran.code == 0, ran.out + ran.err
+    assert "git_pull" in ran.out and "Rehearsed deploying web-2." in ran.out
+    assert world["sent"]["taken"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_real_app_deploy_needs_the_name_and_the_password(terminal, admin, world):  # noqa: F811
+    ready_to_deploy(world)
+
+    refused = terminal("app", "deploy", "web-2", "--real")
+    ran = terminal(
+        "app",
+        "deploy",
+        "web-2",
+        "--real",
+        "--confirm-name",
+        "web-2",
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
+    )
+
+    assert refused.code == 1
+    assert ran.code == 0, ran.out + ran.err
+    assert "Deployed web-2." in ran.out
+    [job] = logged("redeploy.deploy")
+    assert job.data["after"] == {"git_head": AFTER}
+
+
+@pytest.mark.django_db
+def test_deploy_steps_are_shown_and_set_from_a_file(
+    terminal, admin, world, tmp_path  # noqa: F811
+):
+    empty = terminal("app", "deploy-steps", "web-2")
+    chosen = tmp_path / "steps.json"
+    chosen.write_text('[{"kind": "migrate"}, {"kind": "collectstatic"}]')
+    saved = terminal(
+        "app",
+        "deploy-steps",
+        "web-2",
+        "--set",
+        str(chosen),
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
+    )
+    shown = terminal("app", "deploy-steps", "web-2", "--json").json()
+
+    assert "web-2 has no deploy steps yet." in empty.out
+    assert saved.code == 0, saved.err
+    assert "collectstatic" in saved.out
+    assert [step["kind"] for step in shown] == ["migrate", "collectstatic"]
+
+
+@pytest.mark.django_db
+def test_deploy_steps_from_an_unreadable_file_are_refused(
+    terminal, admin, world, tmp_path  # noqa: F811
+):
+    broken = tmp_path / "steps.json"
+    broken.write_text("[{")
+
+    ran = terminal("app", "deploy-steps", "web-2", "--set", str(broken))
+
+    assert ran.code == 1 and "cannot read" in ran.err

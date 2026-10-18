@@ -17,7 +17,9 @@ from dbs.manager.applications.services import application_service, discovery_ser
 from dbs.manager.backups.services import actions as backup_actions
 from dbs.manager.envfiles.services import env_file_service
 from dbs.manager.files.services import file_service
+from dbs.manager.redeploy import deploy as deploys
 from dbs.manager.redeploy import services as redeploy
+from dbs.manager.redeploy.catalogue import KINDS
 from dbs.manager.servers.services import (
     host_key_confirmation_service,
     server_service,
@@ -56,10 +58,15 @@ def recordable() -> set[str]:
         transfer.IMPORT,
         redeploy.RUN,
         redeploy.REVERT,
+        deploys.DEPLOY,
         shell.OPEN,
     }
     codes |= {f"redeploy.{step}" for step in redeploy.MOVE_STEPS}
     codes |= {f"{redeploy.REVERT}_{step}" for step in redeploy.REVERT_STEPS}
+    codes |= {
+        f"deploy.{step}"
+        for step in (*deploys.OPENING_STEPS, *KINDS, deploys.CLOSING_STEP)
+    }
     return codes
 
 

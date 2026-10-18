@@ -20,6 +20,7 @@ from dbs.manager.applications.paths import host_path
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.common.paths import absolute_path
+from dbs.manager.redeploy import catalogue
 from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import (
     HostKeyChanged,
@@ -96,6 +97,7 @@ CONTAINER_REQUIRED = "Name the container that runs the application."
 ENGINE_REQUIRED = "Choose Docker or Podman."
 ACCOUNT_PASSWORD_REQUIRED = "Enter your own password to change this."
 DELETE_PASSWORD_REQUIRED = "Enter your own password to remove an application."
+DEPLOY_STEPS_PASSWORD_REQUIRED = "Enter your own password to change the deploy steps."
 
 Errors = dict[str, list[ErrorDetail]]
 
@@ -107,6 +109,7 @@ class Action:
     CHECK = "application.check"
     PASSPHRASE_REVEAL = "application.passphrase_reveal"
     PASSPHRASE_CAPTURE = "application.passphrase_capture"
+    DEPLOY_STEPS = "application.deploy_steps"
 
 
 def _add(errors: Errors, field: str, message: str, code: str) -> None:
@@ -236,6 +239,20 @@ class ApplicationService:
         ):
             AccountService(self.user).confirm_password(account_password)
             self.applications.soft_delete(application)
+
+    @requires(Capability.APPLICATIONS_MANAGE)
+    def set_deploy_steps(
+        self, application_id: UUID, steps: Any, account_password: str = ""
+    ) -> Application:
+        application = self.get(application_id)
+        cleaned = catalogue.validated(steps, application)
+        require_account_password(account_password, DEPLOY_STEPS_PASSWORD_REQUIRED)
+        with self.activity.track(
+            Action.DEPLOY_STEPS, subject=application, target=application.name
+        ) as entry:
+            entry.detail = {"steps": [step["kind"] for step in cleaned]}
+            AccountService(self.user).confirm_password(account_password)
+            return self.applications.update(application, deploy_steps=cleaned)
 
     @requires(Capability.APPLICATIONS_PASSPHRASE)
     def reveal_passphrase(self, application_id: UUID, password: str) -> str:

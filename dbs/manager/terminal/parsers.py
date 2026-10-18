@@ -397,6 +397,36 @@ def applications(commands, location: Location) -> None:
     )
     capture.add_argument("application", help="The application's name or id.")
 
+    deploy = _verb(
+        verbs,
+        "deploy",
+        "Deploy an application in place: check it, back it up, record its .env, run "
+        "its deploy steps and check it again. Rehearses unless --real.",
+        "terminal.redeploy:deploy",
+        location,
+    )
+    deploy.add_argument("application", help="The application's name or id.")
+    deploy.add_argument("--real", action="store_true", help="Deploy for real.")
+    deploy.add_argument(
+        "--confirm-name", help="The application's name, instead of typing it."
+    )
+
+    steps = _verb(
+        verbs,
+        "deploy-steps",
+        "Show an application's deploy steps, or set them from a JSON file.",
+        "terminal.redeploy:deploy_steps",
+        location,
+    )
+    steps.add_argument("application", help="The application's name or id.")
+    steps.add_argument(
+        "--set",
+        dest="steps_file",
+        metavar="FILE",
+        help='A JSON list such as [{"kind": "git_pull"}, {"kind": "migrate"}]. '
+        "Setting them asks for your password.",
+    )
+
 
 def backups(commands, location: Location) -> None:
     verbs = _area(commands, "backup", "Take, verify, restore and keep backups.")
@@ -739,12 +769,15 @@ def redeploy(commands, location: Location) -> None:
     revert = _verb(
         verbs,
         "revert",
-        "Put the new application back as it was before a move that stopped: push its "
-        "recorded .env back and restore its safety backup. Rehearses unless --real.",
+        "Put an application back as it was before a move or a deploy that stopped: "
+        "push a moved application's recorded .env back and restore the safety "
+        "backup. Rehearses unless --real.",
         "terminal.redeploy:revert",
         location,
     )
-    revert.add_argument("move", metavar="MOVE_ID", help="The move's activity number.")
+    revert.add_argument(
+        "move", metavar="JOB_ID", help="The move's or deploy's activity number."
+    )
     revert.add_argument("--real", action="store_true", help="Revert for real.")
     revert.add_argument(
         "--confirm-name", help="The new application's name, instead of typing it."

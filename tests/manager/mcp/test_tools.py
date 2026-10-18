@@ -107,6 +107,7 @@ TOOLS = {
     "compare_env_versions",
     "list_files",
     "rehearse_redeploy",
+    "rehearse_deploy",
     "rehearse_revert",
 }
 ENV = b"SECRET_KEY=sk_live_very_secret\nDEBUG=0\n"
@@ -723,6 +724,26 @@ def test_redeploys_are_always_rehearsals(mcp, world):  # noqa: F811
         "--dry-run" in restore["argv"] for restore in world["sent"]["restores"]
     ] == [True]
     assert world["sent"]["taken"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_deploys_are_always_rehearsals(mcp, world):  # noqa: F811
+    from dbs.manager.applications.repositories import ApplicationRepository
+
+    ApplicationRepository().update(
+        world["target"], deploy_steps=[{"kind": "migrate", "timeout_minutes": 5}]
+    )
+    world["hosts"].answer(
+        "10.0.0.6", [PYTHON, "manage.py", "migrate", "--plan"], (0, "Planned\n", "")
+    )
+
+    ran = mcp("rehearse_deploy", application="web-2")
+
+    assert ran.ok and ran.data["ok"], ran.raw
+    assert world["sent"]["taken"] == []
+    assert "migrate" not in world["sent"]["events"]
+    [job] = logged("redeploy.deploy")
+    assert job.data["rehearsal"] is True
 
 
 @pytest.mark.django_db(transaction=True)

@@ -63,7 +63,8 @@
         "check": "Application check",
         "passphrase_reveal": "Show backup passphrase",
         "passphrase_capture": "Save backup passphrase",
-        "discover": "Find applications"
+        "discover": "Find applications",
+        "deploy_steps": "Change deploy steps"
       },
       "backup": {
         "take": "Back up server",
@@ -129,7 +130,8 @@
         "revert": "Revert the new server after a move",
         "revert_check": "Revert: check the new server",
         "revert_env": "Revert: push the recorded .env file back",
-        "revert_restore": "Revert: restore the data from before the move"
+        "revert_restore": "Revert: restore the data from before the move",
+        "deploy": "Deploy in place"
       },
       "manager": {
         "export": "Export DBS data",
@@ -137,6 +139,21 @@
       },
       "shell": {
         "session": "Use a terminal"
+      },
+      "deploy": {
+        "check": "Deploy: check the application",
+        "safety_backup": "Deploy: safety backup",
+        "record_env": "Deploy: record the .env",
+        "git_pull": "Deploy: git pull",
+        "compose_pull": "Deploy: pull images",
+        "compose_build": "Deploy: build images",
+        "compose_up": "Deploy: start services",
+        "restart": "Deploy: restart",
+        "systemd_user_restart": "Deploy: restart the service",
+        "pip_install": "Deploy: install requirements",
+        "migrate": "Deploy: migrate",
+        "collectstatic": "Deploy: collect static files",
+        "final_check": "Deploy: final check"
       }
     }
   }

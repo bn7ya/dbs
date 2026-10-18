@@ -25,9 +25,13 @@ from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.envfiles.exceptions import EnvPathMissing
 from dbs.manager.envfiles.repositories import EnvVersionRepository
 from dbs.manager.envfiles.services import EnvFileService
+from dbs.manager.redeploy import deploy as deploys
+from dbs.manager.redeploy.catalogue import KINDS, validated
+from dbs.manager.redeploy.deploy import DEPLOY
 from dbs.manager.redeploy.exceptions import (
     ConfirmNameMismatch,
     NoBackupToRehearse,
+    NoDeploySteps,
     NotRevertable,
     SameApplication,
     SourceUnreachable,
@@ -73,6 +77,8 @@ UNREACHABLE = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
 NO_OP = ["true"]
 NOT_FOUND = "Choose one of the source application's own files."
 PASSWORD_REQUIRED = "Enter your own password to redeploy for real."
+PREFIXES = {RUN: "redeploy.", REVERT: f"{REVERT}_", DEPLOY: "deploy."}
+CHANGING = {RUN: CHANGING_STEPS, DEPLOY: deploys.CHANGING_STEPS}
 
 Detail = dict[str, Any]
 Step = Callable[[Detail, Application, AuditEvent], Optional[Detail]]
@@ -132,6 +138,31 @@ class RedeployService:
         return self._queue(RUN, target, detail)
 
     @requires(Capability.REDEPLOY_RUN)
+    def deploy(
+        self,
+        application: UUID,
+        *,
+        rehearsal: bool = True,
+        password: str = "",
+        confirm_name: str = "",
+    ) -> AuditEvent:
+        target = self.applications.get(application)
+        if not target.deploy_steps:
+            raise NoDeploySteps()
+        steps = validated(target.deploy_steps, target)
+        if not target.has_backup_passphrase:
+            raise PassphraseMissing()
+        detail: Detail = {
+            "target_application": str(target.pk),
+            "rehearsal": rehearsal,
+            "deploy_steps": steps,
+            "steps": deploys.planned(steps, rehearsal),
+        }
+        if not rehearsal:
+            self._confirm(DEPLOY, target, detail, password, confirm_name)
+        return self._queue(DEPLOY, target, detail)
+
+    @requires(Capability.REDEPLOY_RUN)
     def revert(
         self,
         move_id: int,
@@ -147,7 +178,9 @@ class RedeployService:
         detail: Detail = {
             "move": move.pk,
             "target_application": str(target.pk),
-            "env_version": move.data.get("target_env_version"),
+            "env_version": (
+                move.data.get("target_env_version") if move.action == RUN else None
+            ),
             "backup": move.data.get("safety_backup"),
             "rehearsal": rehearsal,
         }
@@ -187,7 +220,7 @@ class RedeployService:
         jobs = ActivityService(None)
         job.data = detail
         work = self._work(job.action)
-        prefix = "redeploy." if job.action == RUN else f"{REVERT}_"
+        prefix = PREFIXES[job.action]
         for step in detail["steps"]:
             if step["status"] == SKIPPED:
                 continue
@@ -206,13 +239,23 @@ class RedeployService:
                 for later in detail["steps"]:
                     if later["status"] == PENDING:
                         later["status"] = SKIPPED
-                if job.action == RUN:
-                    detail["revertable"] = _may_revert(detail, step["step"])
+                if job.action in CHANGING:
+                    detail["revertable"] = _may_revert(
+                        detail, step["step"], CHANGING[job.action]
+                    )
                 raise
             step["status"] = SKIPPED if outcome is None else SUCCEEDED
             jobs.progress(job.pk, detail)
 
     def _work(self, action: str) -> dict[str, Step]:
+        if action == DEPLOY:
+            return {
+                "check": self._deploy_check,
+                "safety_backup": self._deploy_safety_backup,
+                "record_env": self._record_env,
+                **{kind: self._deploy_step for kind in KINDS},
+                "final_check": self._final_check,
+            }
         if action == REVERT:
             return {
                 "check": self._check,
@@ -239,6 +282,52 @@ class RedeployService:
         ):
             raise TargetNotReady()
         return {"status": checked.last_check_status}
+
+    def _deploy_check(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail:
+        checked = self._check(detail, target, job)
+        with ServerConnectionService(job.actor).open(target) as remote:
+            found = deploys.revisions(remote, target, detail["deploy_steps"])
+        detail["before"] = found
+        return {**checked, **found}
+
+    def _deploy_safety_backup(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail:
+        if detail["rehearsal"]:
+            return {"would_back_up": True}
+        file = BackupRunService().back_up(job, target, keep_remote=0)
+        detail["safety_backup"] = str(file.pk)
+        return {"backup": str(file.pk)}
+
+    def _deploy_step(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail | None:
+        running = next(step for step in detail["steps"] if step["status"] == RUNNING)
+        step = detail["deploy_steps"][running["index"]]
+        connections = ServerConnectionService(job.actor)
+        with connections.open(target) as remote:
+            return deploys.run_step(
+                remote,
+                connections.dbs_profile(target),
+                step,
+                deploys.place_of(target),
+                rehearsal=detail["rehearsal"],
+            )
+
+    def _final_check(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail:
+        checked = self._check(detail, target, job)
+        connections = ServerConnectionService(job.actor)
+        with connections.open(target) as remote:
+            deploys.final_checks(
+                remote, connections.dbs_profile(target), settings.BACKUP_EXEC_TIMEOUT
+            )
+            found = deploys.revisions(remote, target, detail["deploy_steps"])
+        detail["after"] = found
+        return {**checked, **found}
 
     def _source_backup(
         self, detail: Detail, target: Application, job: AuditEvent
@@ -487,17 +576,19 @@ def _has_material(step: str, detail: Detail) -> bool:
 def _revertable(move: AuditEvent) -> bool:
     data = move.data or {}
     return (
-        move.action == RUN
+        move.action in CHANGING
         and move.status == audit.FAILED
         and not data.get("rehearsal", True)
         and bool(data.get("revertable"))
     )
 
 
-def _may_revert(detail: Detail, failed_step: str) -> bool:
+def _may_revert(
+    detail: Detail, failed_step: str, changing: tuple[str, ...]
+) -> bool:
     return (
         not detail["rehearsal"]
-        and failed_step in CHANGING_STEPS
+        and failed_step in changing
         and (
             detail.get("target_env_version") is not None
             or detail.get("safety_backup") is not None

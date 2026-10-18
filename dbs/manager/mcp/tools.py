@@ -45,7 +45,11 @@ from dbs.manager.envfiles.services import EnvFileService
 from dbs.manager.files.serializers import FileEntrySerializer
 from dbs.manager.files.services import FileService
 from dbs.manager.mcp.protocol import Tool
-from dbs.manager.redeploy.serializers import RedeploySerializer, RevertSerializer
+from dbs.manager.redeploy.serializers import (
+    DeploySerializer,
+    RedeploySerializer,
+    RevertSerializer,
+)
 from dbs.manager.redeploy.services import RedeployService
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
@@ -654,15 +658,27 @@ class Toolbox:
                 idempotent=True,
             ),
             Tool(
+                "rehearse_deploy",
+                "Rehearse a deploy",
+                "Check that an application could be deployed in place with its deploy "
+                "steps: it is checked, and each step only reads, such as git fetch "
+                "--dry-run, compose config and migrate --plan. Nothing changes. A real "
+                "deploy, and choosing the steps, are done by the person.",
+                dict(application=APPLICATION),
+                self.rehearse_deploy,
+                required=("application",),
+                idempotent=True,
+            ),
+            Tool(
                 "rehearse_revert",
                 "Rehearse putting an application back",
-                "For a move that stopped after it changed the new application, rehearse "
-                "restoring its safety backup. Nothing changes. Putting it back for real "
-                "is done by the person.",
+                "For a move or a deploy that stopped after it changed the application, "
+                "rehearse restoring its safety backup. Nothing changes. Putting it back "
+                "for real is done by the person.",
                 dict(
                     move={
                         "type": "integer",
-                        "description": "The move's activity number.",
+                        "description": "The move's or deploy's activity number.",
                     }
                 ),
                 self.rehearse_revert,
@@ -955,6 +971,11 @@ class Toolbox:
             )
         data = validated(RedeploySerializer, body)
         return self._job(RedeployService(self.user).start(**data))
+
+    def rehearse_deploy(self, arguments: Arguments) -> dict[str, Any]:
+        application = self._application(arguments["application"])
+        data = validated(DeploySerializer, {"rehearsal": True})
+        return self._job(RedeployService(self.user).deploy(application.pk, **data))
 
     def rehearse_revert(self, arguments: Arguments) -> dict[str, Any]:
         move = references.number(str(arguments["move"]), "move")

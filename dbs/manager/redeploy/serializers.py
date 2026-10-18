@@ -32,3 +32,12 @@ class RevertSerializer(serializers.Serializer):
     rehearsal = serializers.BooleanField(required=False, default=True)
     password = _password()
     confirm_name = _confirm_name()
+
+
+class DeploySerializer(RevertSerializer):
+    pass
+
+
+class DeployStepsSerializer(serializers.Serializer):
+    steps = serializers.ListField(child=serializers.DictField(), allow_empty=True)
+    account_password = _password()

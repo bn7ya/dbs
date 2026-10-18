@@ -10,6 +10,12 @@ class SameApplication(APIException):
     default_detail = "Choose a target application other than the source."
 
 
+class NoDeploySteps(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "no_deploy_steps"
+    default_detail = "Choose the application's deploy steps before deploying it."
+
+
 class ConfirmNameMismatch(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_code = "confirm_name_mismatch"

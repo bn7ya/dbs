@@ -78,6 +78,21 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'auth.sign_out',
   'auth.recovery_code_used',
   'shell.session',
+  'application.deploy_steps',
+  'redeploy.deploy',
+  'deploy.check',
+  'deploy.safety_backup',
+  'deploy.record_env',
+  'deploy.git_pull',
+  'deploy.compose_pull',
+  'deploy.compose_build',
+  'deploy.compose_up',
+  'deploy.restart',
+  'deploy.systemd_user_restart',
+  'deploy.pip_install',
+  'deploy.migrate',
+  'deploy.collectstatic',
+  'deploy.final_check',
 ];
 
 export interface ActivityEntry {
