@@ -173,7 +173,7 @@ python manage.py dbs upgrade
 | `MySQLReads` | On MySQL, a `max_allowed_packet` below 64 MiB. |
 | `SQLiteWrites` | On SQLite, WAL mode and, on Django 5.1 or later, `"transaction_mode": "IMMEDIATE"`, so the site keeps writing while a backup reads in its own process. |
 | `LegacyPartials` | Pre-0.7 `*.dbs.part` files left in `DBS_BACKUP_DIR`, which DBS no longer sweeps; the remedy is the `rm` line. |
-| `SSHTargetKeys` | `SSHTarget.from_dict` reads `username` and `key_path` only. |
+| `SSHTargetKeys` | `SSHTarget.from_dict` reads `username` and `key_filename`; the old `user` and `key_file` names are refused. |
 
 **A resolver conflict.** django-dbs now requires `djangorestframework>=3.15,<4`,
 `scikit-learn>=1.4.2,<2`, `paramiko>=3.2,<6`, `waitress>=3,<4` and `keyring>=24,<26`. A project
