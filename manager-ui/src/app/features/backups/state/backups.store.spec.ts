@@ -231,6 +231,7 @@ describe('BackupsStore', () => {
       expect(store.applications()).toEqual(APPLICATIONS);
       expect(store.storage()).toEqual({
         total: 5_400_000,
+        disk: { total: 100_000_000_000, free: 62_000_000_000, low: false },
         applications: [
           { id: OTHER_APPLICATION_ID, name: 'blog', server: OTHER_SERVER_ID, serverName: 'staging-web', bytes: 4_000_000 },
           { id: APPLICATION_ID, name: 'shop', server: SERVER_ID, serverName: 'production-web', bytes: 1_400_000 },
