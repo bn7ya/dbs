@@ -197,6 +197,16 @@ PLAN_FIELDS = {
         "description": "How many to keep on the server, 0 to 5.",
     },
     "enabled": {"type": "boolean"},
+    "anchor_at": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "description": "When the first run happens, with its UTC offset; later runs "
+        "keep its beat.",
+    },
+    "time_zone": {
+        "type": "string",
+        "description": "The time zone whose clock a daily plan keeps, as Europe/Berlin.",
+    },
 }
 
 KEEPS_FEWER = (

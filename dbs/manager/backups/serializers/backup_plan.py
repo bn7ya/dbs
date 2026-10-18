@@ -8,6 +8,7 @@ from dbs.manager.backups.models import (
     PLAN_KEEP_REMOTE_MIN,
     PLAN_PATH_MAX_LENGTH,
     PLAN_PATHS_MAX,
+    PLAN_TIME_ZONE_MAX_LENGTH,
     BackupPlan,
 )
 
@@ -30,6 +31,8 @@ class BackupPlanSerializer(serializers.ModelSerializer):
             "keep",
             "keep_remote",
             "enabled",
+            "anchor_at",
+            "time_zone",
             "next_run_at",
             "last_run_at",
             "last_status",
@@ -67,6 +70,10 @@ class PlanUpdateSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(
         required=False,
     )
+    anchor_at = serializers.DateTimeField(required=False, allow_null=True)
+    time_zone = serializers.CharField(
+        max_length=PLAN_TIME_ZONE_MAX_LENGTH, required=False
+    )
     account_password = serializers.CharField(
         write_only=True,
         required=False,
@@ -74,6 +81,10 @@ class PlanUpdateSerializer(serializers.Serializer):
         trim_whitespace=False,
         max_length=ACCOUNT_PASSWORD_MAX_LENGTH,
     )
+
+
+class RescheduleSerializer(serializers.Serializer):
+    next_run_at = serializers.DateTimeField()
 
 
 class PlanFilterSerializer(serializers.Serializer):

@@ -1,6 +1,13 @@
 from .backups import BackupDetailView, BackupListView, DownloadView, UndoDeleteView
 from .jobs import RestoreView, TakeView, VerifyView
-from .plans import PlanDetailView, PlanListView, PlanRunView
+from .plans import (
+    PlanDetailView,
+    PlanListView,
+    PlanPauseView,
+    PlanRescheduleView,
+    PlanResumeView,
+    PlanRunView,
+)
 from .uploads import UploadView
 
 __all__ = [
@@ -9,6 +16,9 @@ __all__ = [
     "DownloadView",
     "PlanDetailView",
     "PlanListView",
+    "PlanPauseView",
+    "PlanRescheduleView",
+    "PlanResumeView",
     "PlanRunView",
     "RestoreView",
     "TakeView",

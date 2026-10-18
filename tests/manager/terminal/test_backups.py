@@ -1,6 +1,9 @@
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
@@ -331,3 +334,73 @@ def test_activity_lists_a_server_with_its_applications_or_one_application(
         row["action"] for row in by_server
     }
     assert table[0].split()[4:6] == ["SERVER", "APPLICATION"]
+
+
+@pytest.mark.django_db
+def test_a_plan_is_rescheduled_paused_and_resumed_from_the_terminal(
+    terminal, admin, two_applications
+):
+    added = terminal(
+        "plan",
+        "add",
+        "shop",
+        "nightly",
+        "--kind",
+        "dbs",
+        "--every",
+        "1440",
+        "--first-run",
+        "2099-01-01T03:00+01:00",
+        "--time-zone",
+        "Europe/Berlin",
+        "--json",
+    )
+    assert added.code == 1 and "anchor at" in added.err
+    first = (timezone.now() + timedelta(days=2)).replace(microsecond=0)
+    added = terminal(
+        "plan",
+        "add",
+        "shop",
+        "nightly",
+        "--kind",
+        "dbs",
+        "--every",
+        "1440",
+        "--first-run",
+        first.isoformat(),
+        "--time-zone",
+        "Europe/Berlin",
+        "--json",
+    ).json()
+    plan_id = added["id"]
+    assert added["time_zone"] == "Europe/Berlin"
+    assert parse_datetime(added["next_run_at"]) == first
+
+    later = first + timedelta(hours=5)
+    moved = terminal("plan", "reschedule", plan_id, "--at", later.isoformat())
+    assert moved.code == 0, moved.err
+    assert BackupPlan.objects.get(pk=plan_id).next_run_at == later
+
+    assert terminal("plan", "pause", plan_id).code == 0
+    paused = BackupPlan.objects.get(pk=plan_id)
+    assert (paused.enabled, paused.next_run_at) == (False, None)
+
+    resumed = terminal("plan", "resume", plan_id)
+    assert resumed.code == 0, resumed.err
+    assert "runs next at" in resumed.out
+    assert BackupPlan.objects.get(pk=plan_id).next_run_at == later
+
+
+@pytest.mark.django_db
+def test_a_manual_plan_cannot_be_paused_or_rescheduled(
+    terminal, admin, two_applications
+):
+    plan_id = terminal(
+        "plan", "add", "shop", "adhoc", "--kind", "dbs", "--manual", "--json"
+    ).json()["id"]
+
+    paused = terminal("plan", "pause", plan_id)
+    moved = terminal("plan", "reschedule", plan_id, "--at", "2099-01-01T00:00Z")
+
+    assert paused.code == 1 and moved.code == 1
+    assert "runs only when asked" in paused.err

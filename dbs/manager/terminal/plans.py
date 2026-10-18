@@ -6,6 +6,7 @@ from dbs.manager.backups.serializers import (
     BackupPlanSerializer,
     PlanCreateSerializer,
     PlanUpdateSerializer,
+    RescheduleSerializer,
 )
 from dbs.manager.backups.services import BackupPlanService
 from dbs.manager.applications.services import ApplicationService
@@ -35,12 +36,22 @@ SHOWN_FIELDS = (
     "keep",
     "keep_remote",
     "enabled",
+    "anchor_at",
+    "time_zone",
     "next_run_at",
     "last_run_at",
     "last_status",
     "last_error_code",
 )
-FIELDS = ("paths", "pattern", "interval_minutes", "keep", "keep_remote")
+FIELDS = (
+    "paths",
+    "pattern",
+    "interval_minutes",
+    "keep",
+    "keep_remote",
+    "anchor_at",
+    "time_zone",
+)
 
 
 def list_plans(session: TerminalSession) -> int:
@@ -121,6 +132,33 @@ def run(session: TerminalSession) -> int:
         job = service.run(plan.pk)
     entry = jobs.finished(session.user, job)
     return session.outcome(entry, f"Ran the plan {plan.name}.")
+
+
+def reschedule(session: TerminalSession) -> int:
+    plan_id = _plan_id(session)
+    data = validated(RescheduleSerializer, {"next_run_at": session.args.next_run_at})
+    plan = BackupPlanService(session.user).reschedule(plan_id, data["next_run_at"])
+    session.out.say(
+        f"The plan {plan.name} runs next at {plan.next_run_at.isoformat()}.",
+        BackupPlanSerializer(plan).data,
+    )
+    return 0
+
+
+def pause(session: TerminalSession) -> int:
+    plan = BackupPlanService(session.user).pause(_plan_id(session))
+    session.out.say(f"Paused the plan {plan.name}.", BackupPlanSerializer(plan).data)
+    return 0
+
+
+def resume(session: TerminalSession) -> int:
+    plan = BackupPlanService(session.user).resume(_plan_id(session))
+    session.out.say(
+        f"Resumed the plan {plan.name}; it runs next at "
+        f"{plan.next_run_at.isoformat()}.",
+        BackupPlanSerializer(plan).data,
+    )
+    return 0
 
 
 def _plan_id(session: TerminalSession) -> Any:

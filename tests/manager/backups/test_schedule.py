@@ -21,7 +21,7 @@ from dbs.manager.backups.services import (
     BackupService,
     backup_schedule_service,
 )
-from dbs.manager.backups.services.backup_schedule_service import following
+from dbs.manager.backups.timing import next_on_grid
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.scheduler import TASKS
 from tests.manager.factories import make_application
@@ -41,7 +41,7 @@ def stored(plan) -> BackupPlan:
 
 def due(plan, ago: timedelta = timedelta(minutes=1)) -> datetime:
     moment = timezone.now() - ago
-    BackupPlanRepository().update(stored(plan), next_run_at=moment)
+    BackupPlanRepository().update(stored(plan), next_run_at=moment, anchor_at=moment)
     return moment
 
 
@@ -125,10 +125,10 @@ def test_the_next_run_is_the_first_on_the_plans_beat_after_now():
     start = datetime(2026, 10, 1, 3, 0, tzinfo=dt_timezone.utc)
     hour = timedelta(hours=1)
 
-    assert following(start, hour, start) == start + hour
-    assert following(start, hour, start + timedelta(minutes=59)) == start + hour
-    assert following(start, hour, start + hour) == start + 2 * hour
-    assert following(start, DAY, start + 3 * DAY + hour) == start + 4 * DAY
+    assert next_on_grid(start, 60, "UTC", start) == start + hour
+    assert next_on_grid(start, 60, "UTC", start + timedelta(minutes=59)) == start + hour
+    assert next_on_grid(start, 60, "UTC", start + hour) == start + 2 * hour
+    assert next_on_grid(start, 1440, "UTC", start + 3 * DAY + hour) == start + 4 * DAY
 
 
 @pytest.mark.django_db

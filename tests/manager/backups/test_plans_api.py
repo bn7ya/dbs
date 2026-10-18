@@ -27,6 +27,8 @@ SHAPE = {
     "keep",
     "keep_remote",
     "enabled",
+    "anchor_at",
+    "time_zone",
     "next_run_at",
     "last_run_at",
     "last_status",

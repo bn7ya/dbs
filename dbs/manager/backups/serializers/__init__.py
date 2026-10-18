@@ -13,6 +13,7 @@ from .backup_plan import (
     PlanCreateSerializer,
     PlanFilterSerializer,
     PlanUpdateSerializer,
+    RescheduleSerializer,
 )
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "PlanCreateSerializer",
     "PlanFilterSerializer",
     "PlanUpdateSerializer",
+    "RescheduleSerializer",
     "RestoreSerializer",
     "TakeSerializer",
     "UploadSerializer",

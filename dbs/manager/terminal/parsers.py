@@ -514,6 +514,18 @@ def _plan_fields(parser) -> None:
         help="How many to leave on the server, 0 to 5. Keeping fewer asks for your "
         "password.",
     )
+    parser.add_argument(
+        "--first-run",
+        dest="anchor_at",
+        metavar="WHEN",
+        help="When the first run happens, as 2026-11-02T03:00+01:00. Later runs keep "
+        "its beat.",
+    )
+    parser.add_argument(
+        "--time-zone",
+        metavar="ZONE",
+        help="The time zone whose clock a daily plan keeps, as Europe/Berlin.",
+    )
 
 
 def plans(commands, location: Location) -> None:
@@ -547,6 +559,36 @@ def plans(commands, location: Location) -> None:
 
     run = _verb(verbs, "run", "Run a plan now.", "terminal.plans:run", location)
     run.add_argument("plan", help="The plan's id.")
+
+    reschedule = _verb(
+        verbs,
+        "reschedule",
+        "Move a plan's next run; later runs follow from it.",
+        "terminal.plans:reschedule",
+        location,
+    )
+    reschedule.add_argument("plan", help="The plan's id.")
+    reschedule.add_argument(
+        "--at",
+        dest="next_run_at",
+        required=True,
+        metavar="WHEN",
+        help="The new next run, as 2026-11-02T03:00+01:00.",
+    )
+
+    pause = _verb(
+        verbs, "pause", "Stop a plan's runs until resumed.", "terminal.plans:pause", location
+    )
+    pause.add_argument("plan", help="The plan's id.")
+
+    resume = _verb(
+        verbs,
+        "resume",
+        "Start a paused plan again at its next beat.",
+        "terminal.plans:resume",
+        location,
+    )
+    resume.add_argument("plan", help="The plan's id.")
 
 
 def activity(commands, location: Location) -> None:

@@ -80,7 +80,10 @@
       "plan": {
         "create": "Add backup plan",
         "update": "Edit backup plan",
-        "delete": "Delete backup plan"
+        "delete": "Delete backup plan",
+        "reschedule": "Move a backup plan's next run",
+        "pause": "Pause backup plan",
+        "resume": "Resume backup plan"
       },
       "files": {
         "download": "Download file",

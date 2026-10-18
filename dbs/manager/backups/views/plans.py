@@ -17,6 +17,7 @@ from dbs.manager.backups.serializers import (
     PlanCreateSerializer,
     PlanFilterSerializer,
     PlanUpdateSerializer,
+    RescheduleSerializer,
 )
 from dbs.manager.backups.services import BackupPlanService
 
@@ -63,3 +64,29 @@ class PlanRunView(APIView):
     def post(self, request: Request, pk: UUID) -> Response:
         job = BackupPlanService(request.user).run(pk)
         return Response(JobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+
+class PlanRescheduleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, pk: UUID) -> Response:
+        payload = RescheduleSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        plan = BackupPlanService(request.user).reschedule(pk, **payload.validated_data)
+        return Response(BackupPlanSerializer(plan).data)
+
+
+class PlanPauseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, pk: UUID) -> Response:
+        plan = BackupPlanService(request.user).pause(pk)
+        return Response(BackupPlanSerializer(plan).data)
+
+
+class PlanResumeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, pk: UUID) -> Response:
+        plan = BackupPlanService(request.user).resume(pk)
+        return Response(BackupPlanSerializer(plan).data)

@@ -13,6 +13,8 @@ PLAN_KEEP_REMOTE_DEFAULT = 0
 PLAN_PATHS_MAX = 50
 PLAN_PATH_MAX_LENGTH = 1024
 PLAN_PATTERN_MAX_LENGTH = 200
+PLAN_TIME_ZONE_MAX_LENGTH = 64
+PLAN_DEFAULT_TIME_ZONE = "UTC"
 
 
 class PlanKind(models.TextChoices):
@@ -57,6 +59,10 @@ class BackupPlan(BaseModel):
         ],
     )
     enabled = models.BooleanField(default=True)
+    anchor_at = models.DateTimeField(null=True, blank=True)
+    time_zone = models.CharField(
+        max_length=PLAN_TIME_ZONE_MAX_LENGTH, default=PLAN_DEFAULT_TIME_ZONE
+    )
     next_run_at = models.DateTimeField(null=True, blank=True)
     last_run_at = models.DateTimeField(null=True, blank=True)
     last_status = models.CharField(

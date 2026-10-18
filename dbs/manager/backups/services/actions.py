@@ -15,3 +15,6 @@ class Action:
     PLAN_CREATE = "plan.create"
     PLAN_UPDATE = "plan.update"
     PLAN_DELETE = "plan.delete"
+    PLAN_RESCHEDULE = "plan.reschedule"
+    PLAN_PAUSE = "plan.pause"
+    PLAN_RESUME = "plan.resume"

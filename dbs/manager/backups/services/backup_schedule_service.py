@@ -17,14 +17,11 @@ from dbs.manager.backups.services.backup_run_service import BackupRunService
 from dbs.manager.backups.services.job_queue import JobQueue
 from dbs.manager.backups.services.plan_runs import last_run, run_detail
 from dbs.manager.backups.storage import BackupStorage
+from dbs.manager.backups.timing import next_on_grid
 from dbs.manager.runner import get_runner
 from dbs.models import AuditEvent
 
 STALE_UPLOAD_AFTER = timedelta(days=1)
-
-
-def following(scheduled: datetime, interval: timedelta, now: datetime) -> datetime:
-    return scheduled + ((now - scheduled) // interval + 1) * interval
 
 
 class BackupScheduleService:
@@ -42,9 +39,10 @@ class BackupScheduleService:
             for plan in self.plans.lock_scheduled_by(now):
                 self.plans.update(
                     plan,
-                    next_run_at=following(
-                        cast(datetime, plan.next_run_at),
-                        timedelta(minutes=cast(int, plan.interval_minutes)),
+                    next_run_at=next_on_grid(
+                        plan.anchor_at or cast(datetime, plan.next_run_at),
+                        cast(int, plan.interval_minutes),
+                        plan.time_zone,
                         now,
                     ),
                 )
