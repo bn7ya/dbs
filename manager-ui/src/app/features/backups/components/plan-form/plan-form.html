@@ -141,6 +141,50 @@
     }
   </mat-form-field>
 
+  @if (scheduled()) {
+    <fieldset class="plan-form__choice">
+      <legend class="text-label">{{ firstRunLabel | t }}</legend>
+      <app-moment-fields
+        name="anchor_at"
+        [dayLabel]="'backups.moment.day' | t"
+        [timeLabel]="'backups.moment.time' | t"
+        [hint]="firstRunHint | t"
+        [dayError]="errorFor('anchor_at')"
+        [timeError]="errorFor('first_time')"
+        [day]="draft().firstDay"
+        (dayChange)="update('firstDay', $event)"
+        [time]="draft().firstTime"
+        (timeChange)="update('firstTime', $event)"
+      />
+    </fieldset>
+
+    <mat-form-field>
+      <mat-label>{{ 'backups.plans.form.timeZone' | t }}</mat-label>
+      <input
+        matInput
+        class="plan-form__code"
+        name="time_zone"
+        dir="ltr"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        [matAutocomplete]="zonePicker"
+        [appFieldError]="errorFor('time_zone')"
+        [ngModel]="draft().timeZone"
+        (ngModelChange)="update('timeZone', $event)"
+      />
+      <mat-autocomplete #zonePicker="matAutocomplete">
+        @for (zone of zoneOptions(); track zone) {
+          <mat-option [value]="zone"><bdi dir="ltr">{{ zone }}</bdi></mat-option>
+        }
+      </mat-autocomplete>
+      <mat-hint>{{ 'backups.plans.form.timeZoneHint' | t }}</mat-hint>
+      @if (errorFor('time_zone'); as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
+  }
+
   <div class="plan-form__pair">
     <mat-form-field>
       <mat-label>{{ 'backups.plans.form.keep' | t }}</mat-label>
@@ -187,20 +231,22 @@
     }
   </div>
 
-  <div class="plan-form__toggle">
-    <mat-slide-toggle
-      name="enabled"
-      [aria-describedby]="enabledId + '-hint'"
-      [ngModel]="draft().enabled"
-      (ngModelChange)="update('enabled', $event)"
-    >
-      {{ 'backups.plans.form.enabled' | t }}
-    </mat-slide-toggle>
-    <small class="text-sm text-secondary" [id]="enabledId + '-hint'">{{ 'backups.plans.form.enabledHint' | t }}</small>
-    @if (errorFor('enabled'); as message) {
-      <small class="plan-form__error text-sm" role="alert">{{ message }}</small>
-    }
-  </div>
+  @if (scheduled()) {
+    <div class="plan-form__toggle">
+      <mat-slide-toggle
+        name="enabled"
+        [aria-describedby]="enabledId + '-hint'"
+        [ngModel]="draft().enabled"
+        (ngModelChange)="update('enabled', $event)"
+      >
+        {{ 'backups.plans.form.enabled' | t }}
+      </mat-slide-toggle>
+      <small class="text-sm text-secondary" [id]="enabledId + '-hint'">{{ 'backups.plans.form.enabledHint' | t }}</small>
+      @if (errorFor('enabled'); as message) {
+        <small class="plan-form__error text-sm" role="alert">{{ message }}</small>
+      }
+    </div>
+  }
 
   @if (passwordShown()) {
     <app-password-input

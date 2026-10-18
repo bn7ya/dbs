@@ -1,0 +1,5 @@
+<time class="next-run__time" [attr.datetime]="at()">{{ inZone() }}</time>
+<bdi class="next-run__zone text-sm text-secondary" dir="ltr">{{ zoneName() }}</bdi>
+@if (local(); as local) {
+  <span class="text-sm text-secondary">{{ 'backups.plans.localTime' | t: { time: local } }}</span>
+}

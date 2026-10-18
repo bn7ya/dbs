@@ -1,0 +1,30 @@
+<form class="dialog-form" (ngSubmit)="save()" novalidate>
+  @if (formFailure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <p class="text-secondary">{{ body() }}</p>
+
+  <app-moment-fields
+    name="next_run_at"
+    [dayLabel]="'backups.moment.day' | t"
+    [timeLabel]="'backups.moment.time' | t"
+    [hint]="hint()"
+    [dayError]="errorFor('day')"
+    [timeError]="errorFor('time')"
+    [day]="moment().day"
+    (dayChange)="setDay($event)"
+    [time]="moment().time"
+    (timeChange)="setTime($event)"
+  />
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="saving()" [attr.aria-busy]="saving()">
+      @if (saving()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ (saving() ? 'backups.plans.reschedule.working' : 'backups.plans.reschedule.submit') | t }}
+    </button>
+  </div>
+</form>

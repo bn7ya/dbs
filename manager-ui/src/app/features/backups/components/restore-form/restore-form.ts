@@ -13,14 +13,17 @@ import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { Can } from '@core/auth/directives/can';
 import { injectDialogData, injectDialogRef } from '@shared/dialogs/dialogs';
 import { FieldError } from '@shared/field/field-error';
+import { isolated } from '@shared/isolated/isolated';
 import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { uniqueId } from '@shared/unique-id';
-import type { RestoreMode, RestoreRequest } from '../../data/backups.types';
+import type { ApplicationChoice, RestoreMode, RestoreRequest } from '../../data/backups.types';
 import { BackupsStore } from '../../state/backups.store';
 import type { RestoreFormData, Sending } from './restore-form.types';
 
 const MODES: readonly RestoreMode[] = ['merge', 'replace'];
+
+const FORM_FIELDS = ['account_password', 'application_name', 'target_application'];
 
 @Component({
   selector: 'app-restore-form',
@@ -59,13 +62,17 @@ export class RestoreForm {
 
   readonly mode = signal<RestoreMode>('merge');
   readonly accountPassword = signal('');
-  readonly serverName = signal('');
-  readonly targetServer = signal<string | null>(null);
+  readonly applicationName = signal('');
+  readonly targetApplication = signal<string | null>(null);
 
-  readonly targetServers = this.store.targetServers;
+  readonly targets = computed(() => this.store.applications().filter((each) => each.id !== this.file.application));
 
   readonly restoreOnto = computed(
-    () => this.targetServers().find((each) => each.id === this.targetServer())?.name ?? this.file.server_name,
+    () => this.targets().find((each) => each.id === this.targetApplication())?.name ?? this.file.application_name,
+  );
+
+  readonly ontoHint = computed(() =>
+    this.locale.translate('backups.restore.applicationNameHint', { name: isolated(this.restoreOnto()) }),
   );
 
   readonly sending = signal<Sending | null>(null);
@@ -78,7 +85,7 @@ export class RestoreForm {
   private readonly nameEdited = signal(false);
 
   // Spaces around it aside, as the backend compares it.
-  private readonly nameMatches = computed(() => this.serverName().trim() === this.restoreOnto());
+  private readonly nameMatches = computed(() => this.applicationName().trim() === this.restoreOnto());
 
   readonly passwordMissing = computed(() => {
     const asked = (this.sendError()?.fields?.['account_password'] ?? []).length > 0 && !this.passwordEdited();
@@ -100,7 +107,7 @@ export class RestoreForm {
     if (this.attempted() && !this.nameMatches()) {
       return 'name_mismatch';
     }
-    return this.nameEdited() ? null : (this.sendError()?.fields?.['server_name']?.[0] ?? null);
+    return this.nameEdited() ? null : (this.sendError()?.fields?.['application_name']?.[0] ?? null);
   });
 
   readonly nameErrorText = computed(() => {
@@ -109,19 +116,26 @@ export class RestoreForm {
   });
 
   readonly targetError = computed(() => {
-    const code = this.sendError()?.fields?.['target_server']?.[0];
+    const code = this.sendError()?.fields?.['target_application']?.[0];
     return code === undefined ? '' : errorText(this.locale, code);
   });
 
   readonly formFailure = computed(() => {
     const failure = this.sendError();
-    const fields = failure?.fields ?? {};
-    const aboutAField = 'account_password' in fields || 'server_name' in fields || 'target_server' in fields;
+    const fields = Object.keys(failure?.fields ?? {});
+    const aboutAField = fields.some((field) => FORM_FIELDS.includes(field));
     return failure && failure.code !== 'invalid_password' && !aboutAField ? failure : null;
   });
 
   constructor() {
     this.store.resetRestoreForm();
+  }
+
+  targetLabel(target: ApplicationChoice): string {
+    return this.locale.translate('backups.applicationOnServer', {
+      name: isolated(target.name),
+      server: isolated(target.server.name),
+    });
   }
 
   setMode(mode: RestoreMode | null): void {
@@ -135,8 +149,8 @@ export class RestoreForm {
     this.passwordEdited.set(true);
   }
 
-  setServerName(name: string): void {
-    this.serverName.set(name);
+  setApplicationName(name: string): void {
+    this.applicationName.set(name);
     this.nameEdited.set(true);
   }
 
@@ -163,8 +177,8 @@ export class RestoreForm {
     this.sending.set(sending);
     this.passwordEdited.set(false);
     this.nameEdited.set(false);
-    const target = this.targetServer();
-    const onto = target === null ? {} : { target_server: target };
+    const target = this.targetApplication();
+    const onto = target === null ? {} : { target_application: target };
     const request: RestoreRequest =
       sending === 'rehearse'
         ? { mode: this.mode(), rehearse: true, ...onto }
@@ -172,7 +186,7 @@ export class RestoreForm {
             mode: this.mode(),
             rehearse: false,
             account_password: this.accountPassword(),
-            server_name: this.serverName().trim(),
+            application_name: this.applicationName().trim(),
             ...onto,
           };
     const started = await this.store.restore(this.file, request);

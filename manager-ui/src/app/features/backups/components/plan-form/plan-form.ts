@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
+import { MatAutocomplete, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatButton } from '@angular/material/button';
 import { MatChipGrid, MatChipInput, MatChipRemove, MatChipRow, type MatChipInputEvent } from '@angular/material/chips';
 import { MatOption } from '@angular/material/core';
@@ -18,8 +19,17 @@ import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { uniqueId } from '@shared/unique-id';
-import { PLAN_SCHEDULES, scheduleOf, type BackupKind, type BackupPlan, type PlanSchedule, type PlanSettings } from '../../data/backups.types';
-import { BackupsStore } from '../../state/backups.store';
+import {
+  PLAN_SCHEDULES,
+  scheduleOf,
+  type BackupPlan,
+  type PlanKind,
+  type PlanSchedule,
+  type PlanSettings,
+} from '../../data/plans.types';
+import { LOCAL_TIME_ZONE, isoOf, momentProblem, timeZoneNames, zoneNamed } from '../../data/zoned-time';
+import { PlansStore } from '../../state/plans.store';
+import { MomentFields } from '../moment-fields/moment-fields';
 import type { Draft, DraftField, PlanFormData, ScheduleOption } from './plan-form.types';
 
 const FIELD_OF: Readonly<Record<keyof Draft, DraftField>> = {
@@ -29,6 +39,9 @@ const FIELD_OF: Readonly<Record<keyof Draft, DraftField>> = {
   pattern: 'pattern',
   name: 'name',
   schedule: 'interval_minutes',
+  firstDay: 'anchor_at',
+  firstTime: 'anchor_at',
+  timeZone: 'time_zone',
   keep: 'keep',
   keep_remote: 'keep_remote',
   enabled: 'enabled',
@@ -38,26 +51,16 @@ const KEEP_MAX = 5;
 const KEEP_MIN = 1;
 const KEEP_REMOTE_MIN = 0;
 
-const NEW_PLAN: Draft = {
-  kind: 'dbs',
-  paths: [],
-  folder: '',
-  pattern: '*',
-  name: '',
-  schedule: 'daily',
-  keep: KEEP_MAX,
-  keep_remote: 0,
-  enabled: true,
-};
-
 const SCHEDULES = Object.keys(PLAN_SCHEDULES) as PlanSchedule[];
 
-const KINDS: readonly BackupKind[] = ['dbs', 'archive', 'collect'];
+const KINDS: readonly PlanKind[] = ['dbs', 'archive', 'collect'];
 
 @Component({
   selector: 'app-plan-form',
   imports: [
     FormsModule,
+    MatAutocomplete,
+    MatAutocompleteTrigger,
     MatButton,
     MatChipGrid,
     MatChipRow,
@@ -74,6 +77,7 @@ const KINDS: readonly BackupKind[] = ['dbs', 'archive', 'collect'];
     MatSelect,
     MatSlideToggle,
     FieldError,
+    MomentFields,
     Notice,
     PasswordInput,
     ErrorTextPipe,
@@ -84,10 +88,11 @@ const KINDS: readonly BackupKind[] = ['dbs', 'archive', 'collect'];
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlanForm {
-  private readonly store = inject(BackupsStore);
+  private readonly store = inject(PlansStore);
   private readonly ref = injectDialogRef<BackupPlan>();
   private readonly locale = inject(LocaleStore);
   private readonly data = injectDialogData<PlanFormData>();
+  private readonly localZone = inject(LOCAL_TIME_ZONE);
 
   readonly editing = this.data.plan;
 
@@ -100,22 +105,48 @@ export class PlanForm {
   readonly keepRemoteMin = KEEP_REMOTE_MIN;
   readonly keepMax = KEEP_MAX;
 
+  private readonly zones = timeZoneNames(this.localZone, this.editing?.time_zone ?? '');
+
   readonly draft = signal<Draft>(
     this.editing
       ? draftOf(this.editing)
-      : { ...NEW_PLAN, name: this.data.name ?? NEW_PLAN.name, kind: this.data.kind ?? NEW_PLAN.kind },
+      : {
+          kind: this.data.kind ?? 'dbs',
+          paths: [],
+          folder: '',
+          pattern: '*',
+          name: this.data.name ?? '',
+          schedule: 'daily',
+          firstDay: null,
+          firstTime: null,
+          timeZone: this.localZone,
+          keep: KEEP_MAX,
+          keep_remote: 0,
+          enabled: true,
+        },
   );
 
   readonly archiving = computed(() => this.draft().kind === 'archive');
 
   readonly collecting = computed(() => this.draft().kind === 'collect');
 
-  readonly saving = this.store.savingPlan;
-  readonly saveError = this.store.planSaveError;
+  readonly scheduled = computed(() => this.draft().schedule !== 'manual');
+
+  readonly saving = this.store.saving;
+  readonly saveError = this.store.saveError;
 
   readonly scheduleOptions = computed<ScheduleOption[]>(() =>
     SCHEDULES.map((schedule) => ({ value: schedule, label: this.locale.translate(`backups.schedule.${schedule}`) })),
   );
+
+  readonly zoneOptions = computed(() => {
+    const typed = searchable(this.draft().timeZone);
+    return typed === '' ? this.zones : this.zones.filter((zone) => searchable(zone).includes(typed));
+  });
+
+  readonly firstRunLabel = this.editing ? 'backups.plans.form.nextRun' : 'backups.plans.form.firstRun';
+
+  readonly firstRunHint = this.editing ? 'backups.plans.form.nextRunHint' : 'backups.plans.form.firstRunHint';
 
   private readonly attempted = signal(false);
 
@@ -200,7 +231,7 @@ export class PlanForm {
   }
 
   // Another kind sends other folders, pattern and copies on the server, so their errors no longer hold.
-  setKind(kind: BackupKind | null): void {
+  setKind(kind: PlanKind | null): void {
     if (kind) {
       this.update('kind', kind);
       this.edited.update((edited) => new Set<DraftField>([...edited, 'paths', 'pattern', 'keep_remote']));
@@ -280,6 +311,16 @@ function problemsIn(draft: Draft): ReadonlyMap<DraftField, string> {
   if (draft.name.trim() === '') {
     problems.set('name', 'required');
   }
+  if (draft.schedule !== 'manual') {
+    const zone = zoneNamed(draft.timeZone);
+    if (zone === null) {
+      problems.set('time_zone', draft.timeZone.trim() === '' ? 'required' : 'invalid_time_zone');
+    }
+    const moment = momentProblem({ day: draft.firstDay, time: draft.firstTime }, zone ?? '', Date.now());
+    if (moment !== null) {
+      problems.set(moment.part === 'day' ? 'anchor_at' : 'first_time', moment.code);
+    }
+  }
   if (draft.keep === null) {
     problems.set('keep', 'required');
   } else if (!inRange(draft.keep, KEEP_MIN)) {
@@ -294,6 +335,10 @@ function problemsIn(draft: Draft): ReadonlyMap<DraftField, string> {
     problems.set('keep_remote', 'keep_remote_range');
   }
   return problems;
+}
+
+function searchable(text: string): string {
+  return text.trim().toLowerCase().replaceAll('_', ' ');
 }
 
 function isAbsolutePath(path: string): boolean {
@@ -313,6 +358,9 @@ function draftOf(plan: BackupPlan): Draft {
     pattern: plan.pattern,
     name: plan.name,
     schedule: scheduleOf(plan.interval_minutes),
+    firstDay: null,
+    firstTime: null,
+    timeZone: plan.time_zone,
     keep: plan.keep,
     keep_remote: plan.keep_remote,
     enabled: plan.enabled,
@@ -325,6 +373,9 @@ function settingsOf(draft: Draft): PlanSettings | null {
   if (draft.keep === null || keepRemote === null) {
     return null;
   }
+  const zone = zoneNamed(draft.timeZone);
+  const anchor =
+    draft.schedule === 'manual' || zone === null ? null : isoOf({ day: draft.firstDay, time: draft.firstTime }, zone);
   return {
     name: draft.name.trim(),
     interval_minutes: PLAN_SCHEDULES[draft.schedule],
@@ -333,6 +384,8 @@ function settingsOf(draft: Draft): PlanSettings | null {
     enabled: draft.enabled,
     paths: pathsOf(draft),
     pattern: patternOf(draft),
+    ...(zone === null ? {} : { time_zone: zone }),
+    ...(anchor === null ? {} : { anchor_at: anchor }),
   };
 }
 

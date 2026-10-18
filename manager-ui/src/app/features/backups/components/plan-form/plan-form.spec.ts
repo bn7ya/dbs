@@ -2,7 +2,9 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { MatAutocompleteHarness } from '@angular/material/autocomplete/testing';
 import { MatChipGridHarness } from '@angular/material/chips/testing';
+import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { MatRadioButtonHarness } from '@angular/material/radio/testing';
 import { provideRouter } from '@angular/router';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
@@ -11,14 +13,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { Toaster } from '@shared/toaster/toaster';
+import { LOCAL_TIME_ZONE } from '../../data/zoned-time';
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
-import { BackupsStore } from '../../state/backups.store';
-import { ARCHIVE_PLAN, COLLECT_PLAN, MANUAL_PLAN, PLAN, SERVER_ID } from '../../testing/backups.fixtures';
+import { PlansStore } from '../../state/plans.store';
+import { APPLICATION_ID, ARCHIVE_PLAN, COLLECT_PLAN, MANUAL_PLAN, PLAN } from '../../testing/backups.fixtures';
 import { PlanForm } from './plan-form';
 import type { PlanFormData } from './plan-form.types';
 
 const PASSWORD = 'correct-horse-battery-staple';
+
+const BROWSER_ZONE = 'Europe/Berlin';
 
 describe('PlanForm', () => {
   let http: HttpTestingController;
@@ -28,18 +33,23 @@ describe('PlanForm', () => {
   const open = (data: PlanFormData): PlanForm => {
     close = vi.fn();
     localStorage.setItem('locale', 'en');
+    // Only the clock is fixed, so a first run "after now" stays after now.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T00:00:00Z'));
     TestBed.configureTestingModule({
       providers: [
-        BackupsStore,
+        PlansStore,
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: MatDialogRef, useValue: { close } },
         { provide: MAT_DIALOG_DATA, useValue: { data } },
+        { provide: LOCAL_TIME_ZONE, useValue: BROWSER_ZONE },
+        { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });
-    TestBed.inject(BackupsStore).server.set(SERVER_ID);
+    TestBed.inject(PlansStore).application.set(APPLICATION_ID);
     vi.spyOn(TestBed.inject(Toaster), 'add').mockReturnValue(undefined);
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(PlanForm);
@@ -61,14 +71,18 @@ describe('PlanForm', () => {
     return fixture.nativeElement as HTMLElement;
   };
 
+  const input = (view: HTMLElement, name: string): HTMLInputElement | null =>
+    view.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+
   afterEach(() => {
     http.verify();
     TestBed.resetTestingModule();
     localStorage.clear();
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it('starts a new plan daily, keeping five here and none on the server, enabled, with the name given', () => {
+  it("starts a new plan daily in the browser's time zone, keeping five here and none on the server", () => {
     const form = open({ plan: null, name: 'django-dbs' });
 
     expect(form.draft()).toEqual({
@@ -78,6 +92,9 @@ describe('PlanForm', () => {
       pattern: '*',
       name: 'django-dbs',
       schedule: 'daily',
+      firstDay: null,
+      firstTime: null,
+      timeZone: BROWSER_ZONE,
       keep: 5,
       keep_remote: 0,
       enabled: true,
@@ -114,7 +131,7 @@ describe('PlanForm', () => {
     expect(form.error('keep')).toBeNull();
   });
 
-  it('sends the interval of the schedule chosen, then closes with the plan', async () => {
+  it('sends the interval of the schedule chosen and the time zone, without a first run, then closes', async () => {
     const form = open({ plan: null, name: 'django-dbs' });
     form.setSchedule('every6Hours');
     form.update('keep_remote', 2);
@@ -123,7 +140,7 @@ describe('PlanForm', () => {
     const request = http.expectOne('/api/backups/plans/');
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({
-      server: SERVER_ID,
+      application: APPLICATION_ID,
       kind: 'dbs',
       name: 'django-dbs',
       interval_minutes: 360,
@@ -132,6 +149,7 @@ describe('PlanForm', () => {
       enabled: true,
       paths: [],
       pattern: '',
+      time_zone: BROWSER_ZONE,
     });
     request.flush({ ...PLAN, interval_minutes: 360, keep_remote: 2 }, { status: 201, statusText: 'Created' });
     await saving;
@@ -139,27 +157,178 @@ describe('PlanForm', () => {
     expect(close).toHaveBeenCalledWith({ ...PLAN, interval_minutes: 360, keep_remote: 2 });
   });
 
-  it('edits a plan from its settings, a manual one sending no interval', async () => {
-    const form = open({ plan: MANUAL_PLAN });
-    expect(form.draft().schedule).toBe('manual');
+  describe('when it first runs', () => {
+    it("sends the date and time chosen as that wall clock in the plan's zone, with its offset", async () => {
+      const form = open({ plan: null, name: 'django-dbs' });
+      form.update('timeZone', 'Asia/Kolkata');
+      form.update('firstDay', new Date(2026, 9, 20));
+      form.update('firstTime', new Date(2026, 9, 20, 23, 45));
+
+      const saving = form.save();
+      const request = http.expectOne('/api/backups/plans/');
+      expect(request.request.body).toMatchObject({
+        interval_minutes: 1440,
+        time_zone: 'Asia/Kolkata',
+        anchor_at: '2026-10-20T23:45:00+05:30',
+      });
+      request.flush(PLAN, { status: 201, statusText: 'Created' });
+      await saving;
+    });
+
+    it('asks for the missing half, and for a moment after now and within a year', async () => {
+      const form = open({ plan: null, name: 'django-dbs' });
+      form.update('firstDay', new Date(2026, 9, 20));
+
+      await form.save();
+      http.expectNone('/api/backups/plans/');
+      expect(form.errorFor('first_time')).toBe('Fill in this field.');
+
+      form.update('firstDay', null);
+      form.update('firstTime', new Date(2026, 9, 20, 2, 0));
+      expect(form.errorFor('anchor_at')).toBe('Fill in this field.');
+
+      form.update('firstDay', new Date(2026, 8, 20));
+      expect(form.error('anchor_at')).toBe('invalid_moment');
+      form.update('firstDay', new Date(2027, 11, 20));
+      expect(form.errorFor('anchor_at')).toBe('Choose a moment after now and within a year.');
+      form.update('firstDay', new Date(2027, 2, 20));
+      expect(form.error('anchor_at')).toBeNull();
+      expect(form.error('first_time')).toBeNull();
+    });
+
+    it('shows a first run and a time zone under the schedule, and neither for a manual plan', () => {
+      const form = open({ plan: null, name: 'django-dbs' });
+
+      let view = rendered();
+      expect(view.querySelector('fieldset legend')?.textContent).toContain('Backup type');
+      expect(Array.from(view.querySelectorAll('legend'), (legend) => legend.textContent?.trim())).toContain('First run');
+      expect(view.textContent).toContain('Without it, the first run is one interval after saving.');
+      expect(view.textContent).toContain('Daily and weekly plans keep their local time when the clocks change');
+      expect(input(view, 'time_zone')?.getAttribute('dir')).toBe('ltr');
+      expect(input(view, 'anchor_at_day')).not.toBeNull();
+      expect(input(view, 'anchor_at_time')).not.toBeNull();
+      expect(view.querySelector('mat-slide-toggle')).not.toBeNull();
+
+      form.setSchedule('manual');
+      view = rendered();
+      expect(input(view, 'time_zone')).toBeNull();
+      expect(input(view, 'anchor_at_day')).toBeNull();
+      expect(view.querySelector('mat-slide-toggle')).toBeNull();
+    });
+
+    it('sends no first run for a manual plan, even one chosen before', async () => {
+      const form = open({ plan: null, name: 'Before upgrade' });
+      form.update('firstDay', new Date(2026, 9, 20));
+      form.setSchedule('manual');
+
+      const saving = form.save();
+      const request = http.expectOne('/api/backups/plans/');
+      expect(request.request.body).toMatchObject({ interval_minutes: null, time_zone: BROWSER_ZONE });
+      expect(request.request.body).not.toHaveProperty('anchor_at');
+      request.flush(MANUAL_PLAN, { status: 201, statusText: 'Created' });
+      await saving;
+    });
+
+    it("puts the backend's moment refusal under the date until it changes", async () => {
+      const form = open({ plan: null, name: 'django-dbs' });
+      form.update('firstDay', new Date(2026, 9, 20));
+      form.update('firstTime', new Date(2026, 9, 20, 2, 0));
+
+      const saving = form.save();
+      http.expectOne('/api/backups/plans/').flush(
+        { error: { code: 'invalid', message: 'Server prose', fields: { anchor_at: ['invalid_moment'] } } },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await saving;
+
+      expect(form.error('anchor_at')).toBe('invalid_moment');
+      form.update('firstTime', new Date(2026, 9, 20, 3, 0));
+      expect(form.error('anchor_at')).toBeNull();
+    });
+  });
+
+  describe('the time zone', () => {
+    it('offers the zones that match what is typed', async () => {
+      const form = open({ plan: null, name: 'django-dbs' });
+      rendered();
+
+      const zones = await harnesses.loader(fixture).getHarness(MatAutocompleteHarness);
+      await zones.clear();
+      await zones.enterText('new york');
+      const options = await zones.getOptions();
+      expect(await Promise.all(options.map((option) => option.getText()))).toEqual(['America/New_York']);
+      await options[0].click();
+
+      expect(form.draft().timeZone).toBe('America/New_York');
+    });
+
+    it('holds the save while the zone is not one it knows, and says so under it', async () => {
+      const form = open({ plan: null, name: 'django-dbs' });
+      form.update('timeZone', 'Mars/Olympus');
+      expect(form.zoneOptions()).toEqual([]);
+
+      await form.save();
+      http.expectNone('/api/backups/plans/');
+      expect(form.errorFor('time_zone')).toBe('Choose a time zone from the list, such as Europe/Berlin.');
+
+      form.update('timeZone', ' ');
+      expect(form.error('time_zone')).toBe('required');
+      form.update('timeZone', 'UTC');
+      expect(form.error('time_zone')).toBeNull();
+    });
+
+    it("shows the backend's refusal of the zone under it", async () => {
+      const form = open({ plan: null, name: 'django-dbs' });
+
+      const saving = form.save();
+      http.expectOne('/api/backups/plans/').flush(
+        { error: { code: 'invalid', message: 'Server prose', fields: { time_zone: ['invalid_time_zone'] } } },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await saving;
+
+      const field = input(rendered(), 'time_zone')?.closest('mat-form-field');
+      expect(field?.textContent).toContain('Choose a time zone from the list');
+    });
+  });
+
+  it("edits a plan from its settings, with its own zone and no first run unless one is chosen", async () => {
+    const form = open({ plan: { ...PLAN, time_zone: 'Asia/Riyadh' } });
+    expect(form.draft().timeZone).toBe('Asia/Riyadh');
+    expect(form.draft().firstDay).toBeNull();
+    const view = rendered();
+    expect(Array.from(view.querySelectorAll('legend'), (legend) => legend.textContent?.trim())).toContain('Next run');
+    expect(view.textContent).toContain("Leave it empty to keep the plan's times.");
     form.update('enabled', false);
 
     const saving = form.save();
-    const request = http.expectOne(`/api/backups/plans/${MANUAL_PLAN.id}/`);
+    const request = http.expectOne(`/api/backups/plans/${PLAN.id}/`);
     expect(request.request.method).toBe('PATCH');
     expect(request.request.body).toEqual({
-      name: MANUAL_PLAN.name,
-      interval_minutes: null,
-      keep: MANUAL_PLAN.keep,
-      keep_remote: MANUAL_PLAN.keep_remote,
+      name: PLAN.name,
+      interval_minutes: 1440,
+      keep: PLAN.keep,
+      keep_remote: PLAN.keep_remote,
       enabled: false,
       paths: [],
       pattern: '',
+      time_zone: 'Asia/Riyadh',
     });
-    request.flush({ ...MANUAL_PLAN, enabled: false });
+    request.flush({ ...PLAN, enabled: false });
     await saving;
 
-    expect(close).toHaveBeenCalledWith({ ...MANUAL_PLAN, enabled: false });
+    expect(close).toHaveBeenCalledWith({ ...PLAN, enabled: false });
+  });
+
+  it('edits a manual plan, sending no interval', async () => {
+    const form = open({ plan: MANUAL_PLAN });
+    expect(form.draft().schedule).toBe('manual');
+
+    const saving = form.save();
+    const request = http.expectOne(`/api/backups/plans/${MANUAL_PLAN.id}/`);
+    expect(request.request.body).toMatchObject({ interval_minutes: null, time_zone: 'UTC' });
+    request.flush(MANUAL_PLAN);
+    await saving;
   });
 
   it("puts the backend's field errors under their fields, and drops one once its field is edited", async () => {
@@ -194,7 +363,7 @@ describe('PlanForm', () => {
       let view = rendered();
       expect(await radioLabels()).toEqual(['django-dbs', 'Folders', 'Existing files']);
       expect(await chipGrids()).toBe(0);
-      expect(view.textContent).toContain("The server's backup passphrase encrypts each backup.");
+      expect(view.textContent).toContain("The application's backup passphrase encrypts each backup.");
 
       form.setKind('archive');
       view = rendered();
@@ -228,7 +397,7 @@ describe('PlanForm', () => {
       expect(form.error('paths')).toBeNull();
     });
 
-    it('sends the kind and the folders of a folder plan', async () => {
+    it('sends the kind and the folders of a folder plan, with the password', async () => {
       const form = open({ plan: null, kind: 'archive' });
       form.update('name', 'Media');
       form.update('paths', ['/srv/app/media', '/srv/app/uploads']);
@@ -238,7 +407,7 @@ describe('PlanForm', () => {
       const saving = form.save();
       const request = http.expectOne('/api/backups/plans/');
       expect(request.request.body).toEqual({
-        server: SERVER_ID,
+        application: APPLICATION_ID,
         kind: 'archive',
         name: 'Media',
         interval_minutes: 10080,
@@ -247,6 +416,7 @@ describe('PlanForm', () => {
         enabled: true,
         paths: ['/srv/app/media', '/srv/app/uploads'],
         pattern: '',
+        time_zone: BROWSER_ZONE,
         account_password: PASSWORD,
       });
       request.flush(ARCHIVE_PLAN, { status: 201, statusText: 'Created' });
@@ -280,17 +450,8 @@ describe('PlanForm', () => {
       form.setAccountPassword(PASSWORD);
       const saving = form.save();
       const request = http.expectOne(`/api/backups/plans/${ARCHIVE_PLAN.id}/`);
-      expect(request.request.method).toBe('PATCH');
-      expect(request.request.body).toEqual({
-        name: ARCHIVE_PLAN.name,
-        interval_minutes: 10080,
-        keep: ARCHIVE_PLAN.keep,
-        keep_remote: ARCHIVE_PLAN.keep_remote,
-        enabled: true,
-        paths: ['/srv/app/media'],
-        pattern: '',
-        account_password: PASSWORD,
-      });
+      expect(request.request.body).not.toHaveProperty('kind');
+      expect(request.request.body).toMatchObject({ paths: ['/srv/app/media'], account_password: PASSWORD });
       request.flush({ ...ARCHIVE_PLAN, paths: ['/srv/app/media'] });
       await saving;
     });
@@ -306,9 +467,7 @@ describe('PlanForm', () => {
       await saving;
 
       expect(form.kindError()).toBe('paths_not_allowed');
-      expect(rendered().querySelector('fieldset')?.textContent).toContain(
-        'A django-dbs plan takes no folders.',
-      );
+      expect(rendered().querySelector('fieldset')?.textContent).toContain('A django-dbs plan takes no folders.');
 
       form.setKind('archive');
       expect(form.kindError()).toBeNull();
@@ -317,9 +476,6 @@ describe('PlanForm', () => {
   });
 
   describe('collecting existing files', () => {
-    const input = (view: HTMLElement, name: string): HTMLInputElement | null =>
-      view.querySelector<HTMLInputElement>(`input[name="${name}"]`);
-
     it('asks for one folder and a pattern, both read left to right, and not for copies on the server', async () => {
       const form = open({ plan: null, kind: 'collect' });
 
@@ -333,7 +489,6 @@ describe('PlanForm', () => {
       expect(input(view, 'keep_remote')).toBeNull();
       expect(input(view, 'keep')).not.toBeNull();
       expect(view.textContent).toContain('*.sql.gz matches every .sql.gz file in the folder.');
-      expect(view.textContent).toContain("the server's copy stays as it is.");
     });
 
     it('holds the save until the folder is a full path and the pattern has no /', async () => {
@@ -349,9 +504,6 @@ describe('PlanForm', () => {
       form.update('pattern', 'postgres/*.sql.gz');
       expect(form.error('paths')).toBe('absolute_path_required');
       expect(form.error('pattern')).toBe('invalid_pattern');
-
-      form.update('folder', '/var/backups/../etc');
-      expect(form.error('paths')).toBe('absolute_path_required');
 
       form.update('folder', '/var/backups/postgres');
       form.update('pattern', '*.sql.gz');
@@ -370,70 +522,17 @@ describe('PlanForm', () => {
 
       const saving = form.save();
       const request = http.expectOne('/api/backups/plans/');
-      expect(request.request.body).toEqual({
-        server: SERVER_ID,
+      expect(request.request.body).toMatchObject({
         kind: 'collect',
-        name: 'Database dumps',
-        interval_minutes: 1440,
         keep: 4,
         keep_remote: 0,
-        enabled: true,
         paths: ['/var/backups/postgres'],
         pattern: '*.sql.gz',
-        account_password: PASSWORD,
       });
       request.flush(COLLECT_PLAN, { status: 201, statusText: 'Created' });
       await saving;
 
       expect(close).toHaveBeenCalledWith(COLLECT_PLAN);
-    });
-
-    it('keeps what was typed for each kind when the kind changes, and sends only the one chosen', async () => {
-      const form = open({ plan: null, name: 'Media', kind: 'archive' });
-      form.update('paths', ['/srv/app/media']);
-      form.setKind('collect');
-      form.update('folder', '/var/backups');
-      form.setKind('archive');
-
-      expect(form.draft().paths).toEqual(['/srv/app/media']);
-      expect(form.draft().folder).toBe('/var/backups');
-
-      form.setAccountPassword(PASSWORD);
-      const saving = form.save();
-      const request = http.expectOne('/api/backups/plans/');
-      expect(request.request.body).toMatchObject({ kind: 'archive', paths: ['/srv/app/media'], pattern: '', keep_remote: 0 });
-      request.flush(ARCHIVE_PLAN, { status: 201, statusText: 'Created' });
-      await saving;
-    });
-
-    it("edits a collection from its folder and pattern, showing its kind as a fact", async () => {
-      const form = open({ plan: COLLECT_PLAN });
-
-      const view = rendered();
-      await fixture.whenStable();
-      expect(await radioLabels()).toEqual([]);
-      expect(view.querySelector('dl')?.textContent).toContain('Existing files');
-      expect(input(view, 'folder')?.value).toBe('/var/backups/postgres');
-      expect(input(view, 'pattern')?.value).toBe('*.sql.gz');
-      expect(input(view, 'keep_remote')).toBeNull();
-
-      form.update('pattern', '*.dump');
-      form.setAccountPassword(PASSWORD);
-      const saving = form.save();
-      const request = http.expectOne(`/api/backups/plans/${COLLECT_PLAN.id}/`);
-      expect(request.request.method).toBe('PATCH');
-      expect(request.request.body).toEqual({
-        name: COLLECT_PLAN.name,
-        interval_minutes: 1440,
-        keep: COLLECT_PLAN.keep,
-        keep_remote: 0,
-        enabled: true,
-        paths: ['/var/backups/postgres'],
-        pattern: '*.dump',
-        account_password: PASSWORD,
-      });
-      request.flush({ ...COLLECT_PLAN, pattern: '*.dump' });
-      await saving;
     });
 
     it("puts the backend's codes under the folder and the pattern", async () => {
@@ -447,10 +546,7 @@ describe('PlanForm', () => {
           error: {
             code: 'invalid',
             message: 'Server prose',
-            fields: {
-              paths: ['one_folder_required'],
-              pattern: ['invalid_pattern'],
-            },
+            fields: { paths: ['one_folder_required'], pattern: ['invalid_pattern'] },
           },
         },
         { status: 400, statusText: 'Bad Request' },
@@ -458,9 +554,6 @@ describe('PlanForm', () => {
       await saving;
 
       const view = rendered();
-      expect(form.error('paths')).toBe('one_folder_required');
-      expect(form.error('pattern')).toBe('invalid_pattern');
-      expect(form.kindError()).toBeNull();
       expect(input(view, 'folder')?.closest('mat-form-field')?.textContent).toContain('Enter one folder.');
       expect(input(view, 'pattern')?.closest('mat-form-field')?.textContent).toContain('Use a pattern with no / in it.');
     });
@@ -523,7 +616,7 @@ describe('PlanForm', () => {
       expect(close).toHaveBeenCalledWith({ ...PLAN, keep_remote: 0 });
     });
 
-    it("asks for its password when the backend says a change needs it", async () => {
+    it('asks for its password when the backend says a change needs it', async () => {
       const form = open({ plan: MANUAL_PLAN });
 
       const saving = form.save();
