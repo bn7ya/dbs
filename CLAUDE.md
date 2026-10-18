@@ -37,8 +37,8 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`, `dbs/files.py`, everything under
 `dbs/security/`, `dbs/audit.py`, `dbs/leases.py`, `dbs/jobs.py`, `dbs/tee.py`,
 `dbs/extras.py`, `dbs/upgrade.py`, `dbs/schedule_runner.py`, `dbs/health.py`,
-`dbs/connection.py`, `dbs/job_process.py`, the internals of `dbs/engine/`, `dbs/container/` and `dbs/crypto/`
-(`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `stream.py`, `rs.py`,
+`dbs/connection.py`, `dbs/job_process.py`, the internals of `dbs/engine/`, `dbs/container/`
+and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `stream.py`, `rs.py`,
 `sources.py`, `chunked.py`) and everything under `dbs/manager/`.
 
 ## Layout
@@ -53,13 +53,14 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   or a file.
 - `dbs/crypto/` — the Argon2id KDF with the bounds a read enforces, the AES-256-GCM envelope,
   and `chunked.py`, the per-block AES-256-GCM that format 2 uses.
-- `dbs/transports/` — the SSH/SFTP API (`django-dbs[ssh]`): host-key-checked sessions,
-  streamed remote commands, transfers through private partial files.
+- `dbs/transports/` — the SSH/SFTP API: host-key-checked sessions, streamed remote commands
+  with idle and total deadlines, interactive terminals, transfers through private partial
+  files.
 - `dbs/extras.py` — the one list of the packages `pip install django-dbs` brings and the
   repair line for a broken install; `tests/test_packaging.py` keeps it in step with
   `pyproject.toml`.
-- `dbs/management/commands/` — the `dbs` umbrella and its `django_dbs` alias, plus
-  `dbs_backup`, `dbs_restore`, `dbs_validate`, `dbs_schedule`, `dbs_connection`,
+- `dbs/management/commands/` — the `dbs` umbrella and its `django_dbs` and `django-dbs`
+  aliases (real modules), plus `dbs_backup`, `dbs_restore`, `dbs_validate`, `dbs_schedule`, `dbs_connection`,
   `dbs_health`, `dbs_audit`, `dbs_key`, `dbs_security`, `dbs_ai`, `dbs_upgrade`.
 - `dbs/models.py`, `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`,
   `dbs/templates/admin/dbs/`, `dbs/static/dbs/` — the control panel mounted at
@@ -142,7 +143,11 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
   failing backups, several instances on one database), `tests/scaling/` (many applications on
   one manager, a file database), `tests/scale/` (a thousand tables and a large table) and
   `tests/load/` (a backup under web load; `scripts/load_backup.py` writes `load-report.md`)
-  each run as their own session with their own settings.
+  each run as their own session with their own settings. `tests/manager/live/` drives a real
+  Docker or Podman Compose project (`tests/containers/project/`, built by
+  `scripts/container_fixture.sh ENGINE DIR`) over OpenSSH when `DBS_TEST_CONTAINER_ENGINE`
+  names an engine. `scripts/upgrade_rehearsal.py` installs 0.7.0 from PyPI, fills a project and
+  a manager, upgrades both to the checkout and checks that nothing was lost.
 - `RELEASE_NOTES.md` — the developer-facing notes for the current release, used as the GitHub
   Release body. `THIRD_PARTY_LICENSES.md` — the license of every dependency; update it in
   the same commit that adds, removes or bundles one.
@@ -214,9 +219,11 @@ version to read them before it offers giving them up.
 - Every service method that acts names its capability with `@requires`. The interface hides
   what a role cannot do, but the service is the boundary.
 - The MCP server never accepts the account password, never returns a secret, and offers no
-  tool that restores, deploys, redeploys or reverts for real, changes deploy steps, removes,
-  deletes, pushes a `.env` or re-pins a host key. It pins a new server's host key only after a person confirmed it, cannot
-  make a plan keep fewer backups, and cannot save a file the manager keeps encrypted.
+  tool that restores, deploys, redeploys or reverts for real, changes deploy steps, pauses a
+  plan, removes, deletes, pushes a `.env` or re-pins a host key, and none whose name holds
+  `shell`, `terminal`, `console`, `exec` or `pty`. It pins a new server's host key only after a
+  person confirmed it, cannot make a plan keep fewer backups, and cannot save a file the
+  manager keeps encrypted.
   `tests/manager/mcp/test_tools.py` enforces the list; keep it when adding tools.
 - A deploy runs only steps from the fixed catalogue in `dbs/manager/redeploy/catalogue.py`,
   each a fixed argument list with validated names; never accept a command line or an argument
@@ -242,16 +249,17 @@ dependency gets an upper bound below its next major version.
 ## Test
 
 ```bash
-pip install -e ".[dev]"  # every extra and the test tools
-scripts/test.sh          # pytest, tests/manager (--ds=tests.manager.settings), then
-                         # tests/isolation (--ds=tests.isolation.settings, a file database a
-                         # child process can open)
+pip install -e ".[dev]"  # everything DBS uses and the test tools
+scripts/test.sh          # pytest, then tests/manager, tests/isolation, tests/scaling,
+                         # tests/load and tests/scale, each with --ds=tests.<suite>.settings
 ```
 
 `DBS_TEST_DB=postgres|mysql` runs the library suite on another database and
 `DBS_MANAGER_DATABASE_URL` the manager suite; `DBS_TEST_SSH_*` points the OpenSSH tests at
-a server (`scripts/openssh_test_server.sh` starts one), and `DBS_STRESS_FLIPS` sets how many
-bytes `scripts/stress_roundtrip.py` damages.
+a server (`scripts/openssh_test_server.sh` starts one), `DBS_TEST_CONTAINER_ENGINE=docker|podman`
+with `DBS_TEST_CONTAINER_FOLDER` the live container tests, `DBS_TEST_FULL_DISK` a small tmpfs
+for the full-disk backup, `DBS_SCALE_TABLES` and `DBS_SCALE_ROWS` the scale suite, and
+`DBS_STRESS_FLIPS` how many bytes `scripts/stress_roundtrip.py` damages.
 
 The session guard scores time of day, so a test that asserts a verdict tier is
 time-dependent. `DBS_TEST_HOUR=3 pytest` runs the suite as though it were 03:00 UTC.

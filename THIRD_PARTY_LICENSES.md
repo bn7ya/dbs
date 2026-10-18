@@ -93,7 +93,7 @@ production build compiles ahead of time and runs without zone.js, so neither is 
 
 None of these is installed with `django-dbs`.
 
-`pip install -e ".[dev]"` installs the `all` extra above and these:
+`pip install -e ".[dev]"` installs everything above and these:
 
 | Package | License |
 |---|---|

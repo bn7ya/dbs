@@ -4,10 +4,10 @@
 
 | Version | Security fixes |
 |---|---|
-| 0.7.x | Yes |
-| 0.6.x and older | No |
+| 0.8.x | Yes |
+| 0.7.x and older | No |
 
-Fixes ship as a new 0.7.x release on PyPI. Pin the fixed version in your requirements or lock
+Fixes ship as a new 0.8.x release on PyPI. Pin the fixed version in your requirements or lock
 file and reinstall; inside a virtual environment `python manage.py dbs upgrade --self --to
 VERSION` installs exactly that version and then `python manage.py dbs upgrade` finishes the
 upgrade. Older lines receive no fixes, so the first step for any report against them is to
@@ -26,8 +26,9 @@ privately, by either of these:
 Please include:
 
 - the affected version(s) of `django-dbs`, Python and Django;
-- which part is affected: the backup library, the control panel, the session guard, the
-  `dbs.transports` API, or the DBS manager (its web interface, its terminal or its MCP server);
+- which part is affected: the backup library, the control panel and its job process, the
+  session guard, the `dbs.transports` API, or the DBS manager (its web interface, its console,
+  its browser terminal, its command line or its MCP server);
 - the steps to reproduce it, ideally a minimal project or script;
 - what an attacker gains, and what they need first (an account, a network position, a file).
 
@@ -57,14 +58,17 @@ In scope:
 - **The backup library**: the container format, the encryption and key derivation, the
   Reed-Solomon repair, validation, restores, and every `manage.py dbs` command, including
   `dbs upgrade` and its handling of backups in an older format.
-- **The control panel** at `/admin/dbs/` and **the session guard**
+- **The control panel** at `/admin/dbs/`, the job process its backups and restores run in
+  (`python -m dbs.job_process`), and **the session guard**
   (`dbs.security.middleware.DBSSecurityMiddleware`), including `dbs security unlock`.
 - **The `dbs.transports` SSH and SFTP API.**
-- **The DBS manager**: `django_dbs run` and its web interface and REST API, its terminal
-  commands (`django_dbs server`, `backup`, `plan`, `activity`, `env`, `files`, `redeploy`), and
-  its MCP server (`django_dbs mcp`). The manager holds the SSH credentials for every server it
-  manages, so anything that exposes them, or lets someone act with them without signing in, is
-  treated as critical.
+- **The DBS manager**: `django_dbs run` and its web interface and REST API, the console at
+  `/console`, the browser terminal, the discovery of applications in a folder, the commands it
+  runs in containers, its deploy steps, its command line (`django_dbs server`, `app`, `backup`,
+  `plan`, `activity`, `env`, `files`, `redeploy`), and its MCP server (`django_dbs mcp`). The
+  manager holds the SSH credentials for every server it manages, so anything that exposes them,
+  lets someone act with them without signing in, or turns a request into a command line it did
+  not build itself is treated as critical.
 - **What we publish**: the wheel and sdist on PyPI, and the workflows that build them.
 
 Out of scope:
@@ -125,7 +129,9 @@ modes do not apply and the folder's access control list decides who can read a b
   `DBS_PASSPHRASE` or derive them from the project's `SECRET_KEY`.
 - When the DBS manager runs a command on a server, the command is a fixed argument list and the
   passphrase travels on the SSH channel's standard input, so it appears in neither the remote
-  process's arguments nor its environment. Every remote command runs under a time limit, and a
+  process's arguments nor its environment. In a container the command goes through
+  `docker exec -i` or `podman exec -i` the same way, and only non-secret values, such as
+  `DJANGO_SETTINGS_MODULE`, are passed with `-e`. Every remote command runs under a time limit, and a
   connection that stops answering is closed.
 - Host keys are verified and unknown hosts are rejected by default. The manager shows each
   server's host key fingerprint for a person to confirm before it pins it; a changed key stops
@@ -138,7 +144,10 @@ The panel at `/admin/dbs/` can download and overwrite the whole database. It is 
 superusers, and there is deliberately no grantable permission for it.
 
 The panel holds no server credentials, opens no connection to another machine and runs no
-shell commands. It keeps at most five backups in `DBS_BACKUP_DIR` and pushes none of them
+shell commands. Its backups and restores run in a child Python process it starts with a fixed
+argument list (`python -m dbs.job_process`), which reads the job and the passphrase from its
+standard input, never from its arguments or environment, and stops at `DBS_JOB_TIME_LIMIT` and
+`DBS_JOB_MEMORY_LIMIT`. It keeps at most five backups in `DBS_BACKUP_DIR` and pushes none of them
 anywhere: a copy leaves the server when a superuser downloads it or the DBS manager pulls it.
 
 Every backup, restore, validation and panel change is recorded in the audit trail. Each
@@ -149,8 +158,7 @@ verify` finds a row that was altered or removed. No DBS command deletes audit ro
 
 The guard runs only when `dbs.security.middleware.DBSSecurityMiddleware` is in `MIDDLEWARE`.
 Without it the panel is still superuser-only, but nothing is scored and nothing is enforced. Its
-anomaly detector needs scikit-learn, which `pip install "django-dbs[guard]"` installs;
-`manage.py dbs upgrade` reports a guard that is on without it.
+anomaly detector uses scikit-learn, which `pip install django-dbs` installs.
 
 Every admin request is scored and the outcome is enforced server-side in
 `DBSSecurityMiddleware`. The polling endpoint an open page uses is a convenience, not the
@@ -179,7 +187,7 @@ A superuser is trusted with the database by definition, so the guard raises the 
 
 ## The DBS manager
 
-The manager (`pip install "django-dbs[manager]"`, then `django_dbs run`) is a separate Django
+The manager (`pip install django-dbs`, then `django_dbs run`) is a separate Django
 project that reaches each server over SSH. It is never added to a host project's
 `INSTALLED_APPS`, and the host project stores nothing about it.
 
@@ -205,7 +213,62 @@ project that reaches each server over SSH. It is never added to a host project's
 - Its terminal commands run as whoever starts them, against the data directory they name; the
   operating system's file permissions are the boundary there.
 - Its MCP server (`django_dbs mcp`) never accepts the account password and never returns a
-  secret: no passphrase, private key, password or `.env` value. It offers no tool that restores
-  or redeploys for real, removes or deletes anything, pushes a `.env`, or accepts a changed host
-  key; restores and redeploys through it are always rehearsals, and anything that needs the
-  account password is handed back to a person.
+  secret: no passphrase, private key, password or `.env` value. It offers no tool that restores,
+  redeploys, deploys or reverts for real, removes or deletes anything, pushes a `.env`, edits
+  deploy steps, pauses a plan or accepts a changed host key, and none that reaches the console
+  or the terminal; restores, moves and deploys through it are always rehearsals, and anything
+  that needs the account password is handed back to a person.
+
+### Discovery and containers
+
+- Adding an application by folder lists the folder over SFTP and runs only fixed commands with
+  time limits and output caps: `docker` and `podman` `version`, `ps` and `inspect`, the Python
+  and `manage.py dbs connection --json` it found in a trusted place. It reads the folder's
+  Compose files over SFTP, at most 256 KiB each, and keeps only their `env_file` entries. From
+  a container's environment only `DJANGO_SETTINGS_MODULE` is kept. No `.env` is read during
+  discovery.
+- Nothing runs in a folder, or in a project below it, that an account other than the SSH user
+  or root can write to: a planted `manage.py` or interpreter there is never executed.
+- The manager never uses `sudo`. An SSH user that cannot reach the engine's socket gets
+  `engine_permission_denied`, whose remedy is the engine's own group or rootless Podman.
+- A restore into a container streams the backup over standard input into a new private file
+  inside it, written as the container's own user, and checks its size; nothing is staged on
+  the host.
+
+### Deploy steps
+
+An application's deploy steps come only from a fixed catalogue (`git_pull`, `compose_pull`,
+`compose_build`, `compose_up`, `restart`, `systemd_user_restart`, `pip_install`, `migrate`,
+`collectstatic`). Each builds its own argument list; the only values a request supplies are
+names (a git remote and branch, services, a systemd unit, a requirements file inside the
+project), each checked against a strict pattern. No command line, program or argument list is
+taken from a request. Editing the steps needs an admin and the account password; a deploy
+takes a safety backup first and records the `.env` it found.
+
+### The console
+
+The console at `/console` runs one `django_dbs` command line as the signed-in account, split
+with `shlex` and parsed by the same parser as the command line, so every verb is still checked
+against the account's role in the service it calls. It cannot run as another account, read a
+password from standard input, or reach the manager's own disk: the verbs that download, upload
+or start the MCP server are absent. A line has at most 2,000 characters, an account runs one at
+a time, and the output is cut at 256 KiB. The audit trail records the verb and the exit code,
+never the line's values.
+
+### The terminal
+
+The terminal opens a real shell, on a server or inside an application's container or folder,
+with the SSH credentials the manager holds. It widens what a stolen admin session could do, so:
+
+- only admins and the master may open one, and only after typing their account password, every
+  time; `django_dbs run --terminal master` narrows it to the master and `--terminal off` (or
+  `DBS_MANAGER_TERMINAL=off`) switches it off;
+- each shell is bound to the account and the browser session that opened it, under a random
+  id, and closes on sign-out, a password change, a role change, 15 minutes without input, a
+  minute without a poll, or two hours in all;
+- at most four run at once, two per account, with input of at most 64 KiB at a time and a
+  1 MiB output buffer that slows the server's side rather than growing;
+- it never uses `sudo` or asks for root;
+- the audit trail records where it opened, its size, how long it ran, the bytes each way, why
+  it closed and the exit status, never what was typed or shown;
+- the MCP server and the console have no way to open, read or type into one.
