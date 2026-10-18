@@ -19,7 +19,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,
-  reporter: process.env['CI'] ? 'github' : 'list',
+  reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'list',
 
   // A journey waits on real SSH work — a backup, a verification — that takes
   // tens of seconds each; the budget is per journey, not per click.

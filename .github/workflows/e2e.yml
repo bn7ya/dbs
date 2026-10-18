@@ -1,0 +1,69 @@
+name: Interface journeys
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "43 4 * * *"
+
+permissions:
+  contents: read
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  journeys:
+    name: Playwright journeys against a live manager over OpenSSH
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: manager-ui/package-lock.json
+      - run: python -m pip install -e ".[dev]"
+      - run: npm ci
+        working-directory: manager-ui
+      - name: Build the interface into the package
+        run: npm run build:package
+        working-directory: manager-ui
+      - name: Install OpenSSH
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openssh-server
+      - name: Start an OpenSSH server on 127.0.0.1:2222
+        run: sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
+      - name: Prepare the projects and the Compose service the journeys use
+        run: sudo env "PATH=$PATH" scripts/e2e_fixture.sh /srv/e2e docker >> "$GITHUB_ENV"
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+        working-directory: manager-ui
+      - name: Journeys, left to right and right to left
+        working-directory: manager-ui
+        run: sudo -E env "PATH=$PATH" npx playwright test
+      - name: Server log
+        if: failure()
+        run: sudo cat "$RUNNER_TEMP/sshd/sshd.log"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: playwright-report
+          path: manager-ui/playwright-report/
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: journey-screenshots
+          path: manager-ui/test-results/
