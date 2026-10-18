@@ -267,9 +267,12 @@
       "title": "Storage",
       "body": "The space the backups kept in the manager take, in all and for each application.",
       "total": "In all",
+      "free": "Free on its disk",
+      "freeOf": "{free} of {total}",
       "size": "Space used",
       "label": "Storage by application",
-      "pages": "Storage pages"
+      "pages": "Storage pages",
+      "low": "The disk that holds the manager's backups is nearly full. Free some space before the next backup needs it."
     }
   },
   "errors": {

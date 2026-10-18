@@ -88,9 +88,16 @@ export interface DashboardServer {
   readonly applications: readonly DashboardApplication[];
 }
 
+export interface DashboardDisk {
+  readonly total_bytes: number;
+  readonly free_bytes: number;
+  readonly low: boolean;
+}
+
 export interface Dashboard {
   readonly servers: readonly DashboardServer[];
   readonly storage_bytes: number;
+  readonly disk: DashboardDisk | null;
 }
 
 export interface UnfinishedJob {

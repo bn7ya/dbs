@@ -551,8 +551,10 @@ function storageOf(dashboard: Dashboard): Storage {
       bytes: application.storage_bytes,
     })),
   );
+  const { disk } = dashboard;
   return {
     total: dashboard.storage_bytes,
+    disk: disk === null ? null : { total: disk.total_bytes, free: disk.free_bytes, low: disk.low },
     applications: applications.sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name)),
   };
 }

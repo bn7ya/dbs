@@ -410,8 +410,9 @@ role cannot take are left out with `*appCan`.
   holds the zone arithmetic and `LOCAL_TIME_ZONE`.
 - **all backups** (`/backups`, `all-backups.routes.ts`) — every application's backups in the same
   `BackupTable`, with application and server columns linking to their pages, a filter by application
-  and the same row actions, under a storage card with the manager's total and each application's
-  share from `GET /api/dashboard/`.
+  and the same row actions, under a storage card with the manager's total, the free space on the
+  disk under its backups (a warning when the dashboard calls it low) and each application's share
+  from `GET /api/dashboard/`.
 - **files** (`/applications/:applicationId/files?path=`) — the application's allowed folders, as
   host paths: a breadcrumb, open, download (the store asks for a link and prompts for the password
   only when the file holds secrets, such as a `.env`), upload with progress, new folder, delete an
@@ -485,7 +486,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/accounts/{id}/two-factor/reset/` | → `Account` |
 | POST | `/api/accounts/{id}/password/expire/` | → `Account` |
 | POST | `/api/accounts/{id}/master/` | `{password, code}` → `Account`, the new master |
-| GET | `/api/dashboard/` | → `{servers: [{id, name, host, check_status, checked_at, connection_state, last_seen_at, applications: [{id, name, kind, engine, check_status, checked_at, last_backup: {id, name, size, created_at, validation} \| null, next_plan_run, failures_7d, storage_bytes, health}]}], storage_bytes, last_export_at, recent_failures, key_store}` |
+| GET | `/api/dashboard/` | → `{servers: [{id, name, host, check_status, checked_at, connection_state, last_seen_at, applications: [{id, name, kind, engine, check_status, checked_at, last_backup: {id, name, size, created_at, validation} \| null, next_plan_run, failures_7d, storage_bytes, health}]}], storage_bytes, disk: {total_bytes, free_bytes, low} \| null, last_export_at, recent_failures, key_store}` |
 | GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at, key_store}` |
 | GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` (`id, name, host, port, username, engines, application_count, last_check_status, last_checked_at, connection_state, last_seen_at, last_connection_error`) |
 | POST | `/api/servers/` | `{name, host, port?, username, host_key, auth_method?: key\|password, private_key?, key_passphrase?, password?, generate_key?}` → `Server`, plus `public_key` and `authorized_keys_hint` when the key was generated |

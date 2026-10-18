@@ -39,7 +39,14 @@ export interface StoredApplication {
   readonly bytes: number;
 }
 
+export interface StorageDisk {
+  readonly total: number;
+  readonly free: number;
+  readonly low: boolean;
+}
+
 export interface Storage {
   readonly total: number;
+  readonly disk: StorageDisk | null;
   readonly applications: readonly StoredApplication[];
 }

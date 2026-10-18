@@ -20,7 +20,16 @@
         <dl class="all-backups__total">
           <dt class="text-label text-secondary">{{ 'backups.storage.total' | t }}</dt>
           <dd><bdi class="all-backups__size">{{ storage.total | fileSize }}</bdi></dd>
+          @if (storage.disk; as disk) {
+            <dt class="text-label text-secondary">{{ 'backups.storage.free' | t }}</dt>
+            <dd class="all-backups__free">
+              <bdi>{{ 'backups.storage.freeOf' | t: { free: (disk.free | fileSize), total: (disk.total | fileSize) } }}</bdi>
+            </dd>
+          }
         </dl>
+        @if (storage.disk?.low) {
+          <app-notice severity="warning">{{ 'backups.storage.low' | t }}</app-notice>
+        }
 
         @if (stored().length > 0) {
           <div class="table-scroll">

@@ -174,6 +174,7 @@ export const APPLICATIONS: readonly ApplicationChoice[] = [SHOP, BLOG];
 
 export const DASHBOARD: Dashboard = {
   storage_bytes: 5_400_000,
+  disk: { total_bytes: 100_000_000_000, free_bytes: 62_000_000_000, low: false },
   servers: [
     { id: SERVER_ID, name: 'production-web', applications: [{ id: APPLICATION_ID, name: 'shop', storage_bytes: 1_400_000 }] },
     {

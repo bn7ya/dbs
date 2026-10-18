@@ -122,9 +122,24 @@ describe('AllBackupsPage', () => {
     ]);
   });
 
+  it('says how much of the disk under the backups is still free', async () => {
+    await show();
+
+    expect(element().querySelector('.all-backups__free')?.textContent?.trim()).toBe('62 GB of 100 GB');
+    expect(element().querySelector('app-notice')).toBeNull();
+  });
+
+  it('warns when the disk under the backups is nearly full', async () => {
+    await show([FILE], { ...DASHBOARD, disk: { total_bytes: 100_000_000_000, free_bytes: 900_000_000, low: true } });
+
+    expect(element().querySelector('.all-backups__free')?.textContent?.trim()).toBe('900 MB of 100 GB');
+    expect(element().querySelector('app-notice[severity="warning"]')?.textContent).toContain('nearly full');
+  });
+
   it('pages the storage of many applications ten at a time', async () => {
     const many: Dashboard = {
       storage_bytes: 12_000,
+      disk: null,
       servers: [
         {
           id: SERVER_ID,
@@ -212,7 +227,7 @@ describe('AllBackupsPage', () => {
   });
 
   it('says there are no backups yet anywhere', async () => {
-    await show([], { storage_bytes: 0, servers: [] });
+    await show([], { storage_bytes: 0, servers: [], disk: null });
 
     expect(element().querySelector('.all-backups__total')?.textContent).toContain('0 bytes');
     expect(tables()).toEqual([]);
