@@ -1,8 +1,8 @@
-<mat-card appearance="outlined">
+<mat-card appearance="outlined" role="region" [attr.aria-labelledby]="headingId">
   <mat-card-content class="deploy">
     <header class="deploy__header">
       <div class="deploy__intro">
-        <h2>{{ 'redeploy.deploy.title' | t }}</h2>
+        <h2 [id]="headingId">{{ 'redeploy.deploy.title' | t }}</h2>
         <p class="text-secondary">{{ 'redeploy.deploy.body' | t }}</p>
       </div>
       @if (savedSteps().length > 0 && !editing()) {

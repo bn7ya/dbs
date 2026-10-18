@@ -15,6 +15,7 @@ import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { FieldError } from '@shared/field/field-error';
 import { isolated } from '@shared/isolated/isolated';
 import { Notice } from '@shared/notice/notice';
+import { uniqueId } from '@shared/unique-id';
 import type { RunRequest } from '../../data/redeploy.types';
 import { MoveStore } from '../../state/move.store';
 import { ConfirmedRun } from '../confirmed-run/confirmed-run';
@@ -51,6 +52,8 @@ import type { TargetOption } from './move-application.types';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MoveApplication {
+  readonly headingId = uniqueId('move-title');
+
   private readonly store = inject(MoveStore);
   private readonly locale = inject(LocaleStore);
 

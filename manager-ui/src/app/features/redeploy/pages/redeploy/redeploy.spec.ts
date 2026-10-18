@@ -128,6 +128,19 @@ describe('RedeployPage', () => {
     localStorage.clear();
   });
 
+  it('names each card a region by its heading, so its Rehearse stands apart from the other one', async () => {
+    await show(HOST_APPLICATION);
+    render();
+    const root = harness.routeNativeElement as HTMLElement;
+
+    const regions = Array.from(root.querySelectorAll('[role="region"]'), (region) => {
+      const labelledBy = region.getAttribute('aria-labelledby') ?? '';
+      return root.querySelector(`#${labelledBy}`)?.textContent?.trim();
+    });
+
+    expect(regions).toEqual(['Deploy here', 'Move to another application']);
+  });
+
   describe('deploy here', () => {
     it('lists the saved steps in order, with what each one does and how long it may take', async () => {
       await show();

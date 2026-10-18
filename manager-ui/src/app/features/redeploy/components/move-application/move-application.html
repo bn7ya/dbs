@@ -1,7 +1,7 @@
-<mat-card appearance="outlined">
+<mat-card appearance="outlined" role="region" [attr.aria-labelledby]="headingId">
   <mat-card-content class="move">
     <header class="move__header">
-      <h2>{{ 'redeploy.move.title' | t }}</h2>
+      <h2 [id]="headingId">{{ 'redeploy.move.title' | t }}</h2>
       <p class="text-secondary">{{ 'redeploy.move.body' | t }}</p>
       <app-notice severity="info">{{ 'redeploy.move.needsCode' | t }}</app-notice>
       <p class="text-sm text-secondary">{{ 'redeploy.move.how' | t }}</p>

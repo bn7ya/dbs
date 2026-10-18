@@ -10,6 +10,7 @@ import { EmptyState } from '@shared/empty-state/empty-state';
 import { isolated } from '@shared/isolated/isolated';
 import { Notice } from '@shared/notice/notice';
 import { Skeleton } from '@shared/skeleton/skeleton';
+import { uniqueId } from '@shared/unique-id';
 import { fitProblems, takesServices } from '../../data/deploy-catalogue';
 import type { DeployStep, Revisions, RunRequest } from '../../data/redeploy.types';
 import { DeployStore } from '../../state/deploy.store';
@@ -45,6 +46,8 @@ const STEPS_FIELD = /^steps(\.\d+)?$/;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DeployHere {
+  readonly headingId = uniqueId('deploy-title');
+
   private readonly store = inject(DeployStore);
   private readonly locale = inject(LocaleStore);
 
