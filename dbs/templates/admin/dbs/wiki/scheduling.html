@@ -7,9 +7,10 @@
 and how many backups to keep in <code>DBS_BACKUP_DIR</code>. Backups stay on this server;
 the <a href="{% url 'admin:dbs_wiki' 'manager' %}">DBS manager</a> takes the off-site copies
 by connecting to this server and pulling them.</p>
-<p>The schedule runs inside your web workers. Each worker starts a small background thread
+<p>The schedule is watched from your web workers. Each worker starts a small background thread
 on the first request it serves, and the thread checks once a minute whether a backup is
-due. A lease in the database lets exactly one of them take each backup, and only one backup
+due; the backup itself runs in a process of its own (<code>python -m dbs.job_process</code>),
+at a lower priority, so it never holds a web worker. A lease in the database lets exactly one of them take each backup, and only one backup
 or restore runs at a time. The lease lasts two minutes and is renewed while the backup runs,
 so a long backup is never started twice. If a worker dies mid-backup, its audit row is marked
 interrupted and the next tick takes the backup again; if that one dies too, the schedule

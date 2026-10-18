@@ -20,9 +20,16 @@ schedule name them.</p>
 <h2>The scheduler will not start</h2>
 <p>It needs an output directory: pass <code>--output-dir</code> or set
 <code>DBS_BACKUP_DIR</code>.</p>
-<h2><code>django_dbs</code> says it needs <code>django-dbs[manager]</code></h2>
-<p>The manager is an extra: <code>pip install "django-dbs[manager]"</code> on the machine
-that runs it.</p>
+<h2>A panel backup stops with <code>time_limit</code>, <code>memory_limit</code> or <code>killed</code></h2>
+<p>Panel backups and restores run in a process of their own. Raise
+<code>DBS_JOB_TIME_LIMIT</code> (6 hours by default) or <code>DBS_JOB_MEMORY_LIMIT</code>
+(2 GiB, <code>0</code> for none); <code>killed</code> means the process ended without a word,
+often the system's memory killer. Behind uWSGI or mod_wsgi, set <code>DBS_JOB_PYTHON</code> to
+the project's Python. <code>python manage.py dbs upgrade</code> checks that the process can
+start.</p>
+<h2>A backup fails with <code>disk_full</code>, <code>permission_denied</code> or <code>read_only</code></h2>
+<p><code>DBS_BACKUP_DIR</code> is full, not writable by the user the project runs as, or on a
+read-only mount. Older backups there are untouched.</p>
 <h2><code>django_dbs</code> is not recognized / command not found</h2>
 <p>pip installed the script into a folder that is not on your <code>PATH</code>, common with
 Windows user installs and <code>pip install --user</code>; pip prints that folder in a
