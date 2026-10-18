@@ -1,14 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  computed,
-  effect,
-  inject,
-  signal,
-  type Signal,
-} from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButton } from '@angular/material/button';
@@ -18,11 +8,11 @@ import { MatFormField, MatLabel } from '@angular/material/form-field';
 import { MatPaginator, type PageEvent } from '@angular/material/paginator';
 import { MatSelect } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
-import { map } from 'rxjs';
 
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { routeParam } from '@core/routing/route-param';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { Notice } from '@shared/notice/notice';
@@ -35,7 +25,7 @@ import {
   type ActivityStatus,
 } from '../../data/activity.types';
 import { ACTIVITY_PAGE_SIZES, ActivityStore } from '../../state/activity.store';
-import type { ActivityStatusFilter } from '../../state/activity.store.types';
+import type { ActivityScope, ActivityStatusFilter } from '../../state/activity.store.types';
 import type { FilterOption, StatusLook } from './activity.types';
 
 const STATUS_LOOKS: Readonly<Record<ActivityStatus, StatusLook>> = {
@@ -43,6 +33,18 @@ const STATUS_LOOKS: Readonly<Record<ActivityStatus, StatusLook>> = {
   running: { severity: 'info', icon: 'fa-solid fa-spinner' },
   succeeded: { severity: 'success', icon: 'fa-solid fa-circle-check' },
   failed: { severity: 'danger', icon: 'fa-solid fa-circle-xmark' },
+};
+
+const COLUMNS: Readonly<Record<ActivityScope['kind'], readonly string[]>> = {
+  all: ['when', 'action', 'status', 'application', 'server', 'target', 'by', 'ip'],
+  server: ['when', 'action', 'status', 'application', 'target', 'by', 'ip'],
+  application: ['when', 'action', 'status', 'target', 'by', 'ip'],
+};
+
+const EMPTY_BODIES: Readonly<Record<ActivityScope['kind'], string>> = {
+  all: 'activity.empty.body',
+  server: 'activity.empty.serverBody',
+  application: 'activity.empty.applicationBody',
 };
 
 const ACCOUNT_ACTION_PREFIXES: readonly string[] = ['account.', 'auth.', 'manager.'];
@@ -80,9 +82,20 @@ const isAccountAction = (code: string): boolean => ACCOUNT_ACTION_PREFIXES.some(
 export class ActivityPage {
   private readonly store = inject(ActivityStore);
   private readonly locale = inject(LocaleStore);
+  private readonly route = inject(ActivatedRoute);
 
-  readonly serverId = serverIdOf(inject(ActivatedRoute));
-  readonly scoped = computed(() => this.serverId() !== null);
+  private readonly serverId = routeParam(this.route, 'serverId');
+  private readonly applicationId = routeParam(this.route, 'applicationId');
+
+  readonly scope = computed<ActivityScope>(() => {
+    const application = this.applicationId();
+    if (application !== null) {
+      return { kind: 'application', id: application };
+    }
+    const server = this.serverId();
+    return server === null ? { kind: 'all' } : { kind: 'server', id: server };
+  });
+  readonly scoped = computed(() => this.scope().kind !== 'all');
 
   readonly entries = this.store.entries;
   readonly count = this.store.count;
@@ -98,11 +111,9 @@ export class ActivityPage {
   readonly filtered = this.store.filtered;
   readonly skeletonLines = [1, 2, 3, 4, 5, 6];
 
-  readonly columns = computed(() =>
-    this.scoped()
-      ? ['when', 'action', 'status', 'target', 'by', 'ip']
-      : ['when', 'action', 'status', 'server', 'target', 'by', 'ip'],
-  );
+  readonly columns = computed(() => [...COLUMNS[this.scope().kind]]);
+
+  readonly emptyBody = computed(() => EMPTY_BODIES[this.scope().kind]);
 
   readonly statusOptions = computed<FilterOption<ActivityStatusFilter>[]>(() => [
     { value: '', label: this.locale.translate('activity.filters.allStatuses') },
@@ -123,7 +134,7 @@ export class ActivityPage {
   });
 
   constructor() {
-    effect(() => this.store.open(this.serverId()));
+    effect(() => this.store.open(this.scope()));
     inject(DestroyRef).onDestroy(() => this.store.close());
   }
 
@@ -163,13 +174,4 @@ export class ActivityPage {
   retry(): void {
     this.store.reload();
   }
-}
-
-// The router's param inheritance stops at the server page, so `:serverId` is read from the route that declares it.
-function serverIdOf(route: ActivatedRoute): Signal<string | null> {
-  const owner = route.pathFromRoot.find((step) => step.snapshot.paramMap.has('serverId'));
-  if (!owner) {
-    return signal(null).asReadonly();
-  }
-  return toSignal(owner.paramMap.pipe(map((params) => params.get('serverId'))), { requireSync: true });
 }

@@ -15,6 +15,9 @@ export class ActivityApi {
     if (query.server) {
       params = params.set('server', query.server);
     }
+    if (query.application) {
+      params = params.set('application', query.application);
+    }
     if (query.action) {
       params = params.set('action', query.action);
     }

@@ -107,6 +107,8 @@ export interface ActivityEntry {
   readonly actor: string | null;
   readonly server: string | null;
   readonly server_name: string | null;
+  readonly application: string | null;
+  readonly application_name: string | null;
   readonly created_at: string;
   readonly started_at: string | null;
   readonly finished_at: string | null;
@@ -114,6 +116,7 @@ export interface ActivityEntry {
 
 export interface ActivityQuery {
   readonly server?: string;
+  readonly application?: string;
   readonly action?: string;
   readonly status?: ActivityStatus;
   readonly page: number;

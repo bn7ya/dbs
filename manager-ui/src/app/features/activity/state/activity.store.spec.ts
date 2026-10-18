@@ -6,8 +6,12 @@ import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
-import { ENTRY, FAILED, SERVER_ID, pageOf } from '../testing/activity.fixtures';
+import { APPLICATION_ID, ENTRY, FAILED, SERVER_ID, pageOf } from '../testing/activity.fixtures';
 import { ActivityStore } from './activity.store';
+import type { ActivityScope } from './activity.store.types';
+
+const EVERYTHING: ActivityScope = { kind: 'all' };
+const ON_SERVER: ActivityScope = { kind: 'server', id: SERVER_ID };
 
 describe('ActivityStore', () => {
   let store: ActivityStore;
@@ -18,8 +22,8 @@ describe('ActivityStore', () => {
   // A resource resolves its stream on a promise, so a flushed value lands a microtask later.
   const settle = (): Promise<void> => TestBed.inject(ApplicationRef).whenStable();
 
-  const openWith = async (server: string | null, count = 41): Promise<void> => {
-    store.open(server);
+  const openWith = async (scope: ActivityScope, count = 41): Promise<void> => {
+    store.open(scope);
     TestBed.tick();
     listRequest().flush(pageOf([ENTRY], count));
     await settle();
@@ -53,8 +57,8 @@ describe('ActivityStore', () => {
     expect(store.pending()).toBe(false);
   });
 
-  it('lists every server when opened without one', async () => {
-    store.open(null);
+  it('lists everything when opened for everything', async () => {
+    store.open(EVERYTHING);
     TestBed.tick();
     expect(store.pending()).toBe(true);
 
@@ -62,6 +66,7 @@ describe('ActivityStore', () => {
     expect(request.request.params.get('page')).toBe('1');
     expect(request.request.params.get('page_size')).toBe('20');
     expect(request.request.params.has('server')).toBe(false);
+    expect(request.request.params.has('application')).toBe(false);
     expect(request.request.params.has('status')).toBe(false);
     expect(request.request.params.has('action')).toBe(false);
     request.flush(pageOf([ENTRY, FAILED], 41));
@@ -73,12 +78,26 @@ describe('ActivityStore', () => {
     expect(store.empty()).toBe(false);
   });
 
-  it('lists one server when opened with it', async () => {
-    store.open(SERVER_ID);
+  it('lists one server, its applications with it, when opened for the server', async () => {
+    store.open(ON_SERVER);
     TestBed.tick();
 
     const request = listRequest();
     expect(request.request.params.get('server')).toBe(SERVER_ID);
+    expect(request.request.params.has('application')).toBe(false);
+    request.flush(pageOf([ENTRY]));
+    await settle();
+
+    expect(store.entries()).toEqual([ENTRY]);
+  });
+
+  it('lists one application when opened for it', async () => {
+    store.open({ kind: 'application', id: APPLICATION_ID });
+    TestBed.tick();
+
+    const request = listRequest();
+    expect(request.request.params.get('application')).toBe(APPLICATION_ID);
+    expect(request.request.params.has('server')).toBe(false);
     request.flush(pageOf([ENTRY]));
     await settle();
 
@@ -86,7 +105,7 @@ describe('ActivityStore', () => {
   });
 
   it('sends a filter and starts it again at the first page', async () => {
-    await openWith(null);
+    await openWith(EVERYTHING);
     store.goToPage(1, 20);
     TestBed.tick();
     expect(listRequest().request.params.get('page')).toBe('2');
@@ -100,11 +119,11 @@ describe('ActivityStore', () => {
     filtered.flush(pageOf([FAILED]));
     await settle();
 
-    store.setAction('server.check');
+    store.setAction('application.check');
     TestBed.tick();
     const both = listRequest();
     expect(both.request.params.get('status')).toBe('failed');
-    expect(both.request.params.get('action')).toBe('server.check');
+    expect(both.request.params.get('action')).toBe('application.check');
     both.flush(pageOf([], 0));
     await settle();
 
@@ -113,9 +132,9 @@ describe('ActivityStore', () => {
   });
 
   it('clears both filters at once', async () => {
-    await openWith(null);
+    await openWith(EVERYTHING);
     store.setStatus('failed');
-    store.setAction('server.check');
+    store.setAction('application.check');
     TestBed.tick();
     listRequest().flush(pageOf([], 0));
     await settle();
@@ -131,7 +150,7 @@ describe('ActivityStore', () => {
   });
 
   it('keeps the page on screen while the next one loads', async () => {
-    await openWith(null);
+    await openWith(EVERYTHING);
     // Read it, as the page's template does: the page kept is the one last shown.
     expect(store.entries()).toEqual([ENTRY]);
 
@@ -148,7 +167,7 @@ describe('ActivityStore', () => {
   });
 
   it('holds the failure as an ApiError and retries on reload', async () => {
-    store.open(null);
+    store.open(EVERYTHING);
     TestBed.tick();
     listRequest().flush(
       { error: { code: 'unknown', message: 'Server prose' } },
@@ -167,7 +186,7 @@ describe('ActivityStore', () => {
   });
 
   it('forgets the rows when the page closes', async () => {
-    await openWith(null);
+    await openWith(EVERYTHING);
 
     store.close();
     TestBed.tick();
@@ -176,7 +195,7 @@ describe('ActivityStore', () => {
   });
 
   it('starts every visit with the filters clear and on the first page', async () => {
-    await openWith(SERVER_ID);
+    await openWith(ON_SERVER);
     store.setStatus('failed');
     TestBed.tick();
     listRequest().flush(pageOf([FAILED], 41));
@@ -188,7 +207,7 @@ describe('ActivityStore', () => {
     store.close();
     TestBed.tick();
 
-    store.open(SERVER_ID);
+    store.open(ON_SERVER);
     TestBed.tick();
     const request = listRequest();
     expect(request.request.params.get('page')).toBe('1');

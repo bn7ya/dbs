@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ENTRY, SERVER_ID, pageOf } from '../testing/activity.fixtures';
+import { APPLICATION_ID, ENTRY, SERVER_ID, pageOf } from '../testing/activity.fixtures';
 import { ActivityApi } from './activity.api';
 
 describe('ActivityApi', () => {
@@ -44,5 +44,11 @@ describe('ActivityApi', () => {
     http
       .expectOne(`/api/activity/?page=1&page_size=50&server=${SERVER_ID}&action=server.check&status=failed`)
       .flush(pageOf([]));
+  });
+
+  it('sends the application when it is set', () => {
+    void firstValueFrom(api.list({ application: APPLICATION_ID, page: 1, page_size: 20 }));
+
+    http.expectOne(`/api/activity/?page=1&page_size=20&application=${APPLICATION_ID}`).flush(pageOf([]));
   });
 });
