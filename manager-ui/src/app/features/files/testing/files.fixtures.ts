@@ -1,6 +1,6 @@
 import type { Entry, Listing } from '../data/files.types';
 
-export const SERVER_ID = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001';
+export const APPLICATION_ID = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0001';
 
 export const ROOT = '/srv/app/media';
 export const OTHER_ROOT = '/var/log/app';

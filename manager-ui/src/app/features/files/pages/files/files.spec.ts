@@ -19,7 +19,7 @@ import type { PasswordPromptData } from '@shared/password-prompt/password-prompt
 import { Toaster } from '@shared/toaster/toaster';
 import { NewFolderDialog } from '../../components/new-folder/new-folder';
 import type { Entry, Listing } from '../../data/files.types';
-import { FILE, FOLDER, LINK, NESTED, OTHER, OTHER_ROOT, ROOT, SERVER_ID, listingOf } from '../../testing/files.fixtures';
+import { FILE, FOLDER, LINK, NESTED, OTHER, OTHER_ROOT, ROOT, APPLICATION_ID, listingOf } from '../../testing/files.fixtures';
 import { FilesPage } from './files';
 
 const IDENTITY: Identity = {
@@ -37,7 +37,7 @@ const IDENTITY: Identity = {
 
 const ROUTES: Routes = [
   {
-    path: 'servers/:serverId',
+    path: 'applications/:applicationId',
     children: [{ path: 'files', loadChildren: () => import('../../files.routes').then((m) => m.routes) }],
   },
 ];
@@ -51,11 +51,11 @@ describe('FilesPage', () => {
   const settle = (): Promise<void> => TestBed.inject(ApplicationRef).whenStable();
 
   const listRequest = (): TestRequest =>
-    http.expectOne((request) => request.url === `/api/files/${SERVER_ID}/` && request.method === 'GET');
+    http.expectOne((request) => request.url === `/api/files/${APPLICATION_ID}/` && request.method === 'GET');
 
   const showWith = async (listing: Listing, query = ''): Promise<FilesPage> => {
     harness = await RouterTestingHarness.create();
-    const navigating = harness.navigateByUrl(`/servers/${SERVER_ID}/files${query}`, FilesPage);
+    const navigating = harness.navigateByUrl(`/applications/${APPLICATION_ID}/files${query}`, FilesPage);
     const me = await vi.waitFor(() => http.expectOne('/api/auth/me/'));
     me.flush(IDENTITY);
     const page = await navigating;
@@ -99,10 +99,10 @@ describe('FilesPage', () => {
     vi.restoreAllMocks();
   });
 
-  it("lists the server's first allowed folder under a second-level title", async () => {
+  it("lists the application's first allowed folder under a second-level title", async () => {
     const page = await showWith(listingOf([FOLDER, FILE, LINK, OTHER], { roots: [ROOT] }));
 
-    expect(page.serverId()).toBe(SERVER_ID);
+    expect(page.applicationId()).toBe(APPLICATION_ID);
     expect(element().querySelector('h1')).toBeNull();
     expect(element().querySelector('h2')?.textContent?.trim()).toBe('Files');
     expect(rows().map((row) => row.querySelector('bdi')?.textContent)).toEqual([
@@ -120,12 +120,12 @@ describe('FilesPage', () => {
 
     const open = rows()[0].querySelector<HTMLAnchorElement>('a');
     expect(open?.getAttribute('aria-label')).toBe(`Open folder ${FOLDER.name}`);
-    expect(open?.getAttribute('href')).toBe(`/servers/${SERVER_ID}/files?path=${encodeURIComponent(FOLDER.path)}`);
+    expect(open?.getAttribute('href')).toBe(`/applications/${APPLICATION_ID}/files?path=${encodeURIComponent(FOLDER.path)}`);
     open?.click();
 
     const request = await answer(listingOf([NESTED], { path: FOLDER.path }));
     expect(request.request.params.get('path')).toBe(FOLDER.path);
-    expect(TestBed.inject(Router).url).toBe(`/servers/${SERVER_ID}/files?path=${encodeURIComponent(FOLDER.path)}`);
+    expect(TestBed.inject(Router).url).toBe(`/applications/${APPLICATION_ID}/files?path=${encodeURIComponent(FOLDER.path)}`);
     expect(rows().map((row) => row.querySelector('bdi')?.textContent)).toEqual([NESTED.name]);
   });
 
@@ -141,7 +141,7 @@ describe('FilesPage', () => {
     expect(link.querySelector('a[aria-label^="Open folder"]')).toBeNull();
   });
 
-  it('offers a download for a file only, and starts it from the link the server gives', async () => {
+  it('offers a download for a file only, and starts it from the link the manager gives', async () => {
     await showWith(listingOf([FOLDER, FILE, LINK]));
     const started = vi.spyOn(TestBed.inject(Downloader), 'start').mockReturnValue(undefined);
 
@@ -151,13 +151,13 @@ describe('FilesPage', () => {
     expect(downloads.map((button) => button.getAttribute('aria-label'))).toEqual([`Download ${FILE.name}`]);
     downloads[0].click();
 
-    const request = await vi.waitFor(() => http.expectOne(`/api/files/${SERVER_ID}/download/`));
+    const request = await vi.waitFor(() => http.expectOne(`/api/files/${APPLICATION_ID}/download/`));
     expect(request.request.body).toEqual({ path: FILE.path });
-    request.flush({ url: `/api/files/${SERVER_ID}/download/?path=x` });
-    await vi.waitFor(() => expect(started).toHaveBeenCalledWith(`/api/files/${SERVER_ID}/download/?path=x`));
+    request.flush({ url: `/api/files/${APPLICATION_ID}/download/?path=x` });
+    await vi.waitFor(() => expect(started).toHaveBeenCalledWith(`/api/files/${APPLICATION_ID}/download/?path=x`));
   });
 
-  it('asks for the password when the server says the file holds secrets', async () => {
+  it('asks for the password when the manager says the file holds secrets', async () => {
     const env: Entry = { ...FILE, name: '.env', path: `${ROOT}/.env` };
     const page = await showWith(listingOf([env]));
     const started = vi.spyOn(TestBed.inject(Downloader), 'start').mockReturnValue(undefined);
@@ -166,7 +166,7 @@ describe('FilesPage', () => {
 
     const downloading = page.download(env);
     http
-      .expectOne(`/api/files/${SERVER_ID}/download/`)
+      .expectOne(`/api/files/${APPLICATION_ID}/download/`)
       .flush(
         { error: { code: 'invalid', message: 'Server prose', fields: { account_password: ['required'] } } },
         { status: 400, statusText: 'Bad Request' },
@@ -180,11 +180,11 @@ describe('FilesPage', () => {
     expect(started).not.toHaveBeenCalled();
 
     const linking = prompt.submit('hunter2');
-    const request = http.expectOne(`/api/files/${SERVER_ID}/download/`);
+    const request = http.expectOne(`/api/files/${APPLICATION_ID}/download/`);
     expect(request.request.body).toEqual({ path: env.path, account_password: 'hunter2' });
-    request.flush({ url: `/api/files/${SERVER_ID}/download/?path=x&ticket=t1` });
+    request.flush({ url: `/api/files/${APPLICATION_ID}/download/?path=x&ticket=t1` });
     await expect(linking).resolves.toBe(true);
-    expect(started).toHaveBeenCalledWith(`/api/files/${SERVER_ID}/download/?path=x&ticket=t1`);
+    expect(started).toHaveBeenCalledWith(`/api/files/${APPLICATION_ID}/download/?path=x&ticket=t1`);
   });
 
   describe('the way back up', () => {
@@ -206,7 +206,7 @@ describe('FilesPage', () => {
 
       const request = await answer(listingOf([FOLDER, FILE]));
       expect(request.request.params.get('path')).toBe(ROOT);
-      expect(TestBed.inject(Router).url).toBe(`/servers/${SERVER_ID}/files?path=${encodeURIComponent(ROOT)}`);
+      expect(TestBed.inject(Router).url).toBe(`/applications/${APPLICATION_ID}/files?path=${encodeURIComponent(ROOT)}`);
     });
 
     it('puts focus on the place once the link that opened a folder is gone', async () => {
@@ -238,9 +238,9 @@ describe('FilesPage', () => {
     expect(element().querySelector('app-empty-state')?.textContent).toContain('This folder is empty');
   });
 
-  it("sends a server with no allowed folders to its overview, with nothing to upload into", async () => {
+  it("sends an application with no allowed folders to its overview, with nothing to upload into", async () => {
     harness = await RouterTestingHarness.create();
-    const navigating = harness.navigateByUrl(`/servers/${SERVER_ID}/files`, FilesPage);
+    const navigating = harness.navigateByUrl(`/applications/${APPLICATION_ID}/files`, FilesPage);
     (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush(IDENTITY);
     await navigating;
     TestBed.tick();
@@ -253,7 +253,7 @@ describe('FilesPage', () => {
 
     const empty = element().querySelector('app-empty-state');
     expect(empty?.textContent).toContain('No allowed folders');
-    expect(empty?.querySelector('a')?.getAttribute('href')).toBe(`/servers/${SERVER_ID}`);
+    expect(empty?.querySelector('a')?.getAttribute('href')).toBe(`/applications/${APPLICATION_ID}`);
     expect(element().querySelector('app-notice')).toBeNull();
     expect(buttonNamed('Upload a file')).toBeUndefined();
     expect(buttonNamed('New folder')).toBeUndefined();
@@ -261,7 +261,7 @@ describe('FilesPage', () => {
 
   it('says why a folder could not be listed, and tries again', async () => {
     harness = await RouterTestingHarness.create();
-    const navigating = harness.navigateByUrl(`/servers/${SERVER_ID}/files?path=%2Fetc`, FilesPage);
+    const navigating = harness.navigateByUrl(`/applications/${APPLICATION_ID}/files?path=%2Fetc`, FilesPage);
     (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush(IDENTITY);
     await navigating;
     TestBed.tick();
@@ -276,7 +276,7 @@ describe('FilesPage', () => {
       "This path is outside the server's allowed folders.",
     );
     // A refusal about the path, not a lost session: the reader stays on the page.
-    expect(TestBed.inject(Router).url).toBe(`/servers/${SERVER_ID}/files?path=%2Fetc`);
+    expect(TestBed.inject(Router).url).toBe(`/applications/${APPLICATION_ID}/files?path=%2Fetc`);
     expect(buttonNamed('New folder')?.disabled).toBe(true);
 
     buttonNamed('Try again')?.click();
@@ -347,7 +347,7 @@ describe('FilesPage', () => {
     picker?.dispatchEvent(new Event('change'));
     harness.detectChanges();
 
-    const request = http.expectOne(`/api/files/${SERVER_ID}/upload/`);
+    const request = http.expectOne(`/api/files/${APPLICATION_ID}/upload/`);
     expect((request.request.body as FormData).get('path')).toBe(FOLDER.path);
     expect(element().querySelector('.files__upload bdi')?.textContent).toBe('dog.jpg');
     request.flush({ ...NESTED, name: 'dog.jpg', path: `${FOLDER.path}/dog.jpg` }, { status: 201, statusText: 'Created' });

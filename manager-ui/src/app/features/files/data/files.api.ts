@@ -13,39 +13,39 @@ export class FilesApi {
     if (query.path !== null) {
       params = params.set('path', query.path);
     }
-    return this.http.get<Listing>(this.base(query.server), { params });
+    return this.http.get<Listing>(this.base(query.application), { params });
   }
 
-  downloadLink(server: string, path: string, accountPassword: string): Observable<DownloadLink> {
-    return this.http.post<DownloadLink>(`${this.base(server)}download/`, {
+  downloadLink(application: string, path: string, accountPassword: string): Observable<DownloadLink> {
+    return this.http.post<DownloadLink>(`${this.base(application)}download/`, {
       path,
       ...(accountPassword ? { account_password: accountPassword } : {}),
     });
   }
 
   // Bytes sent are reported by the XHR backend only (`withXhr()` in `app.config.ts`); fetch has no upload progress.
-  upload(server: string, folder: string, file: File): Observable<UploadEvent> {
+  upload(application: string, folder: string, file: File): Observable<UploadEvent> {
     const body = new FormData();
     body.append('path', folder);
     body.append('file', file);
     return this.http
-      .post<Entry>(`${this.base(server)}upload/`, body, { reportProgress: true, observe: 'events' })
+      .post<Entry>(`${this.base(application)}upload/`, body, { reportProgress: true, observe: 'events' })
       .pipe(
         map((event) => uploadEventOf(event, file)),
         filter((event) => event !== null),
       );
   }
 
-  createFolder(server: string, folder: NewFolder): Observable<Entry> {
-    return this.http.post<Entry>(`${this.base(server)}folders/`, folder);
+  createFolder(application: string, folder: NewFolder): Observable<Entry> {
+    return this.http.post<Entry>(`${this.base(application)}folders/`, folder);
   }
 
-  remove(server: string, path: string): Observable<void> {
-    return this.http.delete<void>(this.base(server), { params: new HttpParams().set('path', path) });
+  remove(application: string, path: string): Observable<void> {
+    return this.http.delete<void>(this.base(application), { params: new HttpParams().set('path', path) });
   }
 
-  private base(server: string): string {
-    return `/api/files/${server}/`;
+  private base(application: string): string {
+    return `/api/files/${application}/`;
   }
 }
 

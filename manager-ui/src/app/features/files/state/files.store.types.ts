@@ -1,7 +1,7 @@
 import type { Listing } from '../data/files.types';
 
 export interface Upload {
-  readonly server: string;
+  readonly application: string;
   readonly folder: string;
   readonly name: string;
   readonly sent: number;
@@ -14,6 +14,6 @@ export interface ShownSource {
 }
 
 export interface KnownRootsSource {
-  readonly server: string | null;
+  readonly application: string | null;
   readonly roots: readonly string[] | undefined;
 }

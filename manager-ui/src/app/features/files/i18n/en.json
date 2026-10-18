@@ -1,7 +1,7 @@
 {
   "files": {
     "title": "Files",
-    "body": "Files in the allowed folders of this server.",
+    "body": "Files in the allowed folders of this application.",
     "location": {
       "root": "Allowed folder",
       "trail": "Folder path"
@@ -45,7 +45,7 @@
       "working": "Preparing…",
       "prompt": {
         "title": "Download a .env file",
-        "body": "{name} holds the server's secrets. Enter your password to download it."
+        "body": "{name} holds the application's secrets. Enter your password to download it."
       }
     },
     "delete": {
@@ -63,7 +63,7 @@
     },
     "noFolders": {
       "title": "No allowed folders",
-      "body": "Files are listed from the server's allowed folders. Add one under Settings on Overview.",
+      "body": "Files are listed from the application's allowed folders. Add one in its settings on Overview.",
       "action": "Go to Overview"
     }
   }
