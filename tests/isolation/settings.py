@@ -1,6 +1,8 @@
 import os
 import tempfile
 
+import django
+
 from tests.settings import *  # noqa: F401,F403
 from tests.settings import DATABASES
 
@@ -14,6 +16,10 @@ if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": DATABASE_FILE,
             "TEST": {"NAME": DATABASE_FILE},
+            "OPTIONS": {
+                "timeout": 30,
+                **({"transaction_mode": "IMMEDIATE"} if django.VERSION >= (5, 1) else {}),
+            },
         }
     }
 else:

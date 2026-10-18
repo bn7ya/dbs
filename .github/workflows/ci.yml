@@ -288,6 +288,46 @@ jobs:
           sudo cat "$RUNNER_TEMP/sshd/sshd.log"
           sudo su dbs-ssh -s /bin/sh -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
 
+  upgrade-from-0-7:
+    name: Upgrade a project and a manager from 0.7.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install 0.7.0, fill a project and a manager, upgrade both to this commit
+        run: python scripts/upgrade_rehearsal.py
+
+  system-failures:
+    name: Backups on a full disk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e ".[dev]"
+      - name: Mount a 1 MiB tmpfs for the backup folder
+        run: |
+          sudo mkdir -p /mnt/dbs-full
+          sudo mount -t tmpfs -o size=1m tmpfs /mnt/dbs-full
+          sudo chown "$(id -u):$(id -g)" /mnt/dbs-full
+          chmod 700 /mnt/dbs-full
+      - name: A backup that fills the disk fails with disk_full and leaves nothing
+        env:
+          DBS_TEST_FULL_DISK: /mnt/dbs-full
+        run: python -m pytest tests/isolation/test_backup_failures.py --ds=tests.isolation.settings -rs
+
   stress:
     name: Stress round trip of a damaged backup
     runs-on: ubuntu-latest

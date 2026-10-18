@@ -94,3 +94,27 @@ def test_a_scheduled_backup_that_fails_keeps_the_schedule_and_its_older_backups(
     failed = AuditEvent.objects.filter(action="backup.create").order_by("-id").first()
     assert (failed.status, failed.error_code) == (audit.FAILED, audit.DISK_FULL)
     assert not leases_held().exists()
+
+
+FULL_DISK = os.environ.get("DBS_TEST_FULL_DISK", "")
+
+
+@pytest.mark.skipif(
+    not FULL_DISK, reason="Set DBS_TEST_FULL_DISK to a small tmpfs, such as one of 1 MiB."
+)
+def test_a_backup_that_fills_a_real_disk_fails_with_disk_full_and_leaves_nothing(
+    settings, children  # noqa: F811
+):
+    settings.DBS_BACKUP_DIR = FULL_DISK
+    settings.DBS_KDF_TIME_COST = 1
+    settings.DBS_KDF_MEMORY_COST = 8192
+    Author.objects.bulk_create(
+        Author(name=os.urandom(48).hex()) for _ in range(20_000)
+    )
+
+    failed = finished(jobs.start_backup(database="default", passphrase=PASS))
+
+    assert (failed.status, failed.error_code) == (audit.FAILED, audit.DISK_FULL)
+    assert os.listdir(FULL_DISK) == []
+    assert BackupRecord.objects.count() == 0
+    assert not leases_held().exists()

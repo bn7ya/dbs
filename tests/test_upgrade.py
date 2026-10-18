@@ -1239,6 +1239,72 @@ def test_a_small_mysql_packet_is_warned(monkeypatch):
     assert "max_allowed_packet = 256M" in finding.remedy
 
 
+@pytest.mark.django_db
+def test_sqlite_writes_say_nothing_changes_on_another_database_or_in_memory():
+    from django.db import connection
+
+    finding = upgrade.SQLiteWrites().check()
+
+    assert finding.level == OK
+    if connection.vendor == "sqlite":
+        assert "in memory" in finding.message
+    else:
+        assert "not SQLite" in finding.message
+
+
+class Journal:
+    def __init__(self, mode):
+        self.mode = mode
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, sql):
+        assert sql == "PRAGMA journal_mode"
+
+    def fetchone(self):
+        return (self.mode,)
+
+
+@pytest.mark.django_db
+def test_sqlite_in_rollback_journal_mode_is_warned(monkeypatch):
+    import django
+    from django.db import connection
+
+    monkeypatch.setattr(connection, "vendor", "sqlite")
+    monkeypatch.setattr(connection, "cursor", lambda: Journal("delete"))
+    monkeypatch.setitem(connection.settings_dict, "OPTIONS", {})
+
+    finding = upgrade.SQLiteWrites().check()
+
+    assert finding.level == WARN
+    assert "the journal mode is delete" in finding.message
+    assert "database is locked" in finding.message
+    assert "journal_mode=WAL" in finding.remedy
+    if django.VERSION >= (5, 1):
+        assert "transactions start deferred" in finding.message
+        assert '"transaction_mode": "IMMEDIATE"' in finding.remedy
+
+
+@pytest.mark.django_db
+def test_sqlite_in_wal_mode_with_immediate_transactions_is_fine(monkeypatch):
+    from django.db import connection
+
+    monkeypatch.setattr(connection, "vendor", "sqlite")
+    monkeypatch.setattr(connection, "cursor", lambda: Journal("wal"))
+    monkeypatch.setitem(
+        connection.settings_dict, "OPTIONS", {"transaction_mode": "IMMEDIATE"}
+    )
+
+    finding = upgrade.SQLiteWrites().check()
+
+    assert finding.level == OK
+    assert "WAL mode" in finding.message
+
+
 def test_panel_jobs_in_the_web_process_are_named(settings):
     settings.DBS_JOB_PROCESS = False
 

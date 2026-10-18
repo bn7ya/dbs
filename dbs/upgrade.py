@@ -855,6 +855,56 @@ class MySQLReads(Step):
         )
 
 
+class SQLiteWrites(Step):
+    name = "sqlite writes"
+    since = "0.8.0"
+
+    def check(self):
+        import django
+        from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
+
+        connection = connections[DEFAULT_DB_ALIAS]
+        if connection.vendor != "sqlite":
+            return self.ok("the database is not SQLite, so nothing here changes")
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("PRAGMA journal_mode")
+                mode = str(cursor.fetchone()[0]).lower()
+        except (DatabaseError, TypeError, IndexError) as exc:
+            return self.warn(f"could not read the journal mode: {exc}")
+        if mode == "memory":
+            return self.ok("the database is in memory, so no other process writes to it")
+        options = connection.settings_dict.get("OPTIONS") or {}
+        deferred = (
+            django.VERSION >= (5, 1)
+            and str(options.get("transaction_mode", "")).upper() != "IMMEDIATE"
+        )
+        problems = [
+            *([f"the journal mode is {mode}"] if mode != "wal" else []),
+            *(["transactions start deferred"] if deferred else []),
+        ]
+        if not problems:
+            return self.ok(
+                "SQLite runs in WAL mode, so the site keeps writing while a backup reads"
+            )
+        if django.VERSION >= (5, 1):
+            remedy = (
+                'DATABASES["default"]["OPTIONS"] = {"init_command": '
+                '"PRAGMA journal_mode=WAL;", "transaction_mode": "IMMEDIATE", "timeout": 20}'
+            )
+        else:
+            remedy = (
+                "run PRAGMA journal_mode=WAL; once on the database file, which keeps it, "
+                "and set DATABASES['default']['OPTIONS'] = {'timeout': 20}"
+            )
+        return self.warn(
+            f"a backup reads SQLite in one transaction from a process of its own; with "
+            f"{' and '.join(problems)}, a write from the site can fail with 'database is "
+            "locked' while it runs",
+            remedy,
+        )
+
+
 class SSHTargetKeys(Step):
     name = "ssh target keys"
     since = "0.8.0"
@@ -932,6 +982,7 @@ STEPS = (
     LegacyPartials,
     PanelJobProcess,
     MySQLReads,
+    SQLiteWrites,
     SSHTargetKeys,
 )
 
