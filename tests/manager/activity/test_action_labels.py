@@ -24,6 +24,7 @@ from dbs.manager.servers.services import (
     host_key_confirmation_service,
     server_service,
 )
+from dbs.manager.console import service as console
 from dbs.manager.shell import service as shell
 
 ACTIVITY_UI = (
@@ -60,6 +61,7 @@ def recordable() -> set[str]:
         redeploy.REVERT,
         deploys.DEPLOY,
         shell.OPEN,
+        console.RUN,
     }
     codes |= {f"redeploy.{step}" for step in redeploy.MOVE_STEPS}
     codes |= {f"{redeploy.REVERT}_{step}" for step in redeploy.REVERT_STEPS}

@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from django.utils import timezone
 
 from dbs.manager.activity import heartbeat
+from dbs.manager.terminal.output import Output
 from dbs.manager.terminal.session import TerminalSession
 
 EVERY = 30.0
@@ -15,12 +16,15 @@ UNITS = ("bytes", "KB", "MB", "GB", "TB")
 
 @contextmanager
 def reported(session: TerminalSession, every: float = EVERY) -> Iterator[None]:
-    if session.out.as_json:
+    if session.out.as_json or not session.waits:
         yield
         return
     stopped = threading.Event()
     reporter = threading.Thread(
-        target=_report, args=(stopped, every), name="dbs-manager-progress", daemon=True
+        target=_report,
+        args=(session.out, stopped, every),
+        name="dbs-manager-progress",
+        daemon=True,
     )
     reporter.start()
     try:
@@ -30,10 +34,10 @@ def reported(session: TerminalSession, every: float = EVERY) -> Iterator[None]:
         reporter.join(every)
 
 
-def _report(stopped: threading.Event, every: float) -> None:
+def _report(out: Output, stopped: threading.Event, every: float) -> None:
     while not stopped.wait(every):
         for pulse in heartbeat.running():
-            print(f"  {line(pulse.beat())}", flush=True)
+            out.line(f"  {line(pulse.beat())}")
 
 
 def line(beat: heartbeat.Beat) -> str:

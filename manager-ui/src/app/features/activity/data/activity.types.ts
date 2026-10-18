@@ -78,6 +78,7 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'auth.sign_out',
   'auth.recovery_code_used',
   'shell.session',
+  'console.command',
   'application.deploy_steps',
   'redeploy.deploy',
   'deploy.check',

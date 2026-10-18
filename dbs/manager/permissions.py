@@ -58,6 +58,7 @@ class Capability:
     REDEPLOY_REHEARSE = "redeploy.rehearse"
     REDEPLOY_RUN = "redeploy.run"
     SHELL_OPEN = "shell.open"
+    CONSOLE_RUN = "console.run"
 
 
 MINIMUM_ROLE = {
@@ -84,6 +85,7 @@ MINIMUM_ROLE = {
     Capability.REDEPLOY_REHEARSE: Role.OPERATOR,
     Capability.REDEPLOY_RUN: Role.ADMIN,
     Capability.SHELL_OPEN: Role.ADMIN,
+    Capability.CONSOLE_RUN: Role.VIEWER,
 }
 
 REHEARSALS = {

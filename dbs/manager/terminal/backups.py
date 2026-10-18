@@ -74,7 +74,7 @@ def take(session: TerminalSession) -> int:
 
 def _starting(session: TerminalSession, application: Any) -> None:
     if not session.out.as_json:
-        print(f"Backing up {application.name}...", flush=True)
+        session.out.line(f"Backing up {application.name}...")
 
 
 def verify(session: TerminalSession) -> int:

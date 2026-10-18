@@ -8,6 +8,7 @@ from typing import Any
 
 from rest_framework.exceptions import APIException
 
+from dbs import audit
 from dbs.manager.adapters import AdapterError, jobs
 from dbs.manager.adapters.local import private_file
 from dbs.manager.adapters.problems import problem
@@ -27,17 +28,21 @@ class Taken:
     error: str
     activity: dict[str, Any] | None
     kept_on_server: bool = False
+    started: bool = False
 
     @property
     def result(self) -> str:
         if not self.ok:
             return f"failed: {self.error}"
+        if self.started:
+            return "started"
         return KEPT_ON_SERVER_RESULT if self.kept_on_server else "ok"
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "application": self.application,
             "ok": self.ok,
+            "started": self.started,
             "kept_on_server": self.kept_on_server,
             "backup": self.backup,
             "size": self.size,
@@ -63,7 +68,8 @@ def take(
             )
             continue
         detail = entry.data or {}
-        ok = jobs.succeeded(entry)
+        started = entry.status in (audit.QUEUED, audit.RUNNING)
+        ok = started or jobs.succeeded(entry)
         taken.append(
             Taken(
                 application=application.name,
@@ -73,6 +79,7 @@ def take(
                 error="" if ok else jobs.failure(entry),
                 activity=jobs.described(user, entry),
                 kept_on_server=ok and detail.get("outcome") == KEPT_ON_SERVER,
+                started=started,
             )
         )
     return taken

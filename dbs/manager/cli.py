@@ -228,7 +228,7 @@ def build_parser():
     database_option(restore)
     restore.set_defaults(handler=command_import)
 
-    parsers.register(commands, location)
+    parsers.register(commands, parsers.Surface(extend=location))
     return parser
 
 

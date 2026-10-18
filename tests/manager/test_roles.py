@@ -57,10 +57,10 @@ def test_each_role_holds_every_capability_of_the_roles_below_it():
     admin = set(permissions.capabilities(Role.ADMIN))
     master = set(permissions.capabilities(Role.MASTER))
 
-    assert viewer == set()
+    assert viewer == {Capability.CONSOLE_RUN}
     assert viewer < operator < admin < master == set(permissions.MINIMUM_ROLE)
     assert master - admin == {Capability.ACCOUNTS_MANAGE}
-    assert operator == {
+    assert operator - viewer == {
         Capability.SERVERS_CHECK,
         Capability.APPLICATIONS_CHECK,
         Capability.BACKUPS_TAKE,

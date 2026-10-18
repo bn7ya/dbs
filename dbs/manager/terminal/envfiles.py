@@ -50,7 +50,7 @@ def compare(session: TerminalSession) -> int:
         session.out.json(data)
         return 0
     for title in ("added", "removed", "changed"):
-        print(f"{title:<8} {text(data[title])}")
+        session.out.line(f"{title:<8} {text(data[title])}")
     return 0
 
 
@@ -60,7 +60,7 @@ def reveal(session: TerminalSession) -> int:
     if session.out.as_json:
         session.out.json({"content": content})
     else:
-        print(content, end="" if content.endswith("\n") else "\n")
+        session.out.line(content, end="" if content.endswith("\n") else "\n")
     return 0
 
 

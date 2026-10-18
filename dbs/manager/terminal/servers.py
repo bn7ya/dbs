@@ -202,12 +202,12 @@ def browse(session: TerminalSession) -> int:
         "results": entries,
     }
     if not session.out.as_json:
-        print(folder.path + ("  (a Django project)" if folder.project else ""))
+        session.out.line(folder.path + ("  (a Django project)" if folder.project else ""))
     session.out.table(
         entries, BROWSE_COLUMNS, empty="This folder is empty.", data=listing
     )
     if folder.truncated and not session.out.as_json:
-        print("Only the first entries are shown.")
+        session.out.line("Only the first entries are shown.")
     return 0
 
 
@@ -234,10 +234,10 @@ def host_key(session: TerminalSession) -> int:
 def confirm_host_key(session: TerminalSession) -> int:
     confirmations = HostKeyConfirmationService(session.user)
     held = confirmations.to_decide(session.args.confirmation)
-    print(f"Claude asks to pin the host key {held.address} offers:")
-    print(f"  {held.key_type} {held.fingerprint}")
-    print("On the server, ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub prints the")
-    print("fingerprints to compare it with.")
+    session.out.line(f"Claude asks to pin the host key {held.address} offers:")
+    session.out.line(f"  {held.key_type} {held.fingerprint}")
+    session.out.line("On the server, ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub prints the")
+    session.out.line("fingerprints to compare it with.")
     if session.agrees("Is this the server's key? [y/N]"):
         decided = confirmations.confirm(held.id)
         session.out.say(
@@ -259,7 +259,7 @@ def _offered_key(
     offered = service.fingerprint(host, port)
     shown = HostKeySerializer(offered).data
     if not session.out.as_json:
-        print(f"{host}:{port} offers {shown['key_type']} {shown['fingerprint']}")
+        session.out.line(f"{host}:{port} offers {shown['key_type']} {shown['fingerprint']}")
     session.confirm("Is this the server's key? [y/N]")
     return shown["line"]
 
@@ -311,4 +311,4 @@ def _row(item: servers.CheckedServer) -> dict[str, Any]:
 
 def _say(session: TerminalSession, message: str) -> None:
     if not session.out.as_json:
-        print(message)
+        session.out.line(message)

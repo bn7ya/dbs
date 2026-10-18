@@ -9,10 +9,11 @@ from django.utils import timezone
 
 from dbs.manager.activity import heartbeat
 from dbs.manager.terminal import progress
+from dbs.manager.terminal.output import Output
 
 
-def session(as_json=False):
-    return SimpleNamespace(out=SimpleNamespace(as_json=as_json))
+def session(as_json=False, waits=True):
+    return SimpleNamespace(out=Output(as_json=as_json), waits=waits)
 
 
 @pytest.fixture

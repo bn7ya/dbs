@@ -154,6 +154,9 @@
         "migrate": "Deploy: migrate",
         "collectstatic": "Deploy: collect static files",
         "final_check": "Deploy: final check"
+      },
+      "console": {
+        "command": "Run a console command"
       }
     }
   }

@@ -3,6 +3,7 @@ from django.urls import include, path, re_path
 from dbs.manager import spa
 from dbs.manager.accounts.views import SetupView
 from dbs.manager.common.views import HealthView
+from dbs.manager.console.views import ConsoleView
 from dbs.manager.dashboard.views import AboutView, DashboardView
 from dbs.manager.redeploy.views import RedeployView, RevertView
 
@@ -18,6 +19,7 @@ api_patterns = [
     path("files/", include("dbs.manager.files.urls")),
     path("envfiles/", include("dbs.manager.envfiles.urls")),
     path("terminals/", include("dbs.manager.shell.urls")),
+    path("console/", ConsoleView.as_view(), name="console"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("about/", AboutView.as_view(), name="about"),
     path("redeploy/", RedeployView.as_view(), name="redeploy"),

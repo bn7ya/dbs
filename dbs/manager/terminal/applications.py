@@ -227,15 +227,15 @@ def _print_report(session: TerminalSession, report: dict[str, Any]) -> None:
     if not report["listing"]:
         folders = report.get("folders") or []
         if folders:
-            print("Folders that look like projects:")
+            session.out.line("Folders that look like projects:")
             for folder in folders:
-                print(f"  {folder}")
+                session.out.line(f"  {folder}")
         else:
-            print("Name the application's folder with --folder.")
+            session.out.line("Name the application's folder with --folder.")
         return
-    print(f"Folder  {report['folder']}")
+    session.out.line(f"Folder  {report['folder']}")
     if not report["trusted"]:
-        print(
+        session.out.line(
             "This folder or its parent can be written by others, so nothing in it "
             "was run."
         )
@@ -273,4 +273,4 @@ def _row(item: applications.CheckedApplication) -> dict[str, Any]:
 
 def _say(session: TerminalSession, message: str) -> None:
     if not session.out.as_json:
-        print(message)
+        session.out.line(message)

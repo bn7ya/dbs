@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -19,6 +20,19 @@ from dbs.models import AuditEvent, AuditStatus
 
 INVALID_STATUS = "Choose queued, running, succeeded or failed."
 STALE_AFTER_LIMIT = timedelta(hours=1)
+QUEUED_HERE: ContextVar[list[int] | None] = ContextVar(
+    "dbs_manager_queued_here", default=None
+)
+
+
+@contextmanager
+def collecting_jobs() -> Iterator[list[int]]:
+    queued: list[int] = []
+    token = QUEUED_HERE.set(queued)
+    try:
+        yield queued
+    finally:
+        QUEUED_HERE.reset(token)
 
 
 def subject_of(subject: Any) -> str:
@@ -129,7 +143,7 @@ class ActivityService:
         target: str = "",
         detail: dict[str, Any] | None = None,
     ) -> AuditEvent:
-        return audit.queue(
+        entry = audit.queue(
             action,
             actor=self.user,
             target=target,
@@ -137,6 +151,10 @@ class ActivityService:
             subject=subject_of(subject),
             remote_addr=current_ip() or "",
         )
+        collected = QUEUED_HERE.get()
+        if collected is not None:
+            collected.append(entry.pk)
+        return entry
 
     def start(self, activity_id: int) -> AuditEvent | None:
         started = audit.start(activity_id)

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from dbs.conf import setting
@@ -33,9 +36,12 @@ __all__ = [
     "TERMINAL_ENV",
     "TRUSTED_PROXY_ENV",
     "data_dir",
+    "inline_jobs",
     "is_loopback",
     "jobs_inline",
 ]
+
+INLINE = ContextVar("dbs_manager_jobs_inline", default=False)
 
 
 def data_dir():
@@ -43,7 +49,16 @@ def data_dir():
 
 
 def jobs_inline():
-    return bool(setting("DBS_MANAGER_JOBS_INLINE", False))
+    return INLINE.get() or bool(setting("DBS_MANAGER_JOBS_INLINE", False))
+
+
+@contextmanager
+def inline_jobs() -> Iterator[None]:
+    token = INLINE.set(True)
+    try:
+        yield
+    finally:
+        INLINE.reset(token)
 
 
 def is_loopback(host):

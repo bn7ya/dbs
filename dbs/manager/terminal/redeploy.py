@@ -96,7 +96,7 @@ def deploy(session: TerminalSession) -> int:
 def deploy_steps(session: TerminalSession) -> int:
     args = session.args
     application = references.application(session.user, args.application)
-    if args.steps_file:
+    if getattr(args, "steps_file", None):
         try:
             steps = json.loads(Path(args.steps_file).read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -148,4 +148,4 @@ def _steps(session: TerminalSession, entry: Any) -> None:
 
 def _say(session: TerminalSession, message: str) -> None:
     if not session.out.as_json:
-        print(message, flush=True)
+        session.out.line(message)

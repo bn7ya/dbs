@@ -120,6 +120,9 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 - `dbs/manager/redeploy/` — moving an application onto another, deploying one in place from
   the step catalogue (`catalogue.py`, `deploy.py`), and putting either back from its safety
   backup.
+- `dbs/manager/console/` — `POST /api/console/`: one terminal command line run as the
+  signed-in account through the same parsers and handlers, without the verbs that read the
+  manager's own disk or stdin; jobs it starts are returned, not waited for.
 - `dbs/manager/shell/` — the interactive terminal on a server or inside an application's
   container: `sessions.py` holds each shell's SSH channel and output buffer in the manager
   process, `service.py` opens, polls, sweeps and closes them.

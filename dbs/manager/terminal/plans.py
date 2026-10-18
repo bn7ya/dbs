@@ -127,7 +127,7 @@ def run(session: TerminalSession) -> int:
     service = BackupPlanService(session.user)
     plan = service.get(_plan_id(session))
     if not session.out.as_json:
-        print(f"Running {plan.name}...", flush=True)
+        session.out.line(f"Running {plan.name}...")
     with reported(session):
         job = service.run(plan.pk)
     entry = jobs.finished(session.user, job)

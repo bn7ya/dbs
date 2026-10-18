@@ -32,7 +32,7 @@ def list_folder(session: TerminalSession) -> int:
         "results": entries,
     }
     if not session.out.as_json:
-        print(folder.path)
+        session.out.line(folder.path)
     session.out.table(
         entries, LIST_COLUMNS, empty="This folder is empty.", data=listing
     )
