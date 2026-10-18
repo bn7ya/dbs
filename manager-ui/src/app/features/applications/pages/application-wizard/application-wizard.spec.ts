@@ -122,7 +122,9 @@ describe('ApplicationWizardPage', () => {
   });
 
   it('walks six steps on the server named in the address, the passphrase optional', async () => {
-    expect(html().textContent).toContain('deploy@web-1.example.com:22');
+    expect(html().querySelector('header p')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'On the server Production web deploy@web-1.example.com:22',
+    );
     const stepper = await TestbedHarnessEnvironment.loader(harness.fixture).getHarness(MatStepperHarness);
     const steps = await stepper.getSteps();
 

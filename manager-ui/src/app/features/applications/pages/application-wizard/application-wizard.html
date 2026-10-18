@@ -5,8 +5,7 @@
     @if (server(); as host) {
       <p class="text-secondary">
         {{ 'applications.wizard.onServer' | t }}
-        <bdi dir="auto">{{ host.name }}</bdi>
-        <bdi class="wizard__code" dir="ltr">{{ host.username }}&#64;{{ host.host }}:{{ host.port }}</bdi>
+        <bdi dir="auto">{{ host.name }}</bdi>&ngsp;<bdi class="wizard__code" dir="ltr">{{ host.username }}&#64;{{ host.host }}:{{ host.port }}</bdi>
       </p>
     }
   </header>
