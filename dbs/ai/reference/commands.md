@@ -15,14 +15,17 @@ unreadable stops the backup and names it; `--allow-missing-files` backs up witho
 lists what was left out. Rows, files and lookups are read from `--database`.
 
 ## `dbs backup --stream`
-`--prefix`, `--output-dir`, plus the options above except `OUTPUT`.
+`--prefix`, `--output-dir`, `--progress-seconds N`, plus the options above except `OUTPUT`.
 
 Writes the backup to standard output and keeps the same bytes in `DBS_BACKUP_DIR` (or
 `--output-dir`) as `PREFIX-YYYYMMDD-HHMMSSZ.dbs`. Messages go to standard error; the last
 line is a JSON summary `{name, size, sha256}`. When standard output breaks, the backup still
 finishes on the server, the command exits 0 and the summary adds `kept_on_server: true`. At
-most five streamed backups per prefix are kept. The DBS manager takes backups this way, with
-the passphrase on `--passphrase-stdin`.
+most five streamed backups per prefix are kept. `--progress-seconds N` writes a first line
+`{"progress": {"name", "partial", "moment"}}` naming the backup and its partial file, then
+`{"progress": {"bytes": n}}` every N seconds. The DBS manager takes backups this way, with
+the passphrase on `--passphrase-stdin`, and uses the first line to resume a transfer whose
+connection broke.
 
 ## `dbs restore INPUT`
 `--passphrase`, `--passphrase-stdin`, `--database`, `--no-data`, `--no-files`,
@@ -36,7 +39,8 @@ a dry run before a restore onto anything that matters.
 
 ## `dbs validate INPUT`
 `--passphrase` takes an optional value; given bare it uses the derived passphrase.
-Without it, only structure and block integrity are checked.
+`--passphrase-stdin` reads it from standard input. Without either, only structure and block
+integrity are checked. A wrong passphrase is reported as an error, not a traceback.
 
 ## `dbs schedule`
 `--interval`, `--output-dir`, `--prefix`, `--keep` (1 to 5), `--database`, `--once`, plus the
@@ -63,9 +67,11 @@ Walks the audit trail's hash chain and prints the first broken link, or the head
 chain. Also `manage.py dbs_audit`. No DBS command deletes audit rows.
 
 ## `dbs connection [--json]`
-Prints what the DBS manager needs to reach this project: host, SSH user, project directory,
-Python, manage.py, settings module, backup directory, file roots, `.env` path, version and
-host key fingerprints. Never a passphrase.
+Prints what the DBS manager reads from this project: project directory, Python, manage.py,
+settings module, backup directory, file roots, `.env` path and version, and on a server the
+host, SSH user and host key fingerprints. `"container": true` says it runs in a container,
+whose hostname, user and host keys say nothing about the server, so they are left out. The
+manager's discovery runs it itself; nobody pastes it anywhere. Never a passphrase.
 
 ## `dbs key [--show]`
 Reports where the passphrase comes from; `--show` prints it. Archive the output before
@@ -107,43 +113,68 @@ Also reachable as `manage.py dbs_upgrade`.
 Installed with `pip install django-dbs` under three equal names: `django-dbs`, `django_dbs`
 and `dbs`.
 
-`run [--port] [--host] [--trusted-proxy CIDR] [--allow-insecure-http] [--no-browser]`,
-`export [FILE] [--with-backups]`, `import FILE [--replace] [--yes]`,
-`createuser NAME [--role admin|operator|viewer]`, `password NAME`,
-`account list|role|disable|enable|reset-2fa`, `paths`. Each takes `--data-dir`, and all but
-`paths` take `--database-url`.
+`run [--port] [--host] [--trusted-proxy CIDR] [--allow-insecure-http]
+[--terminal admins|master|off] [--no-browser]`, `export [FILE] [--with-backups]`,
+`import FILE [--replace] [--yes]`, `createuser NAME [--role admin|operator|viewer]`,
+`password NAME`, `account list|role|disable|enable|reset-2fa`, `paths`. Each takes
+`--data-dir`, and all but `paths` take `--database-url`.
 
 Everything the manager's interface does is also a command, on the same data:
-- `server list|show|add|edit|remove|check|discover|browse|public-key|host-key|confirm-host-key|passphrase|capture-passphrase`
-- `backup list|take|verify|restore|download|upload|delete|undo-delete` (`take SERVER…` or `--all`)
-- `plan list|show|add|edit|remove|run` (`--keep 1-5`, `--keep-remote 0-5`), `activity list|show`
-- `env list|pull|compare|reveal|push`, `files list|download|upload|mkdir|delete`
-- `redeploy start --from SERVER --to SERVER [--backup ID] [--env ID] [--flush] [--real]`,
-  `redeploy revert MOVE_ID [--real]`
+- `server list|show|add|edit|remove|check|merge|browse|public-key|host-key|confirm-host-key`
+  — a server is an SSH machine: address, user, credentials, host key, container engines
+- `app list|show|discover|add|edit|remove|check|passphrase|capture-passphrase|deploy|deploy-steps`
+  — an application is one Django project on a server
+- `backup list [--app]|take APP…|--all|verify|restore|download|upload|delete|undo-delete`
+- `plan list|show|add|edit|remove|run|reschedule|pause|resume` (`--keep 1-5`,
+  `--keep-remote 0-5`, `--every MINUTES`, `--first-run WHEN`, `--time-zone ZONE`)
+- `activity list [--server] [--app]|show`, `env list|pull|compare|reveal|push`,
+  `files list|download|upload|mkdir|delete`
+- `redeploy start --from APP --to APP [--backup ID] [--env ID] [--flush] [--real]`,
+  `redeploy revert JOB_ID [--real]` (a move, or a deploy's safety backup)
 
 Each takes `--as NAME` (the account to act as; defaults to the only one), `--json` (the web
 API's output) and `--password-stdin` (for actions that need the account password). Accounts
 have roles (master, admin, operator, viewer) and a command refuses what the role does not
 allow. Secrets are prompted for or read from stdin, never passed as arguments; confirmations
-need `--yes` from a script. `server add` confirms the host key, finds the project and its
-Python, and checks the server. `server confirm-host-key ID` is for a person at a real
-terminal: never run it on their behalf. `server capture-passphrase` runs once, before a
-server's first backup; a server's backup passphrase must never change afterwards.
+need `--yes` from a script. `server add` confirms the host key, signs in and checks which
+engines answer. `server confirm-host-key ID` is for a person at a real terminal: never run it
+on their behalf.
 
-For a project whose Django runs in a Docker Compose service, `server add|edit` take
-`--runtime compose --compose-service SERVICE [--compose-file FILE]…` with `--project-dir` set
-to the folder holding the Compose files; `--python` and `--manage` are then paths inside the
-container. The manager runs `docker compose exec -T SERVICE python manage.py …` from that
-folder. Discovery finds such a project by itself when the service is running and its image
-has django-dbs.
+`app discover SERVER --folder F` lists the places a folder's application runs, best first:
+on the server itself, in a Compose service whose working folder is in F, or in a container
+with a bind mount from F, under Docker or Podman, with its Python, `manage.py`, settings, the
+host paths of its backup folder and file roots, its `.env` candidates and its problems
+(`container_not_running`, `dbs_missing`, `dbs_too_old`, `backup_dir_not_mounted`). It runs
+nothing in a folder another account can write to. `app add NAME --server S --folder F
+[--candidate N]` adds one and checks it; `--kind host|compose|container`,
+`--engine docker|podman`, `--compose-service`, `--compose-file`, `--container`,
+`--project-dir`, `--workdir`, `--python`, `--manage`, `--settings`, `--backup-dir`,
+`--env-path`, `--env-location host|container` and `--file-root` override what was found.
+`app capture-passphrase` runs once, before an application's first backup; an application's
+backup passphrase must never change afterwards. The SSH user needs the `docker` group or
+rootless Podman as itself; the manager never uses `sudo` (`engine_permission_denied`).
+
+`app deploy-steps APP --set FILE` takes a JSON list of steps from the fixed catalogue —
+`git_pull` (`remote`, `branch`), `compose_pull`, `compose_build` (`pull`), `compose_up`
+(`services`), `restart`, `systemd_user_restart` (`unit`), `pip_install` (`requirements`),
+`migrate`, `collectstatic`, each with `timeout_minutes` 1 to 120 — at most twelve, with the
+account password. `app deploy APP` rehearses (read-only checks); `--real` checks the
+application, takes a safety backup, records the `.env`, runs the steps and checks again.
 
 `django_dbs mcp [--as NAME]` is an MCP server over stdio for Claude
 (`claude mcp add dbs -- django_dbs mcp`). Its tools read everything but secrets, add and
-check servers once a person confirmed the host key, take, verify and save backups, add and
-run plans, keep `.env` versions (key names only) and rehearse restores, moves and reverts. It
-never takes the account password and has no tool that reveals a secret, restores, moves or
-reverts for real, keeps fewer backups, saves a file the manager keeps encrypted, removes or
-deletes.
+check servers once a person confirmed the host key, discover, add and check applications,
+take, verify and save backups, add and run plans, keep `.env` versions (key names only) and
+rehearse restores, moves, deploys (`rehearse_deploy`) and reverts. It never takes the account
+password and has no tool that reveals a secret, restores, moves, deploys or reverts for real,
+changes deploy steps, keeps fewer backups, saves a file the manager keeps encrypted, removes
+or deletes, or reaches the console or the terminal.
+
+The interface adds a console (`POST /api/console/`: one command line as the signed-in
+account, without `backup download|upload`, `files download|upload`, `server add|edit`,
+`app passphrase`, `env reveal`, `app deploy-steps --set` and `mcp`) and, for admins, a
+terminal on a server or inside an application's container, with the account password every
+time.
 
 `python -m dbs.manager COMMAND` is the same, for when pip put `django_dbs` in a folder that
 is not on `PATH`.

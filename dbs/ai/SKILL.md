@@ -1,6 +1,6 @@
 ---
 name: django-dbs
-description: Use when working in a Django project that has django-dbs installed — taking, validating, restoring or scheduling backups, streaming one with dbs backup --stream, the backup schedule, retention, health and hash-chained audit trail in the /admin/dbs/ panel, the session guard, any manage.py dbs command, or the django_dbs manager and its MCP server. Covers the one install, the passphrase that must never change, restore semantics and the mistakes that lose data.
+description: Use when working in a Django project that has django-dbs installed — taking, validating, restoring or scheduling backups, streaming one with dbs backup --stream, the backup schedule, panel jobs and their child process, retention, health and hash-chained audit trail in the /admin/dbs/ panel, the session guard, any manage.py dbs command, or the django_dbs manager (servers and the applications on them, Docker and Podman, deploys, the console and terminal) and its MCP server. Covers the one install, the passphrase that must never change, restore semantics and the mistakes that lose data.
 ---
 
 # django-dbs
@@ -68,9 +68,9 @@ separate environment and restore from there. Let a human decide.
 ```bash
 python manage.py dbs                      # overview
 python manage.py dbs backup OUTPUT [--allow-missing-files] [--database ALIAS]
-python manage.py dbs backup --stream [--prefix P] [--output-dir DIR]
+python manage.py dbs backup --stream [--prefix P] [--output-dir DIR] [--progress-seconds N]
 python manage.py dbs restore INPUT [--dry-run] [--flush]
-python manage.py dbs validate INPUT [--passphrase]
+python manage.py dbs validate INPUT [--passphrase | --passphrase-stdin]
 python manage.py dbs schedule [--once]               # follows the panel's schedule
 python manage.py dbs schedule --interval 6h --output-dir DIR --keep 5   # a fixed plan
 python manage.py dbs health [--json]
@@ -92,8 +92,13 @@ run. A missing or unreadable source file stops the backup and names it; only pas
 
 `dbs backup --stream` writes the backup to standard output and keeps the same bytes in
 `DBS_BACKUP_DIR`; its last line on standard error is a JSON summary `{name, size, sha256}`,
-with `kept_on_server: true` when standard output broke. It is how the DBS manager takes
-backups.
+with `kept_on_server: true` when standard output broke. `--progress-seconds N` first names
+the backup and its partial file on standard error, then reports the bytes written every N
+seconds. It is how the DBS manager takes backups, and resumes one whose connection broke.
+
+`dbs.contrib`, the original in-request backup and restore views, was removed in 0.8.0. If a
+URLconf still has `include("dbs.contrib.urls")`, the project will not start: delete the line
+and point the developer at `/admin/dbs/` or the DBS manager.
 
 ## Passphrases — read this before writing any DBS code
 
@@ -117,7 +122,7 @@ pass a passphrase as a shell argument in an example — it is visible to other l
 processes; use `$DBS_PASSPHRASE` or `--passphrase-stdin`.
 
 **Warn the developer** whenever they change `SECRET_KEY`, set or change `DBS_PASSPHRASE`, or
-change the passphrase the DBS manager stores for a server: a backup encrypted under a
+change the passphrase the DBS manager stores for an application: a backup encrypted under a
 passphrase they lose, and did not keep in `SECRET_KEY_FALLBACKS`, cannot be opened. Ever.
 
 ## Restore semantics — the part that loses data
@@ -172,6 +177,19 @@ session for that account. Learning mutes only the model, never the rules. Recove
 *Take a backup* and restores run as background jobs on a page that refreshes until they end;
 *Take a backup* needs `DBS_BACKUP_DIR`.
 
+Panel backups, panel restores and scheduled backups run in a child process,
+`python -m dbs.job_process`, which reads its spec and the passphrase from standard input,
+lowers its priority (`DBS_JOB_NICE`, 10) and stops itself at `DBS_JOB_TIME_LIMIT` (`"6h"`) or
+`DBS_JOB_MEMORY_LIMIT` (`"2G"`, `0` for none). The job then fails with `time_limit`,
+`memory_limit`, or `killed` when the process ended another way; a backup that fails for lack
+of space, a folder it may not write, a read-only disk or a lost database records `disk_full`,
+`permission_denied`, `read_only` or `database_failed`. Older backups are never touched.
+Where the web server embeds Python (uWSGI, mod_wsgi) and the child cannot load the project,
+set `DBS_JOB_PYTHON` to the virtualenv's interpreter; `DBS_JOB_BOOTSTRAP` names a callable
+that sets Django up instead of `django.setup` (django-configurations: `configurations.setup`);
+`DBS_JOB_PROCESS = False` keeps jobs in a web-process thread with no limits. `dbs upgrade`
+probes the interpreter and `dbs health` names it. Never move a backup back into the request.
+
 The panel keeps backups on the server and pushes nothing anywhere. There are no SFTP targets
 and no console; off-site copies come from the DBS manager, which connects over SSH and pulls
 them. Never suggest pushing backups from the server, and never add a way to run remote
@@ -210,37 +228,66 @@ rows.
 ## The DBS manager
 
 `django-dbs run` (also `django_dbs run` or `dbs run`; `pipx install django-dbs` keeps it apart
-from a project) starts a separate local application that manages many servers over SSH. It needs each
-server to have django-dbs 0.7 or later, a stable `SECRET_KEY`, `DBS_BACKUP_DIR`, and an SSH
-user that owns the project. `manage.py dbs connection --json` prints the details its
-add-server wizard reads. The project never contacts the manager. Never put `dbs.manager` in
-a project's `INSTALLED_APPS`.
+from a project) starts a separate local application that looks after the Django applications
+on many servers over SSH. The project never contacts the manager, and `dbs.manager` never goes
+in a project's `INSTALLED_APPS`.
 
+- A **server** is an SSH machine: address, port, user, sealed credentials, the host key a
+  person confirmed, and the container engines it has. An **application** is one Django
+  project on a server: on the server itself (`host`), in a Compose service (`compose`) or in
+  a named container (`container`), under `docker` or `podman`. Backups, plans, `.env`
+  versions, files, deploys and moves belong to an application.
+- An application is added from a folder: `django_dbs app discover SERVER --folder F` lists
+  what it finds, best first, and `django_dbs app add NAME --server SERVER --folder F
+  [--candidate N]` adds one and checks it. Discovery matches containers by their Compose
+  working folder or a bind mount from the folder, finds the Python and `manage.py`, asks
+  `manage.py dbs connection --json`, maps container paths to the server through the mounts
+  and offers `.env` candidates. It runs nothing in a folder, or a project below it, that
+  another account can write to. The developer never pastes `dbs connection --json` anymore.
+- Each server needs django-dbs 0.7.0 or later (0.8.0 to resume a broken transfer), a stable
+  `SECRET_KEY`, `DBS_BACKUP_DIR` (on a mounted folder in a container), and an SSH user that
+  owns the project and, for containers, may run `docker` (the `docker` group) or rootless
+  `podman` as itself. The manager never uses `sudo`; `engine_permission_denied` means the SSH
+  user may not use the engine.
 - It **pulls**: each run collects backups waiting on the server under its own name, streams
   a fresh one with `dbs backup --stream`, verifies it, and only then removes the server's
-  copies beyond `keep_remote` (0 to 5). It keeps at most five good backups per server and
-  plan, never deletes the newest verified one, and quarantines a backup that fails
-  verification.
-- It stores each server's backup passphrase, sealed. It is captured once, while adding the
-  server and before its first backup, and **must never be changed** afterwards.
+  copies beyond `keep_remote` (0 to 5). A broken stream from a 0.8 server resumes where it
+  stopped. It keeps at most five good backups per application and plan, never deletes the
+  newest verified one, and quarantines a backup that fails verification.
+- It stores each application's backup passphrase, sealed. It is captured once
+  (`django_dbs app capture-passphrase APP`), while adding the application and before its
+  first backup, and **must never be changed** afterwards.
+- Plans have a first run (`--first-run`), a time zone (`--time-zone`), and can be
+  rescheduled (`plan reschedule ID --at WHEN`), paused and resumed.
+- **Deploy in place**: an application keeps up to twelve steps from a fixed catalogue —
+  `git_pull`, `compose_pull`, `compose_build`, `compose_up`, `restart`,
+  `systemd_user_restart`, `pip_install`, `migrate`, `collectstatic` — each a fixed command
+  with validated names. A deploy checks the application, takes a safety backup, records its
+  `.env`, runs the steps and checks it again; its rehearsal only reads. Never suggest a free
+  command line as a deploy step: there is none, by design.
+- **The console** (`/console`, `POST /api/console/`) runs one `django_dbs` command line as the
+  signed-in account, without the verbs that read the manager's disk or stdin. **The
+  terminal** is an interactive shell on a server or inside an application's container, for
+  admins only, with the account password every time; it records no keystroke or output.
 - Accounts have roles — master, admin, operator, viewer. Web sign-in takes a password and a
   two-factor code; passwords last 30 days. `django_dbs createuser NAME --role ROLE`,
   `django_dbs account list|role|disable|enable|reset-2fa` and `django_dbs password NAME`
   manage them from a shell.
-- Everything the interface does is a `django_dbs` command (`server`, `backup`, `plan`,
+- Everything the interface does is a `django_dbs` command (`server`, `app`, `backup`, `plan`,
   `activity`, `env`, `files`, `redeploy`); `django_dbs AREA VERB --help` lists the options.
   Actions guarded by the account password read it with `--password-stdin`; never put a
   password or passphrase in an argument.
 
 `django_dbs mcp` is the MCP server Claude drives. Through it Claude may read everything but
-secrets, add servers, take, verify and save backups, add and run plans, keep more backups,
-keep `.env` versions and rehearse restores, moves and reverts. It cannot reveal a secret,
-restore, move or revert for real, push a `.env`, keep fewer backups, save a file the manager
-keeps encrypted, remove or delete anything, or pin a host key a person did not confirm.
-When adding a server, show the person the fingerprint from `fingerprint_host` and wait for
-them to confirm it on the Servers page or with `django_dbs server confirm-host-key ID`; do
-not try to confirm it yourself. When a tool says it needs the account password, tell the
-person to do it in the manager.
+secrets, add servers, discover, add and check applications, take, verify and save backups,
+add and run plans, keep more backups, keep `.env` versions and rehearse restores, moves,
+deploys (`rehearse_deploy`) and reverts. It cannot reveal a secret, restore, move, deploy or
+revert for real, change deploy steps, push a `.env`, keep fewer backups, save a file the
+manager keeps encrypted, remove or delete anything, reach the console or the terminal, or pin
+a host key a person did not confirm. When adding a server, show the person the fingerprint
+from `fingerprint_host` and wait for them to confirm it on the Servers page or with
+`django_dbs server confirm-host-key ID`; do not try to confirm it yourself. When a tool says
+it needs the account password, tell the person to do it in the manager.
 
 ## Python API
 
@@ -264,7 +311,8 @@ pull_backup, open_session`.
 
 See `reference/settings.md`. The ones that change behaviour most: `DBS_EXCLUDE_MODELS`,
 `DBS_FILE_ROOTS`, `DBS_RESTORE_ROOTS`, `DBS_RESTORE_PATH_MAP`, `DBS_BACKUP_DIR`,
-`DBS_SCHEDULER`, `DBS_ANOMALY_ENFORCE`, `DBS_TRUSTED_NETWORKS`, `DBS_TRUSTED_PROXIES`,
+`DBS_SCHEDULER`, `DBS_JOB_PROCESS`, `DBS_JOB_TIME_LIMIT`, `DBS_JOB_MEMORY_LIMIT`,
+`DBS_JOB_PYTHON`, `DBS_ANOMALY_ENFORCE`, `DBS_TRUSTED_NETWORKS`, `DBS_TRUSTED_PROXIES`,
 `DBS_GEOLOCATION`.
 
 `DBS_SSH_TARGETS`, `DBS_SCHEDULE_PUSH_TARGET`, `DBS_SCHEDULE_KEEP_REMOTE` and
@@ -284,7 +332,11 @@ deleting them where you find them, and the DBS manager for off-site copies.
 | Scheduler exits immediately | It needs `--output-dir` or `DBS_BACKUP_DIR` |
 | Scheduled backups never run | `dbs health` says the scheduler has not checked in: no request has reached a worker yet, or uWSGI runs without threads. Use `DBS_SCHEDULER = "command"` and `manage.py dbs schedule` |
 | `django-dbs` says the installation cannot import a package | `pip install --force-reinstall django-dbs` repairs it |
-| Manager backups are quarantined | The passphrase the manager stores is not the one the server's backups use. Do not change a passphrase to fix it; tell the developer |
+| The project will not start: `dbs.contrib` not found | 0.8.0 removed it. Delete `include("dbs.contrib.urls")`; backups are taken at `/admin/dbs/` or by the DBS manager |
+| A panel job fails with `time_limit`, `memory_limit` or `killed` | It ran past `DBS_JOB_TIME_LIMIT`, used more than `DBS_JOB_MEMORY_LIMIT`, or its process died. Raise the limit or check the server's log; never move the job into the web request |
+| Panel jobs cannot start: the interpreter cannot load the project | Set `DBS_JOB_PYTHON` to the project's virtualenv Python, or `DBS_JOB_BOOTSTRAP`; `dbs upgrade` names the interpreter it tried |
+| Manager says `engine_permission_denied` | The SSH user may not use Docker or Podman: the `docker` group, or rootless Podman as that user. Never suggest `sudo` |
+| Manager backups are quarantined | The passphrase the manager stores is not the one the application's backups use. Do not change a passphrase to fix it; tell the developer |
 
 ## Testing this project
 

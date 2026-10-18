@@ -18,8 +18,9 @@ model ships pre-trained on a synthetic corpus (`dbs/security/baseline.json.gz`, 
 by `scripts/train_base_model.py`) so scoring works from the first request. Once an account
 has `DBS_ANOMALY_MIN_ROWS` events, a personal forest is fitted on its newest 2000 rows mixed
 with a shrinking sample of that corpus, in a background thread, at most every 15 minutes or
-200 requests; a request never waits for it. Without scikit-learn the guard scores with its
-rules alone, and `manage.py check` warns (`dbs.security.W003`).
+200 requests; a request never waits for it. If scikit-learn cannot be imported the guard
+scores with its rules alone, and `manage.py check` warns (`dbs.security.W003`) with the
+`pip install --force-reinstall "django-dbs"` line that repairs the installation.
 
 **Nothing is ever pickled or unpickled.** Models are refit from stored feature rows. Do not
 "optimise" this by persisting a fitted estimator — that would be a deserialization hole in
@@ -73,6 +74,19 @@ does the same on demand. Neither touches the audit trail.
   so it applies whatever the session backend.
 - `BackupRecord.location` is read-only and `download` serves only a file resolved inside
   `DBS_BACKUP_DIR`. It is a backup catalogue, not a file browser.
-- The panel runs no remote command and stores no SSH credential.
+- The panel runs no remote command and stores no SSH credential. Its jobs run in a child
+  process that takes the passphrase on standard input, never in its arguments or environment.
+
+## The DBS manager's terminal and console
+
+The panel never opens a shell. The DBS manager, a separate application, can: an admin opens a
+terminal on a server, or inside an application's container, with the account password every
+time. At most four run at once, two per account; one closes after 15 minutes without input, a
+minute without a poll, two hours in all, on sign-out and on a password or role change.
+`django_dbs run --terminal master|off` narrows or removes it. Its audit row records where, the
+size, how long, the bytes each way and why it closed — never what was typed or shown. The
+console runs one `django_dbs` command line as the signed-in account, each command checked
+against its role. Neither the console nor the MCP server can open a terminal; keep it that
+way. Deploy steps come only from the fixed catalogue, so no request carries a command line.
 - Trusted networks and proxies no wider than /8 (v4) or /16 (v6) — a guarded session
   must not be able to trust the whole internet.

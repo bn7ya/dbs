@@ -15,8 +15,9 @@ from dbs.transports import (
 `private_key`, `password`, `known_hosts`, `host_key`, `remote_dir`, `auto_add_host_key`,
 `use_agent`, `connect_timeout`, `keepalive_interval` (15 seconds), `io_timeout` (30
 seconds) and `command_timeout` (6 hours). Build one directly, or from a dict with
-`SSHTarget.from_dict(...)`, where `password_env` and `key_passphrase_env` name environment
-variables that hold the secrets.
+`SSHTarget.from_dict(...)`, which reads `username` and `key_filename` (the older `user` and
+`key_file` keys are refused) and where `password_env` and `key_passphrase_env` name
+environment variables that hold the secrets.
 
 Host keys are rejected unless known. `host_key="<type> <base64>"` pins exactly one key and
 ignores the system known_hosts. `fetch_host_key(host, port)` returns a `HostKey` with the
@@ -28,7 +29,10 @@ first contact and gives up detection of a machine-in-the-middle on that connecti
 A session sends a keepalive every `keepalive_interval`, bounds SFTP reads by `io_timeout`,
 and stops a remote command after `command_timeout`: a dropped connection raises
 `ConnectionLost`, an overrun `RemoteTimeout`. `SSHSession.stream()` writes a command's
-standard output to a file as it arrives. Uploads and downloads go through a private partial
+standard output to a file as it arrives; `idle_timeout` stops it after that many seconds with
+no output on either stream, and `on_stderr_line` sees each line of standard error as it
+arrives. `SSHSession.open_terminal()` opens a channel with a pseudo-terminal running a login
+shell, or a given command. Uploads and downloads go through a private partial
 file: a push never replaces a backup already on the server, and a pull never replaces a local
 file.
 
