@@ -1,0 +1,100 @@
+<div class="facts__tags">
+  @if (contained()) {
+    @if (candidate().running) {
+      <app-status-tag severity="success" icon="fa-solid fa-circle-play" [label]="'applications.candidate.running' | t" />
+    } @else {
+      <app-status-tag severity="warning" icon="fa-solid fa-circle-stop" [label]="'applications.candidate.stopped' | t" />
+    }
+    @if (candidate().replicas > 1) {
+      <app-status-tag icon="fa-solid fa-clone" [label]="'applications.candidate.replicas' | t: { count: candidate().replicas }" />
+    }
+  }
+  @if (candidate().dbs_version; as version) {
+    <app-status-tag
+      [severity]="candidate().compatible ? 'success' : 'warning'"
+      [icon]="candidate().compatible ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation'"
+      [label]="(candidate().compatible ? 'applications.candidate.dbs' : 'applications.candidate.dbsOld') | t: { version }"
+    />
+  }
+</div>
+
+@if (candidate().problems.length > 0) {
+  <ul class="facts__problems" role="list">
+    @for (problem of candidate().problems; track problem) {
+      <li>
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        {{ 'applications.problems.' + problem | t }}
+      </li>
+    }
+  </ul>
+}
+
+<dl class="facts__list">
+  <div class="facts__row">
+    <dt class="text-label text-secondary">{{ 'applications.candidate.folder' | t }}</dt>
+    <dd><bdi class="facts__code" dir="ltr">{{ candidate().project_dir }}</bdi></dd>
+  </div>
+  @if (contained() && candidate().workdir) {
+    <div class="facts__row">
+      <dt class="text-label text-secondary">{{ 'applications.candidate.workdir' | t }}</dt>
+      <dd><bdi class="facts__code" dir="ltr">{{ candidate().workdir }}</bdi></dd>
+    </div>
+  }
+  <div class="facts__row">
+    <dt class="text-label text-secondary">{{ 'applications.candidate.python' | t }}</dt>
+    <dd>
+      @if (candidate().python_path) {
+        <bdi class="facts__code" dir="ltr">{{ candidate().python_path }}</bdi>
+      } @else {
+        <span class="text-muted">{{ 'applications.candidate.noPython' | t }}</span>
+      }
+    </dd>
+  </div>
+  <div class="facts__row">
+    <dt class="text-label text-secondary">{{ 'applications.candidate.settings' | t }}</dt>
+    <dd>
+      @if (candidate().settings_module) {
+        <bdi class="facts__code" dir="ltr">{{ candidate().settings_module }}</bdi>
+      } @else {
+        <span class="text-muted">{{ 'applications.candidate.notFound' | t }}</span>
+      }
+    </dd>
+  </div>
+  <div class="facts__row">
+    <dt class="text-label text-secondary">{{ 'applications.candidate.backupDir' | t }}</dt>
+    <dd>
+      @if (candidate().remote_backup_dir) {
+        <bdi class="facts__code" dir="ltr">{{ candidate().remote_backup_dir }}</bdi>
+        @if (backupDirElsewhere()) {
+          <span class="facts__aside text-sm text-secondary">
+            {{ 'applications.candidate.onHost' | t }} <bdi class="facts__code" dir="ltr">{{ candidate().backup_dir_on_host }}</bdi>
+          </span>
+        }
+      } @else {
+        <span class="text-muted">{{ 'applications.candidate.notFound' | t }}</span>
+      }
+    </dd>
+  </div>
+  <div class="facts__row">
+    <dt class="text-label text-secondary">{{ 'applications.candidate.env' | t }}</dt>
+    <dd>
+      @if (candidate().env.length > 0) {
+        <ul class="facts__env" role="list">
+          @for (env of candidate().env; track env.path + env.location) {
+            <li>
+              <bdi class="facts__code" dir="ltr">{{ env.path }}</bdi>
+              <span class="text-sm text-secondary">
+                {{
+                  'applications.form.envPath.option'
+                    | t: { location: ('applications.envLocation.' + env.location | t), source: ('applications.envSource.' + env.source | t) }
+                }}
+              </span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <span class="text-muted">{{ 'applications.candidate.notFound' | t }}</span>
+      }
+    </dd>
+  </div>
+</dl>

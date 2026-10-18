@@ -1,10 +1,8 @@
-import type { AuthMethod, Runtime, Server } from '../../data/servers.types';
+import type { AuthMethod, Server } from '../../data/servers.types';
 
 export interface ServerFormData {
   readonly server: Server;
 }
-
-export type ServerFormStep = 'connection' | 'project';
 
 export interface ServerDraft {
   readonly name: string;
@@ -15,16 +13,6 @@ export interface ServerDraft {
   readonly private_key: string;
   readonly key_passphrase: string;
   readonly password: string;
-  readonly runtime: Runtime;
-  readonly compose_service: string;
-  readonly compose_files: readonly string[];
-  readonly project_dir: string;
-  readonly python_path: string;
-  readonly manage_path: string;
-  readonly settings_module: string;
-  readonly remote_backup_dir: string;
-  readonly file_roots: readonly string[];
-  readonly env_path: string;
 }
 
 export type ServerDraftField = keyof ServerDraft;

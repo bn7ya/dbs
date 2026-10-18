@@ -1,0 +1,50 @@
+@use "layout" as *;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.settings-fields__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(calc($card-max / 2), 100%), 1fr));
+  gap: var(--app-space-5);
+}
+
+.settings-fields__choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  align-items: flex-start;
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.settings-fields__mounts,
+.settings-fields__mount-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.settings-fields__mount-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+// Each mount reads as one line, server side first; it wraps rather than widen the form.
+.settings-fields__mount {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1) var(--app-space-2);
+  align-items: baseline;
+}
+
+.settings-fields__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}

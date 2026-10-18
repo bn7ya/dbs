@@ -1,0 +1,60 @@
+@if (application(); as current) {
+  <div class="application">
+    <header class="application__header">
+      <a matButton routerLink="/applications">{{ 'applications.page.back' | t }}</a>
+      <div class="application__title">
+        <h1><bdi dir="auto">{{ current.name }}</bdi></h1>
+        <app-check-tag [status]="current.last_check_status" />
+      </div>
+      <div class="application__facts">
+        <span class="application__fact">
+          <span class="text-secondary">{{ 'applications.page.server' | t }}</span>
+          <a [routerLink]="['/servers', current.server.id]" dir="auto">{{ current.server.name }}</a>
+          <app-connection-dot [state]="current.server.connection_state" />
+        </span>
+        <app-where-it-runs class="application__fact" [place]="current" />
+      </div>
+    </header>
+
+    <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" [attr.aria-label]="'applications.page.sections' | t">
+      @for (tab of tabs(); track tab.path) {
+        <a
+          mat-tab-link
+          [routerLink]="tab.path"
+          routerLinkActive
+          #active="routerLinkActive"
+          [routerLinkActiveOptions]="tabMatch"
+          [active]="active.isActive"
+        >
+          {{ tab.labelKey | t }}
+        </a>
+      }
+    </nav>
+
+    <mat-tab-nav-panel #panel>
+      <router-outlet />
+    </mat-tab-nav-panel>
+  </div>
+} @else if (missing()) {
+  <app-empty-state
+    icon="fa-solid fa-cube"
+    [headingLevel]="1"
+    [title]="'applications.page.missing.title' | t"
+    [description]="'applications.page.missing.body' | t"
+  >
+    <a matButton="filled" routerLink="/applications">{{ 'applications.page.back' | t }}</a>
+  </app-empty-state>
+} @else if (error(); as failure) {
+  <div class="application__failure">
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    <div>
+      <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+    </div>
+  </div>
+} @else {
+  <div class="application" aria-busy="true">
+    @for (line of skeletonLines; track line) {
+      <app-skeleton />
+    }
+  </div>
+}

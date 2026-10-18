@@ -1,0 +1,310 @@
+<div class="wizard">
+  <header class="wizard__header">
+    <a matButton [routerLink]="['/servers', serverId(), 'applications']">{{ 'applications.wizard.back' | t }}</a>
+    <h1>{{ 'applications.wizard.title' | t }}</h1>
+    @if (server(); as host) {
+      <p class="text-secondary">
+        {{ 'applications.wizard.onServer' | t }}
+        <bdi dir="auto">{{ host.name }}</bdi>
+        <bdi class="wizard__code" dir="ltr">{{ host.username }}&#64;{{ host.host }}:{{ host.port }}</bdi>
+      </p>
+    }
+  </header>
+
+  @if (serverError(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      <form class="wizard__form" novalidate (ngSubmit)="advance()">
+        <mat-stepper
+          [linear]="true"
+          orientation="vertical"
+          [selectedIndex]="shownStep()"
+          [attr.aria-label]="'applications.wizard.steps.label' | t"
+          (selectionChange)="step.set($event.selectedIndex)"
+        >
+          <ng-template matStepperIcon="edit"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
+          <ng-template matStepperIcon="done"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
+
+          <mat-step [label]="'applications.wizard.steps.folder' | t" [completed]="stepDone('folder')" [editable]="!created()">
+            <div class="wizard__step">
+              <p class="text-secondary">{{ 'applications.wizard.folder.intro' | t }}</p>
+              <mat-form-field>
+                <mat-label>{{ 'applications.wizard.folder.label' | t }}</mat-label>
+                <input
+                  matInput
+                  name="folder"
+                  dir="ltr"
+                  autocomplete="off"
+                  spellcheck="false"
+                  [placeholder]="'applications.form.projectDir.placeholder' | t"
+                  [appFieldError]="error('folder') | errorText"
+                  [ngModel]="folder()"
+                  (ngModelChange)="folder.set($event)"
+                />
+                <button
+                  matIconButton
+                  matSuffix
+                  type="button"
+                  [attr.aria-label]="'applications.browser.browseLabel' | t: { field: ('applications.wizard.folder.label' | t) }"
+                  (click)="browseFolder()"
+                >
+                  <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                </button>
+                <mat-hint>{{ 'applications.wizard.folder.hint' | t }}</mat-hint>
+                @if (error('folder') | errorText; as message) {
+                  <mat-error>{{ message }}</mat-error>
+                }
+              </mat-form-field>
+            </div>
+          </mat-step>
+
+          <mat-step [label]="'applications.wizard.steps.discovery' | t" [completed]="stepDone('discovery')" [editable]="!created()">
+            <div class="wizard__step" [attr.aria-busy]="discovering()">
+              @if (discovering()) {
+                <p class="wizard__working" role="status">
+                  <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  {{ 'applications.wizard.discovery.searching' | t }}
+                </p>
+              } @else if (discoverError(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              } @else if (discovery(); as found) {
+                @if (!matched()) {
+                  @if (found.folder) {
+                    <app-notice severity="warning">{{ 'applications.wizard.discovery.notThere' | t: { folder: searchedFolder() } }}</app-notice>
+                  }
+                  <app-notice severity="info">
+                    {{ (found.folders.length > 0 ? 'applications.wizard.discovery.pickFolder' : 'applications.wizard.discovery.noFolders') | t }}
+                  </app-notice>
+                  @if (found.folders.length > 0) {
+                    <section class="wizard__suggestions" [attr.aria-label]="'applications.wizard.discovery.folders' | t">
+                      <h3 class="text-label text-secondary">{{ 'applications.wizard.discovery.folders' | t }}</h3>
+                      <div class="wizard__actions">
+                        @for (suggested of found.folders; track suggested) {
+                          <button matButton="tonal" type="button" (click)="pickFolder(suggested)">
+                            <i matButtonIcon class="fa-solid fa-folder-tree" aria-hidden="true"></i>
+                            <bdi class="wizard__code" dir="ltr">{{ suggested }}</bdi>
+                          </button>
+                        }
+                      </div>
+                    </section>
+                  }
+                } @else if (!found.trusted) {
+                  <app-notice severity="warning">{{ 'applications.wizard.discovery.untrusted' | t: { folder: searchedFolder() } }}</app-notice>
+                } @else if (candidates().length === 0) {
+                  <app-notice severity="warning">{{ 'applications.wizard.discovery.none' | t }}</app-notice>
+                } @else {
+                  <fieldset class="wizard__choice">
+                    <legend class="text-label">{{ 'applications.wizard.discovery.pick' | t }}</legend>
+                    <mat-radio-group
+                      class="wizard__candidates"
+                      name="candidate"
+                      [ngModel]="chosen()"
+                      (ngModelChange)="choose($event)"
+                    >
+                      @for (option of candidates(); track $index) {
+                        <div class="wizard__candidate">
+                          <mat-radio-button [value]="$index" [aria-describedby]="detailsId + '-' + $index">
+                            <app-where-it-runs [place]="option" />
+                          </mat-radio-button>
+                          <app-candidate-facts class="wizard__facts" [id]="detailsId + '-' + $index" [candidate]="option" />
+                        </div>
+                      }
+                    </mat-radio-group>
+                  </fieldset>
+                }
+              }
+              <div class="wizard__actions">
+                <button matButton="outlined" type="button" [disabled]="discovering()" (click)="discover()">
+                  {{ 'applications.wizard.discovery.again' | t }}
+                </button>
+                <button matButton type="button" (click)="browseFolder()">
+                  <i matButtonIcon class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                  {{ 'applications.wizard.discovery.browse' | t }}
+                </button>
+              </div>
+            </div>
+          </mat-step>
+
+          <mat-step [label]="'applications.wizard.steps.review' | t" [completed]="stepDone('review')" [editable]="!created()">
+            <div class="wizard__step">
+              @if (created()) {
+                <app-notice severity="success">{{ 'applications.wizard.review.added' | t }}</app-notice>
+              } @else if (candidate()) {
+                <app-notice severity="info">{{ 'applications.wizard.review.filled' | t }}</app-notice>
+              }
+              @if (createFailure(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              }
+
+              <mat-form-field>
+                <mat-label>{{ 'applications.form.name.label' | t }}</mat-label>
+                <input
+                  matInput
+                  name="name"
+                  autocomplete="off"
+                  required
+                  [appFieldError]="error('name') | errorText"
+                  [ngModel]="draft().name"
+                  (ngModelChange)="update('name', $event)"
+                />
+                <mat-hint>{{ 'applications.form.name.hint' | t }}</mat-hint>
+                @if (error('name') | errorText; as message) {
+                  <mat-error>{{ message }}</mat-error>
+                }
+              </mat-form-field>
+
+              <div>
+                <button matButton type="button" [attr.aria-expanded]="detailsOpen()" [attr.aria-controls]="detailsId" (click)="toggleDetails()">
+                  <i matButtonIcon class="fa-solid" [class.fa-chevron-up]="detailsOpen()" [class.fa-chevron-down]="!detailsOpen()" aria-hidden="true"></i>
+                  {{ (detailsOpen() ? 'applications.wizard.review.hideDetails' : 'applications.wizard.review.showDetails') | t }}
+                </button>
+              </div>
+
+              <div class="wizard__details" [id]="detailsId" [hidden]="!detailsOpen()">
+                <app-settings-fields
+                  [draft]="draft()"
+                  [errors]="errors()"
+                  [pythonPaths]="pythonPaths()"
+                  [envCandidates]="envCandidates()"
+                  (changed)="changeDraft($event)"
+                  (browse)="browse($event)"
+                />
+              </div>
+            </div>
+          </mat-step>
+
+          <mat-step [label]="'applications.wizard.steps.check' | t" [completed]="stepDone('check')">
+            <div class="wizard__step">
+              <p class="text-secondary">{{ 'applications.check.wait' | t }}</p>
+              <div>
+                <button matButton="outlined" type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="checkAgain()">
+                  @if (checking()) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ 'applications.check.run' | t }}
+                </button>
+              </div>
+              @if (checkError(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              } @else if (lastCheckError(); as code) {
+                <app-notice severity="danger">{{ code | errorText }}</app-notice>
+              }
+              @if (saveFailure(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              }
+              @if (application(); as current) {
+                @if (reported()) {
+                  <app-check-report [application]="current" [versions]="versions()">
+                    <button
+                      reportAction
+                      matButton="tonal"
+                      type="button"
+                      [disabled]="checking() || saving()"
+                      [attr.aria-busy]="checking() || saving()"
+                      (click)="useSuggestedPython()"
+                    >
+                      @if (checking() || saving()) {
+                        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                      }
+                      {{ 'applications.check.usePython' | t }}
+                    </button>
+                  </app-check-report>
+                }
+                @if (!passed() && !checking()) {
+                  <div class="wizard__actions">
+                    <a matButton [routerLink]="['/applications', current.id]">{{ 'applications.wizard.check.later' | t }}</a>
+                  </div>
+                }
+              }
+            </div>
+          </mat-step>
+
+          <mat-step [label]="'applications.wizard.steps.passphrase' | t" [completed]="stepDone('passphrase')" [optional]="true">
+            <div class="wizard__step">
+              <p class="text-secondary">{{ 'applications.wizard.passphrase.intro' | t }}</p>
+              <app-notice severity="warning">{{ 'applications.passphrase.readFirst' | t }}</app-notice>
+              <div>
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [disabled]="capturing() || captured()"
+                  [attr.aria-busy]="capturing()"
+                  (click)="capturePassphrase()"
+                >
+                  @if (capturing()) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ 'applications.passphrase.capture' | t }}
+                </button>
+              </div>
+              @if (captureError(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              }
+              @if (captured()) {
+                <app-notice severity="success">{{ 'applications.passphrase.captured' | t }}</app-notice>
+              }
+            </div>
+          </mat-step>
+
+          <mat-step [label]="'applications.wizard.steps.backup' | t" [completed]="backedUp()">
+            <div class="wizard__step">
+              <p class="text-secondary">{{ 'applications.wizard.backup.intro' | t }}</p>
+              <div>
+                <button
+                  type="button"
+                  [matButton]="backedUp() ? 'outlined' : 'filled'"
+                  [disabled]="backingUp()"
+                  [attr.aria-busy]="backingUp()"
+                  (click)="takeBackup()"
+                >
+                  @if (backingUp()) {
+                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                  }
+                  {{ (backingUp() ? 'applications.wizard.backup.running' : 'applications.wizard.backup.take') | t }}
+                </button>
+              </div>
+              @if (backupError(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              }
+              @if (backupJob(); as job) {
+                @if (backupRunning()) {
+                  @if (job.connection; as connection) {
+                    <app-job-connection [connection]="connection" />
+                  }
+                } @else if (backedUp()) {
+                  <app-notice severity="success">{{ 'applications.wizard.backup.done' | t }}</app-notice>
+                } @else {
+                  <app-notice severity="danger">{{ job.error_code | errorText }}</app-notice>
+                }
+              }
+              @if (application(); as current) {
+                <div class="wizard__actions">
+                  <a [matButton]="backedUp() ? 'filled' : 'outlined'" [routerLink]="['/applications', current.id]">
+                    {{ 'applications.wizard.backup.open' | t }}
+                  </a>
+                </div>
+              }
+            </div>
+          </mat-step>
+        </mat-stepper>
+
+        @if (step() < steps.length - 1) {
+          <div class="wizard__nav">
+            @if (step() > 0 && !(created() && step() <= firstAfterCreation)) {
+              <button matButton type="button" (click)="back()">{{ 'actions.back' | t }}</button>
+            }
+            <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+              @if (busy()) {
+                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ (step() === reviewStep && !created() ? 'applications.wizard.review.submit' : 'actions.next') | t }}
+            </button>
+          </div>
+        }
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>

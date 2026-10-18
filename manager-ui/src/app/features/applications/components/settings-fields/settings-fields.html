@@ -1,0 +1,273 @@
+<app-runtime-fields
+  [kind]="draft().kind"
+  [engine]="draft().engine"
+  [composeProject]="draft().compose_project"
+  [composeService]="draft().compose_service"
+  [composeFiles]="draft().compose_files"
+  [containerName]="draft().container_name"
+  [errors]="runtimeErrors()"
+  (changed)="updateRuntime($event)"
+/>
+
+<mat-form-field>
+  <mat-label>{{ 'applications.form.projectDir.label' | t }}</mat-label>
+  <input
+    matInput
+    name="project_dir"
+    dir="ltr"
+    autocomplete="off"
+    spellcheck="false"
+    [placeholder]="'applications.form.projectDir.placeholder' | t"
+    [appFieldError]="errors().project_dir | errorText"
+    [ngModel]="draft().project_dir"
+    (ngModelChange)="update('project_dir', $event)"
+  />
+  <button
+    matIconButton
+    matSuffix
+    type="button"
+    [attr.aria-label]="'applications.browser.browseLabel' | t: { field: ('applications.form.projectDir.label' | t) }"
+    (click)="browse.emit('project_dir')"
+  >
+    <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+  </button>
+  <mat-hint>{{ 'applications.form.projectDir.hint.' + draft().kind | t }}</mat-hint>
+  @if (errors().project_dir | errorText; as message) {
+    <mat-error>{{ message }}</mat-error>
+  }
+</mat-form-field>
+
+@if (contained()) {
+  <mat-form-field>
+    <mat-label>{{ 'applications.form.workdir.label' | t }}</mat-label>
+    <input
+      matInput
+      name="workdir"
+      dir="ltr"
+      autocomplete="off"
+      spellcheck="false"
+      [placeholder]="'applications.form.workdir.placeholder' | t"
+      [appFieldError]="errors().workdir | errorText"
+      [ngModel]="draft().workdir"
+      (ngModelChange)="update('workdir', $event)"
+    />
+    <mat-hint>{{ 'applications.form.workdir.hint' | t }}</mat-hint>
+    @if (errors().workdir | errorText; as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+}
+
+<div class="settings-fields__pair">
+  <mat-form-field>
+    <mat-label>{{ 'applications.form.pythonPath.label' | t }}</mat-label>
+    <input
+      matInput
+      name="python_path"
+      dir="ltr"
+      autocomplete="off"
+      spellcheck="false"
+      required
+      [matAutocomplete]="pythons"
+      [appFieldError]="errors().python_path | errorText"
+      [ngModel]="draft().python_path"
+      (ngModelChange)="update('python_path', $event)"
+    />
+    <mat-autocomplete #pythons="matAutocomplete">
+      @for (python of pythonPaths(); track python) {
+        <mat-option [value]="python"><bdi dir="ltr">{{ python }}</bdi></mat-option>
+      }
+    </mat-autocomplete>
+    <mat-hint>{{ (contained() ? 'applications.form.pythonPath.containerHint' : 'applications.form.pythonPath.hint') | t }}</mat-hint>
+    @if (errors().python_path | errorText; as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field>
+    <mat-label>{{ 'applications.form.managePath.label' | t }}</mat-label>
+    <input
+      matInput
+      name="manage_path"
+      dir="ltr"
+      autocomplete="off"
+      spellcheck="false"
+      required
+      [appFieldError]="errors().manage_path | errorText"
+      [ngModel]="draft().manage_path"
+      (ngModelChange)="update('manage_path', $event)"
+    />
+    <mat-hint>{{ (contained() ? 'applications.form.managePath.containerHint' : 'applications.form.managePath.hint') | t }}</mat-hint>
+    @if (errors().manage_path | errorText; as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+</div>
+
+<mat-form-field>
+  <mat-label>{{ 'applications.form.settingsModule.label' | t }}</mat-label>
+  <input
+    matInput
+    name="settings_module"
+    dir="ltr"
+    autocomplete="off"
+    spellcheck="false"
+    [placeholder]="'applications.form.settingsModule.placeholder' | t"
+    [appFieldError]="errors().settings_module | errorText"
+    [ngModel]="draft().settings_module"
+    (ngModelChange)="update('settings_module', $event)"
+  />
+  <mat-hint>{{ 'applications.form.settingsModule.hint' | t }}</mat-hint>
+  @if (errors().settings_module | errorText; as message) {
+    <mat-error>{{ message }}</mat-error>
+  }
+</mat-form-field>
+
+<mat-form-field>
+  <mat-label>{{ 'applications.form.remoteBackupDir.label' | t }}</mat-label>
+  <input
+    matInput
+    name="remote_backup_dir"
+    dir="ltr"
+    autocomplete="off"
+    spellcheck="false"
+    required
+    [appFieldError]="errors().remote_backup_dir | errorText"
+    [ngModel]="draft().remote_backup_dir"
+    (ngModelChange)="update('remote_backup_dir', $event)"
+  />
+  @if (hostPaths()) {
+    <button
+      matIconButton
+      matSuffix
+      type="button"
+      [attr.aria-label]="'applications.browser.browseLabel' | t: { field: ('applications.form.remoteBackupDir.label' | t) }"
+      (click)="browse.emit('remote_backup_dir')"
+    >
+      <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+    </button>
+  }
+  <mat-hint>{{ (contained() ? 'applications.form.remoteBackupDir.containerHint' : 'applications.form.remoteBackupDir.hint') | t }}</mat-hint>
+  @if (errors().remote_backup_dir | errorText; as message) {
+    <mat-error>{{ message }}</mat-error>
+  }
+</mat-form-field>
+
+<mat-form-field>
+  <mat-label>{{ 'applications.form.envPath.label' | t }}</mat-label>
+  <input
+    matInput
+    name="env_path"
+    dir="ltr"
+    autocomplete="off"
+    spellcheck="false"
+    [placeholder]="'applications.form.envPath.placeholder' | t"
+    [matAutocomplete]="envFiles"
+    [appFieldError]="errors().env_path | errorText"
+    [ngModel]="draft().env_path"
+    (ngModelChange)="update('env_path', $event)"
+  />
+  <mat-autocomplete #envFiles="matAutocomplete">
+    @for (candidate of envCandidates(); track candidate.path + candidate.location) {
+      <mat-option [value]="candidate.path" (onSelectionChange)="pickEnv($event, candidate)">
+        <bdi dir="ltr">{{ candidate.path }}</bdi>
+        <span class="text-sm text-secondary">
+          {{
+            'applications.form.envPath.option'
+              | t: { location: ('applications.envLocation.' + candidate.location | t), source: ('applications.envSource.' + candidate.source | t) }
+          }}
+        </span>
+      </mat-option>
+    }
+  </mat-autocomplete>
+  @if (envOnHost()) {
+    <button
+      matIconButton
+      matSuffix
+      type="button"
+      [attr.aria-label]="'applications.browser.browseLabel' | t: { field: ('applications.form.envPath.label' | t) }"
+      (click)="browse.emit('env_path')"
+    >
+      <i class="fa-regular fa-file" aria-hidden="true"></i>
+    </button>
+  }
+  <mat-hint>{{ (envCandidates().length > 0 ? 'applications.form.envPath.pickHint' : 'applications.form.envPath.hint') | t }}</mat-hint>
+  @if (errors().env_path | errorText; as message) {
+    <mat-error>{{ message }}</mat-error>
+  }
+</mat-form-field>
+
+@if (contained()) {
+  <fieldset class="settings-fields__choice">
+    <legend class="text-label">{{ 'applications.envLocation.label' | t }}</legend>
+    <mat-button-toggle-group
+      name="env_location"
+      [attr.aria-label]="'applications.envLocation.label' | t"
+      [value]="draft().env_location"
+      (change)="setLocation($event.value)"
+    >
+      @for (location of locations; track location.value) {
+        <mat-button-toggle [value]="location.value">{{ location.labelKey | t }}</mat-button-toggle>
+      }
+    </mat-button-toggle-group>
+  </fieldset>
+}
+
+<mat-form-field>
+  <mat-label>{{ 'applications.form.fileRoots.label' | t }}</mat-label>
+  <mat-chip-grid #roots [appFieldError]="errors().file_roots | errorText" [attr.aria-label]="'applications.form.fileRoots.label' | t">
+    @for (root of draft().file_roots; track $index) {
+      <mat-chip-row (removed)="removeFileRoot($index)">
+        <bdi dir="ltr">{{ root }}</bdi>
+        <button matChipRemove type="button" [attr.aria-label]="'applications.form.remove' | t: { path: root }">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </mat-chip-row>
+    }
+    <input
+      name="file_roots"
+      dir="ltr"
+      autocomplete="off"
+      spellcheck="false"
+      [placeholder]="'applications.form.fileRoots.placeholder' | t"
+      [matChipInputFor]="roots"
+      [matChipInputSeparatorKeyCodes]="separators"
+      [matChipInputAddOnBlur]="true"
+      (matChipInputTokenEnd)="addFileRoot($event)"
+    />
+  </mat-chip-grid>
+  @if (hostPaths()) {
+    <button
+      matIconButton
+      matSuffix
+      type="button"
+      [attr.aria-label]="'applications.browser.browseLabel' | t: { field: ('applications.form.fileRoots.label' | t) }"
+      (click)="browse.emit('file_roots')"
+    >
+      <i class="fa-solid fa-folder-plus" aria-hidden="true"></i>
+    </button>
+  }
+  <mat-hint>{{ (contained() ? 'applications.form.fileRoots.containerHint' : 'applications.form.fileRoots.hint') | t }}</mat-hint>
+  @if (errors().file_roots | errorText; as message) {
+    <mat-error>{{ message }}</mat-error>
+  }
+</mat-form-field>
+
+@if (draft().mounts.length > 0) {
+  <section class="settings-fields__mounts">
+    <h3 class="text-label">{{ 'applications.mounts.title' | t }}</h3>
+    <p class="text-sm text-secondary">{{ 'applications.mounts.body' | t }}</p>
+    <ul class="settings-fields__mount-list" role="list">
+      @for (mount of draft().mounts; track mount.destination) {
+        <li class="settings-fields__mount">
+          <bdi class="settings-fields__code" dir="ltr">{{ mount.source }}</bdi>
+          <span class="text-sm text-secondary">{{ 'applications.mounts.at' | t }}</span>
+          <bdi class="settings-fields__code" dir="ltr">{{ mount.destination }}</bdi>
+          @if (!mount.rw) {
+            <span class="text-sm text-secondary">{{ 'applications.mounts.readOnly' | t }}</span>
+          }
+        </li>
+      }
+    </ul>
+  </section>
+}

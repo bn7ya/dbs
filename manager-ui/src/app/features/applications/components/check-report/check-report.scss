@@ -1,0 +1,54 @@
+@use "layout" as *;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.report__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(calc($card-max / 2), 100%), 1fr));
+  gap: var(--app-space-4) var(--app-space-6);
+  margin: 0;
+}
+
+.report__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.report__fact dd {
+  margin: 0;
+}
+
+.report__presence {
+  display: inline-flex;
+  gap: var(--app-space-2);
+  align-items: center;
+}
+
+// The suggestion and the button that takes it are one decision.
+.report__suggestion,
+.report__roots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  align-items: flex-start;
+}
+
+.report__suggestion app-notice {
+  align-self: stretch;
+}
+
+.report__reason {
+  display: block;
+  margin-block-start: var(--app-space-2);
+}
+
+.report__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,138 @@
+<div class="applications">
+  <header class="applications__header">
+    <div class="applications__title">
+      @if (scoped()) {
+        <h2>{{ 'applications.list.onServer' | t }}</h2>
+        <p class="text-sm text-secondary">{{ 'applications.list.onServerBody' | t }}</p>
+      } @else {
+        <h1>{{ 'applications.title' | t }}</h1>
+        <p class="text-secondary">{{ 'applications.subtitle' | t }}</p>
+      }
+    </div>
+    @if (scoped() && (!empty() || searching())) {
+      <a *appCan="'applications.manage'" matButton="filled" [routerLink]="addLink()">
+        <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
+        {{ 'applications.add' | t }}
+      </a>
+    }
+  </header>
+
+  <mat-card appearance="outlined">
+    <mat-card-content class="applications__body">
+      <mat-form-field class="applications__search">
+        <mat-label>{{ 'applications.search.label' | t }}</mat-label>
+        <i matIconPrefix class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input
+          matInput
+          type="search"
+          name="search"
+          autocomplete="off"
+          [placeholder]="'applications.search.placeholder' | t"
+          [ngModel]="search()"
+          (ngModelChange)="onSearch($event)"
+        />
+      </mat-form-field>
+
+      @if (error(); as failure) {
+        <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+        <div>
+          <button matButton="outlined" type="button" (click)="retry()">{{ 'actions.retry' | t }}</button>
+        </div>
+      } @else if (pending()) {
+        <div class="applications__skeleton" aria-busy="true">
+          @for (line of skeletonLines; track line) {
+            <app-skeleton />
+          }
+        </div>
+      } @else if (empty()) {
+        @if (searching()) {
+          <app-empty-state
+            icon="fa-solid fa-magnifying-glass"
+            [headingLevel]="scoped() ? 3 : 2"
+            [title]="'applications.noMatch.title' | t"
+            [description]="'applications.noMatch.body' | t"
+          />
+        } @else if (scoped()) {
+          <app-empty-state
+            icon="fa-solid fa-cube"
+            [headingLevel]="3"
+            [title]="'applications.empty.serverTitle' | t"
+            [description]="'applications.empty.serverBody' | t"
+          >
+            <a *appCan="'applications.manage'" matButton="filled" [routerLink]="addLink()">{{ 'applications.add' | t }}</a>
+          </app-empty-state>
+        } @else {
+          <app-empty-state
+            icon="fa-solid fa-cube"
+            [headingLevel]="2"
+            [title]="'applications.empty.title' | t"
+            [description]="'applications.empty.body' | t"
+          >
+            <a matButton="outlined" routerLink="/servers">{{ 'applications.empty.servers' | t }}</a>
+          </app-empty-state>
+        }
+      } @else {
+        <div class="table-scroll">
+          <table
+            mat-table
+            [dataSource]="applications()"
+            [attr.aria-label]="'applications.list.label' | t"
+            [attr.aria-busy]="loading()"
+          >
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'applications.list.name' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                <a [routerLink]="['/applications', row.id]" dir="auto">{{ row.name }}</a>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="server">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'applications.list.server' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                <a [routerLink]="['/servers', row.server.id]" dir="auto">{{ row.server.name }}</a>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="where">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'applications.list.where' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                <app-where-it-runs [place]="row" />
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'applications.list.status' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                <app-check-tag [status]="row.last_check_status" />
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="lastChecked">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'applications.list.lastChecked' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.last_checked_at; as checkedAt) {
+                  {{ checkedAt | appDate }}
+                } @else {
+                  <span class="text-muted">{{ 'applications.list.never' | t }}</span>
+                }
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+            <tr mat-row *matRowDef="let row; columns: columns()"></tr>
+          </table>
+        </div>
+
+        <nav [attr.aria-label]="'applications.list.pages' | t">
+          <mat-paginator
+            [length]="count()"
+            [pageIndex]="page()"
+            [pageSize]="pageSize()"
+            [pageSizeOptions]="pageSizes"
+            (page)="onPaged($event)"
+          />
+        </nav>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

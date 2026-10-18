@@ -37,6 +37,16 @@
   font-family: var(--app-font-mono);
 }
 
+// An engine and its version per line: a server may run both.
+.servers__engines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
 // Each key is a block of its own: where it is, what it is, and the two answers.
 .servers__pending {
   display: flex;

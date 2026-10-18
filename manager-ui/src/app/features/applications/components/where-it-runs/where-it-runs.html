@@ -1,0 +1,5 @@
+<i class="where__icon" [class]="icon()" aria-hidden="true"></i>
+<span>{{ 'applications.where.' + place().kind | t: { engine: (engineKey() | t) } }}</span>
+@if (detail(); as shown) {
+  &ngsp;<bdi class="where__detail" dir="ltr">{{ shown }}</bdi>
+}

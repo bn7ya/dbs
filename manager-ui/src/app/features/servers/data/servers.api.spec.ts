@@ -83,45 +83,22 @@ describe('ServersApi', () => {
     expect(request.request.body).toEqual({ host: 'web-1.example.com', port: 2222 });
   });
 
-  it('checks, re-pins and reveals on the server’s own action URLs', () => {
+  it('checks, merges, re-pins and reads the public key on the server’s own action URLs', () => {
     void firstValueFrom(api.check(SERVER.id));
     const check = http.expectOne(`/api/servers/${SERVER.id}/check/`);
     expect(check.request.method).toBe('POST');
+
+    void firstValueFrom(api.merge(SERVER.id, { into: 'kept', account_password: 'secret' }));
+    const merge = http.expectOne(`/api/servers/${SERVER.id}/merge/`);
+    expect(merge.request.method).toBe('POST');
+    expect(merge.request.body).toEqual({ into: 'kept', account_password: 'secret' });
 
     void firstValueFrom(api.repinHostKey(SERVER.id, { host_key: 'line', password: 'secret' }));
     const repin = http.expectOne(`/api/servers/${SERVER.id}/host-key/`);
     expect(repin.request.method).toBe('POST');
     expect(repin.request.body).toEqual({ host_key: 'line', password: 'secret' });
 
-    void firstValueFrom(api.revealPassphrase(SERVER.id, 'secret'));
-    const reveal = http.expectOne(`/api/servers/${SERVER.id}/passphrase/`);
-    expect(reveal.request.method).toBe('POST');
-    expect(reveal.request.body).toEqual({ password: 'secret' });
-  });
-
-  it('discovers by searching, or inside the folder the developer chose', () => {
-    void firstValueFrom(api.discover(SERVER.id));
-    expect(http.expectOne(`/api/servers/${SERVER.id}/discover/`).request.body).toEqual({});
-
-    void firstValueFrom(api.discover(SERVER.id, '/srv/blog'));
-    expect(http.expectOne(`/api/servers/${SERVER.id}/discover/`).request.body).toEqual({ project_dir: '/srv/blog' });
-
-    void firstValueFrom(api.discover(SERVER.id, '/srv/blog', 'secret'));
-    expect(http.expectOne(`/api/servers/${SERVER.id}/discover/`).request.body).toEqual({
-      project_dir: '/srv/blog',
-      account_password: 'secret',
-    });
-  });
-
-  it('browses a folder on the server, the home folder when no path is given', () => {
-    void firstValueFrom(api.browse({ server: SERVER.id, path: null, page: 1, page_size: 50 }));
-    http.expectOne(`/api/servers/${SERVER.id}/browse/?page=1&page_size=50`).flush({});
-
-    void firstValueFrom(api.browse({ server: SERVER.id, path: '/srv/app', page: 2, page_size: 50 }));
-    const request = http.expectOne((r) => r.url === `/api/servers/${SERVER.id}/browse/`);
-    expect(request.request.method).toBe('GET');
-    expect(request.request.params.get('path')).toBe('/srv/app');
-    expect(request.request.params.get('page')).toBe('2');
-    request.flush({});
+    void firstValueFrom(api.publicKey(SERVER.id));
+    expect(http.expectOne(`/api/servers/${SERVER.id}/public-key/`).request.method).toBe('GET');
   });
 });

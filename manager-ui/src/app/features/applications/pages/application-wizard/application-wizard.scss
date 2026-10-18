@@ -1,0 +1,93 @@
+@use "layout" as *;
+
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+  max-inline-size: $dialog-lg;
+}
+
+.wizard__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  align-items: flex-start;
+}
+
+.wizard__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.wizard__step,
+.wizard__details,
+.wizard__suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.wizard__step {
+  padding-block: var(--app-space-2);
+}
+
+.wizard__suggestions {
+  gap: var(--app-space-2);
+}
+
+.wizard__details[hidden] {
+  display: none;
+}
+
+.wizard__working {
+  display: flex;
+  gap: var(--app-space-2);
+  align-items: center;
+}
+
+.wizard__choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+// Each candidate is a card-like group: its radio first, what was found under it.
+.wizard__candidates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.wizard__candidate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4);
+  border: var(--app-border-width) solid var(--app-color-outline);
+  border-radius: var(--app-radius-md);
+}
+
+.wizard__facts {
+  padding-inline-start: var(--app-space-7);
+}
+
+.wizard__actions,
+.wizard__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+}
+
+.wizard__nav {
+  justify-content: flex-end;
+}
+
+.wizard__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}

@@ -3,24 +3,18 @@ import { Injectable, inject } from '@angular/core';
 import type { Observable } from 'rxjs';
 
 import type { Page } from '@core/http/api.types';
-import type { JobStarted } from '@core/jobs/job.types';
 import type {
-  BackupPassphrase,
-  BrowseQuery,
-  CheckedServer,
   CreatedServer,
-  Discovery,
-  PassphraseCapture,
-  PublicKey,
-  RemoteFolder,
   HostKey,
   HostKeyConfirmation,
   HostKeyDecision,
   HostKeyRepin,
   HostKeyTarget,
+  PublicKey,
   Server,
   ServerCreate,
   ServerListQuery,
+  ServerMerge,
   ServerSummary,
   ServerUpdate,
 } from './servers.types';
@@ -44,33 +38,6 @@ export class ServersApi {
     return this.http.post<CreatedServer>(`${this.base}/`, server);
   }
 
-  publicKey(id: string): Observable<PublicKey> {
-    return this.http.get<PublicKey>(`${this.base}/${id}/public-key/`);
-  }
-
-  discover(id: string, projectDir?: string, accountPassword?: string): Observable<Discovery> {
-    return this.http.post<Discovery>(`${this.base}/${id}/discover/`, {
-      ...(projectDir ? { project_dir: projectDir } : {}),
-      ...(accountPassword ? { account_password: accountPassword } : {}),
-    });
-  }
-
-  browse(query: BrowseQuery): Observable<RemoteFolder> {
-    let params = new HttpParams().set('page', query.page).set('page_size', query.page_size);
-    if (query.path !== null) {
-      params = params.set('path', query.path);
-    }
-    return this.http.get<RemoteFolder>(`${this.base}/${query.server}/browse/`, { params });
-  }
-
-  capturePassphrase(id: string): Observable<PassphraseCapture> {
-    return this.http.post<PassphraseCapture>(`${this.base}/${id}/passphrase/capture/`, {});
-  }
-
-  takeBackup(server: string): Observable<JobStarted> {
-    return this.http.post<JobStarted>('/api/backups/take/', { server });
-  }
-
   get(id: string): Observable<Server> {
     return this.http.get<Server>(`${this.base}/${id}/`);
   }
@@ -81,6 +48,14 @@ export class ServersApi {
 
   remove(id: string, accountPassword: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/${id}/`, { body: { account_password: accountPassword } });
+  }
+
+  check(id: string): Observable<Server> {
+    return this.http.post<Server>(`${this.base}/${id}/check/`, {});
+  }
+
+  merge(id: string, merge: ServerMerge): Observable<Server> {
+    return this.http.post<Server>(`${this.base}/${id}/merge/`, merge);
   }
 
   fingerprint(target: HostKeyTarget): Observable<HostKey> {
@@ -96,15 +71,11 @@ export class ServersApi {
     return this.http.post<HostKeyConfirmation>(`${this.base}/host-keys/${id}/${decision}/`, {});
   }
 
-  check(id: string): Observable<CheckedServer> {
-    return this.http.post<CheckedServer>(`${this.base}/${id}/check/`, {});
+  publicKey(id: string): Observable<PublicKey> {
+    return this.http.get<PublicKey>(`${this.base}/${id}/public-key/`);
   }
 
   repinHostKey(id: string, repin: HostKeyRepin): Observable<Server> {
     return this.http.post<Server>(`${this.base}/${id}/host-key/`, repin);
-  }
-
-  revealPassphrase(id: string, password: string): Observable<BackupPassphrase> {
-    return this.http.post<BackupPassphrase>(`${this.base}/${id}/passphrase/`, { password });
   }
 }

@@ -1,0 +1,124 @@
+<fieldset class="runtime-fields__choice">
+  <legend class="text-label">{{ 'applications.kind.label' | t }}</legend>
+  <mat-radio-group class="runtime-fields__options" name="kind" [ngModel]="kind()" (ngModelChange)="chooseKind($event)">
+    @for (option of kinds; track option.value) {
+      <mat-radio-button [value]="option.value">{{ option.labelKey | t }}</mat-radio-button>
+    }
+  </mat-radio-group>
+</fieldset>
+
+@if (kind() !== 'host') {
+  <fieldset class="runtime-fields__choice">
+    <legend class="text-label">{{ 'applications.engine.label' | t }}</legend>
+    <mat-radio-group
+      class="runtime-fields__options"
+      name="engine"
+      [attr.aria-describedby]="errors().engine ? engineErrorId : null"
+      [ngModel]="engine()"
+      (ngModelChange)="chooseEngine($event)"
+    >
+      @for (option of engines; track option.value) {
+        <mat-radio-button [value]="option.value">{{ option.labelKey | t }}</mat-radio-button>
+      }
+    </mat-radio-group>
+    @if (errors().engine | errorText; as message) {
+      <small class="runtime-fields__error" role="alert" [id]="engineErrorId">{{ message }}</small>
+    }
+  </fieldset>
+}
+
+@if (kind() === 'compose') {
+  <mat-form-field>
+    <mat-label>{{ 'applications.form.composeService.label' | t }}</mat-label>
+    <input
+      matInput
+      name="compose_service"
+      dir="ltr"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      required
+      [appFieldError]="errors().compose_service | errorText"
+      [ngModel]="composeService()"
+      (ngModelChange)="changed.emit({ compose_service: $event })"
+    />
+    <mat-hint>{{ 'applications.form.composeService.hint' | t }}</mat-hint>
+    @if (errors().compose_service | errorText; as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field>
+    <mat-label>{{ 'applications.form.composeProject.label' | t }}</mat-label>
+    <input
+      matInput
+      name="compose_project"
+      dir="ltr"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      [appFieldError]="errors().compose_project | errorText"
+      [ngModel]="composeProject()"
+      (ngModelChange)="changed.emit({ compose_project: $event })"
+    />
+    <mat-hint>{{ 'applications.form.composeProject.hint' | t }}</mat-hint>
+    @if (errors().compose_project | errorText; as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field>
+    <mat-label>{{ 'applications.form.composeFiles.label' | t }}</mat-label>
+    <mat-chip-grid
+      #files
+      [appFieldError]="errors().compose_files | errorText"
+      [attr.aria-label]="'applications.form.composeFiles.label' | t"
+    >
+      @for (file of composeFiles(); track $index) {
+        <mat-chip-row (removed)="removeFile($index)">
+          <bdi dir="ltr">{{ file }}</bdi>
+          <button matChipRemove type="button" [attr.aria-label]="'applications.form.remove' | t: { path: file }">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+          </button>
+        </mat-chip-row>
+      }
+      <input
+        name="compose_files"
+        dir="ltr"
+        autocomplete="off"
+        spellcheck="false"
+        [placeholder]="'applications.form.composeFiles.placeholder' | t"
+        [matChipInputFor]="files"
+        [matChipInputSeparatorKeyCodes]="separators"
+        [matChipInputAddOnBlur]="true"
+        (matChipInputTokenEnd)="addFile($event)"
+      />
+    </mat-chip-grid>
+    <mat-hint>{{ 'applications.form.composeFiles.hint' | t }}</mat-hint>
+    @if (errors().compose_files | errorText; as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+}
+
+@if (kind() === 'container') {
+  <mat-form-field>
+    <mat-label>{{ 'applications.form.containerName.label' | t }}</mat-label>
+    <input
+      matInput
+      name="container_name"
+      dir="ltr"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      required
+      [appFieldError]="errors().container_name | errorText"
+      [ngModel]="containerName()"
+      (ngModelChange)="changed.emit({ container_name: $event })"
+    />
+    <mat-hint>{{ 'applications.form.containerName.hint' | t }}</mat-hint>
+    @if (errors().container_name | errorText; as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+}

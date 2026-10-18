@@ -2,22 +2,15 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
-import { JobWatcher } from '@core/jobs/job-watcher';
-import type { Job } from '@core/jobs/job.types';
-import type { ProjectSettings } from '../data/servers.types';
 import { CREATE, SERVER } from '../testing/servers.fixtures';
 import { ServerWizardStore } from './server-wizard.store';
-
-const DONE: Job = { id: 1, action: 'backup.take', status: 'succeeded', detail: {}, error_code: '', finished_at: null };
 
 describe('ServerWizardStore', () => {
   let store: ServerWizardStore;
   let http: HttpTestingController;
-  const watch = vi.fn(() => of(DONE));
 
   const created = async (extra: Record<string, unknown> = {}): Promise<void> => {
     const creating = store.create(CREATE);
@@ -29,7 +22,6 @@ describe('ServerWizardStore', () => {
     TestBed.configureTestingModule({
       providers: [
         ServerWizardStore,
-        { provide: JobWatcher, useValue: { watch } },
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         provideRouter([]),
@@ -42,7 +34,17 @@ describe('ServerWizardStore', () => {
   afterEach(() => {
     http.verify();
     TestBed.resetTestingModule();
-    watch.mockClear();
+  });
+
+  it('reads the host key the server presents', async () => {
+    const fetching = store.fetchHostKey({ host: 'web-1.example.com', port: 22 });
+    expect(store.fetchingHostKey()).toBe(true);
+    http
+      .expectOne('/api/servers/fingerprint/')
+      .flush({ key_type: 'ssh-ed25519', line: 'web-1 ssh-ed25519 AAAA', fingerprint: 'SHA256:abc' });
+
+    await expect(fetching).resolves.toMatchObject({ fingerprint: 'SHA256:abc' });
+    expect(store.fetchingHostKey()).toBe(false);
   });
 
   it('creates the server once and keeps the generated public key', async () => {
@@ -65,73 +67,38 @@ describe('ServerWizardStore', () => {
     );
 
     await expect(creating).resolves.toBeNull();
-    expect(store.createError()?.fields?.['name']).toEqual(['name_taken']);
     expect(store.server()).toBeNull();
+    expect(store.createError()?.fields?.['name']).toEqual(['name_taken']);
   });
 
-  it('discovers the project, saves it without the account password and runs the check', async () => {
+  it('checks the server it created and keeps what it found', async () => {
     await created();
 
-    const discovering = store.discover();
-    http.expectOne(`/api/servers/${SERVER.id}/discover/`).flush({ project_dir: '/srv/app' });
-    expect((await discovering)?.project_dir).toBe('/srv/app');
+    const checking = store.check();
+    expect(store.checking()).toBe(true);
+    http.expectOne(`/api/servers/${SERVER.id}/check/`).flush({ ...SERVER, last_check_status: 'problem' });
 
-    const settings: ProjectSettings = {
-      runtime: 'host',
-      compose_service: '',
-      compose_files: [],
-      project_dir: '/srv/app',
-      python_path: 'python3',
-      manage_path: 'manage.py',
-      settings_module: '',
-      remote_backup_dir: '/var/backups/dbs',
-      file_roots: [],
-      env_path: '',
-    };
-    const saving = store.saveProject(settings);
-    const patch = http.expectOne(`/api/servers/${SERVER.id}/`);
-    expect(patch.request.method).toBe('PATCH');
-    expect(patch.request.body).toEqual(settings);
-    patch.flush({ ...SERVER, project_dir: '/srv/app' });
-    await expect(saving).resolves.toBe(true);
+    await expect(checking).resolves.toBe(true);
+    expect(store.checked()?.last_check_status).toBe('problem');
+  });
+
+  it('keeps why a check could not sign in, and forgets the last result', async () => {
+    await created();
+    const first = store.check();
+    http.expectOne(`/api/servers/${SERVER.id}/check/`).flush(SERVER);
+    await first;
 
     const checking = store.check();
     http
       .expectOne(`/api/servers/${SERVER.id}/check/`)
-      .flush({ ...SERVER, local_version: '0.5.0', remote_version: '0.5.0', installed: true, compatible: true, last_health: null });
-    await checking;
-    expect(store.checked()?.compatible).toBe(true);
+      .flush({ error: { code: 'ssh_auth_failed', message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' });
+
+    await expect(checking).resolves.toBe(false);
+    expect(store.checkError()?.code).toBe('ssh_auth_failed');
+    expect(store.checked()).toBeNull();
   });
 
-  it('switches to another Python and checks again', async () => {
-    await created();
-
-    const switching = store.usePython('/srv/app/venv/bin/python');
-    const patch = http.expectOne(`/api/servers/${SERVER.id}/`);
-    expect(patch.request.body).toEqual({ python_path: '/srv/app/venv/bin/python' });
-    patch.flush({ ...SERVER, python_path: '/srv/app/venv/bin/python' });
-    const check = await vi.waitFor(() => http.expectOne(`/api/servers/${SERVER.id}/check/`));
-    check.flush({ ...SERVER, local_version: '0.5.0', remote_version: '0.5.0', installed: true, compatible: true, last_health: null });
-
-    expect((await switching)?.remote_version).toBe('0.5.0');
-    expect(store.server()?.python_path).toBe('/srv/app/venv/bin/python');
-  });
-
-  it('captures the passphrase and follows the test backup to its end', async () => {
-    await created();
-
-    const capturing = store.capturePassphrase();
-    http.expectOne(`/api/servers/${SERVER.id}/passphrase/capture/`).flush({ captured: true });
-    await capturing;
-    expect(store.captured()).toBe(true);
-
-    store.takeBackup();
-    const take = http.expectOne('/api/backups/take/');
-    expect(take.request.body).toEqual({ server: SERVER.id });
-    take.flush({ activity: 1 }, { status: 202, statusText: 'Accepted' });
-
-    expect(watch).toHaveBeenCalledWith(1);
-    expect(store.backupJob()?.status).toBe('succeeded');
-    expect(store.backingUp()).toBe(false);
+  it('checks nothing before the server exists', async () => {
+    await expect(store.check()).resolves.toBe(false);
   });
 });

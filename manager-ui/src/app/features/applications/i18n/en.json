@@ -1,0 +1,364 @@
+{
+  "applications": {
+    "title": "Applications",
+    "subtitle": "Every Django project the manager backs up, and the server it runs on.",
+    "add": "Add an application",
+    "search": {
+      "label": "Search",
+      "placeholder": "Name, server or host"
+    },
+    "list": {
+      "label": "Applications",
+      "onServer": "Applications on this server",
+      "onServerBody": "The Django projects this server runs, on the server itself or in containers.",
+      "name": "Name",
+      "server": "Server",
+      "where": "Where it runs",
+      "status": "Check",
+      "lastChecked": "Last checked",
+      "never": "Never",
+      "pages": "Application pages"
+    },
+    "empty": {
+      "title": "No applications yet",
+      "body": "Add an application from the page of the server it runs on.",
+      "servers": "Go to the servers",
+      "serverTitle": "No applications on this server yet",
+      "serverBody": "Add the Django project this server runs, so the manager can check it and back it up."
+    },
+    "noMatch": {
+      "title": "No matching applications",
+      "body": "Try another name, server or host."
+    },
+    "status": {
+      "unknown": "Not checked",
+      "ok": "Ready",
+      "problem": "Needs attention",
+      "failed": "Check failed"
+    },
+    "kind": {
+      "label": "Where the application runs",
+      "host": "On the server",
+      "compose": "In a Compose service",
+      "container": "In a container"
+    },
+    "engine": {
+      "label": "Container engine",
+      "docker": "Docker",
+      "podman": "Podman",
+      "none": "None"
+    },
+    "where": {
+      "host": "On the server",
+      "compose": "Compose service, {engine}",
+      "container": "Container, {engine}"
+    },
+    "envLocation": {
+      "label": "Where the .env file is",
+      "host": "On the server",
+      "container": "Inside the container"
+    },
+    "envSource": {
+      "folder": "found in the folder",
+      "compose": "named in the compose file",
+      "dbs": "named by django-dbs"
+    },
+    "page": {
+      "back": "All applications",
+      "server": "Server",
+      "sections": "Application sections",
+      "overview": "Overview",
+      "backups": "Backups",
+      "schedule": "Schedule",
+      "files": "Files",
+      "environment": ".env file",
+      "deploy": "Deploy",
+      "terminal": "Terminal",
+      "activity": "Activity",
+      "missing": {
+        "title": "Application not found",
+        "body": "It may have been removed."
+      }
+    },
+    "check": {
+      "title": "Check",
+      "lastChecked": "Last checked:",
+      "never": "Not checked yet.",
+      "run": "Check now",
+      "wait": "A check can take up to a minute.",
+      "done": "Check finished.",
+      "found": "Found",
+      "missing": "Not found",
+      "notSet": "Not set",
+      "notChecked": "Not checked",
+      "running": "Running",
+      "stopped": "Not running",
+      "ready": "django-dbs here and in the application work together.",
+      "incompatible": "The application's django-dbs is too old for this manager. Upgrade it in the application.",
+      "notFound": "django-dbs was not found with {python}.",
+      "suggestion": "django-dbs {version} was found in {python}.",
+      "usePython": "Use this Python",
+      "engineSaid": "The container engine said:",
+      "panelSchedule": "The application's own DBS panel also schedules backups, while the manager takes them too. Turn off the panel's schedule, or plan fewer backups here.",
+      "report": {
+        "system": "System",
+        "localVersion": "django-dbs here",
+        "dbsVersion": "django-dbs in the application",
+        "engine": {
+          "docker": "Docker",
+          "podman": "Podman"
+        },
+        "container": "Container",
+        "backupCommand": "Backup command",
+        "envFile": ".env file",
+        "remoteBackupDir": "Backup folder",
+        "timeout": "The timeout command inside the container, to stop a command that runs out of time",
+        "roots": "Allowed folders"
+      }
+    },
+    "settings": {
+      "title": "Settings",
+      "kind": "Where it runs",
+      "engine": "Container engine",
+      "composeProject": "Compose project",
+      "composeService": "Compose service",
+      "composeFiles": "Compose files",
+      "composeDefault": "The folder's own",
+      "containerName": "Container",
+      "projectDir": "Project folder",
+      "workdir": "Folder inside the container",
+      "pythonPath": "Python command",
+      "managePath": "manage.py path",
+      "settingsModule": "Settings module",
+      "remoteBackupDir": "Backup folder",
+      "envPath": ".env file",
+      "envLocation": "Where the .env file is",
+      "fileRoots": "Allowed folders",
+      "notSet": "Not set",
+      "updated": "Changes saved.",
+      "envInContainer": "This .env file is inside the container. A .env file written there is lost when the container is created again, so keep the one the container starts with on the server too."
+    },
+    "mounts": {
+      "title": "Mounted folders",
+      "body": "Read from the container. Change them in the compose file or where the container is started.",
+      "at": "mounted at",
+      "readOnly": "read only"
+    },
+    "passphrase": {
+      "title": "Backup passphrase",
+      "body": "It encrypts the django-dbs backups of this application. Keep a copy somewhere safe.",
+      "label": "Passphrase",
+      "show": "Show passphrase",
+      "hide": "Hide passphrase",
+      "copy": "Copy passphrase",
+      "neverChange": "Never change this passphrase: the backups taken with it would no longer open.",
+      "readFirst": "Read the passphrase from the application now, before its first backup. It must never change afterwards: older backups would no longer open.",
+      "capture": "Read it from the application",
+      "captured": "The backup passphrase is saved.",
+      "prompt": {
+        "title": "Show backup passphrase",
+        "body": "Enter your password to show the backup passphrase."
+      }
+    },
+    "delete": {
+      "title": "Remove application",
+      "body": "Removes this application from the manager. Its backups on the server stay there.",
+      "action": "Remove application",
+      "prompt": "{name} is removed from the manager, and its backups on the server stay there. Enter your password to remove it.",
+      "done": "Application removed."
+    },
+    "overview": {
+      "password": {
+        "title": "Confirm it is you",
+        "body": "Changing the Python of this application needs your password."
+      }
+    },
+    "candidate": {
+      "running": "Running",
+      "stopped": "Not running",
+      "replicas": "Replicas: {count}",
+      "dbs": "django-dbs {version}",
+      "dbsOld": "django-dbs {version}, too old",
+      "folder": "Folder",
+      "workdir": "Folder inside the container",
+      "python": "Python with django-dbs",
+      "noPython": "None found",
+      "settings": "Settings module",
+      "backupDir": "Backup folder",
+      "onHost": "On the server:",
+      "env": ".env files",
+      "notFound": "Not found"
+    },
+    "problems": {
+      "container_not_running": "The container is not running, so nothing inside it was read.",
+      "dbs_missing": "No Python here can import django-dbs.",
+      "dbs_too_old": "django-dbs here is too old for this manager.",
+      "backup_dir_not_mounted": "The backup folder is not a mounted folder, so the manager cannot collect the backups."
+    },
+    "form": {
+      "editTitle": "Edit application",
+      "remove": "Remove {path}",
+      "name": {
+        "label": "Name",
+        "hint": "A name to tell this application apart."
+      },
+      "composeService": {
+        "label": "Compose service",
+        "hint": "The service in the compose file that runs Django, such as backend."
+      },
+      "composeProject": {
+        "label": "Compose project",
+        "hint": "Leave empty to use the folder's name."
+      },
+      "composeFiles": {
+        "label": "Compose files",
+        "hint": "Leave empty to use the folder's own compose file. Add files in the order compose -f takes them, pressing Enter after each one.",
+        "placeholder": "compose.prod.yaml"
+      },
+      "containerName": {
+        "label": "Container",
+        "hint": "The name or id of the container that runs Django."
+      },
+      "projectDir": {
+        "label": "Project folder",
+        "placeholder": "/srv/app",
+        "hint": {
+          "host": "The folder that holds manage.py.",
+          "compose": "The folder on the server that holds the compose file.",
+          "container": "The application's folder on the server, if it has one."
+        }
+      },
+      "workdir": {
+        "label": "Folder inside the container",
+        "placeholder": "/app",
+        "hint": "Where manage.py runs inside the container. Leave empty to use the container's own."
+      },
+      "pythonPath": {
+        "label": "Python command",
+        "hint": "python3, or the Python of the project's virtual environment.",
+        "containerHint": "The Python inside the container, such as python."
+      },
+      "managePath": {
+        "label": "manage.py path",
+        "hint": "Relative to the project folder.",
+        "containerHint": "Inside the container, relative to the folder it works in."
+      },
+      "settingsModule": {
+        "label": "Settings module",
+        "hint": "Leave empty to use the project's default.",
+        "placeholder": "config.settings.prod"
+      },
+      "remoteBackupDir": {
+        "label": "Backup folder",
+        "hint": "Where backups are written on the server.",
+        "containerHint": "Where backups are written, as the container sees it. It must be a mounted folder, so the manager can collect them from the server."
+      },
+      "envPath": {
+        "label": ".env file",
+        "hint": "Full path to the project's .env file, if it has one.",
+        "pickHint": "Choose one of the .env files found, or type its full path.",
+        "placeholder": "/srv/app/.env",
+        "option": "{location}, {source}"
+      },
+      "fileRoots": {
+        "label": "Allowed folders",
+        "hint": "Folders the Files tab can open. Press Enter after each one.",
+        "containerHint": "Folders the Files tab can open, as the container sees them. Press Enter after each one.",
+        "placeholder": "/srv/app/media"
+      },
+      "accountPassword": {
+        "hint": "Changing anything but the name needs your password."
+      }
+    },
+    "wizard": {
+      "title": "Add an application",
+      "back": "Back to the server",
+      "onServer": "On the server",
+      "steps": {
+        "label": "Steps",
+        "folder": "Folder",
+        "discovery": "Discovery",
+        "review": "Review",
+        "check": "Check",
+        "passphrase": "Backup passphrase",
+        "backup": "Test backup"
+      },
+      "folder": {
+        "intro": "Choose the folder of the Django project, or of the compose file that runs it. DBS looks inside it for manage.py and for the containers that use it.",
+        "label": "Folder on the server",
+        "hint": "Leave empty to see the project folders found on this server."
+      },
+      "discovery": {
+        "searching": "Searching the folder…",
+        "notThere": "{folder} is not a folder on this server.",
+        "pickFolder": "Choose one of the project folders found on this server, or browse for another.",
+        "noFolders": "No project folders were found in the home folder, /srv, /var/www or /opt. Browse the server for the folder.",
+        "folders": "Project folders on this server",
+        "untrusted": "Other accounts can write to {folder} or to the folder above it, so DBS ran nothing in it. Let only its owner write there, then search again.",
+        "none": "No Django project and no container using this folder was found. Continue to fill in the settings yourself, or choose another folder.",
+        "pick": "What was found, best first",
+        "again": "Search again",
+        "browse": "Browse the server"
+      },
+      "review": {
+        "filled": "Filled in from what discovery found. Check each value.",
+        "added": "Application added.",
+        "submit": "Add the application",
+        "showDetails": "Show more settings",
+        "hideDetails": "Hide more settings"
+      },
+      "check": {
+        "later": "Open the application and fix it later"
+      },
+      "passphrase": {
+        "intro": "The backup passphrase can be read from the application's settings. This step is optional."
+      },
+      "backup": {
+        "intro": "Take a first backup to confirm everything works.",
+        "take": "Take a test backup",
+        "running": "Backing up…",
+        "done": "The test backup worked.",
+        "open": "Open the application"
+      },
+      "password": {
+        "title": "Confirm it is you",
+        "body": "This server's setup is over, so searching it or changing what it runs needs your password.",
+        "submit": "Continue"
+      }
+    },
+    "browser": {
+      "title": {
+        "folder": "Choose the folder to search",
+        "project": "Choose the project folder",
+        "backups": "Choose where backups go on the server",
+        "env": "Choose the .env file",
+        "root": "Choose a folder to allow"
+      },
+      "home": "Home",
+      "up": "Up one folder",
+      "trail": "Current folder",
+      "projects": "Project folders found on this server",
+      "isProject": "This folder is a Django project: it holds manage.py.",
+      "empty": "This folder is empty.",
+      "list": "Folders and files",
+      "name": "Name",
+      "size": "Size",
+      "modified": "Modified",
+      "open": "Open {name}",
+      "pick": "Choose {name}",
+      "pages": "Pages",
+      "chooseHere": "Choose this folder",
+      "browseLabel": "Browse the server for: {field}",
+      "truncated": "This folder holds more than 5000 entries. Only the first 5000 are listed."
+    }
+  },
+  "errors": {
+    "engine_required": "Choose Docker or Podman.",
+    "compose_service_required": "Name the Compose service that runs the application.",
+    "compose_folder_required": "Enter the folder that holds the compose file.",
+    "container_required": "Name the container that runs the application.",
+    "container_not_running": "The application's container is not running.",
+    "container_engine_missing": "Neither Docker nor Podman answers on this server.",
+    "engine_permission_denied": "The SSH user may not use the container engine. Add it to the engine's group, or run the containers with rootless Podman as that user."
+  }
+}

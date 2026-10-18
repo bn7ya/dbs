@@ -9,8 +9,9 @@
   align-items: start;
 }
 
-// The check decides whether anything else here can work, so it takes the whole first row.
-.overview__check {
+// The check decides whether anything else here can work, so it takes a whole row, as does a
+// second record of the same machine.
+.overview__wide {
   grid-column: 1 / -1;
 }
 
@@ -51,28 +52,16 @@
   margin: 0;
 }
 
-.overview__roots {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-3);
-}
-
-.overview__presence {
-  display: inline-flex;
-  gap: var(--app-space-2);
-  align-items: center;
-}
-
 .overview__list {
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-1);
+  gap: var(--app-space-3);
   padding: 0;
   margin: 0;
   list-style: none;
 }
 
-.overview__passphrase {
+.overview__wide-field {
   inline-size: 100%;
 }
 
