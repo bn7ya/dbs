@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-usage="usage: sudo $0 docker|podman DIRECTORY [ACCOUNT]"
+usage="usage: sudo $0 docker|podman DIRECTORY [ACCOUNT] [NAME]"
 if [ "$(id -u)" -ne 0 ]; then
     echo "$usage" >&2
     exit 2
@@ -10,6 +10,7 @@ fi
 engine=${1:-}
 directory=${2:-}
 account=${3:-dbs-ssh}
+name=${4:-shop}
 case "$engine" in
     docker|podman) ;;
     *) echo "$usage" >&2; exit 2 ;;
@@ -26,7 +27,8 @@ fi
 repository=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$directory"
 directory=$(cd "$directory" && pwd)
-project="$directory/shop"
+project="$directory/$name"
+image="localhost/dbs-live-$name"
 
 runtime="/run/user/$(id -u "$account")"
 install -d -m 700 -o "$account" "$runtime"
@@ -40,6 +42,7 @@ if [ -d "$project" ]; then
     rm -rf "$project"
 fi
 cp -R "$repository/tests/containers/project" "$project"
+sed "s|localhost/dbs-live-shop|$image|" "$repository/tests/containers/project/compose.yaml" > "$project/compose.yaml"
 mv "$project/env.example" "$project/.env"
 python3 -m pip wheel --quiet --no-deps --wheel-dir "$project/wheelhouse" "$repository"
 python3 -m pip download --quiet --dest "$project/wheelhouse" --only-binary=:all: \
@@ -73,7 +76,7 @@ if [ "$engine" = docker ]; then
 else
     as_account "podman unshare chown 10001:10001 backups"
 fi
-as_account "$engine build --network none --tag localhost/dbs-live-shop ." >&2
+as_account "$engine build --network none --tag $image ." >&2
 as_account "$engine compose up -d" >&2
 waited=0
 until as_account "$engine compose exec -T web python manage.py migrate --check" >/dev/null 2>&1; do
