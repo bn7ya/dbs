@@ -35,6 +35,7 @@ class HealthReport:
     checks: list = field(default_factory=list)
     last_backup_at: object = None
     generated_at: object = None
+    schedule: dict = field(default_factory=dict)
 
     @property
     def status(self):
@@ -50,6 +51,7 @@ class HealthReport:
             ],
             "last_backup_at": _iso(self.last_backup_at),
             "generated_at": _iso(self.generated_at),
+            "schedule": self.schedule,
         }
 
 
@@ -75,6 +77,7 @@ def report(now=None):
     result = HealthReport(
         last_backup_at=last_backup.created_at if last_backup else None,
         generated_at=now,
+        schedule=_schedule_facts(schedule),
     )
     result.checks.append(_backup_age(schedule, last_backup, now))
     result.checks.append(_last_validation())
@@ -86,6 +89,17 @@ def report(now=None):
     if failure is not None:
         result.checks.append(failure)
     return result
+
+
+def _schedule_facts(schedule):
+    from .schedule_runner import mode
+
+    return {
+        "enabled": bool(schedule.enabled),
+        "interval_seconds": int(schedule.interval_seconds),
+        "keep": int(schedule.keep),
+        "mode": mode(),
+    }
 
 
 def _last_success(action):

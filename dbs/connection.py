@@ -11,7 +11,9 @@ import sys
 from .conf import setting
 
 HOST_KEY_GLOB = "/etc/ssh/ssh_host_*_key.pub"
-FORMAT = 1
+FORMAT = 2
+CONTAINER_MARKERS = ("/.dockerenv", "/run/.containerenv")
+CONTAINER_CGROUP_WORDS = ("docker", "containerd", "kubepods", "libpod", "podman")
 
 
 def fingerprint(blob):
@@ -62,16 +64,29 @@ def ssh_user():
         return ""
 
 
+def in_container(markers=CONTAINER_MARKERS, cgroup="/proc/1/cgroup") -> bool:
+    if any(os.path.exists(marker) for marker in markers):
+        return True
+    try:
+        with open(cgroup, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return False
+    return any(word in text for word in CONTAINER_CGROUP_WORDS)
+
+
 def details():
     from . import __version__
     from .schedule_runner import backup_directory
 
     directory = project_dir()
     env_file = os.path.join(directory, ".env")
+    contained = in_container()
     return {
         "dbs_connection": FORMAT,
-        "hostname": socket.gethostname(),
-        "ssh_user": ssh_user(),
+        "container": contained,
+        "hostname": "" if contained else socket.gethostname(),
+        "ssh_user": "" if contained else ssh_user(),
         "project_dir": directory,
         "python_path": python_path(),
         "manage_path": manage_path(directory),
@@ -80,5 +95,5 @@ def details():
         "file_roots": [str(root) for root in setting("DBS_FILE_ROOTS", None) or ()],
         "env_path": env_file if os.path.isfile(env_file) else "",
         "dbs_version": __version__,
-        "host_keys": host_keys(),
+        "host_keys": [] if contained else host_keys(),
     }

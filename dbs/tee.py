@@ -3,10 +3,12 @@ from __future__ import annotations
 import datetime
 import errno
 import hashlib
+import json
 import os
 import re
 import secrets
 import stat
+import threading
 import time
 from dataclasses import dataclass
 
@@ -183,3 +185,39 @@ class TeeSink:
             self.stream.write(data)
         except (OSError, ValueError):
             self.stream_lost = True
+
+
+class Progress:
+    def __init__(self, sink: TeeSink, seconds: int, report):
+        self.sink = sink
+        self.seconds = seconds
+        self.report = report
+        self._stopped = threading.Event()
+        self._thread = None
+
+    def __enter__(self) -> "Progress":
+        if self.seconds <= 0:
+            return self
+        self.report(
+            json.dumps(
+                {
+                    "progress": {
+                        "name": backup_filename(self.sink.prefix, self.sink.moment),
+                        "partial": os.path.basename(self.sink.partial),
+                        "moment": self.sink.moment.isoformat(),
+                    }
+                }
+            )
+        )
+        self._thread = threading.Thread(target=self._beat, name="dbs-stream-progress", daemon=True)
+        self._thread.start()
+        return self
+
+    def _beat(self) -> None:
+        while not self._stopped.wait(self.seconds):
+            self.report(json.dumps({"progress": {"bytes": self.sink.size}}))
+
+    def __exit__(self, *exc_info) -> None:
+        self._stopped.set()
+        if self._thread is not None:
+            self._thread.join()

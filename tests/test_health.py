@@ -118,6 +118,10 @@ def test_the_command_prints_json(backup_dir, scheduled):
     assert payload["status"] in (health.OK, health.WARN, health.ERROR)
     assert {"name", "status", "message"} <= set(payload["checks"][0])
     assert payload["last_backup_at"] and payload["generated_at"]
+    assert payload["schedule"]["enabled"] is True
+    assert payload["schedule"]["interval_seconds"] > 0
+    assert payload["schedule"]["mode"] == "off"
+    assert 1 <= payload["schedule"]["keep"] <= 5
 
 
 @pytest.mark.django_db

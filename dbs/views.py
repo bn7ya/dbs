@@ -291,11 +291,7 @@ def connection(request):
     return _page(
         request,
         "admin/dbs/connection.html",
-        {
-            "title": "Connection details",
-            "details": info,
-            "snippet": json.dumps(info, indent=2),
-        },
+        {"title": "Connection details", "details": info},
     )
 
 

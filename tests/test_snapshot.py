@@ -12,9 +12,9 @@ from tests.testapp.models import Author, Book
 
 PASS = "snapshot-pass-phrase"
 
-postgres_only = pytest.mark.skipif(
-    connection.vendor != "postgresql",
-    reason="Snapshot isolation is backend specific; run with DBS_TEST_DB=postgres.",
+snapshot_databases = pytest.mark.skipif(
+    connection.vendor not in ("postgresql", "mysql"),
+    reason="Snapshot isolation is backend specific; run with DBS_TEST_DB=postgres or mysql.",
 )
 
 
@@ -46,7 +46,7 @@ def _write_after_serializing(model_to_watch, monkeypatch):
     monkeypatch.setattr(backup_module, "serialize_batches", serialize_then_write)
 
 
-@postgres_only
+@snapshot_databases
 @pytest.mark.django_db(transaction=True)
 def test_rows_committed_during_a_backup_never_split_it(monkeypatch):
     ada = Author.objects.create(name="Ada")
@@ -67,7 +67,7 @@ def test_rows_committed_during_a_backup_never_split_it(monkeypatch):
     assert Book.objects.get().author_id == ada.pk
 
 
-@postgres_only
+@snapshot_databases
 @pytest.mark.django_db(transaction=True)
 def test_a_backup_inside_a_callers_transaction_still_completes():
     Author.objects.create(name="Ada")
@@ -83,3 +83,33 @@ def test_a_backup_inside_a_callers_transaction_still_completes():
     )
     assert names == ["Ada", "Grace"]
 
+
+
+@snapshot_databases
+@pytest.mark.django_db(transaction=True)
+def test_rows_committed_between_two_pages_of_one_table_never_appear(monkeypatch):
+    from dbs import serialize
+
+    first = Author.objects.create(name="Ada")
+    real = serialize.Pages.__iter__
+    monkeypatch.setattr(serialize.Pages, "measured", lambda self, encoded_bytes, count: None)
+
+    def page_then_write(self):
+        self.size = 1
+        for index, chunk in enumerate(real(self)):
+            yield chunk
+            if index == 0 and self.queryset.model is Author:
+                writer = threading.Thread(target=_commit_a_new_author_and_book)
+                writer.start()
+                writer.join()
+
+    monkeypatch.setattr(serialize.Pages, "__iter__", page_then_write)
+
+    container = create_backup(PASS, registry=_registry(), kdf_params=FAST_KDF)
+
+    authors = {
+        record["pk"]
+        for record in read_payload(container, PASS).records
+        if record["model"] == "testapp.author"
+    }
+    assert authors == {first.pk}

@@ -783,6 +783,37 @@ class LegacyPartials(Step):
         )
 
 
+class MySQLReads(Step):
+    name = "mysql reads"
+    since = "0.8.0"
+    minimum_packet = 64 * 1024 * 1024
+
+    def check(self):
+        from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
+
+        connection = connections[DEFAULT_DB_ALIAS]
+        if connection.vendor != "mysql":
+            return self.ok("the database is not MySQL, so nothing here changes")
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT @@max_allowed_packet")
+                packet = int(cursor.fetchone()[0])
+        except (DatabaseError, TypeError, ValueError) as exc:
+            return self.warn(f"could not read max_allowed_packet: {exc}")
+        if packet < self.minimum_packet:
+            return self.warn(
+                f"max_allowed_packet is {packet // (1024 * 1024)} MiB, so restoring a row "
+                "larger than that fails; backups now read MySQL from one consistent snapshot "
+                "and fetch large rows a few at a time",
+                "raise max_allowed_packet on the server (my.cnf: max_allowed_packet = 256M) "
+                "and in the client's OPTIONS if a table holds large values",
+            )
+        return self.ok(
+            "backups read MySQL from one consistent snapshot and fetch large rows a few "
+            "at a time"
+        )
+
+
 class SSHTargetKeys(Step):
     name = "ssh target keys"
     since = "0.8.0"
@@ -858,6 +889,7 @@ STEPS = (
     ContribViewsRemoved,
     CommandNames,
     LegacyPartials,
+    MySQLReads,
     SSHTargetKeys,
 )
 

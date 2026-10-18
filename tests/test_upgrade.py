@@ -1196,3 +1196,44 @@ def test_the_ssh_target_keys_step_names_the_current_keys():
 
     assert finding.level == OK
     assert "key_filename" in finding.message
+
+
+@pytest.mark.django_db
+def test_mysql_reads_say_nothing_changes_on_another_database():
+    from django.db import connection
+
+    finding = upgrade.MySQLReads().check()
+
+    if connection.vendor == "mysql":
+        assert finding.level in (OK, WARN)
+        assert "consistent snapshot" in finding.message
+    else:
+        assert finding.level == OK
+        assert "not MySQL" in finding.message
+
+
+@pytest.mark.django_db
+def test_a_small_mysql_packet_is_warned(monkeypatch):
+    from django.db import connection
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, sql):
+            assert "max_allowed_packet" in sql
+
+        def fetchone(self):
+            return (16 * 1024 * 1024,)
+
+    monkeypatch.setattr(connection, "vendor", "mysql")
+    monkeypatch.setattr(connection, "cursor", lambda: Cursor())
+
+    finding = upgrade.MySQLReads().check()
+
+    assert finding.level == WARN
+    assert "16 MiB" in finding.message
+    assert "max_allowed_packet = 256M" in finding.remedy

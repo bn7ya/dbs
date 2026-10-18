@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     "tests.complexapp",
     "tests.softdeleteapp",
     "tests.restoreapp",
+    "tests.largeapp",
 ]
 
 MIDDLEWARE = [

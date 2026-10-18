@@ -30,6 +30,7 @@ from dbs.exceptions import (
 )
 from dbs.files import SkippedFile
 from dbs.serialize import AllRowsSerializer, RowLoader, serialize_batches
+from django.core.serializers.json import DjangoJSONEncoder
 from tests.conftest import FAST_KDF
 from tests.format1 import as_format1
 from tests.testapp.models import Author, Book, Tag
@@ -465,11 +466,14 @@ def test_a_large_block_size_narrows_the_interleave_to_fit(library):
 def test_batched_many_to_many_members_match_the_one_row_path(library):
     batched = [
         record
-        for body, _count in serialize_batches(Book, ModelBackup(), set(), frozenset(), "default", rows=4)
-        for record in json.loads(body)
+        for pieces, _count in serialize_batches(Book, ModelBackup(), set(), frozenset(), "default", rows=4)
+        for record in json.loads(b"".join(pieces))
     ]
     one_by_one = json.loads(
-        AllRowsSerializer().serialize(Book.objects.order_by("pk"), use_natural_foreign_keys=False)
+        json.dumps(
+            AllRowsSerializer().serialize(Book.objects.order_by("pk"), use_natural_foreign_keys=False),
+            cls=DjangoJSONEncoder,
+        )
     )
 
     assert batched == one_by_one

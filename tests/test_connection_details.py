@@ -15,6 +15,7 @@ from dbs.models import AuditEvent
 
 KEYS = {
     "dbs_connection",
+    "container",
     "hostname",
     "ssh_user",
     "project_dir",
@@ -29,13 +30,24 @@ KEYS = {
 }
 
 
-def test_the_details_name_everything_the_manager_needs(settings, tmp_path):
+@pytest.fixture
+def on_a_host(monkeypatch):
+    monkeypatch.setattr(connection, "in_container", lambda: False)
+
+
+@pytest.fixture
+def in_a_container(monkeypatch):
+    monkeypatch.setattr(connection, "in_container", lambda: True)
+
+
+def test_the_details_name_everything_the_manager_needs(settings, tmp_path, on_a_host):
     settings.DBS_BACKUP_DIR = str(tmp_path)
 
     info = connection.details()
 
     assert set(info) == KEYS
-    assert info["dbs_connection"] == 1
+    assert info["dbs_connection"] == 2
+    assert info["container"] is False
     assert info["dbs_version"] == __version__
     assert info["remote_backup_dir"] == str(tmp_path)
     assert info["settings_module"] == "tests.settings"
@@ -67,11 +79,44 @@ def test_the_command_prints_json():
 
     call_command("dbs", "connection", "--json", stdout=out)
 
-    assert json.loads(out.getvalue())["dbs_connection"] == 1
+    assert json.loads(out.getvalue())["dbs_connection"] == 2
 
 
 @pytest.mark.django_db
-def test_the_panel_shows_the_snippet_and_records_nothing(settings):
+def test_inside_a_container_no_container_fact_passes_for_the_servers(in_a_container):
+    info = connection.details()
+
+    assert info["container"] is True
+    assert info["hostname"] == ""
+    assert info["ssh_user"] == ""
+    assert info["host_keys"] == []
+    assert info["project_dir"]
+
+
+@pytest.mark.parametrize(
+    "cgroup, expected",
+    [
+        ("0::/system.slice/docker-3f2a.scope\n", True),
+        ("0::/machine.slice/libpod-9c1b.scope\n", True),
+        ("0::/init.scope\n", False),
+    ],
+)
+def test_the_cgroup_tells_a_container_without_marker_files(tmp_path, cgroup, expected):
+    path = tmp_path / "cgroup"
+    path.write_text(cgroup)
+
+    assert connection.in_container(markers=(), cgroup=str(path)) is expected
+
+
+def test_a_marker_file_tells_a_container(tmp_path):
+    marker = tmp_path / ".dockerenv"
+    marker.write_text("")
+
+    assert connection.in_container(markers=(str(marker),), cgroup=str(tmp_path / "none"))
+
+
+@pytest.mark.django_db
+def test_the_panel_explains_how_to_add_the_project_and_records_nothing(settings, on_a_host):
     settings.DBS_SETUP_WIZARD = False
     client = Client()
     client.force_login(User.objects.create_superuser("root", "root@example.com", "pw"))
@@ -80,8 +125,21 @@ def test_the_panel_shows_the_snippet_and_records_nothing(settings):
     response = client.get("/admin/dbs/panel/connection/")
 
     assert response.status_code == 200
-    assert b"dbs_connection" in response.content
+    assert b"give it the project" in response.content
+    assert b"runs in a container" not in response.content
     assert AuditEvent.objects.count() == before
+
+
+@pytest.mark.django_db
+def test_the_panel_says_when_the_project_runs_in_a_container(settings, in_a_container):
+    settings.DBS_SETUP_WIZARD = False
+    client = Client()
+    client.force_login(User.objects.create_superuser("root", "root@example.com", "pw"))
+
+    response = client.get("/admin/dbs/panel/connection/")
+
+    assert b"This project runs in a container" in response.content
+    assert b"<th>Host</th>" not in response.content
 
 
 @pytest.mark.django_db

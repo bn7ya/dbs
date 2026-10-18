@@ -19,7 +19,7 @@ from dbs.exceptions import DBSError
 from dbs.naming import DEFAULT_PREFIX, backup_filename, is_backup_name
 from dbs.retention import MAXIMUM_KEEP
 from dbs.schedule_runner import keep_at_most
-from dbs.tee import TeeSink, sweep_partials
+from dbs.tee import Progress, TeeSink, sweep_partials
 
 HANGUP_SIGNALS = ("SIGHUP", "SIGPIPE")
 
@@ -70,13 +70,14 @@ class Command(BaseCommand):
         parser.add_argument("--stream", action="store_true", help="Write the backup to standard output and keep a copy in DBS_BACKUP_DIR; messages go to standard error, the last line a JSON summary.")
         parser.add_argument("--prefix", default=None, help="With --stream: the backup filename prefix; defaults to DBS_BACKUP_PREFIX.")
         parser.add_argument("--output-dir", default=None, help="With --stream: the folder that keeps the copy, instead of DBS_BACKUP_DIR.")
+        parser.add_argument("--progress-seconds", type=int, default=0, help="With --stream: name the backup on standard error at once, then report the bytes written every N seconds.")
 
     def handle(self, *args, **options):
         if options.get("stream"):
             if options.get("output"):
                 raise CommandError("--stream writes the backup to standard output; leave out the path.")
-        elif options.get("prefix") or options.get("output_dir"):
-            raise CommandError("--prefix and --output-dir go with --stream.")
+        elif options.get("prefix") or options.get("output_dir") or options.get("progress_seconds"):
+            raise CommandError("--prefix, --output-dir and --progress-seconds go with --stream.")
         elif not options.get("output"):
             raise CommandError("Give the path to write the backup to, or use --stream.")
         passphrase = resolve_passphrase(
@@ -173,7 +174,9 @@ class Command(BaseCommand):
             data={"database": options["database"], "streamed": True},
         ) as entry, surviving_a_lost_connection(), redirect_stdout(sys.stderr):
             try:
-                with TeeSink(output, directory, prefix) as sink:
+                with TeeSink(output, directory, prefix) as sink, Progress(
+                    sink, options.get("progress_seconds") or 0, self.say
+                ):
                     summary = write_backup(
                         sink,
                         passphrase,

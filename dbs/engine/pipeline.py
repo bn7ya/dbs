@@ -193,10 +193,18 @@ def _compress(frames: Channel, compressed: Channel, stream: PayloadStream, worke
         for item in frames:
             stream.digest.update(item)
             stream.payload_bytes += len(item)
-            pending += item
-            if len(pending) >= SEGMENT_BYTES:
-                compressed.put(Segment(pool.submit(_deflate, bytes(pending)), len(pending)))
-                pending = bytearray()
+            with memoryview(item) as view:
+                offset = 0
+                while offset < len(view):
+                    taken = view[offset : offset + SEGMENT_BYTES - len(pending)]
+                    pending += taken
+                    offset += len(taken)
+                    if len(pending) >= SEGMENT_BYTES:
+                        compressed.put(
+                            Segment(pool.submit(_deflate, bytes(pending)), len(pending))
+                        )
+                        pending = bytearray()
+                    taken.release()
         if pending:
             compressed.put(Segment(pool.submit(_deflate, bytes(pending)), len(pending)))
         compressed.close()

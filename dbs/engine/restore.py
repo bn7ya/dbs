@@ -20,7 +20,13 @@ from ..exceptions import ContainerError, CorruptionError, RestoreError
 from ..files import StagedFiles, plan_entries, plan_restore, refusal_message
 from ..introspect import backup_plan, excluded_fields, topological_order
 from ..registry import ModelBackup, backup_registry
-from ..serialize import NaturalKeyResolver, RowLoader, resolve_natural_keys, save_records
+from ..serialize import (
+    NaturalKeyResolver,
+    RowLoader,
+    decode_large_binaries,
+    resolve_natural_keys,
+    save_records,
+)
 from .backup import migration_state
 from .frames import KNOWN_FLAGS, PayloadReader
 from .inputs import opened, stream_source, whole
@@ -357,6 +363,7 @@ class _StreamedRows:
     def load(self) -> None:
         with self.loader.connection.constraint_checks_disabled():
             for batch in self.payload.record_batches():
+                decode_large_binaries(batch)
                 pointed = _point_rows(batch, self.moved)
                 self.loader.save([self.resolver.record(record) for record in pointed])
 
