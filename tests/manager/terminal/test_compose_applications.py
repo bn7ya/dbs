@@ -118,6 +118,9 @@ class ComposeProject(FakeRemote):
 
     def run(self, argv, **options):
         argv = list(argv)
+        if argv[:2] == ["docker", "ps"] and "status=running" in argv:
+            wanted = f"label=com.docker.compose.service={SERVICE}" in argv
+            return Result(0, f"shop-{SERVICE}-1\n" if wanted and self.running else "")
         if argv[:2] != ["docker", "compose"] or argv[2:3] == ["version"]:
             return super().run(argv, **options)
         rest, files, project = argv[2:], [], ""

@@ -193,18 +193,12 @@ def test_a_check_asks_the_engine_and_the_service(
         "-c",
         VERSION_PROBE,
     ] in argvs
-    assert [
-        "docker",
-        "compose",
-        "-f",
-        "compose.yaml",
-        "-f",
-        "compose.prod.yaml",
-        "ps",
-        "--status",
-        "running",
-        "--services",
-    ] in argvs
+    assert any(
+        argv[:2] == ["docker", "ps"]
+        and "label=com.docker.compose.service=backend" in argv
+        and "status=running" in argv
+        for argv in argvs
+    )
     assert body["last_health"] == {"status": "ok", "checks": []}
     assert body["compatible"] is True
 

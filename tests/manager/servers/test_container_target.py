@@ -158,19 +158,31 @@ def test_the_version_asked_is_compose_for_a_service_and_the_engine_for_a_contain
 
 
 @pytest.mark.parametrize("engine", ENGINES)
-def test_a_service_is_running_when_compose_lists_it(engine):
+def test_a_service_is_running_when_the_engine_lists_a_running_container_of_it(engine):
     target = compose(engine)
 
     assert target.running_argv() == [
-        *compose_prefix(engine),
+        engine,
         "ps",
-        "--status",
-        "running",
-        "--services",
+        "--filter",
+        "label=com.docker.compose.project=shop",
+        "--filter",
+        "label=com.docker.compose.service=backend",
+        "--filter",
+        "status=running",
+        "--format",
+        "{{.Names}}",
     ]
-    assert target.running_in("db\nbackend\n") is True
-    assert target.running_in("db\nbackend-worker\n") is False
+    assert target.running_in("shop-backend-1\n") is True
+    assert target.running_in("\n") is False
     assert target.running_in("") is False
+
+
+def test_a_service_without_a_project_name_is_looked_for_by_its_service_alone():
+    target = ContainerTarget(engine="podman", service="backend", files=FILES)
+
+    assert "label=com.docker.compose.project=shop" not in target.running_argv()
+    assert "label=com.docker.compose.service=backend" in target.running_argv()
 
 
 @pytest.mark.parametrize("engine", ENGINES)

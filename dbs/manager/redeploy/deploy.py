@@ -105,11 +105,17 @@ def revisions(
             found["git_head"] = head
     target = container_of(application)
     if target is not None:
-        if target.in_compose:
-            argv = target.argv("images", "--quiet", target.service)
-        else:
-            argv = [target.engine, "inspect", "--format", IMAGE_FORMAT, target.container]
-        image = _revision(remote, argv, cwd=application.project_dir or None)
+        cwd = application.project_dir or None
+        name = (
+            _first_line(remote, target.running_argv(), cwd)
+            if target.in_compose
+            else target.container
+        )
+        image = (
+            _revision(remote, [target.engine, "inspect", "--format", IMAGE_FORMAT, name], cwd)
+            if name
+            else ""
+        )
         if image:
             found["image"] = image
     return found
@@ -118,11 +124,14 @@ def revisions(
 def _revision(
     remote: RemoteHost, argv: Sequence[str], cwd: str | None = None
 ) -> str:
+    line = _first_line(remote, argv, cwd)
+    return line if REVISION.match(line) else ""
+
+
+def _first_line(remote: RemoteHost, argv: Sequence[str], cwd: str | None) -> str:
     try:
         result = remote.run(argv, cwd=cwd, timeout=REVISION_TIMEOUT)
     except RemoteCommandFailed:
         return ""
     lines = (result.stdout or "").strip().splitlines()
-    if not result.ok or not lines or not REVISION.match(lines[0].strip()):
-        return ""
-    return lines[0].strip()
+    return lines[0].strip() if result.ok and lines else ""

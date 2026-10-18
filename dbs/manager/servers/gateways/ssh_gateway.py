@@ -78,6 +78,8 @@ FLUSHED = re.compile(r"Flushed (\d+) existing rows")
 WOULD_FLUSH = re.compile(r"Flush would first delete (\d+) existing rows")
 HEALED = "Corruption detected and repaired"
 UNKNOWN_OPTION = "unrecognized arguments"
+COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
+COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
 PROGRESS_OPTION = "unrecognized arguments: --progress-seconds"
 RESTORE_FILE_PREFIX = ".dbs-restore-"
 RESTORE_FILE_MODE = 0o600
@@ -248,13 +250,28 @@ class ContainerTarget:
         return [self.engine, "version", "--format", ENGINE_VERSION_FORMATS[self.engine]]
 
     def running_argv(self) -> list[str]:
-        if self.in_compose:
-            return self.argv("ps", "--status", "running", "--services")
-        return [self.engine, "inspect", "--format", "{{.State.Running}}", self.container]
+        if not self.in_compose:
+            return [self.engine, "inspect", "--format", "{{.State.Running}}", self.container]
+        project = (
+            ["--filter", f"label={COMPOSE_PROJECT_LABEL}={self.project}"]
+            if self.project
+            else []
+        )
+        return [
+            self.engine,
+            "ps",
+            *project,
+            "--filter",
+            f"label={COMPOSE_SERVICE_LABEL}={self.service}",
+            "--filter",
+            "status=running",
+            "--format",
+            "{{.Names}}",
+        ]
 
     def running_in(self, output: str) -> bool:
         if self.in_compose:
-            return self.service in output.split()
+            return bool(output.strip())
         return output.strip().splitlines()[-1:] == ["true"]
 
 
@@ -1261,18 +1278,25 @@ def _started(
 
 
 def _stream_summary(stderr: str, prefix: str) -> dict | None:
-    lines = [line for line in stderr.splitlines() if line.strip()]
-    summary = _json_of(lines[-1]) if lines else None
-    if not isinstance(summary, dict):
-        return None
+    for line in reversed(stderr.splitlines()):
+        summary = _json_of(line) if line.lstrip().startswith("{") else None
+        if isinstance(summary, dict) and "progress" not in summary:
+            return summary if _is_summary(summary, prefix) else None
+    return None
+
+
+def _is_summary(summary: dict, prefix: str) -> bool:
     name, size, digest = summary.get("name"), summary.get("size"), summary.get("sha256")
-    if not isinstance(name, str) or "/" in name or not is_backup_name(name, prefix):
-        return None
-    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
-        return None
-    if not isinstance(digest, str) or not SHA256_HEX.fullmatch(digest):
-        return None
-    return summary
+    return (
+        isinstance(name, str)
+        and "/" not in name
+        and is_backup_name(name, prefix)
+        and isinstance(size, int)
+        and not isinstance(size, bool)
+        and size >= 0
+        and isinstance(digest, str)
+        and SHA256_HEX.fullmatch(digest) is not None
+    )
 
 
 def _restore_report(

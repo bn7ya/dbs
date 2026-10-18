@@ -574,6 +574,31 @@ def test_without_a_folder_the_server_keeps_its_copy_in_dbs_backup_dir():
     assert found.path == ""
 
 
+def test_the_summary_is_found_under_what_podman_compose_prints_after_it():
+    name = backup_filename("web-1")
+    session = StreamingSession(
+        result=RemoteResult(
+            0,
+            "",
+            "podman-compose version: 1.0.6\n"
+            f"{summary_line(name)}\n"
+            "exit code: 0\n",
+        )
+    )
+
+    found, _, _ = streamed(session)
+
+    assert found.name == name
+
+
+def test_a_progress_line_is_never_taken_for_the_summary():
+    progress = json.dumps({"progress": {"bytes": 10}})
+    session = StreamingSession(result=RemoteResult(0, "", f"{progress}\n"))
+
+    with pytest.raises(RemoteCommandFailed):
+        streamed(session)
+
+
 def test_a_stream_the_server_could_not_send_whole_is_kept_on_the_server():
     name = backup_filename("web-1")
     session = StreamingSession(

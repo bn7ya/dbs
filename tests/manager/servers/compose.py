@@ -84,6 +84,14 @@ class ComposeHost(LocalSftpSession):
             return RemoteResult(127, "", f"sh: 1: {self.engine}: not found")
         if argv[1:2] == ["version"]:
             return RemoteResult(0, f"{ENGINE_VERSION}\n", "")
+        if argv[1:2] == ["ps"]:
+            wanted = next(
+                part.rsplit("=", 1)[1]
+                for part in argv
+                if part.startswith("label=com.docker.compose.service=")
+            )
+            listed = f"shop-{wanted}-1\n" if wanted in self.running else ""
+            return RemoteResult(0, listed, "")
         if argv[1:2] != ["compose"]:
             return RemoteResult(1, "", f"unknown {self.engine} command {argv[1]}")
         rest = compose_verb(argv)

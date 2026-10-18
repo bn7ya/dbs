@@ -248,6 +248,46 @@ jobs:
         if: failure()
         run: sudo cat "$RUNNER_TEMP/sshd/sshd.log"
 
+  containers:
+    name: The manager against ${{ matrix.engine }} over OpenSSH
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [docker, podman]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e ".[dev]"
+      - name: Install OpenSSH and the Compose provider
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openssh-server
+          if [ "${{ matrix.engine }}" = podman ]; then
+            sudo apt-get install -y --no-install-recommends podman podman-compose uidmap slirp4netns
+          fi
+      - name: Start an OpenSSH server on 127.0.0.1:2222
+        run: sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
+      - name: Build and start the Compose project as the SSH account
+        run: sudo env "PATH=$PATH" scripts/container_fixture.sh ${{ matrix.engine }} /srv/dbs-live >> "$GITHUB_ENV"
+      - name: Discover, check, back up, restore, deploy and open a terminal
+        env:
+          DBS_TEST_CONTAINER_REQUIRED: "1"
+        run: python -m pytest tests/manager/live --ds=tests.manager.settings -rs
+      - name: Server and project logs
+        if: failure()
+        run: |
+          sudo cat "$RUNNER_TEMP/sshd/sshd.log"
+          sudo su dbs-ssh -s /bin/sh -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
+
   stress:
     name: Stress round trip of a damaged backup
     runs-on: ubuntu-latest
