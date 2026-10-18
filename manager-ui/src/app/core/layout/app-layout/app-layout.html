@@ -35,8 +35,8 @@
     </mat-toolbar>
   </header>
 
-  <nav class="app-layout__nav" [attr.aria-label]="'nav.label' | t">
-    <mat-nav-list>
+  <div class="app-layout__nav">
+    <mat-nav-list [attr.aria-label]="'nav.label' | t">
       @for (section of sections(); track section.path) {
         <a
           mat-list-item
@@ -52,7 +52,7 @@
         </a>
       }
     </mat-nav-list>
-  </nav>
+  </div>
 
   <main id="main" class="app-layout__content">
     <router-outlet />
