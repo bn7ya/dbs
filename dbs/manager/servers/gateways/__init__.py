@@ -1,5 +1,7 @@
 from dbs.manager.servers.gateways.ssh_gateway import (
-    ComposeService,
+    CONTAINER_TMP,
+    ENGINES,
+    ContainerTarget,
     Credentials,
     DbsProfile,
     EntryKind,
@@ -19,7 +21,9 @@ from dbs.manager.servers.gateways.ssh_gateway import (
 from dbs.transports import HostKey
 
 __all__ = [
-    "ComposeService",
+    "CONTAINER_TMP",
+    "ENGINES",
+    "ContainerTarget",
     "Credentials",
     "DbsProfile",
     "EntryKind",

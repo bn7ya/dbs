@@ -29,8 +29,8 @@ class BackupPlan(BaseModel):
         SUCCEEDED = "succeeded", "Succeeded"
         FAILED = "failed", "Failed"
 
-    server = models.ForeignKey(
-        "dbs_manager.Server",
+    application = models.ForeignKey(
+        "dbs_manager.Application",
         on_delete=models.PROTECT,
         related_name="+",
         db_index=False,
@@ -72,7 +72,7 @@ class BackupPlan(BaseModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["server", "name"],
+                fields=["application", "name"],
                 condition=Q(deleted_at__isnull=True),
                 name="dbs_manager_plan_unique_active_name",
             ),

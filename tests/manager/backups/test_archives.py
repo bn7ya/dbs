@@ -72,7 +72,7 @@ def flip(path, position: int) -> None:
 
 @pytest.mark.django_db
 def test_an_archive_is_stored_sealed_and_described(
-    settings, admin, server, host, storage, archive_plan, ran
+    settings, admin, application, host, storage, archive_plan, ran
 ):
     plan = archive_plan(keep_remote=1)
 
@@ -101,7 +101,7 @@ def test_an_archive_is_stored_sealed_and_described(
     )
     assert backup.size == len(made.content)
     assert backup.sha256 == hashlib.sha256(made.content).hexdigest()
-    assert backup.storage_path == f"{server.pk}/{backup.name}.sealed"
+    assert backup.storage_path == f"{application.pk}/{backup.name}.sealed"
     assert backup.remote_path == f"{BACKUP_DIR}/{backup.name}"
     assert backup.validation == BackupFile.Validation.STRUCTURE_OK
     on_disk = storage / backup.storage_path
@@ -155,10 +155,11 @@ def test_an_archive_of_several_chunks_downloads_whole(
 
 
 @pytest.mark.django_db
-def test_an_archive_lists_with_its_kind(api, server, archive_plan, archived):
+def test_an_archive_lists_with_its_kind(api, application, archive_plan, archived):
     backup = archived(archive_plan())
 
-    [listed] = api.get("/api/backups/", {"server": server.pk}).json()["results"]
+    body = api.get("/api/backups/", {"application": application.pk}).json()
+    [listed] = body["results"]
 
     assert (listed["id"], listed["kind"], listed["name"]) == (
         str(backup.pk),
@@ -200,7 +201,7 @@ def test_an_archive_tar_could_not_make_fails_with_its_output(
 
 @pytest.mark.django_db
 def test_an_archive_that_arrives_changed_is_not_kept(
-    monkeypatch, server, server_root, storage, archive_plan, ran
+    monkeypatch, application, server_root, storage, archive_plan, ran
 ):
     host = using(monkeypatch, BackupHost(root=server_root, reported_sha256="0" * 64))
     plan = archive_plan(keep_remote=0)
@@ -209,7 +210,7 @@ def test_an_archive_that_arrives_changed_is_not_kept(
 
     assert (job.status, job.error_code) == (audit.FAILED, "archive_mismatch")
     assert job.data == {"plan": str(plan.pk)}
-    assert BackupFileRepository().alive_for_server(server.pk).count() == 0
+    assert BackupFileRepository().alive_for_application(application.pk).count() == 0
     assert stored_files(storage) == []
     assert host.prunes == []
     assert host.remote_names() == [host.archives[0].name]
@@ -311,7 +312,7 @@ def test_two_archives_of_one_second_get_their_own_names(
 
 @pytest.mark.django_db
 def test_an_archive_plan_keeps_its_newest_files_and_deletes_the_rest(
-    server, storage, archive_plan, archived, make_plan, ran
+    application, storage, archive_plan, archived, make_plan, ran
 ):
     plan = archive_plan(keep=2)
     dbs_plan = make_plan(keep=1)

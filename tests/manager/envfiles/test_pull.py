@@ -5,9 +5,11 @@ from uuid import uuid4
 import pytest
 
 from dbs import audit
-from dbs.manager.servers.services import ServerService
+from dbs.manager.applications.services import ApplicationService
+from dbs.manager.servers.gateways import RemoteHost
+from dbs.manager.servers.gateways.ssh_gateway import READ_SMALL
 from dbs.manager.vault import fingerprint, unseal
-from tests.manager.envfiles.conftest import ENV, LIST
+from tests.manager.envfiles.conftest import CONTAINER, ENV, LIST
 from tests.manager.servers.support import PASSWORD, LocalSftp
 
 KEYS = ["SECRET_KEY", "DEBUG", "DATABASE_URL"]
@@ -22,18 +24,18 @@ def refusing(error: Exception):
 
 @pytest.mark.django_db
 def test_a_pull_keeps_the_file_sealed_with_its_key_names(
-    admin, api, server, env_file, network, versions, logged
+    admin, api, application, env_file, network, versions, logged
 ):
-    response = api.post(f"{LIST}pull/", {"server": server.pk})
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
 
     assert response.status_code == 200
     body = response.json()
-    [version] = versions(server)
+    [version] = versions(application)
     assert body == {
         "created": True,
         "version": {
             "id": str(version.pk),
-            "server": str(server.pk),
+            "application": str(application.pk),
             "path": str(env_file),
             "size": len(ENV),
             "keys": KEYS,
@@ -48,28 +50,29 @@ def test_a_pull_keeps_the_file_sealed_with_its_key_names(
     [entry] = logged("env.pull")
     assert (
         entry.status,
-        entry.server,
+        entry.application,
         entry.target,
         entry.data,
         entry.actor,
     ) == (
         audit.SUCCEEDED,
-        server,
+        application,
         str(env_file),
         {"created": True},
         admin,
     )
     assert [session.closed for session in network.opened] == [True]
+    assert (network.runs, network.feeds) == ([], [])
 
 
 @pytest.mark.django_db
-def test_an_unchanged_file_is_not_kept_again(api, server, pull, versions, logged):
-    first = pull(server)
+def test_an_unchanged_file_is_not_kept_again(api, application, pull, versions, logged):
+    first = pull(application)
 
-    again = pull(server)
+    again = pull(application)
 
     assert again == {"created": False, "version": first["version"]}
-    assert len(versions(server)) == 1
+    assert len(versions(application)) == 1
     assert [entry.data for entry in logged("env.pull")] == [
         {"created": False},
         {"created": True},
@@ -77,51 +80,51 @@ def test_an_unchanged_file_is_not_kept_again(api, server, pull, versions, logged
 
 
 @pytest.mark.django_db
-def test_a_changed_file_is_kept_as_a_new_version(server, env_file, pull, versions):
-    pull(server)
+def test_a_changed_file_is_kept_as_a_new_version(application, env_file, pull, versions):
+    pull(application)
     env_file.write_bytes(ENV + b"NEW_KEY=1\n")
 
-    again = pull(server)
+    again = pull(application)
 
     assert again["created"] is True
     assert again["version"]["keys"] == [*KEYS, "NEW_KEY"]
-    assert [version.source for version in versions(server)] == ["pulled", "pulled"]
-    assert str(versions(server)[0].pk) == again["version"]["id"]
+    assert [version.source for version in versions(application)] == ["pulled", "pulled"]
+    assert str(versions(application)[0].pk) == again["version"]["id"]
 
 
 @pytest.mark.django_db
 def test_the_same_file_at_another_path_is_kept_again(
-    admin, server, env_file, pull, versions
+    admin, application, env_file, pull, versions
 ):
-    pull(server)
+    pull(application)
     moved = env_file.with_name("production.env")
     moved.write_bytes(ENV)
-    ServerService(admin).update(
-        server.pk, account_password=PASSWORD, env_path=str(moved)
+    ApplicationService(admin).update(
+        application.pk, account_password=PASSWORD, env_path=str(moved)
     )
 
-    again = pull(server)
+    again = pull(application)
 
     assert (again["created"], again["version"]["path"]) == (True, str(moved))
-    assert len(versions(server)) == 2
+    assert len(versions(application)) == 2
 
 
 @pytest.mark.django_db
-def test_a_link_is_read_through_to_its_file(server, env_file, pull):
+def test_a_link_is_read_through_to_its_file(application, env_file, pull):
     shared = env_file.with_name("shared.env")
     env_file.rename(shared)
     env_file.symlink_to(shared)
 
-    assert pull(server)["version"]["keys"] == KEYS
+    assert pull(application)["version"]["keys"] == KEYS
 
 
 @pytest.mark.django_db
-def test_a_server_with_no_env_path_is_refused_without_connecting(
-    api, make_server, network, logged
+def test_an_application_with_no_env_path_is_refused_without_connecting(
+    api, make_application, network, logged
 ):
-    server = make_server()
+    application = make_application()
 
-    response = api.post(f"{LIST}pull/", {"server": server.pk})
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "env_path_missing"
@@ -136,11 +139,11 @@ def test_a_server_with_no_env_path_is_refused_without_connecting(
 
 @pytest.mark.django_db
 def test_a_file_that_is_not_there_is_remote_not_found(
-    api, server, env_file, network, logged
+    api, application, env_file, network, logged
 ):
     env_file.unlink()
 
-    response = api.post(f"{LIST}pull/", {"server": server.pk})
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "remote_not_found"
@@ -148,11 +151,11 @@ def test_a_file_that_is_not_there_is_remote_not_found(
 
 
 @pytest.mark.django_db
-def test_a_folder_at_the_path_is_remote_not_found(api, server, env_file, network):
+def test_a_folder_at_the_path_is_remote_not_found(api, application, env_file, network):
     env_file.unlink()
     env_file.mkdir()
 
-    response = api.post(f"{LIST}pull/", {"server": server.pk})
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
 
     assert (response.status_code, response.json()["error"]["code"]) == (
         404,
@@ -162,36 +165,36 @@ def test_a_folder_at_the_path_is_remote_not_found(api, server, env_file, network
 
 @pytest.mark.django_db
 def test_a_file_too_large_is_refused_and_not_kept(
-    api, settings, server, env_file, network, versions, logged
+    api, settings, application, env_file, network, versions, logged
 ):
     settings.ENV_MAX_BYTES = len(ENV) - 1
 
-    response = api.post(f"{LIST}pull/", {"server": server.pk})
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
 
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "env_too_large"
-    assert versions(server) == []
+    assert versions(application) == []
     assert network.opened[0].sftp.opened == []
     [entry] = logged("env.pull")
     assert (entry.status, entry.error_code) == (audit.FAILED, "env_too_large")
 
 
 @pytest.mark.django_db
-def test_a_file_of_exactly_the_limit_is_kept(settings, server, pull):
+def test_a_file_of_exactly_the_limit_is_kept(settings, application, pull):
     settings.ENV_MAX_BYTES = len(ENV)
 
-    assert pull(server)["created"] is True
+    assert pull(application)["created"] is True
 
 
 @pytest.mark.django_db
 def test_a_file_the_server_will_not_let_be_read_is_remote_permission_denied(
-    api, monkeypatch, server, network
+    api, monkeypatch, application, network
 ):
     monkeypatch.setattr(
         LocalSftp, "open", refusing(PermissionError(13, "Permission denied"))
     )
 
-    response = api.post(f"{LIST}pull/", {"server": server.pk})
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
 
     assert (response.status_code, response.json()["error"]["code"]) == (
         403,
@@ -200,10 +203,12 @@ def test_a_file_the_server_will_not_let_be_read_is_remote_permission_denied(
 
 
 @pytest.mark.django_db
-def test_a_server_that_does_not_answer_is_ssh_unreachable(api, server, network, logged):
-    network.unreachable.add(server.host)
+def test_a_server_that_does_not_answer_is_ssh_unreachable(
+    api, application, network, logged
+):
+    network.unreachable.add(application.server.host)
 
-    response = api.post(f"{LIST}pull/", {"server": server.pk})
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
 
     assert (response.status_code, response.json()["error"]["code"]) == (
         502,
@@ -213,13 +218,13 @@ def test_a_server_that_does_not_answer_is_ssh_unreachable(api, server, network, 
 
 
 @pytest.mark.django_db
-def test_an_unknown_or_deleted_server_is_not_found_and_not_recorded(
-    admin, api, server, network, logged
+def test_an_unknown_or_removed_application_is_not_found_and_not_recorded(
+    admin, api, application, network, logged
 ):
-    ServerService(admin).delete(server.pk, account_password=PASSWORD)
+    ApplicationService(admin).delete(application.pk, account_password=PASSWORD)
 
-    for server_id in (uuid4(), server.pk):
-        response = api.post(f"{LIST}pull/", {"server": server_id})
+    for application_id in (uuid4(), application.pk):
+        response = api.post(f"{LIST}pull/", {"application": application_id})
         assert (response.status_code, response.json()["error"]["code"]) == (
             404,
             "not_found",
@@ -230,28 +235,30 @@ def test_an_unknown_or_deleted_server_is_not_found_and_not_recorded(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("body", "code"), [({}, "required"), ({"server": "web-1"}, "invalid")]
+    ("body", "code"), [({}, "required"), ({"application": "web-1"}, "invalid")]
 )
-def test_a_pull_needs_a_server_id(api, network, body, code):
+def test_a_pull_needs_an_application_id(api, network, body, code):
     response = api.post(f"{LIST}pull/", body)
 
     assert response.status_code == 400
-    assert response.json()["error"]["fields"] == {"server": [code]}
+    assert response.json()["error"]["fields"] == {"application": [code]}
 
 
 @pytest.mark.django_db
 def test_versions_are_listed_newest_first_a_page_at_a_time(
-    api, make_server, server, env_file, pull
+    api, make_application, application, env_file, pull
 ):
-    other = make_server(name="web-2", host="10.0.0.6", env_path=str(env_file))
+    other = make_application(name="web-2", host="10.0.0.6", env_path=str(env_file))
     pull(other)
     ids = []
     for extra in (b"", b"A=1\n", b"B=2\n"):
         env_file.write_bytes(ENV + extra)
-        ids.append(pull(server)["version"]["id"])
+        ids.append(pull(application)["version"]["id"])
 
-    first = api.get(LIST, {"server": server.pk, "page_size": 2}).json()
-    second = api.get(LIST, {"server": server.pk, "page_size": 2, "page": 2}).json()
+    first = api.get(LIST, {"application": application.pk, "page_size": 2}).json()
+    second = api.get(
+        LIST, {"application": application.pk, "page_size": 2, "page": 2}
+    ).json()
 
     assert first["count"] == 3
     assert first["previous"] is None
@@ -263,8 +270,8 @@ def test_versions_are_listed_newest_first_a_page_at_a_time(
 
 
 @pytest.mark.django_db
-def test_a_server_with_no_versions_lists_none(api, server):
-    assert api.get(LIST, {"server": server.pk}).json() == {
+def test_an_application_with_no_versions_lists_none(api, application):
+    assert api.get(LIST, {"application": application.pk}).json() == {
         "count": 0,
         "next": None,
         "previous": None,
@@ -274,18 +281,18 @@ def test_a_server_with_no_versions_lists_none(api, server):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("query", "code"), [({}, "required"), ({"server": "nope"}, "invalid")]
+    ("query", "code"), [({}, "required"), ({"application": "nope"}, "invalid")]
 )
-def test_the_list_needs_a_server_id(api, query, code):
+def test_the_list_needs_an_application_id(api, query, code):
     response = api.get(LIST, query)
 
     assert response.status_code == 400
-    assert response.json()["error"]["fields"] == {"server": [code]}
+    assert response.json()["error"]["fields"] == {"application": [code]}
 
 
 @pytest.mark.django_db
-def test_one_version_reads_as_it_lists(api, server, pull):
-    pulled = pull(server)["version"]
+def test_one_version_reads_as_it_lists(api, application, pull):
+    pulled = pull(application)["version"]
 
     response = api.get(f"{LIST}{pulled['id']}/")
 
@@ -301,3 +308,127 @@ def test_an_unknown_version_is_not_found(api):
         404,
         "not_found",
     )
+
+
+@pytest.mark.django_db
+def test_a_env_inside_a_container_is_read_there(
+    api, settings, in_a_container, container_env, network, versions, logged
+):
+    application = in_a_container(str(container_env))
+
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert (body["created"], body["version"]["path"], body["version"]["keys"]) == (
+        True,
+        str(container_env),
+        KEYS,
+    )
+    [version] = versions(application)
+    assert unseal(version.content_sealed, context="envfiles.content") == ENV
+    assert network.runs == [
+        [
+            "docker",
+            "exec",
+            CONTAINER,
+            application.python_path,
+            "-c",
+            READ_SMALL,
+            str(container_env),
+            str(settings.ENV_MAX_BYTES),
+        ]
+    ]
+    assert [session.sftp.opened for session in network.opened] == [[]]
+    [entry] = logged("env.pull")
+    assert (entry.status, entry.application, entry.target) == (
+        audit.SUCCEEDED,
+        application,
+        str(container_env),
+    )
+
+
+@pytest.mark.django_db
+def test_a_env_inside_a_container_that_is_not_there_is_remote_not_found(
+    api, in_a_container, container_env, network, versions, logged
+):
+    container_env.unlink()
+    application = in_a_container(str(container_env))
+
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
+
+    assert (response.status_code, response.json()["error"]["code"]) == (
+        404,
+        "remote_not_found",
+    )
+    assert versions(application) == []
+    assert logged("env.pull")[0].error_code == "remote_not_found"
+
+
+@pytest.mark.django_db
+def test_a_env_inside_a_container_too_large_is_refused_and_not_kept(
+    api, settings, in_a_container, container_env, network, versions
+):
+    settings.ENV_MAX_BYTES = len(ENV) - 1
+    application = in_a_container(str(container_env))
+
+    response = api.post(f"{LIST}pull/", {"application": application.pk})
+
+    assert (response.status_code, response.json()["error"]["code"]) == (
+        413,
+        "env_too_large",
+    )
+    assert versions(application) == []
+
+
+@pytest.mark.django_db
+def test_a_container_env_on_a_bind_mount_is_read_on_the_host(
+    monkeypatch, in_a_container, env_file, pull, network, versions
+):
+    read = []
+    read_small = RemoteHost.read_small
+
+    def spied(self, path, max_bytes):
+        read.append(path)
+        return read_small(self, path, max_bytes)
+
+    monkeypatch.setattr(RemoteHost, "read_small", spied)
+    application = in_a_container(
+        "/app/.env",
+        mounts=[
+            {
+                "type": "bind",
+                "source": str(env_file.parent),
+                "destination": "/app",
+                "rw": True,
+            }
+        ],
+    )
+
+    pulled = pull(application)
+
+    assert (pulled["version"]["path"], pulled["version"]["keys"]) == (
+        "/app/.env",
+        KEYS,
+    )
+    [version] = versions(application)
+    assert unseal(version.content_sealed, context="envfiles.content") == ENV
+    assert (network.runs, network.feeds) == ([], [])
+    assert read == [str(env_file)]
+
+
+@pytest.mark.django_db
+def test_a_container_application_with_its_env_on_the_host_reads_it_there(
+    make_application, env_file, pull, network
+):
+    application = make_application(
+        name="shop",
+        kind="container",
+        engine="docker",
+        container_name=CONTAINER,
+        env_path=str(env_file),
+        env_location="host",
+    )
+
+    assert pull(application)["version"]["keys"] == KEYS
+    assert (network.runs, network.feeds) == ([], [])

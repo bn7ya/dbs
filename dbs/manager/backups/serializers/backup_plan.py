@@ -15,13 +15,13 @@ ACCOUNT_PASSWORD_MAX_LENGTH = 128
 
 
 class BackupPlanSerializer(serializers.ModelSerializer):
-    server = serializers.UUIDField(source="server_id", read_only=True)
+    application = serializers.UUIDField(source="application_id", read_only=True)
 
     class Meta:
         model = BackupPlan
         fields = [
             "id",
-            "server",
+            "application",
             "name",
             "kind",
             "paths",
@@ -76,6 +76,10 @@ class PlanUpdateSerializer(serializers.Serializer):
     )
 
 
+class PlanFilterSerializer(serializers.Serializer):
+    application = serializers.UUIDField()
+
+
 class PlanCreateSerializer(PlanUpdateSerializer):
-    server = serializers.UUIDField()
+    application = serializers.UUIDField()
     kind = serializers.ChoiceField(choices=BackupPlan.Kind.choices)

@@ -19,7 +19,7 @@ def holds_a_value(text: str) -> bool:
 
 @pytest.mark.django_db
 def test_no_value_reaches_a_response_the_log_or_a_column_but_through_a_reveal(
-    api, anonymous, caplog, settings, server, env_file, network, versions
+    api, anonymous, caplog, settings, application, env_file, network, versions
 ):
     caplog.set_level(logging.DEBUG)
     bodies = []
@@ -28,23 +28,24 @@ def test_no_value_reaches_a_response_the_log_or_a_column_but_through_a_reveal(
         bodies.append(response.content.decode())
         return response.json()
 
-    first = answered(api.post(f"{LIST}pull/", {"server": server.pk}))["version"]["id"]
-    answered(api.post(f"{LIST}pull/", {"server": server.pk}))
+    chosen = {"application": application.pk}
+    first = answered(api.post(f"{LIST}pull/", chosen))["version"]["id"]
+    answered(api.post(f"{LIST}pull/", chosen))
     env_file.write_bytes(ENV + b"ADDED=1\n")
-    second = answered(api.post(f"{LIST}pull/", {"server": server.pk}))["version"]["id"]
-    answered(api.get(LIST, {"server": server.pk}))
+    second = answered(api.post(f"{LIST}pull/", chosen))["version"]["id"]
+    answered(api.get(LIST, chosen))
     answered(api.get(f"{LIST}{first}/"))
     answered(api.get(f"{LIST}{first}/compare/", {"to": second}))
     answered(api.post(f"{LIST}{first}/reveal/", {"password": "wrong"}))
     answered(anonymous.post(f"{LIST}{first}/reveal/", {"password": PASSWORD}))
     answered(api.post(f"{LIST}{first}/push/", {"password": "wrong"}))
     answered(api.post(f"{LIST}{first}/push/", {"password": PASSWORD}))
-    network.unreachable.add(server.host)
-    answered(api.post(f"{LIST}pull/", {"server": server.pk}))
+    network.unreachable.add(application.server.host)
+    answered(api.post(f"{LIST}pull/", chosen))
     answered(api.post(f"{LIST}{second}/push/", {"password": PASSWORD}))
     network.unreachable.clear()
     settings.ENV_MAX_BYTES = 8
-    answered(api.post(f"{LIST}pull/", {"server": server.pk}))
+    answered(api.post(f"{LIST}pull/", chosen))
     answered(api.post(f"{LIST}{second}/push/", {"password": PASSWORD}))
     revealed = api.post(f"{LIST}{second}/reveal/", {"password": PASSWORD})
     log = api.get("/api/activity/", {"page_size": 200})
@@ -60,7 +61,7 @@ def test_no_value_reaches_a_response_the_log_or_a_column_but_through_a_reveal(
             json.dumps([entry.target_name, entry.data, entry.error_code])
         )
     assert not holds_a_value(caplog.text)
-    for version in versions(server):
+    for version in versions(application):
         stored = bytes(version.content_sealed)
         assert not any(value.encode() in stored for value in VALUES)
         assert version.fingerprint != hashlib.sha256(ENV).hexdigest()

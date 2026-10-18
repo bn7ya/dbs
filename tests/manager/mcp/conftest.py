@@ -3,7 +3,12 @@ import json
 import pytest
 
 from dbs.manager.mcp.server import build
-from tests.manager.terminal.conftest import local_host, make_server, storage  # noqa: F401
+from tests.manager.terminal.conftest import (  # noqa: F401
+    local_host,
+    make_application,
+    make_server,
+    storage,
+)
 
 
 class Called:

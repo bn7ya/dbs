@@ -18,8 +18,8 @@ class BackupFile(BaseModel):
         VERIFIED = "verified", "Verified"
         FAILED = "failed", "Failed"
 
-    server = models.ForeignKey(
-        "dbs_manager.Server",
+    application = models.ForeignKey(
+        "dbs_manager.Application",
         on_delete=models.PROTECT,
         related_name="+",
         db_index=False,
@@ -48,7 +48,8 @@ class BackupFile(BaseModel):
     class Meta(BaseModel.Meta):
         indexes = [
             models.Index(
-                fields=["server", "-created_at"], name="dbs_manager_backup_server_idx"
+                fields=["application", "-created_at"],
+                name="dbs_manager_backup_app_idx",
             ),
         ]
         constraints = [

@@ -110,7 +110,7 @@ def alive(plan) -> list[BackupFile]:
 
 @pytest.mark.django_db
 def test_a_first_run_collects_each_matching_file_sealed_and_described(
-    admin, server, host, dumps, storage, collect_plan, ran
+    admin, application, host, dumps, storage, collect_plan, ran
 ):
     plan = collect_plan()
 
@@ -126,14 +126,14 @@ def test_a_first_run_collects_each_matching_file_sealed_and_described(
     second, first = alive(plan)
     for row, (name, content, mtime) in ((first, FIRST), (second, SECOND)):
         assert (row.kind, row.name, row.sealed) == ("collected", name, True)
-        assert (row.plan, row.server, row.created_by) == (plan, server, admin)
+        assert (row.plan, row.application, row.created_by) == (plan, application, admin)
         assert (row.remote_path, row.remote_size) == (f"{DUMPS}/{name}", len(content))
         assert row.remote_mtime == moment(mtime)
         assert (row.size, row.sha256) == (
             len(content),
             hashlib.sha256(content).hexdigest(),
         )
-        assert row.storage_path == f"{server.pk}/{name}.sealed"
+        assert row.storage_path == f"{application.pk}/{name}.sealed"
         assert row.validation == BackupFile.Validation.STRUCTURE_OK
         on_disk = storage / row.storage_path
         assert stat.S_IMODE(on_disk.stat().st_mode) == 0o600
@@ -229,7 +229,7 @@ def test_a_new_size_or_a_new_time_alone_makes_a_file_new(
 
 @pytest.mark.django_db
 def test_a_file_that_changed_is_collected_again_and_both_download_as_they_were(
-    api, host, server, server_root, dumps, collect_plan, collected
+    api, host, application, server_root, dumps, collect_plan, collected
 ):
     plan = collect_plan()
     collected(plan)
@@ -244,8 +244,8 @@ def test_a_file_that_changed_is_collected_again_and_both_download_as_they_were(
         len(REWRITTEN),
         moment(SECOND[2] + 60),
     )
-    assert before.storage_path == f"{server.pk}/{SECOND[0]}.sealed"
-    assert again.storage_path == f"{server.pk}/{SECOND[0]}-2.sealed"
+    assert before.storage_path == f"{application.pk}/{SECOND[0]}.sealed"
+    assert again.storage_path == f"{application.pk}/{SECOND[0]}-2.sealed"
     for row, content in ((before, SECOND[1]), (again, REWRITTEN)):
         response = downloaded(api, row.pk)
         assert b"".join(response.streaming_content) == content
@@ -411,7 +411,15 @@ def test_a_collected_file_that_cannot_be_recorded_does_not_stay_on_disk(
 
 @pytest.mark.django_db
 def test_a_collect_plan_keeps_its_newest_files_and_never_brings_back_the_rest(
-    host, server, server_root, dumps, storage, collect_plan, collected, make_plan, ran
+    host,
+    application,
+    server_root,
+    dumps,
+    storage,
+    collect_plan,
+    collected,
+    make_plan,
+    ran,
 ):
     plan = collect_plan(keep=2)
     dbs_plan = make_plan(keep=1)
@@ -424,7 +432,7 @@ def test_a_collect_plan_keeps_its_newest_files_and_never_brings_back_the_rest(
     [retention] = logged("backup.retention")
     assert retention.data == {"removed": [FIRST[0]], "plan": "pg-dumps"}
     assert len(alive(dbs_plan)) == 1
-    assert (storage / str(server.pk) / f"{FIRST[0]}.sealed").is_file()
+    assert (storage / str(application.pk) / f"{FIRST[0]}.sealed").is_file()
 
     detail = collected(plan)
 
@@ -449,12 +457,13 @@ def test_files_of_one_moment_are_newest_by_the_servers_time_then_by_name(
 
 @pytest.mark.django_db
 def test_a_collected_file_lists_with_its_kind_and_where_it_was_found(
-    api, server, host, dumps, collect_plan, collected
+    api, application, host, dumps, collect_plan, collected
 ):
     plan = collect_plan(pattern=FIRST[0])
     collected(plan)
 
-    [listed] = api.get("/api/backups/", {"server": server.pk}).json()["results"]
+    body = api.get("/api/backups/", {"application": application.pk}).json()
+    [listed] = body["results"]
 
     assert (listed["kind"], listed["name"], listed["remote_path"]) == (
         "collected",

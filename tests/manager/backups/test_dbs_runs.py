@@ -28,10 +28,10 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def take(admin, server, run_jobs, entry):
+def take(admin, application, run_jobs, entry):
     def run():
         with run_jobs():
-            job = BackupService(admin).take(server.pk)
+            job = BackupService(admin).take(application.pk)
         return entry(job.pk)
 
     return run
@@ -43,8 +43,8 @@ def hosting(monkeypatch, server_root, **options) -> BackupHost:
     return host
 
 
-def files(server) -> list[BackupFile]:
-    return list(BackupFileRepository().alive_for_server(server.pk))
+def files(application) -> list[BackupFile]:
+    return list(BackupFileRepository().alive_for_application(application.pk))
 
 
 def stored_name(job) -> str:
@@ -52,12 +52,12 @@ def stored_name(job) -> str:
 
 
 def test_a_take_streams_a_verified_backup_and_leaves_no_copy_on_the_server(
-    server, host, take, storage
+    application, host, take, storage
 ):
     job = take()
 
     assert job.status == audit.SUCCEEDED
-    [backup] = files(server)
+    [backup] = files(application)
     assert backup.validation == BackupFile.Validation.VERIFIED
     assert backup.failure == ""
     assert (storage / backup.storage_path).read_bytes() == dbs_backup(BACKUP_PASSPHRASE)
@@ -66,7 +66,7 @@ def test_a_take_streams_a_verified_backup_and_leaves_no_copy_on_the_server(
 
 
 def test_the_backups_waiting_on_the_server_are_collected_first(
-    server, host, take, storage
+    application, host, take, storage
 ):
     older = host.keep_on_server(
         backup_filename("web-1", ordinal=7), dbs_backup(BACKUP_PASSPHRASE)
@@ -82,11 +82,11 @@ def test_the_backups_waiting_on_the_server_are_collected_first(
     assert collected.remote_size == collected.size
     assert collected.remote_mtime is not None
     assert collected.remote_path == ""
-    assert len(files(server)) == 2
+    assert len(files(application)) == 2
     assert host.remote_names() == []
 
 
-def test_only_this_takes_prefix_is_collected(server, host, take):
+def test_only_this_takes_prefix_is_collected(application, host, take):
     other = host.keep_on_server(backup_filename("web-1-nightly"), b"another plan")
     unrelated = host.keep_on_server("notes.txt", b"not a backup")
 
@@ -99,7 +99,7 @@ def test_only_this_takes_prefix_is_collected(server, host, take):
 
 
 def test_a_backup_already_held_is_not_pulled_again(
-    admin, server, host, make_plan, ran
+    admin, application, host, make_plan, ran
 ):
     plan = make_plan(keep_remote=3)
     first = ran(plan)
@@ -113,7 +113,7 @@ def test_a_backup_already_held_is_not_pulled_again(
 
 
 def test_a_server_copy_that_changed_under_its_name_is_pulled_again(
-    server, host, make_plan, ran
+    application, host, make_plan, ran
 ):
     plan = make_plan(keep_remote=3)
     first = ran(plan)
@@ -131,7 +131,7 @@ def test_a_server_copy_that_changed_under_its_name_is_pulled_again(
 
 
 def test_a_broken_stream_is_kept_on_the_server_and_collected_next_time(
-    monkeypatch, server, server_root, take, storage
+    monkeypatch, application, server_root, take, storage
 ):
     broken = hosting(monkeypatch, server_root, breaks=True)
 
@@ -139,9 +139,9 @@ def test_a_broken_stream_is_kept_on_the_server_and_collected_next_time(
 
     assert kept.status == audit.SUCCEEDED
     assert kept.data == {"outcome": "kept_on_server", "pulled": 0}
-    assert files(server) == []
+    assert files(application) == []
     [waiting] = broken.remote_names()
-    assert [path.name for path in (storage / str(server.pk)).iterdir()] == []
+    assert [path.name for path in (storage / str(application.pk)).iterdir()] == []
 
     healthy = hosting(monkeypatch, server_root)
     collected = take()
@@ -149,12 +149,12 @@ def test_a_broken_stream_is_kept_on_the_server_and_collected_next_time(
     assert collected.status == audit.SUCCEEDED
     assert collected.data["pulled"] == 1
     assert healthy.pulls == [f"{BACKUP_DIR}/{waiting}"]
-    assert waiting in {file.name for file in files(server)}
+    assert waiting in {file.name for file in files(application)}
     assert healthy.remote_names() == []
 
 
 def test_a_streamed_backup_that_arrives_changed_is_quarantined(
-    monkeypatch, server, server_root, take, storage
+    monkeypatch, application, server_root, take, storage
 ):
     good = dbs_backup(BACKUP_PASSPHRASE)
     host = hosting(monkeypatch, server_root, sent=bytes(reversed(good)))
@@ -163,7 +163,7 @@ def test_a_streamed_backup_that_arrives_changed_is_quarantined(
 
     assert job.status == audit.FAILED
     assert job.error_code == "backup_quarantined"
-    [quarantined] = files(server)
+    [quarantined] = files(application)
     assert job.data == {
         "output": "The bytes that arrived are not the ones the server sent.",
         "quarantined": [str(quarantined.pk)],
@@ -177,11 +177,11 @@ def test_a_streamed_backup_that_arrives_changed_is_quarantined(
 
 
 def test_a_quarantined_backup_is_never_restored(
-    api, monkeypatch, server, server_root, take
+    api, monkeypatch, application, server_root, take
 ):
     hosting(monkeypatch, server_root, sent=b"garbage")
     take()
-    [quarantined] = files(server)
+    [quarantined] = files(application)
 
     response = api.post(
         f"/api/backups/{quarantined.pk}/restore/",
@@ -194,7 +194,7 @@ def test_a_quarantined_backup_is_never_restored(
 
 
 def test_the_server_copy_of_a_quarantined_stream_is_collected_whole_next_time(
-    monkeypatch, server, server_root, take
+    monkeypatch, application, server_root, take
 ):
     hosting(monkeypatch, server_root, sent=b"cut short")
     take()
@@ -205,24 +205,24 @@ def test_the_server_copy_of_a_quarantined_stream_is_collected_whole_next_time(
 
     assert job.status == audit.SUCCEEDED
     assert host.pulls == [f"{BACKUP_DIR}/{kept}"]
-    good = [file for file in files(server) if not file.failure]
+    good = [file for file in files(application) if not file.failure]
     assert kept in {file.name for file in good}
     assert host.remote_names() == []
 
 
 def test_a_backup_made_with_another_passphrase_is_quarantined_with_the_reason(
-    monkeypatch, server, server_root, take
+    monkeypatch, application, server_root, take
 ):
     hosting(monkeypatch, server_root, content=dbs_backup("another-passphrase"))
 
     job = take()
 
     assert job.error_code == "backup_quarantined"
-    assert "Decryption" in files(server)[0].failure
+    assert "Decryption" in files(application)[0].failure
 
 
 def test_a_waiting_file_that_is_not_a_backup_is_quarantined_once(
-    server, host, take
+    application, host, take
 ):
     garbage = host.keep_on_server(backup_filename("web-1", ordinal=9), b"not a backup")
 
@@ -230,7 +230,7 @@ def test_a_waiting_file_that_is_not_a_backup_is_quarantined_once(
     second = take()
 
     assert first.status == second.status == audit.SUCCEEDED
-    [quarantined] = [file for file in files(server) if file.failure]
+    [quarantined] = [file for file in files(application) if file.failure]
     assert first.data["quarantined"] == [str(quarantined.pk)]
     assert "quarantined" not in second.data
     assert host.pulls == [garbage]
@@ -238,7 +238,7 @@ def test_a_waiting_file_that_is_not_a_backup_is_quarantined_once(
 
 
 def test_the_server_keeps_the_newest_copies_a_plan_asks_for(
-    server, host, make_plan, ran
+    application, host, make_plan, ran
 ):
     plan = make_plan(keep_remote=2)
 
@@ -252,7 +252,7 @@ def test_the_server_keeps_the_newest_copies_a_plan_asks_for(
 
 
 def test_a_server_copy_that_is_not_the_recorded_file_is_left_alone(
-    server, host, make_plan, ran
+    application, host, make_plan, ran
 ):
     plan = make_plan(keep_remote=1)
     name = stored_name(ran(plan))
@@ -266,7 +266,7 @@ def test_a_server_copy_that_is_not_the_recorded_file_is_left_alone(
 
 
 def test_retention_keeps_at_most_five_good_backups_and_never_counts_quarantined(
-    monkeypatch, server, server_root, take
+    monkeypatch, application, server_root, take
 ):
     hosting(monkeypatch, server_root, sent=b"broken")
     take()
@@ -274,15 +274,15 @@ def test_retention_keeps_at_most_five_good_backups_and_never_counts_quarantined(
     for _ in range(TAKE_KEEP + 2):
         take()
 
-    good = [file for file in files(server) if not file.failure]
-    quarantined = [file for file in files(server) if file.failure]
+    good = [file for file in files(application) if not file.failure]
+    quarantined = [file for file in files(application) if file.failure]
     assert len(good) == TAKE_KEEP
     assert len(quarantined) == 1
     assert host.remote_names() == []
 
 
 def test_quarantined_arrivals_are_kept_five_at_most_apart_from_the_good_ones(
-    monkeypatch, server, server_root, take
+    monkeypatch, application, server_root, take
 ):
     hosting(monkeypatch, server_root)
     take()
@@ -290,13 +290,13 @@ def test_quarantined_arrivals_are_kept_five_at_most_apart_from_the_good_ones(
         hosting(monkeypatch, server_root, content=f"not a backup {attempt}".encode())
         take()
 
-    good = [file for file in files(server) if not file.failure]
-    quarantined = [file for file in files(server) if file.failure]
+    good = [file for file in files(application) if not file.failure]
+    quarantined = [file for file in files(application) if file.failure]
     assert len(good) == 1
     assert len(quarantined) == KEEP_MAX
 
 
-def test_a_plan_never_keeps_more_than_five(server, host, make_plan, ran):
+def test_a_plan_never_keeps_more_than_five(application, host, make_plan, ran):
     plan = make_plan(keep=7, keep_remote=0)
 
     for _ in range(KEEP_MAX + 2):
@@ -306,7 +306,7 @@ def test_a_plan_never_keeps_more_than_five(server, host, make_plan, ran):
 
 
 def test_a_quarantined_arrival_never_pushes_out_a_good_backup(
-    monkeypatch, server, server_root, make_plan, ran
+    monkeypatch, application, server_root, make_plan, ran
 ):
     plan = make_plan(keep=1, keep_remote=0)
     hosting(monkeypatch, server_root)
@@ -320,7 +320,7 @@ def test_a_quarantined_arrival_never_pushes_out_a_good_backup(
 
 
 def test_retention_keeps_the_newest_by_the_moment_in_the_name(
-    server, host, take
+    application, host, take
 ):
     for ordinal in range(1, TAKE_KEEP + 2):
         host.keep_on_server(
@@ -329,15 +329,17 @@ def test_retention_keeps_the_newest_by_the_moment_in_the_name(
 
     job = take()
 
-    kept = {file.name for file in files(server)}
+    kept = {file.name for file in files(application)}
     assert stored_name(job) in kept
     assert "web-1-20200101-000000Z.dbs" not in kept
     assert "web-1-20200102-000000Z.dbs" not in kept
     assert len(kept) == TAKE_KEEP
 
 
-def test_stale_partials_on_the_manager_are_swept_before_a_run(server, host, take, storage):
-    directory = BackupStorage().directory(server.pk)
+def test_stale_partials_on_the_manager_are_swept_before_a_run(
+    application, host, take, storage
+):
+    directory = BackupStorage().directory(application.pk)
     stale = directory / ".incoming-0123456789abcdef.part"
     stale.write_bytes(b"left by a crash")
     old = time.time() - 7200
@@ -349,9 +351,11 @@ def test_stale_partials_on_the_manager_are_swept_before_a_run(server, host, take
 
 
 def test_progress_reports_the_bytes_received_at_most_once_a_second(
-    admin, server, monkeypatch
+    admin, application, monkeypatch
 ):
-    job = ActivityService(admin).queue("backup.take", server=server, detail={"plan": "x"})
+    job = ActivityService(admin).queue(
+        "backup.take", subject=application, detail={"plan": "x"}
+    )
     ActivityService(admin).start(job.pk)
     clock = iter([10.0, 10.5, 11.2])
     monkeypatch.setattr("dbs.manager.backups.services.dbs_runs.time.monotonic", lambda: next(clock))

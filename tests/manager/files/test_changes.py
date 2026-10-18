@@ -9,19 +9,21 @@ from dbs import audit
 from tests.manager.servers.support import LocalSftp
 
 
-def make_folder(api, server, path: str, name: str):
-    return api.post(f"/api/files/{server.pk}/folders/", {"path": path, "name": name})
+def make_folder(api, application, path: str, name: str):
+    return api.post(
+        f"/api/files/{application.pk}/folders/", {"path": path, "name": name}
+    )
 
 
-def delete(api, server, path: str):
-    return api.delete(f"/api/files/{server.pk}/?{urlencode({'path': path})}")
+def delete(api, application, path: str):
+    return api.delete(f"/api/files/{application.pk}/?{urlencode({'path': path})}")
 
 
 @pytest.mark.django_db
 def test_a_folder_is_made_and_answered_as_an_entry(
-    admin, api, server, tree, sessions, logged
+    admin, api, application, tree, sessions, logged
 ):
-    response = make_folder(api, server, f"{tree.media}/Docs", "  2026 reports ")
+    response = make_folder(api, application, f"{tree.media}/Docs", "  2026 reports ")
 
     assert response.status_code == 201
     body = response.json()
@@ -34,10 +36,10 @@ def test_a_folder_is_made_and_answered_as_an_entry(
     }
     assert (tree.media / "Docs" / "2026 reports").is_dir()
     [entry] = logged("files.create_folder")
-    assert (entry.status, entry.actor, entry.server, entry.target) == (
+    assert (entry.status, entry.actor, entry.application, entry.target) == (
         audit.SUCCEEDED,
         admin,
-        server,
+        application,
         f"{tree.media}/Docs/2026 reports",
     )
     assert [session.closed for session in sessions] == [True]
@@ -46,9 +48,9 @@ def test_a_folder_is_made_and_answered_as_an_entry(
 @pytest.mark.django_db
 @pytest.mark.parametrize("taken", ["Docs", "logo.png", "escape"])
 def test_a_folder_whose_name_is_taken_is_file_exists(
-    api, server, tree, sessions, logged, taken
+    api, application, tree, sessions, logged, taken
 ):
-    response = make_folder(api, server, str(tree.media), taken)
+    response = make_folder(api, application, str(tree.media), taken)
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "file_exists"
@@ -60,9 +62,9 @@ def test_a_folder_whose_name_is_taken_is_file_exists(
     "name", ["a/b", "..", ".", "a\\b", "\x1b[31m", "‮cod.exe", "ن" * 128, "../../etc"]
 )
 def test_a_name_that_cannot_be_one_is_refused_and_not_recorded(
-    api, server, tree, sessions, logged, name
+    api, application, tree, sessions, logged, name
 ):
-    response = make_folder(api, server, str(tree.media), name)
+    response = make_folder(api, application, str(tree.media), name)
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {"name": ["invalid_name"]}
@@ -71,8 +73,8 @@ def test_a_name_that_cannot_be_one_is_refused_and_not_recorded(
 
 
 @pytest.mark.django_db
-def test_a_folder_needs_a_name_and_a_place(api, server, sessions):
-    response = api.post(f"/api/files/{server.pk}/folders/", {"name": "  "})
+def test_a_folder_needs_a_name_and_a_place(api, application, sessions):
+    response = api.post(f"/api/files/{application.pk}/folders/", {"name": "  "})
 
     assert response.json()["error"]["fields"] == {
         "path": ["required"],
@@ -83,9 +85,9 @@ def test_a_folder_needs_a_name_and_a_place(api, server, sessions):
 @pytest.mark.django_db
 @pytest.mark.parametrize("relative", ["escape", "escape/"])
 def test_a_folder_through_a_link_out_of_the_allowed_folders_is_refused(
-    api, server, tree, sessions, logged, relative
+    api, application, tree, sessions, logged, relative
 ):
-    response = make_folder(api, server, f"{tree.media}/{relative}", "planted")
+    response = make_folder(api, application, f"{tree.media}/{relative}", "planted")
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "path_outside_roots"
@@ -95,9 +97,9 @@ def test_a_folder_through_a_link_out_of_the_allowed_folders_is_refused(
 
 @pytest.mark.django_db
 def test_a_folder_outside_the_allowed_folders_is_refused_unreached(
-    api, server, tree, sessions
+    api, application, tree, sessions
 ):
-    response = make_folder(api, server, str(tree.base), "planted")
+    response = make_folder(api, application, str(tree.base), "planted")
 
     assert response.status_code == 403
     assert sessions == []
@@ -106,17 +108,17 @@ def test_a_folder_outside_the_allowed_folders_is_refused_unreached(
 
 @pytest.mark.django_db
 def test_a_folder_in_a_folder_that_is_not_there_is_remote_not_found(
-    api, server, tree, sessions
+    api, application, tree, sessions
 ):
-    response = make_folder(api, server, f"{tree.media}/missing/deeper", "x")
+    response = make_folder(api, application, f"{tree.media}/missing/deeper", "x")
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "remote_not_found"
 
 
 @pytest.mark.django_db
-def test_making_a_folder_needs_a_session(anonymous, server, tree, sessions):
-    response = make_folder(anonymous, server, str(tree.media), "x")
+def test_making_a_folder_needs_a_session(anonymous, application, tree, sessions):
+    response = make_folder(anonymous, application, str(tree.media), "x")
 
     assert response.status_code == 403
     assert sessions == []
@@ -124,9 +126,9 @@ def test_making_a_folder_needs_a_session(anonymous, server, tree, sessions):
 
 @pytest.mark.django_db
 def test_a_file_is_deleted_and_recorded_with_its_kind(
-    admin, api, server, tree, sessions, logged
+    admin, api, application, tree, sessions, logged
 ):
-    response = delete(api, server, f"{tree.media}/logo.png")
+    response = delete(api, application, f"{tree.media}/logo.png")
 
     assert response.status_code == 204
     assert not (tree.media / "logo.png").exists()
@@ -134,13 +136,13 @@ def test_a_file_is_deleted_and_recorded_with_its_kind(
     assert (
         entry.status,
         entry.actor,
-        entry.server,
+        entry.application,
         entry.target,
         entry.data,
     ) == (
         audit.SUCCEEDED,
         admin,
-        server,
+        application,
         f"{tree.media}/logo.png",
         {"kind": "file"},
     )
@@ -148,8 +150,8 @@ def test_a_file_is_deleted_and_recorded_with_its_kind(
 
 
 @pytest.mark.django_db
-def test_an_empty_folder_is_deleted(api, server, tree, sessions, logged):
-    response = delete(api, server, f"{tree.media}/assets/")
+def test_an_empty_folder_is_deleted(api, application, tree, sessions, logged):
+    response = delete(api, application, f"{tree.media}/assets/")
 
     assert response.status_code == 204
     assert not (tree.media / "assets").exists()
@@ -158,9 +160,9 @@ def test_an_empty_folder_is_deleted(api, server, tree, sessions, logged):
 
 @pytest.mark.django_db
 def test_a_folder_that_holds_anything_is_never_deleted(
-    api, server, tree, sessions, logged
+    api, application, tree, sessions, logged
 ):
-    response = delete(api, server, f"{tree.media}/Docs")
+    response = delete(api, application, f"{tree.media}/Docs")
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "folder_not_empty"
@@ -171,9 +173,9 @@ def test_a_folder_that_holds_anything_is_never_deleted(
 @pytest.mark.django_db
 @pytest.mark.parametrize("link", ["escape", "secret-link", "docs-link", "logo-link"])
 def test_deleting_a_link_removes_the_link_and_never_what_it_points_at(
-    api, server, tree, sessions, logged, link
+    api, application, tree, sessions, logged, link
 ):
-    response = delete(api, server, f"{tree.media}/{link}")
+    response = delete(api, application, f"{tree.media}/{link}")
 
     assert response.status_code == 204
     assert not os.path.lexists(tree.media / link)
@@ -185,9 +187,9 @@ def test_deleting_a_link_removes_the_link_and_never_what_it_points_at(
 
 @pytest.mark.django_db
 def test_a_file_reached_through_a_link_out_of_the_allowed_folders_is_never_deleted(
-    api, server, tree, sessions, logged
+    api, application, tree, sessions, logged
 ):
-    response = delete(api, server, f"{tree.media}/escape/passwd")
+    response = delete(api, application, f"{tree.media}/escape/passwd")
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "path_outside_roots"
@@ -200,11 +202,11 @@ def test_a_file_reached_through_a_link_out_of_the_allowed_folders_is_never_delet
     "spelling", ["{media}", "{media}/", "//{media}/.", "{backups}", "{alias}"]
 )
 def test_an_allowed_folder_itself_is_never_deleted(
-    api, server, tree, sessions, logged, spelling
+    api, application, tree, sessions, logged, spelling
 ):
     path = spelling.format(media=tree.media, backups=tree.backups, alias=tree.alias)
 
-    response = delete(api, server, path)
+    response = delete(api, application, path)
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "cannot_delete_root"
@@ -215,9 +217,9 @@ def test_an_allowed_folder_itself_is_never_deleted(
 
 @pytest.mark.django_db
 def test_an_allowed_folder_reached_by_another_path_is_never_deleted(
-    api, server, tree, sessions
+    api, application, tree, sessions
 ):
-    response = delete(api, server, f"{tree.media}/shared")
+    response = delete(api, application, f"{tree.media}/shared")
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "cannot_delete_root"
@@ -226,9 +228,9 @@ def test_an_allowed_folder_reached_by_another_path_is_never_deleted(
 
 @pytest.mark.django_db
 def test_deleting_outside_the_allowed_folders_is_refused_unreached(
-    api, server, tree, sessions
+    api, application, tree, sessions
 ):
-    response = delete(api, server, str(tree.outside / "passwd"))
+    response = delete(api, application, str(tree.outside / "passwd"))
 
     assert response.status_code == 403
     assert sessions == []
@@ -237,9 +239,9 @@ def test_deleting_outside_the_allowed_folders_is_refused_unreached(
 
 @pytest.mark.django_db
 def test_deleting_what_is_not_there_is_remote_not_found(
-    api, server, tree, sessions, logged
+    api, application, tree, sessions, logged
 ):
-    response = delete(api, server, f"{tree.media}/missing.png")
+    response = delete(api, application, f"{tree.media}/missing.png")
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "remote_not_found"
@@ -248,14 +250,14 @@ def test_deleting_what_is_not_there_is_remote_not_found(
 
 @pytest.mark.django_db
 def test_a_file_the_server_will_not_remove_is_remote_permission_denied(
-    monkeypatch, api, server, tree, sessions
+    monkeypatch, api, application, tree, sessions
 ):
     def refuse(self, path):
         raise PermissionError(13, "Permission denied")
 
     monkeypatch.setattr(LocalSftp, "remove", refuse)
 
-    response = delete(api, server, f"{tree.media}/logo.png")
+    response = delete(api, application, f"{tree.media}/logo.png")
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "remote_permission_denied"
@@ -263,18 +265,18 @@ def test_a_file_the_server_will_not_remove_is_remote_permission_denied(
 
 
 @pytest.mark.django_db
-def test_a_name_with_spaces_and_arabic_is_deleted(api, server, tree, sessions):
+def test_a_name_with_spaces_and_arabic_is_deleted(api, application, tree, sessions):
     (tree.media / "نسخة الليل.sql").write_bytes(b"x")
 
-    response = delete(api, server, f"{tree.media}/نسخة الليل.sql")
+    response = delete(api, application, f"{tree.media}/نسخة الليل.sql")
 
     assert response.status_code == 204
     assert not (tree.media / "نسخة الليل.sql").exists()
 
 
 @pytest.mark.django_db
-def test_a_delete_needs_a_path(api, server, sessions, logged):
-    response = api.delete(f"/api/files/{server.pk}/")
+def test_a_delete_needs_a_path(api, application, sessions, logged):
+    response = api.delete(f"/api/files/{application.pk}/")
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {"path": ["required"]}
@@ -282,8 +284,8 @@ def test_a_delete_needs_a_path(api, server, sessions, logged):
 
 
 @pytest.mark.django_db
-def test_a_delete_needs_a_session(anonymous, server, tree, sessions):
-    response = delete(anonymous, server, f"{tree.media}/logo.png")
+def test_a_delete_needs_a_session(anonymous, application, tree, sessions):
+    response = delete(anonymous, application, f"{tree.media}/logo.png")
 
     assert response.status_code == 403
     assert (tree.media / "logo.png").exists()

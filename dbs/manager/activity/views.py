@@ -23,8 +23,8 @@ class ActivityListView(ListAPIView):
 
     def list(self, request, *args, **kwargs):
         page = self.paginate_queryset(self.get_queryset())
-        servers = ActivityService(request.user).servers_for(page)
-        data = ActivitySerializer(page, many=True, context={"servers": servers}).data
+        subjects = ActivityService(request.user).subjects_for(page)
+        data = ActivitySerializer(page, many=True, context={"subjects": subjects}).data
         return self.get_paginated_response(data)
 
 
@@ -34,5 +34,5 @@ class ActivityDetailView(APIView):
     def get(self, request, pk):
         service = ActivityService(request.user)
         entry = service.get(pk)
-        servers = service.servers_for([entry])
-        return Response(ActivitySerializer(entry, context={"servers": servers}).data)
+        subjects = service.subjects_for([entry])
+        return Response(ActivitySerializer(entry, context={"subjects": subjects}).data)

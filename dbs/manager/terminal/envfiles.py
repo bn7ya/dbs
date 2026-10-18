@@ -22,16 +22,16 @@ LIST_COLUMNS = (
 
 
 def list_versions(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
-    versions = EnvFileService(session.user).list(server.pk)
+    application = references.application(session.user, session.args.application)
+    versions = EnvFileService(session.user).list(application.pk)
     rows = EnvVersionSerializer(versions, many=True).data
-    session.out.table(rows, LIST_COLUMNS, empty=f"No versions kept for {server.name}.")
+    session.out.table(rows, LIST_COLUMNS, empty=f"No versions kept for {application.name}.")
     return 0
 
 
 def pull(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
-    pulled = EnvFileService(session.user).pull(server.pk)
+    application = references.application(session.user, session.args.application)
+    pulled = EnvFileService(session.user).pull(application.pk)
     message = (
         f"Kept a new version of {pulled.version.path}."
         if pulled.created

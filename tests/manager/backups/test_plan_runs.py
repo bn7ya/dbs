@@ -6,6 +6,7 @@ import pytest
 
 from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
@@ -16,7 +17,6 @@ from dbs.manager.backups.services import (
 )
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.servers.exceptions import RemoteCommandFailed, SSHUnreachable
-from dbs.manager.servers.services import ServerService
 from tests.manager.backups.support import BackupHost
 from tests.manager.servers.support import BACKUP_DIR, PASSWORD, connecting_to
 
@@ -41,7 +41,7 @@ def alive(plan) -> list[str]:
 
 @pytest.mark.django_db
 def test_a_run_answers_at_once_with_the_job_and_whose_run_it_is(
-    api, admin, server, host, make_plan, entry
+    api, admin, application, host, make_plan, entry
 ):
     plan = make_plan()
 
@@ -52,7 +52,7 @@ def test_a_run_answers_at_once_with_the_job_and_whose_run_it_is(
     job = entry(response.json()["activity"])
     assert (job.action, job.status) == ("backup.run", audit.QUEUED)
     assert (job.subject, job.target_name, job.actor) == (
-        str(server.pk),
+        str(application.pk),
         "django-dbs",
         admin,
     )
@@ -71,11 +71,13 @@ def test_a_disabled_or_manual_plan_still_runs_when_asked(api, make_plan, ran):
 
 
 @pytest.mark.django_db
-def test_a_plan_or_server_that_is_gone_is_not_run(api, admin, server, make_plan):
+def test_a_plan_or_application_that_is_gone_is_not_run(
+    api, admin, application, make_plan
+):
     deleted = make_plan(name="deleted")
     BackupPlanService(admin).delete(deleted.pk)
     orphan = make_plan(name="orphan")
-    ServerService(admin).delete(server.pk, account_password=PASSWORD)
+    ApplicationService(admin).delete(application.pk, account_password=PASSWORD)
 
     for path in (
         run_url(deleted),
@@ -89,18 +91,20 @@ def test_a_plan_or_server_that_is_gone_is_not_run(api, admin, server, make_plan)
 
 
 @pytest.mark.django_db
-def test_takes_and_plan_runs_of_one_server_never_overlap(
-    api, admin, server, host, make_plan, django_capture_on_commit_callbacks
+def test_takes_and_plan_runs_of_one_application_never_overlap(
+    api, admin, application, host, make_plan, django_capture_on_commit_callbacks
 ):
     plan = make_plan()
 
     with django_capture_on_commit_callbacks():
-        take = api.post("/api/backups/take/", {"server": server.pk})
+        take = api.post("/api/backups/take/", {"application": application.pk})
         run = api.post(run_url(plan))
-    TakeLock().release(server.pk, take.json()["activity"])
+    TakeLock().release(application.pk, take.json()["activity"])
     with django_capture_on_commit_callbacks():
         first = api.post(run_url(plan))
-        second_take = api.post("/api/backups/take/", {"server": server.pk})
+        second_take = api.post(
+            "/api/backups/take/", {"application": application.pk}
+        )
 
     assert (take.status_code, first.status_code) == (202, 202)
     for refused in (run, second_take):
@@ -110,7 +114,9 @@ def test_takes_and_plan_runs_of_one_server_never_overlap(
 
 
 @pytest.mark.django_db
-def test_a_run_stores_a_backup_that_names_its_plan(admin, server, host, make_plan, ran):
+def test_a_run_stores_a_backup_that_names_its_plan(
+    admin, application, host, make_plan, ran
+):
     plan = make_plan(name="Nightly DB", keep_remote=3)
 
     job = ran(plan)
@@ -124,7 +130,11 @@ def test_a_run_stores_a_backup_that_names_its_plan(admin, server, host, make_pla
         "pulled": 0,
         "released": 0,
     }
-    assert (backup.plan, backup.server, backup.created_by) == (plan, server, admin)
+    assert (backup.plan, backup.application, backup.created_by) == (
+        plan,
+        application,
+        admin,
+    )
     assert backup.name.startswith("web-1-nightly-db-")
     assert backup.remote_path == f"{BACKUP_DIR}/{backup.name}"
     assert host.remote_names() == [backup.name]
@@ -202,7 +212,7 @@ def test_a_remote_failure_keeps_the_plan_and_the_output(monkeypatch, make_plan, 
 
 @pytest.mark.django_db
 def test_a_plan_deleted_before_its_run_starts_fails_it(
-    admin, server, host, make_plan, django_capture_on_commit_callbacks, entry
+    admin, application, host, make_plan, django_capture_on_commit_callbacks, entry
 ):
     plan = make_plan()
     with django_capture_on_commit_callbacks() as queued:
@@ -218,18 +228,18 @@ def test_a_plan_deleted_before_its_run_starts_fails_it(
         BackupPlanRepository().all_including_deleted().get(pk=plan.pk).last_status
         == "none"
     )
-    assert TakeLock().acquire(server.pk, uuid4())
+    assert TakeLock().acquire(application.pk, uuid4())
 
 
 @pytest.mark.django_db
-def test_a_run_that_finds_the_server_busy_fails_with_backup_running(
-    admin, server, host, make_plan, django_capture_on_commit_callbacks, entry
+def test_a_run_that_finds_the_application_busy_fails_with_backup_running(
+    admin, application, host, make_plan, django_capture_on_commit_callbacks, entry
 ):
     plan = make_plan()
     with django_capture_on_commit_callbacks() as queued:
         job = BackupPlanService(admin).run(plan.pk)
-    TakeLock().release(server.pk, job.pk)
-    TakeLock().acquire(server.pk, uuid4())
+    TakeLock().release(application.pk, job.pk)
+    TakeLock().acquire(application.pk, uuid4())
 
     for send in queued:
         send()
@@ -253,7 +263,7 @@ def test_a_finished_run_is_not_run_twice(make_plan, host, ran):
 
 @pytest.mark.django_db
 def test_a_run_keeps_the_plans_newest_files_and_deletes_the_rest(
-    admin, server, storage, make_plan, ran, taken, entry
+    admin, application, storage, make_plan, ran, taken, entry
 ):
     plan = make_plan(keep=2)
     other = make_plan(name="weekly", keep=1)
@@ -273,7 +283,7 @@ def test_a_run_keeps_the_plans_newest_files_and_deletes_the_rest(
     [retention] = logged("backup.retention")
     assert retention.status == audit.SUCCEEDED
     assert (retention.subject, retention.target_name, retention.actor) == (
-        str(server.pk),
+        str(application.pk),
         "django-dbs",
         admin,
     )
@@ -326,12 +336,12 @@ def test_a_failed_run_deletes_nothing(monkeypatch, make_plan, ran):
 
 @pytest.mark.django_db
 def test_a_take_is_never_touched_by_retention(
-    admin, server, host, run_jobs, make_plan, ran
+    admin, application, host, run_jobs, make_plan, ran
 ):
     make_plan(keep=1)
     with run_jobs():
-        BackupService(admin).take(server.pk)
+        BackupService(admin).take(application.pk)
     with run_jobs():
-        BackupService(admin).take(server.pk)
+        BackupService(admin).take(application.pk)
 
-    assert BackupFileRepository().alive_for_server(server.pk).count() == 2
+    assert BackupFileRepository().alive_for_application(application.pk).count() == 2

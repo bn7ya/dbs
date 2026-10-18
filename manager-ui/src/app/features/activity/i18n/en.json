@@ -53,7 +53,17 @@
         "host_key_reject": "Reject host key for Claude",
         "keypair": "Create SSH key",
         "discover": "Find django-dbs settings",
-        "passphrase_capture": "Save backup passphrase"
+        "passphrase_capture": "Save backup passphrase",
+        "merge": "Join servers"
+      },
+      "application": {
+        "create": "Add application",
+        "update": "Edit application",
+        "delete": "Remove application",
+        "check": "Application check",
+        "passphrase_reveal": "Show backup passphrase",
+        "passphrase_capture": "Save backup passphrase",
+        "discover": "Find applications"
       },
       "backup": {
         "take": "Back up server",

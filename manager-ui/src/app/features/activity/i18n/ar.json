@@ -53,7 +53,17 @@
         "host_key_reject": "رفض مفتاح المضيف لـ Claude",
         "keypair": "إنشاء مفتاح SSH",
         "discover": "البحث عن إعدادات django-dbs",
-        "passphrase_capture": "حفظ عبارة مرور النسخ الاحتياطية"
+        "passphrase_capture": "حفظ عبارة مرور النسخ الاحتياطية",
+        "merge": "دمج الخوادم"
+      },
+      "application": {
+        "create": "إضافة تطبيق",
+        "update": "تعديل التطبيق",
+        "delete": "إزالة التطبيق",
+        "check": "فحص التطبيق",
+        "passphrase_reveal": "إظهار عبارة مرور النسخ الاحتياطية",
+        "passphrase_capture": "حفظ عبارة مرور النسخ الاحتياطية",
+        "discover": "البحث عن التطبيقات"
       },
       "backup": {
         "take": "نسخ الخادم احتياطيا",

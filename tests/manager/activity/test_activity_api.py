@@ -19,6 +19,8 @@ SHAPE = {
     "actor",
     "server",
     "server_name",
+    "application",
+    "application_name",
     "connection",
     "created_at",
     "started_at",
@@ -52,6 +54,7 @@ def test_an_entry_has_the_documented_shape(api, admin):
     assert entry["actor"] == "sara"
     assert entry["ip"] == "203.0.113.9"
     assert entry["server"] is None and entry["server_name"] is None
+    assert entry["application"] is None and entry["application_name"] is None
     assert entry["started_at"] == entry["finished_at"]
 
 
@@ -106,7 +109,7 @@ def test_the_log_is_paginated(api, admin):
 
 
 @pytest.mark.django_db
-def test_the_log_filters_by_action_status_and_server(api, admin):
+def test_the_log_filters_by_action_status_server_and_application(api, admin):
     service = ActivityService(admin)
     service.record("server.check", status=audit.FAILED)
     service.record("server.check")
@@ -122,7 +125,8 @@ def test_the_log_filters_by_action_status_and_server(api, admin):
         ("server.check", "failed")
     ]
     assert actions(server=uuid4()) == []
-    assert len(actions(server="", action="", status="")) == 3
+    assert actions(application=uuid4()) == []
+    assert len(actions(server="", application="", action="", status="")) == 3
 
 
 @pytest.mark.django_db
@@ -136,11 +140,12 @@ def test_an_unknown_status_is_a_field_error(api):
 
 
 @pytest.mark.django_db
-def test_a_server_that_is_not_a_uuid_is_a_field_error(api):
-    response = api.get(LIST, {"server": "web-1"})
+@pytest.mark.parametrize("field", ["server", "application"])
+def test_a_server_or_application_that_is_not_a_uuid_is_a_field_error(api, field):
+    response = api.get(LIST, {field: "web-1"})
 
     assert response.status_code == 400
-    assert response.json()["error"]["fields"] == {"server": ["invalid"]}
+    assert response.json()["error"]["fields"] == {field: ["invalid"]}
 
 
 @pytest.mark.django_db

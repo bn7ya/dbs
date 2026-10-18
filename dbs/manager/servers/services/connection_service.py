@@ -20,8 +20,9 @@ from dbs.manager.servers.exceptions import (
     SSHAuthFailed,
     SSHUnreachable,
 )
+from dbs.manager.applications.models import Application
 from dbs.manager.servers.gateways import (
-    ComposeService,
+    ContainerTarget,
     Credentials,
     DbsProfile,
     RemoteHost,
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 CONNECTION_ERRORS = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
 PROBE_EVERY = timedelta(minutes=5)
 PROBE_COMMAND = ["true"]
+STAGING_FOLDER = ".dbs-staging"
 
 _probing: set[UUID] = set()
 _probing_lock = threading.Lock()
@@ -51,7 +53,6 @@ class _Address(TypedDict):
     port: int
     username: str
     host_key: str
-    remote_dir: str
     timeout_on_host: bool
     timeout_in_container: bool
 
@@ -66,16 +67,21 @@ class ServerConnectionService:
         self.servers = ServerRepository()
         self.liveness = ServerLiveness()
 
-    def credentials(self, server: Server, pulse: Pulse | None = None) -> Credentials:
+    def credentials(
+        self,
+        server: Server,
+        pulse: Pulse | None = None,
+        application: Application | None = None,
+    ) -> Credentials:
         address: _Address = {
             "host": server.host,
             "port": server.port,
             "username": server.username,
             "host_key": server.host_key,
-            "remote_dir": server.remote_backup_dir,
             "timeout_on_host": bool(server.timeout_on_host),
-            "timeout_in_container": bool(server.timeout_in_container)
-            and server.in_compose,
+            "timeout_in_container": application is not None
+            and application.in_container
+            and bool(application.timeout_in_container),
         }
         if server.auth_method == Server.AuthMethod.KEY:
             return Credentials(
@@ -95,15 +101,21 @@ class ServerConnectionService:
         )
 
     @contextmanager
-    def open(self, server: Server | UUID) -> Iterator[RemoteHost]:
-        if not isinstance(server, Server):
-            server = self._active(server)
+    def open(self, target: Server | Application | UUID) -> Iterator[RemoteHost]:
+        application = target if isinstance(target, Application) else None
+        server = (
+            target.server
+            if isinstance(target, Application)
+            else target
+            if isinstance(target, Server)
+            else self._active(target)
+        )
         pulse = heartbeat.current()
         try:
             with ExitStack() as stack:
                 try:
                     remote = stack.enter_context(
-                        connect(self.credentials(server, pulse))
+                        connect(self.credentials(server, pulse, application))
                     )
                 except CONNECTION_ERRORS as exc:
                     self.liveness.offline(server, exc)
@@ -113,7 +125,7 @@ class ServerConnectionService:
                     stack.enter_context(pulse.connected())
                 yield remote
         except RemoteCommandFailed as exc:
-            self._interrupted(server, exc)
+            self._interrupted(server, application, exc)
             raise
         self.liveness.online(server)
 
@@ -132,32 +144,36 @@ class ServerConnectionService:
                 _probing.discard(server.pk)
         return True
 
-    def dbs_profile(self, server: Server) -> DbsProfile:
+    def dbs_profile(self, application: Application) -> DbsProfile:
         return DbsProfile(
-            python=server.python_path,
-            manage=server.manage_path,
-            project_dir=server.project_dir or None,
-            settings_module=server.settings_module or None,
-            compose=(
-                ComposeService(
-                    service=server.compose_service,
-                    files=tuple(server.compose_files),
-                )
-                if server.in_compose
-                else None
-            ),
+            python=application.python_path,
+            manage=application.manage_path,
+            project_dir=application.project_dir or None,
+            settings_module=application.settings_module or None,
+            container=container_of(application),
         )
 
-    def backup_passphrase(self, server: Server) -> str:
-        if server.backup_passphrase_sealed is None:
+    def backup_passphrase(self, application: Application) -> str:
+        if application.backup_passphrase_sealed is None:
             raise PassphraseMissing()
         return unseal_text(
-            server.backup_passphrase_sealed, context=vault_contexts.BACKUP_PASSPHRASE
+            application.backup_passphrase_sealed,
+            context=vault_contexts.BACKUP_PASSPHRASE,
         )
 
-    def _interrupted(self, server: Server, exc: RemoteCommandFailed) -> None:
+    def staging_folder(self, application: Application, remote: RemoteHost) -> str:
+        if application.in_container:
+            return remote.home_folder(STAGING_FOLDER)
+        return application.remote_backup_dir
+
+    def _interrupted(
+        self,
+        server: Server,
+        application: Application | None,
+        exc: RemoteCommandFailed,
+    ) -> None:
         if exc.settles_at is not None:
-            settling.mark(server.pk, exc.settles_at)
+            settling.mark((application or server).pk, exc.settles_at)
         if isinstance(exc, ServerConnectionLost):
             self.liveness.offline(server, exc)
 
@@ -173,6 +189,20 @@ class ServerConnectionService:
         if server is None:
             raise NotFound()
         return server
+
+
+def container_of(application: Application) -> ContainerTarget | None:
+    if not application.in_container:
+        return None
+    compose = application.kind == Application.Kind.COMPOSE
+    return ContainerTarget(
+        engine=application.engine or Application.Engine.DOCKER,
+        service=application.compose_service if compose else "",
+        files=tuple(application.compose_files) if compose else (),
+        project=application.compose_project if compose else "",
+        container="" if compose else application.container_name,
+        workdir=application.workdir,
+    )
 
 
 def probe_servers() -> int:

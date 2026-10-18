@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from dbs.manager.adapters import AdapterError
+from dbs.manager.applications.models import Application
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerService
-from dbs.manager.adapters import AdapterError
 
 
 def identifier(value: str, what: str) -> UUID:
@@ -46,5 +48,35 @@ def servers(user: Any, references: list[str], every: bool) -> list[Server]:
     return list(
         {
             found.pk: found for found in (server(user, ref) for ref in references)
+        }.values()
+    )
+
+
+def application(user: Any, reference: str) -> Application:
+    service = ApplicationService(user)
+    try:
+        return service.get(UUID(reference))
+    except ValueError:
+        pass
+    found = service.list().filter(name=reference).first()
+    if found is None:
+        raise AdapterError(f"there is no application named {reference!r}.")
+    return found
+
+
+def applications(user: Any, references: list[str], every: bool) -> list[Application]:
+    if every and references:
+        raise AdapterError("name applications or choose all of them, not both.")
+    if every:
+        chosen = list(ApplicationService(user).list())
+        if not chosen:
+            raise AdapterError("there are no applications yet.")
+        return chosen
+    if not references:
+        raise AdapterError("name at least one application, or choose all of them.")
+    return list(
+        {
+            found.pk: found
+            for found in (application(user, ref) for ref in references)
         }.values()
     )

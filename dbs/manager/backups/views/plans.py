@@ -13,9 +13,9 @@ from rest_framework.views import APIView
 from dbs.manager.activity.serializers import JobSerializer
 from dbs.manager.backups.models import BackupPlan
 from dbs.manager.backups.serializers import (
-    BackupFilterSerializer,
     BackupPlanSerializer,
     PlanCreateSerializer,
+    PlanFilterSerializer,
     PlanUpdateSerializer,
 )
 from dbs.manager.backups.services import BackupPlanService
@@ -26,9 +26,11 @@ class PlanListView(ListAPIView):
     serializer_class = BackupPlanSerializer
 
     def get_queryset(self) -> QuerySet[BackupPlan]:
-        query = BackupFilterSerializer(data=self.request.query_params)
+        query = PlanFilterSerializer(data=self.request.query_params)
         query.is_valid(raise_exception=True)
-        return BackupPlanService(self.request.user).list(query.validated_data["server"])
+        return BackupPlanService(self.request.user).list(
+            query.validated_data["application"]
+        )
 
     def post(self, request: Request) -> Response:
         payload = PlanCreateSerializer(data=request.data)

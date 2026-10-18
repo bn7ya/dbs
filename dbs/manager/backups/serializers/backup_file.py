@@ -6,14 +6,19 @@ from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.restore_modes import RestoreMode
 
 ACCOUNT_PASSWORD_MAX_LENGTH = 128
-SERVER_NAME_MAX_LENGTH = 200
+APPLICATION_NAME_MAX_LENGTH = 200
 TICKET_MAX_LENGTH = 64
 
 
 class BackupFileSerializer(serializers.ModelSerializer):
-    server = serializers.UUIDField(source="server_id", read_only=True)
+    application = serializers.UUIDField(source="application_id", read_only=True)
+    application_name = serializers.CharField(
+        source="application.name",
+        read_only=True,
+    )
+    server = serializers.UUIDField(source="application.server_id", read_only=True)
     server_name = serializers.CharField(
-        source="server.name",
+        source="application.server.name",
         read_only=True,
     )
     taken_by = serializers.CharField(
@@ -36,6 +41,8 @@ class BackupFileSerializer(serializers.ModelSerializer):
         model = BackupFile
         fields = [
             "id",
+            "application",
+            "application_name",
             "server",
             "server_name",
             "kind",
@@ -55,15 +62,15 @@ class BackupFileSerializer(serializers.ModelSerializer):
 
 
 class BackupFilterSerializer(serializers.Serializer):
-    server = serializers.UUIDField()
+    application = serializers.UUIDField(required=False)
 
 
 class TakeSerializer(serializers.Serializer):
-    server = serializers.UUIDField()
+    application = serializers.UUIDField()
 
 
 class UploadSerializer(serializers.Serializer):
-    server = serializers.UUIDField()
+    application = serializers.UUIDField()
     file = serializers.FileField()
 
 
@@ -79,12 +86,12 @@ class RestoreSerializer(serializers.Serializer):
         trim_whitespace=False,
         max_length=ACCOUNT_PASSWORD_MAX_LENGTH,
     )
-    server_name = serializers.CharField(
+    application_name = serializers.CharField(
         required=False,
         allow_blank=True,
-        max_length=SERVER_NAME_MAX_LENGTH,
+        max_length=APPLICATION_NAME_MAX_LENGTH,
     )
-    target_server = serializers.UUIDField(required=False, allow_null=True)
+    target_application = serializers.UUIDField(required=False, allow_null=True)
 
 
 class AccountPasswordSerializer(serializers.Serializer):

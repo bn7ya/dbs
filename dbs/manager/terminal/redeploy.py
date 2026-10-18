@@ -5,9 +5,9 @@ from typing import Any
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.adapters import jobs, references
 from dbs.manager.adapters.forms import validated
+from dbs.manager.applications.models import Application
 from dbs.manager.redeploy.serializers import RedeploySerializer, RevertSerializer
 from dbs.manager.redeploy.services import RUN, RedeployService
-from dbs.manager.servers.models import Server
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.terminal.progress import reported
 from dbs.manager.terminal.session import TerminalSession
@@ -15,11 +15,11 @@ from dbs.manager.terminal.session import TerminalSession
 
 def start(session: TerminalSession) -> int:
     args = session.args
-    source = references.server(session.user, args.source)
-    target = references.server(session.user, args.target)
+    source = references.application(session.user, args.source)
+    target = references.application(session.user, args.target)
     body: dict[str, Any] = {
-        "source_server": source.pk,
-        "target_server": target.pk,
+        "source_application": source.pk,
+        "target_application": target.pk,
         "flush": args.flush,
         "rehearsal": not args.real,
     }
@@ -49,7 +49,7 @@ def revert(session: TerminalSession) -> int:
     found = ActivityService(session.user).get(move)
     if found.action != RUN:
         raise CommandFailed(f"{move} is not a move.")
-    target = references.server(session.user, found.subject)
+    target = references.application(session.user, found.subject)
     body: dict[str, Any] = {"rehearsal": not args.real, **_confirmed(session, target)}
     data = validated(RevertSerializer, body)
     _say(session, f"Putting {target.name} back as it was before move {move}...")
@@ -62,13 +62,13 @@ def revert(session: TerminalSession) -> int:
     return session.outcome(entry, f"{done} {target.name}.")
 
 
-def _confirmed(session: TerminalSession, target: Server) -> dict[str, str]:
+def _confirmed(session: TerminalSession, target: Application) -> dict[str, str]:
     args = session.args
     if not args.real:
         return {}
     if not args.confirm_name:
         session.confirm(
-            f"Type the target server's name ({target.name}) to go ahead:",
+            f"Type the target application's name ({target.name}) to go ahead:",
             expected=target.name,
         )
     return {

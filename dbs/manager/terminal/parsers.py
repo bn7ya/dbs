@@ -14,7 +14,17 @@ Location = Callable[[argparse.ArgumentParser], None]
 
 
 def register(commands, location: Location) -> None:
-    for build in (servers, backups, plans, activity, envfiles, files, redeploy, mcp):
+    for build in (
+        servers,
+        applications,
+        backups,
+        plans,
+        activity,
+        envfiles,
+        files,
+        redeploy,
+        mcp,
+    ):
         build(commands, location)
 
 
@@ -63,36 +73,51 @@ def _yes(parser) -> None:
     )
 
 
-def _server_settings(parser) -> None:
+def _application_settings(parser) -> None:
     parser.add_argument(
-        "--runtime",
-        choices=("host", "compose"),
-        help="Where the project runs: on the server itself, or in a Docker Compose service.",
+        "--kind",
+        choices=("host", "compose", "container"),
+        help="Where the application runs: on the server itself, in a Compose "
+        "service, or in a container.",
+    )
+    parser.add_argument(
+        "--engine",
+        choices=("docker", "podman"),
+        help="The container engine for --kind compose or container.",
+    )
+    parser.add_argument(
+        "--compose-project", help="The Compose project name, when it is not the folder's."
     )
     parser.add_argument(
         "--compose-service",
-        help="The Docker Compose service that runs the project, such as backend.",
+        help="The Compose service that runs the application, such as backend.",
     )
     parser.add_argument(
         "--compose-file",
         dest="compose_files",
         action="append",
         metavar="PATH",
-        help="A compose file to pass to docker compose -f. Repeat for more, in order.",
+        help="A compose file to pass with -f. Repeat for more, in order.",
+    )
+    parser.add_argument(
+        "--container", dest="container_name", help="The container for --kind container."
     )
     parser.add_argument(
         "--project-dir",
-        help="The folder that holds manage.py, or the compose file for --runtime compose.",
+        help="The folder on the server that holds manage.py or the compose file.",
+    )
+    parser.add_argument(
+        "--workdir", help="The folder inside the container that holds manage.py."
     )
     parser.add_argument(
         "--python",
         dest="python_path",
-        help="The Python to run; inside the service for --runtime compose.",
+        help="The Python to run; inside the container for a container application.",
     )
     parser.add_argument(
         "--manage",
         dest="manage_path",
-        help="The manage.py to run; inside the service for --runtime compose.",
+        help="The manage.py to run; inside the container for a container application.",
     )
     parser.add_argument(
         "--settings", dest="settings_module", help="DJANGO_SETTINGS_MODULE to use."
@@ -100,9 +125,14 @@ def _server_settings(parser) -> None:
     parser.add_argument(
         "--backup-dir",
         dest="remote_backup_dir",
-        help="Where the server writes its backups.",
+        help="Where the application writes its backups.",
     )
     parser.add_argument("--env-path", help="The .env file to keep versions of.")
+    parser.add_argument(
+        "--env-location",
+        choices=("host", "container"),
+        help="Whether --env-path is on the server or inside the container.",
+    )
     parser.add_argument(
         "--file-root",
         dest="file_roots",
@@ -147,7 +177,7 @@ def servers(commands, location: Location) -> None:
     add = _verb(
         verbs,
         "add",
-        "Add a server: confirm its host key, find its project, and check it.",
+        "Add a server: confirm its host key, sign in and check it.",
         "terminal.servers:add",
         location,
     )
@@ -163,21 +193,10 @@ def servers(commands, location: Location) -> None:
     add.add_argument(
         "--host-key", help="The host key to pin, instead of confirming the one offered."
     )
-    add.add_argument(
-        "--backup-passphrase",
-        action="store_true",
-        help="Ask for the passphrase its backups use. Defaults to a new random one.",
-    )
-    add.add_argument(
-        "--no-discover",
-        action="store_true",
-        help="Do not look for the project and its Python.",
-    )
-    _server_settings(add)
     _yes(add)
 
     edit = _verb(
-        verbs, "edit", "Change a server's settings.", "terminal.servers:edit", location
+        verbs, "edit", "Change how to reach a server.", "terminal.servers:edit", location
     )
     edit.add_argument("server", help="The server's name or id.")
     edit.add_argument("--name", help="A new name.")
@@ -185,18 +204,12 @@ def servers(commands, location: Location) -> None:
     edit.add_argument("--port", type=int, help="A new SSH port.")
     edit.add_argument("--user", dest="username", help="A new SSH account.")
     _ssh_auth(edit)
-    edit.add_argument(
-        "--backup-passphrase",
-        action="store_true",
-        help="Ask for the passphrase its backups use. Never change it once there are "
-        "backups: they would no longer open.",
-    )
-    _server_settings(edit)
 
     remove = _verb(
         verbs,
         "remove",
-        "Remove a server. It asks for its name and your password.",
+        "Remove a server that runs no application. It asks for its name and your "
+        "password.",
         "terminal.servers:remove",
         location,
     )
@@ -206,25 +219,23 @@ def servers(commands, location: Location) -> None:
     check = _verb(
         verbs,
         "check",
-        "Check that servers are reachable and ready.",
+        "Check that servers answer and which container engines they have.",
         "terminal.servers:check",
         location,
     )
     check.add_argument("servers", nargs="*", metavar="SERVER")
     check.add_argument("--all", action="store_true", help="Check every server.")
 
-    discover = _verb(
+    merge = _verb(
         verbs,
-        "discover",
-        "Find the project and the Python that has django-dbs.",
-        "terminal.servers:discover",
+        "merge",
+        "Join a server into another that is the same machine: its applications move "
+        "and it is removed. It asks for your password.",
+        "terminal.servers:merge",
         location,
     )
-    discover.add_argument("server", help="The server's name or id.")
-    discover.add_argument("--project", help="Look in this folder only.")
-    discover.add_argument(
-        "--save", action="store_true", help="Save what was found to the server."
-    )
+    merge.add_argument("server", help="The server to join into the other.")
+    merge.add_argument("--into", required=True, help="The server that stays.")
 
     browse = _verb(
         verbs,
@@ -268,26 +279,123 @@ def servers(commands, location: Location) -> None:
         "confirmation", help="The confirmation id Claude was given."
     )
 
+
+def applications(commands, location: Location) -> None:
+    verbs = _area(
+        commands,
+        "app",
+        "Find, add, change, check and remove the Django applications on servers.",
+    )
+
+    found = _verb(
+        verbs,
+        "list",
+        "List the applications.",
+        "terminal.applications:list_applications",
+        location,
+    )
+    found.add_argument("--server", help="Only the applications on this server.")
+    found.add_argument("--search", help="Only applications whose name has this.")
+
+    show = _verb(
+        verbs, "show", "Show one application.", "terminal.applications:show", location
+    )
+    show.add_argument("application", help="The application's name or id.")
+
+    discover = _verb(
+        verbs,
+        "discover",
+        "Look in a folder on a server for the application: on the server itself, "
+        "in Compose services or in containers, with Docker or Podman.",
+        "terminal.applications:discover",
+        location,
+    )
+    discover.add_argument("server", help="The server's name or id.")
+    discover.add_argument(
+        "--folder",
+        default="",
+        help="The application's folder on the server. Without it, folders that "
+        "look like projects are suggested.",
+    )
+
+    add = _verb(
+        verbs,
+        "add",
+        "Add the application found in a folder, then check it.",
+        "terminal.applications:add",
+        location,
+    )
+    add.add_argument("name", help="A name for this application.")
+    add.add_argument("--server", required=True, help="The server it runs on.")
+    add.add_argument(
+        "--folder", required=True, help="The application's folder on the server."
+    )
+    add.add_argument(
+        "--candidate",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Which of the places found to add, from app discover. Defaults to the "
+        "first.",
+    )
+    add.add_argument(
+        "--backup-passphrase",
+        action="store_true",
+        help="Ask for the passphrase its backups use. Defaults to a new random one.",
+    )
+    _application_settings(add)
+
+    edit = _verb(
+        verbs,
+        "edit",
+        "Change an application's settings.",
+        "terminal.applications:edit",
+        location,
+    )
+    edit.add_argument("application", help="The application's name or id.")
+    edit.add_argument("--name", help="A new name.")
+    _application_settings(edit)
+
+    remove = _verb(
+        verbs,
+        "remove",
+        "Remove an application. It asks for its name and your password.",
+        "terminal.applications:remove",
+        location,
+    )
+    remove.add_argument("application", help="The application's name or id.")
+    _yes(remove)
+
+    check = _verb(
+        verbs,
+        "check",
+        "Check that applications are ready to back up.",
+        "terminal.applications:check",
+        location,
+    )
+    check.add_argument("applications", nargs="*", metavar="APPLICATION")
+    check.add_argument("--all", action="store_true", help="Check every application.")
+
     passphrase = _verb(
         verbs,
         "passphrase",
-        "Show the passphrase a server's backups use. Never change it: older backups "
-        "would no longer open.",
-        "terminal.servers:passphrase",
+        "Show the passphrase an application's backups use. Never change it: older "
+        "backups would no longer open.",
+        "terminal.applications:passphrase",
         location,
     )
-    passphrase.add_argument("server", help="The server's name or id.")
+    passphrase.add_argument("application", help="The application's name or id.")
 
     capture = _verb(
         verbs,
         "capture-passphrase",
-        "Read the backup passphrase from the server itself. Do it only while adding "
-        "a server, before its first backup: a server's backup passphrase must never "
-        "change, because older backups would no longer open.",
-        "terminal.servers:capture_passphrase",
+        "Read the backup passphrase from the application itself. Do it only while "
+        "adding it, before its first backup: an application's backup passphrase "
+        "must never change, because older backups would no longer open.",
+        "terminal.applications:capture_passphrase",
         location,
     )
-    capture.add_argument("server", help="The server's name or id.")
+    capture.add_argument("application", help="The application's name or id.")
 
 
 def backups(commands, location: Location) -> None:
@@ -296,17 +404,17 @@ def backups(commands, location: Location) -> None:
     found = _verb(
         verbs, "list", "List the backups.", "terminal.backups:list_backups", location
     )
-    found.add_argument("--server", help="Only this server's backups.")
+    found.add_argument("--app", dest="application", help="Only this application's backups.")
 
     take = _verb(
         verbs,
         "take",
-        "Take a backup of one, several or every server.",
+        "Take a backup of one, several or every application.",
         "terminal.backups:take",
         location,
     )
-    take.add_argument("servers", nargs="*", metavar="SERVER")
-    take.add_argument("--all", action="store_true", help="Back up every server.")
+    take.add_argument("applications", nargs="*", metavar="APPLICATION")
+    take.add_argument("--all", action="store_true", help="Back up every application.")
 
     verify = _verb(
         verbs,
@@ -326,12 +434,12 @@ def backups(commands, location: Location) -> None:
     )
     restore.add_argument("backup", help="The backup's id.")
     restore.add_argument("--mode", choices=RESTORE_MODES, required=True)
-    restore.add_argument("--to", help="Restore onto this server instead.")
+    restore.add_argument("--to", help="Restore into this application instead.")
     restore.add_argument(
         "--real", action="store_true", help="Restore for real, not a rehearsal."
     )
     restore.add_argument(
-        "--confirm-name", help="The target server's name, instead of typing it."
+        "--confirm-name", help="The target application's name, instead of typing it."
     )
 
     download = _verb(
@@ -352,7 +460,7 @@ def backups(commands, location: Location) -> None:
         "terminal.backups:upload",
         location,
     )
-    upload.add_argument("server", help="The server it belongs to.")
+    upload.add_argument("application", help="The application it belongs to.")
     upload.add_argument("file", help="The file to keep.")
 
     delete = _verb(
@@ -403,7 +511,7 @@ def _plan_fields(parser) -> None:
         type=int,
         choices=KEEP_REMOTE_CHOICES,
         metavar="N",
-        help="How many to keep on the server, 0 to 5. Keeping fewer asks for your "
+        help="How many to leave on the server, 0 to 5. Keeping fewer asks for your "
         "password.",
     )
 
@@ -414,13 +522,13 @@ def plans(commands, location: Location) -> None:
     found = _verb(
         verbs, "list", "List the plans.", "terminal.plans:list_plans", location
     )
-    found.add_argument("--server", help="Only this server's plans.")
+    found.add_argument("--app", dest="application", help="Only this application's plans.")
 
     show = _verb(verbs, "show", "Show one plan.", "terminal.plans:show", location)
     show.add_argument("plan", help="The plan's id.")
 
     add = _verb(verbs, "add", "Add a plan.", "terminal.plans:add", location)
-    add.add_argument("server", help="The server's name or id.")
+    add.add_argument("application", help="The application's name or id.")
     add.add_argument("name", help="A name for the plan.")
     add.add_argument("--kind", choices=PLAN_KINDS, required=True)
     _plan_fields(add)
@@ -451,7 +559,10 @@ def activity(commands, location: Location) -> None:
         "terminal.activity:list_activity",
         location,
     )
-    found.add_argument("--server", help="Only this server's activity.")
+    found.add_argument(
+        "--server", help="Only this server's activity and its applications'."
+    )
+    found.add_argument("--app", dest="application", help="Only this application's activity.")
     found.add_argument("--action", help="Only this action, for example backup.take.")
     found.add_argument("--status", choices=ACTIVITY_STATUSES)
     found.add_argument(
@@ -463,7 +574,7 @@ def activity(commands, location: Location) -> None:
 
 
 def envfiles(commands, location: Location) -> None:
-    verbs = _area(commands, "env", "Keep versions of a server's .env file.")
+    verbs = _area(commands, "env", "Keep versions of an application's .env file.")
 
     found = _verb(
         verbs,
@@ -472,7 +583,7 @@ def envfiles(commands, location: Location) -> None:
         "terminal.envfiles:list_versions",
         location,
     )
-    found.add_argument("server", help="The server's name or id.")
+    found.add_argument("application", help="The application's name or id.")
 
     pull = _verb(
         verbs,
@@ -481,7 +592,7 @@ def envfiles(commands, location: Location) -> None:
         "terminal.envfiles:pull",
         location,
     )
-    pull.add_argument("server", help="The server's name or id.")
+    pull.add_argument("application", help="The application's name or id.")
 
     compare = _verb(
         verbs,
@@ -501,7 +612,7 @@ def envfiles(commands, location: Location) -> None:
     push = _verb(
         verbs,
         "push",
-        "Write a kept version back to its server.",
+        "Write a kept version back to its application.",
         "terminal.envfiles:push",
         location,
     )
@@ -509,12 +620,12 @@ def envfiles(commands, location: Location) -> None:
 
 
 def files(commands, location: Location) -> None:
-    verbs = _area(commands, "files", "Work with the files on a server.")
+    verbs = _area(commands, "files", "Work with an application's files on its server.")
 
     found = _verb(
         verbs, "list", "List a folder.", "terminal.files:list_folder", location
     )
-    found.add_argument("server", help="The server's name or id.")
+    found.add_argument("application", help="The application's name or id.")
     found.add_argument(
         "path", nargs="?", help="The folder. Defaults to the first root."
     )
@@ -526,63 +637,67 @@ def files(commands, location: Location) -> None:
         "terminal.files:download",
         location,
     )
-    download.add_argument("server", help="The server's name or id.")
+    download.add_argument("application", help="The application's name or id.")
     download.add_argument("path", help="The file on the server.")
     download.add_argument("-o", "--output", help="Where to save it.")
 
     upload = _verb(
         verbs, "upload", "Put a file on the server.", "terminal.files:upload", location
     )
-    upload.add_argument("server", help="The server's name or id.")
+    upload.add_argument("application", help="The application's name or id.")
     upload.add_argument("folder", help="The folder on the server.")
     upload.add_argument("file", help="The file here.")
 
     folder = _verb(verbs, "mkdir", "Make a folder.", "terminal.files:mkdir", location)
-    folder.add_argument("server", help="The server's name or id.")
+    folder.add_argument("application", help="The application's name or id.")
     folder.add_argument("folder", help="The folder to make it in.")
     folder.add_argument("name", help="The new folder's name.")
 
     delete = _verb(
         verbs, "delete", "Delete a file or folder.", "terminal.files:delete", location
     )
-    delete.add_argument("server", help="The server's name or id.")
+    delete.add_argument("application", help="The application's name or id.")
     delete.add_argument("path", help="What to delete.")
     _yes(delete)
 
 
 def redeploy(commands, location: Location) -> None:
-    verbs = _area(commands, "redeploy", "Move a project from one server onto another.")
+    verbs = _area(
+        commands, "redeploy", "Move an application onto another, on any server."
+    )
     start = _verb(
         verbs,
         "start",
-        "Move a project onto a new server with the same environment: back up the "
+        "Move an application onto a new one with the same environment: back up the "
         "old one now, record the new one, push the .env, migrate, restore and "
         "check. Rehearses unless --real.",
         "terminal.redeploy:start",
         location,
     )
     start.add_argument(
-        "--from", dest="source", required=True, help="The old server."
+        "--from", dest="source", required=True, help="The old application."
     )
-    start.add_argument("--to", dest="target", required=True, help="The new server.")
+    start.add_argument(
+        "--to", dest="target", required=True, help="The new application."
+    )
     start.add_argument(
         "--backup",
-        help="The old server's backup to restore when it cannot be reached. "
+        help="The old application's backup to restore when it cannot be reached. "
         "Defaults to its newest.",
     )
     start.add_argument("--env", dest="env_version", help="A .env version to push.")
     start.add_argument(
-        "--flush", action="store_true", help="Replace the new server's data."
+        "--flush", action="store_true", help="Replace the new application's data."
     )
     start.add_argument("--real", action="store_true", help="Move for real.")
     start.add_argument(
-        "--confirm-name", help="The new server's name, instead of typing it."
+        "--confirm-name", help="The new application's name, instead of typing it."
     )
 
     revert = _verb(
         verbs,
         "revert",
-        "Put the new server back as it was before a move that stopped: push its "
+        "Put the new application back as it was before a move that stopped: push its "
         "recorded .env back and restore its safety backup. Rehearses unless --real.",
         "terminal.redeploy:revert",
         location,
@@ -590,5 +705,5 @@ def redeploy(commands, location: Location) -> None:
     revert.add_argument("move", metavar="MOVE_ID", help="The move's activity number.")
     revert.add_argument("--real", action="store_true", help="Revert for real.")
     revert.add_argument(
-        "--confirm-name", help="The new server's name, instead of typing it."
+        "--confirm-name", help="The new application's name, instead of typing it."
     )

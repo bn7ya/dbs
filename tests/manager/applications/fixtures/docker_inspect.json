@@ -1,0 +1,588 @@
+[
+    {
+        "Id": "cbfea8576810036219d5116394d1b524878b397fa091eb7316ba6442f33df123",
+        "Created": "2026-10-12T09:14:03.218911Z",
+        "Path": "gunicorn",
+        "Args": [
+            "shop.wsgi",
+            "--bind",
+            "0.0.0.0:8000"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 48213,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-12T09:14:04.552301Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:ad6465dbe4f4d3bb2945d86879df9200189506fd9619b7444db206126db4b51e",
+        "ResolvConfPath": "/var/lib/docker/containers/cbfea8576810036219d5116394d1b524878b397fa091eb7316ba6442f33df123/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/cbfea8576810036219d5116394d1b524878b397fa091eb7316ba6442f33df123/hostname",
+        "HostsPath": "/var/lib/docker/containers/cbfea8576810036219d5116394d1b524878b397fa091eb7316ba6442f33df123/hosts",
+        "LogPath": "/var/lib/docker/containers/cbfea8576810036219d5116394d1b524878b397fa091eb7316ba6442f33df123/cbfea8576810036219d5116394d1b524878b397fa091eb7316ba6442f33df123-json.log",
+        "Name": "/shop-backend-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/shop/media",
+                "Destination": "/app/media",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/shop/backups",
+                "Destination": "/app/backups",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "volume",
+                "Name": "shop_static",
+                "Source": "/var/lib/docker/volumes/shop_static/_data",
+                "Destination": "/app/static",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "cbfea8576810",
+            "Domainname": "",
+            "User": "app",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "DJANGO_SETTINGS_MODULE=shop.settings.prod",
+                "DATABASE_URL=postgres://shop:[scrubbed]@db:5432/shop",
+                "PATH=/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LANG=C.UTF-8",
+                "PYTHONUNBUFFERED=1"
+            ],
+            "Cmd": [
+                "gunicorn",
+                "shop.wsgi",
+                "--bind",
+                "0.0.0.0:8000"
+            ],
+            "Image": "registry.example.com/shop/backend:2026.10",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "10e08a419e850eba1ebba18fdd28eb7ec1b7e8baa9bcc3b973e2b8891ec726be",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "db:service_started:false",
+                "com.docker.compose.image": "sha256:ad6465dbe4f4d3bb2945d86879df9200189506fd9619b7444db206126db4b51e",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "shop",
+                "com.docker.compose.project.config_files": "${HOST}/srv/shop/compose.yaml,${HOST}/srv/shop/compose.prod.yaml",
+                "com.docker.compose.project.working_dir": "${HOST}/srv/shop",
+                "com.docker.compose.service": "backend",
+                "com.docker.compose.version": "2.29.7"
+            }
+        }
+    },
+    {
+        "Id": "f28b62b2b757ddbdc7452cb5d0e5dc0d45499d6c04a5446e3b809549ff602e95",
+        "Created": "2026-10-12T09:14:03.218911Z",
+        "Path": "gunicorn",
+        "Args": [
+            "shop.wsgi",
+            "--bind",
+            "0.0.0.0:8000"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 48213,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-12T09:14:04.913377Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:ad6465dbe4f4d3bb2945d86879df9200189506fd9619b7444db206126db4b51e",
+        "ResolvConfPath": "/var/lib/docker/containers/f28b62b2b757ddbdc7452cb5d0e5dc0d45499d6c04a5446e3b809549ff602e95/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/f28b62b2b757ddbdc7452cb5d0e5dc0d45499d6c04a5446e3b809549ff602e95/hostname",
+        "HostsPath": "/var/lib/docker/containers/f28b62b2b757ddbdc7452cb5d0e5dc0d45499d6c04a5446e3b809549ff602e95/hosts",
+        "LogPath": "/var/lib/docker/containers/f28b62b2b757ddbdc7452cb5d0e5dc0d45499d6c04a5446e3b809549ff602e95/f28b62b2b757ddbdc7452cb5d0e5dc0d45499d6c04a5446e3b809549ff602e95-json.log",
+        "Name": "/shop-backend-2",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/shop/media",
+                "Destination": "/app/media",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/shop/backups",
+                "Destination": "/app/backups",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "volume",
+                "Name": "shop_static",
+                "Source": "/var/lib/docker/volumes/shop_static/_data",
+                "Destination": "/app/static",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "f28b62b2b757",
+            "Domainname": "",
+            "User": "app",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "DJANGO_SETTINGS_MODULE=shop.settings.prod",
+                "DATABASE_URL=postgres://shop:[scrubbed]@db:5432/shop",
+                "PATH=/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LANG=C.UTF-8",
+                "PYTHONUNBUFFERED=1"
+            ],
+            "Cmd": [
+                "gunicorn",
+                "shop.wsgi",
+                "--bind",
+                "0.0.0.0:8000"
+            ],
+            "Image": "registry.example.com/shop/backend:2026.10",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "10e08a419e850eba1ebba18fdd28eb7ec1b7e8baa9bcc3b973e2b8891ec726be",
+                "com.docker.compose.container-number": "2",
+                "com.docker.compose.depends_on": "db:service_started:false",
+                "com.docker.compose.image": "sha256:ad6465dbe4f4d3bb2945d86879df9200189506fd9619b7444db206126db4b51e",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "shop",
+                "com.docker.compose.project.config_files": "${HOST}/srv/shop/compose.yaml,${HOST}/srv/shop/compose.prod.yaml",
+                "com.docker.compose.project.working_dir": "${HOST}/srv/shop",
+                "com.docker.compose.service": "backend",
+                "com.docker.compose.version": "2.29.7"
+            }
+        }
+    },
+    {
+        "Id": "224672128fdabed4b98d56ab991e52190c5b516fe34c90586b898c9a8cdb4216",
+        "Created": "2026-10-12T09:14:03.218911Z",
+        "Path": "postgres",
+        "Args": [],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 48213,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-12T09:14:03.990012Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:ae53bac0cfe998821d51035c2b4ed1afbd54b95d0df5467ce9208b3840016622",
+        "ResolvConfPath": "/var/lib/docker/containers/224672128fdabed4b98d56ab991e52190c5b516fe34c90586b898c9a8cdb4216/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/224672128fdabed4b98d56ab991e52190c5b516fe34c90586b898c9a8cdb4216/hostname",
+        "HostsPath": "/var/lib/docker/containers/224672128fdabed4b98d56ab991e52190c5b516fe34c90586b898c9a8cdb4216/hosts",
+        "LogPath": "/var/lib/docker/containers/224672128fdabed4b98d56ab991e52190c5b516fe34c90586b898c9a8cdb4216/224672128fdabed4b98d56ab991e52190c5b516fe34c90586b898c9a8cdb4216-json.log",
+        "Name": "/shop-db-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "shop_pgdata",
+                "Source": "/var/lib/docker/volumes/shop_pgdata/_data",
+                "Destination": "/var/lib/postgresql/data",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "224672128fda",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "POSTGRES_PASSWORD=[scrubbed]",
+                "POSTGRES_DB=shop",
+                "PATH=/usr/lib/postgresql/16/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "PGDATA=/var/lib/postgresql/data"
+            ],
+            "Cmd": [
+                "postgres"
+            ],
+            "Image": "postgres:16",
+            "Volumes": null,
+            "WorkingDir": "",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "7bdc25d1694ef984782a16f6f1710c1c6bc83ba7a131b515baf532bea021d011",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "",
+                "com.docker.compose.image": "sha256:ae53bac0cfe998821d51035c2b4ed1afbd54b95d0df5467ce9208b3840016622",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "shop",
+                "com.docker.compose.project.config_files": "${HOST}/srv/shop/compose.yaml,${HOST}/srv/shop/compose.prod.yaml",
+                "com.docker.compose.project.working_dir": "${HOST}/srv/shop",
+                "com.docker.compose.service": "db",
+                "com.docker.compose.version": "2.29.7"
+            }
+        }
+    },
+    {
+        "Id": "f073e42fb203605fde686c9ab17c8de36a380096026e4a3d34c9c1894bf2e70e",
+        "Created": "2026-10-12T09:14:03.218911Z",
+        "Path": "celery",
+        "Args": [
+            "-A",
+            "shop",
+            "worker"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 137,
+            "Error": "",
+            "StartedAt": "2026-10-12T09:14:05.101187Z",
+            "FinishedAt": "2026-10-14T02:11:09.402113Z"
+        },
+        "Image": "sha256:ad6465dbe4f4d3bb2945d86879df9200189506fd9619b7444db206126db4b51e",
+        "ResolvConfPath": "/var/lib/docker/containers/f073e42fb203605fde686c9ab17c8de36a380096026e4a3d34c9c1894bf2e70e/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/f073e42fb203605fde686c9ab17c8de36a380096026e4a3d34c9c1894bf2e70e/hostname",
+        "HostsPath": "/var/lib/docker/containers/f073e42fb203605fde686c9ab17c8de36a380096026e4a3d34c9c1894bf2e70e/hosts",
+        "LogPath": "/var/lib/docker/containers/f073e42fb203605fde686c9ab17c8de36a380096026e4a3d34c9c1894bf2e70e/f073e42fb203605fde686c9ab17c8de36a380096026e4a3d34c9c1894bf2e70e-json.log",
+        "Name": "/shop-worker-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/shop/media",
+                "Destination": "/app/media",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "f073e42fb203",
+            "Domainname": "",
+            "User": "app",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "DJANGO_SETTINGS_MODULE=shop.settings.prod",
+                "DATABASE_URL=postgres://shop:[scrubbed]@db:5432/shop",
+                "PATH=/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LANG=C.UTF-8",
+                "PYTHONUNBUFFERED=1"
+            ],
+            "Cmd": [
+                "celery",
+                "-A",
+                "shop",
+                "worker"
+            ],
+            "Image": "registry.example.com/shop/backend:2026.10",
+            "Volumes": null,
+            "WorkingDir": "/app",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "com.docker.compose.config-hash": "87eba76e7f3164534045ba922e7770fb58bbd14ad732bbf5ba6f11cc56989e6e",
+                "com.docker.compose.container-number": "1",
+                "com.docker.compose.depends_on": "db:service_started:false",
+                "com.docker.compose.image": "sha256:ad6465dbe4f4d3bb2945d86879df9200189506fd9619b7444db206126db4b51e",
+                "com.docker.compose.oneoff": "False",
+                "com.docker.compose.project": "shop",
+                "com.docker.compose.project.config_files": "${HOST}/srv/shop/compose.yaml,${HOST}/srv/shop/compose.prod.yaml",
+                "com.docker.compose.project.working_dir": "${HOST}/srv/shop",
+                "com.docker.compose.service": "worker",
+                "com.docker.compose.version": "2.29.7"
+            }
+        }
+    },
+    {
+        "Id": "46ade969890b2ca3a74861ebc69b16483567d3a5b5634b8d98a598b6422fef92",
+        "Created": "2026-10-12T09:14:03.218911Z",
+        "Path": "python",
+        "Args": [
+            "manage.py",
+            "runserver",
+            "0.0.0.0:8000"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 48213,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-10T18:40:51.007431Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:20cea72992dade58a1513a211f59c81b2f266b133a23d7ab65e02cee6c989bf7",
+        "ResolvConfPath": "/var/lib/docker/containers/46ade969890b2ca3a74861ebc69b16483567d3a5b5634b8d98a598b6422fef92/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/46ade969890b2ca3a74861ebc69b16483567d3a5b5634b8d98a598b6422fef92/hostname",
+        "HostsPath": "/var/lib/docker/containers/46ade969890b2ca3a74861ebc69b16483567d3a5b5634b8d98a598b6422fef92/hosts",
+        "LogPath": "/var/lib/docker/containers/46ade969890b2ca3a74861ebc69b16483567d3a5b5634b8d98a598b6422fef92/46ade969890b2ca3a74861ebc69b16483567d3a5b5634b8d98a598b6422fef92-json.log",
+        "Name": "/blog-web",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/blog",
+                "Destination": "/code",
+                "Mode": "rw",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "46ade969890b",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LANG=C.UTF-8",
+                "PYTHON_VERSION=3.12.7"
+            ],
+            "Cmd": [
+                "python",
+                "manage.py",
+                "runserver",
+                "0.0.0.0:8000"
+            ],
+            "Image": "blog:latest",
+            "Volumes": null,
+            "WorkingDir": "/code",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "org.opencontainers.image.source": "https://git.example.com/blog"
+            }
+        }
+    },
+    {
+        "Id": "85c3ed8f16f880368df30c7ebe3b205de8e0bef190bfd328bcb47f16d7a00609",
+        "Created": "2026-10-12T09:14:03.218911Z",
+        "Path": "crond",
+        "Args": [
+            "-f"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 48213,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-10T18:40:52.773140Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:20cea72992dade58a1513a211f59c81b2f266b133a23d7ab65e02cee6c989bf7",
+        "ResolvConfPath": "/var/lib/docker/containers/85c3ed8f16f880368df30c7ebe3b205de8e0bef190bfd328bcb47f16d7a00609/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/85c3ed8f16f880368df30c7ebe3b205de8e0bef190bfd328bcb47f16d7a00609/hostname",
+        "HostsPath": "/var/lib/docker/containers/85c3ed8f16f880368df30c7ebe3b205de8e0bef190bfd328bcb47f16d7a00609/hosts",
+        "LogPath": "/var/lib/docker/containers/85c3ed8f16f880368df30c7ebe3b205de8e0bef190bfd328bcb47f16d7a00609/85c3ed8f16f880368df30c7ebe3b205de8e0bef190bfd328bcb47f16d7a00609-json.log",
+        "Name": "/blog-cron",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/blog/media",
+                "Destination": "/srv/cron/media",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "85c3ed8f16f8",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LANG=C.UTF-8"
+            ],
+            "Cmd": [
+                "crond",
+                "-f"
+            ],
+            "Image": "blog:latest",
+            "Volumes": null,
+            "WorkingDir": "/srv/cron",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "org.opencontainers.image.source": "https://git.example.com/blog"
+            }
+        }
+    },
+    {
+        "Id": "5bc9eac398e75da146518c4df2648d1c9b1a8e85a465b7cbdccb473afd010bf8",
+        "Created": "2026-10-12T09:14:03.218911Z",
+        "Path": "redis-server",
+        "Args": [],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 48213,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-01T07:02:11.119827Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:b8c47f301e6803918103eaf005a8b7eb3287afe8f6fdb5145541e214700147a7",
+        "ResolvConfPath": "/var/lib/docker/containers/5bc9eac398e75da146518c4df2648d1c9b1a8e85a465b7cbdccb473afd010bf8/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/5bc9eac398e75da146518c4df2648d1c9b1a8e85a465b7cbdccb473afd010bf8/hostname",
+        "HostsPath": "/var/lib/docker/containers/5bc9eac398e75da146518c4df2648d1c9b1a8e85a465b7cbdccb473afd010bf8/hosts",
+        "LogPath": "/var/lib/docker/containers/5bc9eac398e75da146518c4df2648d1c9b1a8e85a465b7cbdccb473afd010bf8/5bc9eac398e75da146518c4df2648d1c9b1a8e85a465b7cbdccb473afd010bf8-json.log",
+        "Name": "/redis",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "redis_data",
+                "Source": "/var/lib/docker/volumes/redis_data/_data",
+                "Destination": "/data",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "5bc9eac398e7",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "REDIS_VERSION=7.4.1"
+            ],
+            "Cmd": [
+                "redis-server"
+            ],
+            "Image": "redis:7",
+            "Volumes": null,
+            "WorkingDir": "/data",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {}
+        }
+    }
+]

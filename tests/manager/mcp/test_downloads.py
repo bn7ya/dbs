@@ -24,10 +24,10 @@ def host(monkeypatch):
 
 @pytest.mark.django_db(transaction=True)
 def test_a_saved_backup_is_readable_by_its_owner_alone(
-    mcp, admin, host, make_server, tmp_path
+    mcp, admin, host, make_application, tmp_path
 ):
-    make_server(name="shop")
-    mcp("take_backups", servers=["shop"])
+    make_application(name="shop")
+    mcp("take_backups", applications=["shop"])
     backup = BackupFile.objects.get()
 
     saved = mcp("download_backup", backup=str(backup.pk), path=str(tmp_path))
@@ -43,11 +43,11 @@ def test_a_saved_backup_is_readable_by_its_owner_alone(
 
 @pytest.mark.django_db
 def test_a_file_the_manager_keeps_encrypted_is_never_saved(
-    mcp, admin, make_server, tmp_path
+    mcp, admin, make_application, tmp_path
 ):
-    server = make_server(name="shop")
+    application = make_application(name="shop")
     uploaded = BackupService(admin).upload(
-        server.pk, SimpleUploadedFile("db.sql", b"-- dump\n")
+        application.pk, SimpleUploadedFile("db.sql", b"-- dump\n")
     )
     here = tmp_path / "here"
     here.mkdir()

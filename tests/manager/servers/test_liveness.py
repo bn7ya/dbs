@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from dbs.manager.activity import heartbeat
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.servers import settling
 from dbs.manager.servers.exceptions import (
@@ -90,6 +91,22 @@ def test_a_connection_lost_mid_work_marks_the_server_offline_and_settling(
 
 
 @pytest.mark.django_db
+def test_a_connection_lost_while_working_for_an_application_settles_that_application(
+    admin, monkeypatch, configured_server, configured_application
+):
+    monkeypatch.setattr(CONNECT, connecting_to(healthy_remote()))
+    until = timezone.now() + timedelta(minutes=1)
+
+    with pytest.raises(ServerConnectionLost):
+        with ServerConnectionService(admin).open(configured_application):
+            raise ServerConnectionLost(settles_at=until)
+
+    assert fresh(configured_server).connection_state == Server.ConnectionState.OFFLINE
+    assert settling.settling_until(configured_application.pk) == until
+    assert settling.settling_until(configured_server.pk) is None
+
+
+@pytest.mark.django_db
 def test_a_command_that_failed_on_its_own_leaves_the_server_online(
     admin, monkeypatch, configured_server
 ):
@@ -105,23 +122,25 @@ def test_a_command_that_failed_on_its_own_leaves_the_server_online(
 
 @pytest.mark.django_db
 def test_no_new_job_starts_while_a_stopped_command_may_still_run(
-    admin, api, monkeypatch, configured_server
+    admin, api, monkeypatch, configured_application
 ):
-    settling.mark(configured_server.pk, timezone.now() + timedelta(seconds=45))
+    settling.mark(configured_application.pk, timezone.now() + timedelta(seconds=45))
 
-    response = api.post("/api/backups/take/", {"server": str(configured_server.pk)})
+    response = api.post(
+        "/api/backups/take/", {"application": str(configured_application.pk)}
+    )
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "server_settling"
-    assert TakeLock().acquire(configured_server.pk, 1) is False
+    assert TakeLock().acquire(configured_application.pk, 1) is False
 
 
 @pytest.mark.django_db
-def test_a_window_that_has_passed_holds_nothing(configured_server):
-    settling.mark(configured_server.pk, timezone.now() - timedelta(seconds=1))
+def test_a_window_that_has_passed_holds_nothing(configured_application):
+    settling.mark(configured_application.pk, timezone.now() - timedelta(seconds=1))
 
-    assert settling.settling_until(configured_server.pk) is None
-    assert TakeLock().acquire(configured_server.pk, 1) is True
+    assert settling.settling_until(configured_application.pk) is None
+    assert TakeLock().acquire(configured_application.pk, 1) is True
 
 
 @pytest.mark.django_db
@@ -134,15 +153,19 @@ def test_a_later_window_is_never_shortened(configured_server):
 
 
 @pytest.mark.django_db
-def test_a_job_hands_its_heartbeat_to_the_connection(admin, monkeypatch, configured_server):
+def test_a_job_hands_its_heartbeat_to_the_connection(
+    admin, monkeypatch, configured_application
+):
     remote = healthy_remote()
     monkeypatch.setattr(CONNECT, connecting_to(remote))
-    queued = ActivityService(admin).queue("backup.take", server=configured_server)
+    queued = ActivityService(admin).queue(
+        "backup.take", subject=configured_application
+    )
     job = ActivityService(None).start(queued.pk)
     pulse = heartbeat.current()
 
     try:
-        with ServerConnectionService(admin).open(configured_server):
+        with ServerConnectionService(admin).open(configured_application):
             assert remote.credentials.on_activity is pulse
             pulse(2048)
             during = heartbeat.connection_of(job.pk)
@@ -158,9 +181,11 @@ def test_a_job_hands_its_heartbeat_to_the_connection(admin, monkeypatch, configu
 
 @pytest.mark.django_db
 def test_a_running_job_shows_whether_its_connection_is_alive(
-    admin, api, monkeypatch, configured_server, settings
+    admin, api, monkeypatch, configured_application, settings
 ):
-    queued = ActivityService(admin).queue("backup.take", server=configured_server)
+    queued = ActivityService(admin).queue(
+        "backup.take", subject=configured_application
+    )
     job = ActivityService(None).start(queued.pk)
     pulse = heartbeat.current()
     url = f"/api/activity/{job.pk}/"
@@ -219,7 +244,7 @@ def test_a_server_is_never_probed_twice_at_once(admin, monkeypatch, configured_s
 
 
 @pytest.mark.django_db
-def test_the_check_remembers_whether_commands_can_be_stopped(
+def test_the_server_check_remembers_whether_commands_can_be_stopped(
     admin, monkeypatch, configured_server
 ):
     remote = healthy_remote()
@@ -228,6 +253,21 @@ def test_the_check_remembers_whether_commands_can_be_stopped(
 
     checked = ServerService(admin).check(configured_server.pk)
 
-    assert (checked.timeout_on_host, checked.timeout_in_container) == (True, None)
+    assert checked.timeout_on_host is True
     with ServerConnectionService(admin).open(checked) as opened:
         assert opened.credentials.timeout_on_host is True
+        assert opened.credentials.timeout_in_container is False
+
+
+@pytest.mark.django_db
+def test_an_application_on_the_host_has_no_container_to_stop_commands_in(
+    admin, monkeypatch, configured_application
+):
+    remote = healthy_remote()
+    remote.answers = {**remote.answers, ("timeout", "-k", "1", "5", "true"): Result(0)}
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+
+    checked = ApplicationService(admin).check(configured_application.pk)
+
+    assert checked.timeout_in_container is None
+    assert ["timeout", "-k", "1", "5", "true"] not in [run["argv"] for run in remote.runs]

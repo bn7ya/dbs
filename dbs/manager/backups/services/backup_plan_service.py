@@ -13,6 +13,7 @@ from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.models import PLAN_PATTERN_MAX_LENGTH, BackupPlan
 from dbs.manager.backups.repositories import BackupPlanRepository
 from dbs.manager.backups.services.actions import Action
@@ -21,7 +22,6 @@ from dbs.manager.backups.services.job_queue import JobQueue
 from dbs.manager.backups.services.plan_runs import run_detail
 from dbs.manager.common.paths import absolute_path
 from dbs.manager.runner import get_runner
-from dbs.manager.servers.services import ServerService
 from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
@@ -44,9 +44,9 @@ RETENTION_FIELDS = ("keep", "keep_remote")
 ENABLED_BY_DEFAULT = BackupPlan._meta.get_field("enabled").get_default()
 DEFAULT_PATTERN = "*"
 
-NAME_TAKEN = "Another plan for this server already has this name."
+NAME_TAKEN = "Another plan for this application already has this name."
 SIMILAR_NAME_TAKEN = (
-    "Another plan for this server has a name that differs only in case or "
+    "Another plan for this application has a name that differs only in case or "
     "punctuation, so their backups would share file names on the server."
 )
 INVALID_INTERVAL = "Choose hourly, every 3, 6 or 12 hours, daily, weekly, or none."
@@ -105,12 +105,12 @@ class BackupPlanService:
     def __init__(self, user: User | AnonymousUser | None) -> None:
         self.user: User | AnonymousUser | None = user
         self.plans = BackupPlanRepository()
-        self.servers = ServerService(user)
+        self.applications = ApplicationService(user)
         self.activity = ActivityService(user)
         self.jobs = JobQueue(user)
 
-    def list(self, server_id: UUID) -> QuerySet[BackupPlan]:
-        return self.plans.alive_for_server(server_id)
+    def list(self, application_id: UUID) -> QuerySet[BackupPlan]:
+        return self.plans.alive_for_application(application_id)
 
     def get(self, plan_id: UUID) -> BackupPlan:
         plan = self.plans.find(plan_id)
@@ -120,9 +120,9 @@ class BackupPlanService:
 
     @requires(Capability.PLANS_MANAGE)
     def create(
-        self, *, server: UUID, account_password: str = "", **data: Any
+        self, *, application: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
-        target = self.servers.get(server)
+        target = self.applications.get(application)
         data = self._validated(target.pk, data["kind"], data, plan=None)
         fields = {
             name: data[name] for name in ("kind", *EDITABLE_FIELDS) if name in data
@@ -133,13 +133,15 @@ class BackupPlanService:
         guarded = fields["kind"] != BackupPlan.Kind.DBS
         _require_password(account_password, guarded)
         with self.activity.track(
-            Action.PLAN_CREATE, server=target, target=fields["name"]
+            Action.PLAN_CREATE, subject=target, target=fields["name"]
         ):
             if guarded:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(
                 lambda: self.plans.create(
-                    created_by=cast("User | None", self.user), server=target, **fields
+                    created_by=cast("User | None", self.user),
+                    application=target,
+                    **fields,
                 )
             )
 
@@ -148,7 +150,7 @@ class BackupPlanService:
         self, plan_id: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
         plan = self.get(plan_id)
-        data = self._validated(plan.server_id, plan.kind, data, plan=plan)
+        data = self._validated(plan.application_id, plan.kind, data, plan=plan)
         changes = {
             name: data[name]
             for name in EDITABLE_FIELDS
@@ -171,7 +173,7 @@ class BackupPlanService:
         )
         name = changes.get("name", plan.name)
         with self.activity.track(
-            Action.PLAN_UPDATE, server=plan.server, target=name
+            Action.PLAN_UPDATE, subject=plan.application, target=name
         ) as entry:
             entry.detail = {"fields": changed}
             if guarded:
@@ -187,16 +189,16 @@ class BackupPlanService:
         with transaction.atomic():
             self.plans.soft_delete(plan)
             self.activity.record(
-                Action.PLAN_DELETE, server=plan.server, target=plan.name
+                Action.PLAN_DELETE, subject=plan.application, target=plan.name
             )
 
     @requires(Capability.PLANS_RUN)
     def run(self, plan_id: UUID) -> AuditEvent:
         plan = self.get(plan_id)
-        server = self.servers.get(plan.server_id)
+        application = self.applications.get(plan.application_id)
         return self.jobs.queue_backup(
             Action.RUN,
-            server=server,
+            application=application,
             target=plan.name,
             detail=run_detail(plan),
             send=lambda job: get_runner().submit(
@@ -206,7 +208,7 @@ class BackupPlanService:
 
     def _validated(
         self,
-        server_id: UUID,
+        application_id: UUID,
         kind: str,
         data: dict[str, Any],
         *,
@@ -215,7 +217,7 @@ class BackupPlanService:
         errors: Errors = {}
         excluding = None if plan is None else plan.pk
         if "name" in data:
-            self._check_name(server_id, data["name"], excluding, errors)
+            self._check_name(application_id, data["name"], excluding, errors)
         interval = data.get("interval_minutes")
         if interval is not None and interval not in INTERVALS:
             _add(errors, "interval_minutes", INVALID_INTERVAL, "invalid_interval")
@@ -250,13 +252,13 @@ class BackupPlanService:
         return validated
 
     def _check_name(
-        self, server_id: UUID, name: str, excluding: UUID | None, errors: Errors
+        self, application_id: UUID, name: str, excluding: UUID | None, errors: Errors
     ) -> None:
-        if self.plans.name_in_use(server_id, name, excluding=excluding):
+        if self.plans.name_in_use(application_id, name, excluding=excluding):
             _add(errors, "name", NAME_TAKEN, "name_taken")
             return
         slug = slugify(name)
-        others = self.plans.names_for_server(server_id, excluding=excluding)
+        others = self.plans.names_for_application(application_id, excluding=excluding)
         if slug and any(slugify(other) == slug for other in others):
             _add(errors, "name", SIMILAR_NAME_TAKEN, "name_taken")
 

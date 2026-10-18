@@ -12,8 +12,12 @@ CONNECT = "dbs.manager.servers.services.connection_service.connect"
 
 def argv_of(script):
     body = shlex.split(script)[2]
-    lines = body.splitlines()
-    return shlex.split(lines[-1][len("exec ") :]), lines[:-1]
+    lines = body.split("\n")
+    start = next(
+        index for index, line in enumerate(lines) if line.startswith("exec ")
+    )
+    command = "\n".join(lines[start:])[len("exec ") :]
+    return shlex.split(command), lines[:start]
 
 
 class ScriptedSession(LocalSftpSession):

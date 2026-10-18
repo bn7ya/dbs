@@ -31,15 +31,15 @@ def project(tmp_path):
 
 
 @pytest.fixture
-def server(make_server, project):
-    return make_server(
+def application(make_application, project):
+    return make_application(
         env_path=str(project / ".env"), file_roots=[str(project / "media")]
     )
 
 
 @pytest.mark.django_db
 def test_env_pull_list_compare_reveal_and_push(
-    terminal, admin, server, project, local_host
+    terminal, admin, application, project, local_host
 ):
     assert "Kept a new version" in terminal("env", "pull", "web-1").out
     (project / ".env").write_bytes(b"SECRET_KEY=second\nNEW=1\n")
@@ -59,11 +59,14 @@ def test_env_pull_list_compare_reveal_and_push(
     assert pushed.code == 0, pushed.err
     assert (project / ".env").read_bytes() == ENV
     assert EnvVersion.objects.filter(source=EnvVersion.Source.PUSHED).exists()
+    assert {version.application_id for version in EnvVersion.objects.all()} == {
+        application.pk
+    }
 
 
 @pytest.mark.django_db
 def test_files_list_upload_download_mkdir_and_delete(
-    terminal, admin, server, project, local_host, tmp_path
+    terminal, admin, application, project, local_host, tmp_path
 ):
     media = project / "media"
     local = tmp_path / "logo.png"
@@ -88,7 +91,7 @@ def test_files_list_upload_download_mkdir_and_delete(
 
 @pytest.mark.django_db
 def test_files_outside_the_roots_stay_closed(
-    terminal, admin, server, local_host, tmp_path
+    terminal, admin, application, local_host, tmp_path
 ):
     ran = terminal("files", "list", "web-1", tmp_path)
 

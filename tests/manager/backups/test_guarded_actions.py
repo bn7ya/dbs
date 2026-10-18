@@ -19,8 +19,10 @@ LOCMEM_CLOCK = "django.core.cache.backends.locmem.time"
 
 
 @pytest.fixture
-def sealed(admin, server):
-    return BackupService(admin).upload(server.pk, SimpleUploadedFile("db.sql", CONTENT))
+def sealed(admin, application):
+    return BackupService(admin).upload(
+        application.pk, SimpleUploadedFile("db.sql", CONTENT)
+    )
 
 
 def link(api, backup, password=PASSWORD):
@@ -83,8 +85,10 @@ def test_the_password_buys_one_download_through_a_ticket(api, sealed):
 
 
 @pytest.mark.django_db
-def test_a_ticket_is_for_its_own_backup_and_account(api, admin, server, sealed):
-    other = BackupService(admin).upload(server.pk, SimpleUploadedFile("b.sql", b"b"))
+def test_a_ticket_is_for_its_own_backup_and_account(api, admin, application, sealed):
+    other = BackupService(admin).upload(
+        application.pk, SimpleUploadedFile("b.sql", b"b")
+    )
     ticket = parse_qs(urlsplit(link(api, sealed).json()["url"]).query)["ticket"][0]
     stranger = APIClient()
     stranger.force_login(UserRepository().create(username="omar", password=PASSWORD))
@@ -118,14 +122,14 @@ def test_a_ticket_lasts_a_minute(api, sealed, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_deleting_a_backup_needs_the_password(api, admin, server, taken):
+def test_deleting_a_backup_needs_the_password(api, admin, application, taken):
     backup = taken()
 
     asked = api.delete(f"{LIST}{backup.pk}/")
     wrong = api.delete(
         f"{LIST}{backup.pk}/", {"account_password": "wrong"}, format="json"
     )
-    listed = api.get(LIST, {"server": server.pk}).json()["count"]
+    listed = api.get(LIST, {"application": application.pk}).json()["count"]
     deleted = api.delete(
         f"{LIST}{backup.pk}/", {"account_password": PASSWORD}, format="json"
     )

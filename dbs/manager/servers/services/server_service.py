@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
@@ -16,17 +14,18 @@ from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.common.exceptions import error_code_of
-from dbs.manager.common.paths import absolute_path
-from dbs.manager.servers import keys, versions
+from dbs.manager.servers import keys
 from dbs.manager.servers.exceptions import (
     HostKeyChanged,
     NoPrivateKey,
     RemoteCommandFailed,
+    ServerHasApplications,
+    ServersDiffer,
     SSHAuthFailed,
     SSHUnreachable,
 )
 from dbs.manager.servers.gateways import (
-    DbsProfile,
+    ENGINES,
     HostKey,
     RemoteHost,
     fetch_host_key,
@@ -34,7 +33,7 @@ from dbs.manager.servers.gateways import (
 )
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.repositories import ServerRepository
-from dbs.manager.servers.services import pythons, vault_contexts
+from dbs.manager.servers.services import vault_contexts
 from dbs.manager.servers.services.connection_service import ServerConnectionService
 from dbs.manager.vault import seal_text
 from dbs.manager.permissions import Capability, requires
@@ -42,52 +41,30 @@ from dbs.manager.permissions import Capability, requires
 if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
 
-PLAIN_FIELDS = (
-    "name",
-    "host",
-    "port",
-    "username",
-    "runtime",
-    "compose_service",
-    "python_path",
-    "manage_path",
-    "settings_module",
-)
-OPTIONAL_PATH_FIELDS = ("project_dir", "env_path")
-REQUIRED_PATH_FIELDS = ("remote_backup_dir",)
+PLAIN_FIELDS = ("name", "host", "port", "username")
 UNGUARDED_FIELDS = frozenset({"name"})
-SETUP_FIELDS = frozenset(
-    {
-        "runtime",
-        "compose_service",
-        "compose_files",
-        "project_dir",
-        "python_path",
-        "manage_path",
-        "settings_module",
-        "remote_backup_dir",
-        "file_roots",
-        "env_path",
-    }
-)
 SETUP_WINDOW = timedelta(hours=1)
-HEALTH_STATUSES = ("ok", "warn", "error")
-
 CONNECTION_ERRORS = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
-DBS_VERSION = pythons.VERSION_PROBE
 REPORTED_OUTPUT_LIMIT = 200
+ENGINE_VERSIONS = {
+    "docker": ["docker", "version", "--format", "{{.Server.Version}}"],
+    "podman": ["podman", "version", "--format", "{{.Version}}"],
+}
+COMPOSE_VERSIONS = {
+    "docker": ["docker", "compose", "version", "--short"],
+    "podman": ["podman", "compose", "version", "--short"],
+}
+PERMISSION_DENIED = "permission denied"
+NOT_FOUND = 127
+ABSENT = {"installed": False, "usable": False, "version": None, "compose": None, "error": ""}
 
 INVALID_HOST_KEY = "Paste the host key as one line, for example 'ssh-ed25519 AAAA...'."
-ABSOLUTE_PATH_REQUIRED = (
-    "Use an absolute path that starts with / and has no '..' in it."
-)
 NAME_TAKEN = "Another server already has this name."
-COMPOSE_SERVICE_REQUIRED = "Name the Docker Compose service that runs the project."
-COMPOSE_FOLDER_REQUIRED = "Enter the folder that holds the compose file."
 PRIVATE_KEY_REQUIRED = "Paste the private key this server accepts."
 PASSWORD_REQUIRED = "Enter the password this server accepts."
 ACCOUNT_PASSWORD_REQUIRED = "Enter your own password to change this."
 DELETE_PASSWORD_REQUIRED = "Enter your own password to delete a server."
+MERGE_PASSWORD_REQUIRED = "Enter your own password to join two servers."
 
 Errors = dict[str, list[ErrorDetail]]
 
@@ -98,29 +75,35 @@ class Action:
     DELETE = "server.delete"
     CHECK = "server.check"
     REPIN = "server.repin"
-    PASSPHRASE_REVEAL = "server.passphrase_reveal"
     FINGERPRINT = "server.fingerprint"
     KEYPAIR = "server.keypair"
-    PASSPHRASE_CAPTURE = "server.passphrase_capture"
+    MERGE = "server.merge"
 
 
 def _add(errors: Errors, field: str, message: str, code: str) -> None:
     errors.setdefault(field, []).append(ErrorDetail(message, code=code))
 
 
-def _address(host: str, port: int) -> str:
+def address(host: str, port: int) -> str:
     return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
 
 
-def _changed(server: Server, changes: dict[str, Any]) -> list[str]:
+def changed_fields(instance: Any, changes: dict[str, Any]) -> list[str]:
     names = set()
     for column, value in changes.items():
         if column.endswith("_sealed"):
-            if value is not None or getattr(server, column) is not None:
-                names.add(column.removesuffix("_sealed"))
-        elif getattr(server, column) != value:
+            if value is not None or getattr(instance, column) is not None:
+                names.add(column[: -len("_sealed")])
+        elif getattr(instance, column) != value:
             names.add(column)
     return sorted(names)
+
+
+def require_account_password(account_password: str, message: str) -> None:
+    if not account_password:
+        raise ValidationError(
+            {"account_password": [ErrorDetail(message, code="required")]}
+        )
 
 
 @dataclass(frozen=True)
@@ -128,12 +111,6 @@ class AddedServer:
     server: Server
     public_key: str | None = None
     authorized_keys_hint: str | None = None
-
-
-@dataclass(frozen=True)
-class CheckedServer:
-    server: Server
-    compatibility: dict[str, Any]
 
 
 class ServerService:
@@ -146,9 +123,6 @@ class ServerService:
     def list(self, search: str | None = None) -> QuerySet[Server]:
         return self.servers.search((search or "").strip() or None)
 
-    def with_env_path(self) -> QuerySet[Server]:
-        return self.servers.with_env_path()
-
     def get(self, server_id: UUID) -> Server:
         server = self.servers.find(server_id)
         if server is None:
@@ -158,7 +132,7 @@ class ServerService:
     @requires(Capability.SERVERS_MANAGE)
     def fingerprint(self, host: str, port: int) -> HostKey:
         with self.activity.track(
-            Action.FINGERPRINT, target=_address(host, port)
+            Action.FINGERPRINT, target=address(host, port)
         ) as entry:
             key = fetch_host_key(host, port)
             entry.detail = {"fingerprint": key.fingerprint}
@@ -180,26 +154,19 @@ class ServerService:
         data.pop("generate_key", None)
         errors: Errors = {}
         fields = {name: data[name] for name in PLAIN_FIELDS if name in data}
-        fields |= self._paths(data, errors)
-        fields |= self._runtime(data, errors, current=None)
         fields |= self._pinned(data["host_key"], errors)
         fields |= self._credentials(data, errors, data["auth_method"], current=None)
         if self.servers.name_in_use(data["name"]):
             _add(errors, "name", NAME_TAKEN, "name_taken")
         if errors:
             raise ValidationError(errors)
-
-        fields["backup_passphrase_sealed"] = seal_text(
-            data.get("backup_passphrase") or secrets.token_urlsafe(32),
-            context=vault_contexts.BACKUP_PASSPHRASE,
-        )
         with transaction.atomic():
             server = self._saved(
                 lambda: self.servers.create(
                     created_by=cast("User | None", self.user), **fields
                 )
             )
-            self.activity.record(Action.CREATE, server=server, target=server.name)
+            self.activity.record(Action.CREATE, subject=server, target=server.name)
         return server
 
     @requires(Capability.SERVERS_MANAGE)
@@ -214,7 +181,7 @@ class ServerService:
             server = self.create(**data)
             self.activity.record(
                 Action.KEYPAIR,
-                server=server,
+                subject=server,
                 target=server.name,
                 detail={"fingerprint": keys.fingerprint(public_key)},
             )
@@ -239,8 +206,6 @@ class ServerService:
         server = self.get(server_id)
         errors: Errors = {}
         changes = {name: data[name] for name in PLAIN_FIELDS if name in data}
-        changes |= self._paths(data, errors)
-        changes |= self._runtime(data, errors, current=server)
         changes |= self._credentials(
             data, errors, data.get("auth_method", server.auth_method), current=server
         )
@@ -250,46 +215,16 @@ class ServerService:
             _add(errors, "name", NAME_TAKEN, "name_taken")
         if errors:
             raise ValidationError(errors)
-
-        if data.get("backup_passphrase"):
-            changes["backup_passphrase_sealed"] = seal_text(
-                data["backup_passphrase"], context=vault_contexts.BACKUP_PASSPHRASE
-            )
-        changed = _changed(server, changes)
-        free = (
-            UNGUARDED_FIELDS | SETUP_FIELDS
-            if self.in_setup(server)
-            else UNGUARDED_FIELDS
-        )
-        guarded = not free.issuperset(changed)
-        if guarded and not account_password:
-            raise ValidationError(
-                {
-                    "account_password": [
-                        ErrorDetail(ACCOUNT_PASSWORD_REQUIRED, code="required"),
-                    ]
-                }
-            )
+        changed = changed_fields(server, changes)
+        guarded = not UNGUARDED_FIELDS.issuperset(changed) and not self.in_setup(server)
+        if guarded:
+            require_account_password(account_password, ACCOUNT_PASSWORD_REQUIRED)
         name = changes.get("name", server.name)
-        with self.activity.track(Action.UPDATE, server=server, target=name) as entry:
+        with self.activity.track(Action.UPDATE, subject=server, target=name) as entry:
             entry.detail = {"fields": changed}
             if guarded or account_password:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(lambda: self.servers.update(server, **changes))
-
-    def require_step_up(self, server: Server, account_password: str) -> None:
-        if not account_password and not self.in_setup(server):
-            raise ValidationError(
-                {
-                    "account_password": [
-                        ErrorDetail(ACCOUNT_PASSWORD_REQUIRED, code="required"),
-                    ]
-                }
-            )
-
-    def confirm_step_up(self, account_password: str) -> None:
-        if account_password:
-            AccountService(self.user).confirm_password(account_password)
 
     def in_setup(self, server: Server) -> bool:
         return (
@@ -297,29 +232,50 @@ class ServerService:
             and self.user.is_authenticated
             and server.created_by_id == self.user.pk
             and server.created_at > timezone.now() - SETUP_WINDOW
-            and server.last_check_status != Server.CheckStatus.OK
         )
 
     @requires(Capability.SERVERS_MANAGE)
     def delete(self, server_id: UUID, account_password: str = "") -> None:
+        from dbs.manager.applications.repositories import ApplicationRepository
+
         server = self.get(server_id)
-        if not account_password:
-            raise ValidationError(
-                {
-                    "account_password": [
-                        ErrorDetail(DELETE_PASSWORD_REQUIRED, code="required"),
-                    ]
-                }
-            )
-        with self.activity.track(Action.DELETE, server=server, target=server.name):
+        require_account_password(account_password, DELETE_PASSWORD_REQUIRED)
+        if ApplicationRepository().on_server(server.pk).exists():
+            raise ServerHasApplications()
+        with self.activity.track(Action.DELETE, subject=server, target=server.name):
             AccountService(self.user).confirm_password(account_password)
             self.servers.soft_delete(server)
+
+    @requires(Capability.SERVERS_MANAGE)
+    def merge(self, server_id: UUID, into: UUID, account_password: str = "") -> Server:
+        from dbs.manager.applications.repositories import ApplicationRepository
+
+        source, target = self.get(server_id), self.get(into)
+        require_account_password(account_password, MERGE_PASSWORD_REQUIRED)
+        if source.pk == target.pk or (
+            source.host,
+            source.port,
+            source.username,
+            source.host_key,
+        ) != (target.host, target.port, target.username, target.host_key):
+            raise ServersDiffer()
+        with self.activity.track(
+            Action.MERGE, subject=target, target=target.name
+        ) as entry:
+            AccountService(self.user).confirm_password(account_password)
+            with transaction.atomic():
+                moved = ApplicationRepository().on_server(source.pk).update(
+                    server=target
+                )
+                self.servers.soft_delete(source)
+            entry.detail = {"merged": source.name, "applications": moved}
+        return target
 
     @requires(Capability.SERVERS_MANAGE)
     def repin(self, server_id: UUID, host_key: str, password: str) -> Server:
         server = self.get(server_id)
         with self.activity.track(
-            Action.REPIN, server=server, target=server.name
+            Action.REPIN, subject=server, target=server.name
         ) as entry:
             AccountService(self.user).confirm_password(password)
             errors: Errors = {}
@@ -334,119 +290,42 @@ class ServerService:
                 last_check_error="",
             )
 
-    @requires(Capability.SERVERS_PASSPHRASE)
-    def reveal_passphrase(self, server_id: UUID, password: str) -> str:
-        server = self.get(server_id)
-        with self.activity.track(
-            Action.PASSPHRASE_REVEAL, server=server, target=server.name
-        ):
-            AccountService(self.user).confirm_password(password)
-            return self.connections.backup_passphrase(server)
-
     @requires(Capability.SERVERS_CHECK)
     def check(self, server_id: UUID) -> Server:
         server = self.get(server_id)
         with self.activity.track(
-            Action.CHECK, server=server, target=server.name
+            Action.CHECK, subject=server, target=server.name
         ) as entry:
             try:
                 with self.connections.open(server) as remote:
-                    report = self._inspect(server, remote)
-                    health = self._health(server, remote, report["dbs_version"])
-                    limits = self._limits(server, remote, report)
+                    report = inspect_host(remote)
             except CONNECTION_ERRORS as exc:
-                self._record(server, Server.CheckStatus.FAILED, error_code_of(exc), {})
+                self._record(
+                    server, Server.CheckStatus.FAILED, error_code_of(exc), {}, server.engines
+                )
                 entry.detail = {"status": Server.CheckStatus.FAILED}
                 raise
             status = (
-                Server.CheckStatus.OK if _ready(report) else Server.CheckStatus.PROBLEM
+                Server.CheckStatus.OK if report["system"] else Server.CheckStatus.PROBLEM
             )
             entry.detail = {"status": status}
-            self.servers.update(server, last_health=health, **limits)
-            return self._record(server, status, "", report)
-
-    def checked(self, server_id: UUID) -> CheckedServer:
-        server = self.check(server_id)
-        return CheckedServer(server=server, compatibility=self.compatibility(server))
-
-    def compatibility(self, server: Server) -> dict[str, Any]:
-        remote = (server.last_check_report or {}).get("dbs_version")
-        return versions.compatibility(remote)
-
-    @requires(Capability.SERVERS_MANAGE)
-    def capture_passphrase(self, server_id: UUID) -> Server:
-        server = self.get(server_id)
-        with self.activity.track(
-            Action.PASSPHRASE_CAPTURE, server=server, target=server.name
-        ):
-            with self.connections.open(server) as remote:
-                result = remote.run_manage(
-                    self.connections.dbs_profile(server), ["dbs_key", "--show"]
-                )
-            lines = result.stdout.strip().splitlines()
-            if not result.ok or not lines or not lines[-1].strip():
-                raise RemoteCommandFailed(output=result.stderr.strip()[-500:])
-            sealed = seal_text(
-                lines[-1].strip(), context=vault_contexts.BACKUP_PASSPHRASE
+            return self._record(
+                server,
+                status,
+                "",
+                report,
+                report["engines"],
+                timeout_on_host=report["timeout"],
             )
-            return self.servers.update(server, backup_passphrase_sealed=sealed)
-
-    def _health(
-        self, server: Server, remote: RemoteHost, remote_version: str | None
-    ) -> dict[str, Any] | None:
-        if not versions.at_least(remote_version, versions.HEALTH_FROM):
-            return None
-        try:
-            result = remote.run_manage(
-                self.connections.dbs_profile(server), ["dbs", "health", "--json"]
-            )
-        except RemoteCommandFailed:
-            return None
-        return _health_report(result.stdout)
-
-    def _limits(
-        self, server: Server, remote: RemoteHost, report: dict[str, Any]
-    ) -> dict[str, bool | None]:
-        running = (report.get("compose") or {}).get("running", False)
-        return {
-            "timeout_on_host": remote.has_timeout(),
-            "timeout_in_container": (
-                remote.has_timeout(self.connections.dbs_profile(server))
-                if running
-                else None
-            ),
-        }
-
-    def _inspect(self, server: Server, remote: RemoteHost) -> dict[str, Any]:
-        profile = self.connections.dbs_profile(server)
-        project_dir = server.project_dir or None
-        system = _output(remote, ["uname", "-sr"])
-        compose = _compose_report(remote, profile) if profile.compose else None
-        probe = pythons.probe(remote, profile)
-        dbs_version = probe.version
-        backup_command = None
-        if project_dir:
-            backup_command = _succeeds(remote, profile, ["dbs_backup", "--help"])
-        report = {
-            "system": system,
-            "dbs_version": dbs_version,
-            "dbs_error": probe.error,
-            "python_suggestion": (
-                None
-                if dbs_version is not None or project_dir is None
-                else _python_suggestion(server, remote, profile)
-            ),
-            "backup_command": backup_command,
-            "env_file": _exists(remote, server.env_path) if server.env_path else None,
-            "roots": {root: _exists(remote, root) for root in server.file_roots},
-            "remote_backup_dir": _exists(remote, server.remote_backup_dir),
-        }
-        if compose is not None:
-            report["compose"] = compose
-        return report
 
     def _record(
-        self, server: Server, status: str, error: str, report: dict[str, Any]
+        self,
+        server: Server,
+        status: str,
+        error: str,
+        report: dict[str, Any],
+        engines: dict[str, Any],
+        **extra: Any,
     ) -> Server:
         return self.servers.update(
             server,
@@ -454,61 +333,9 @@ class ServerService:
             last_check_error=error,
             last_check_report=report,
             last_checked_at=timezone.now(),
+            engines=engines,
+            **extra,
         )
-
-    def _paths(self, data: dict[str, Any], errors: Errors) -> dict[str, Any]:
-        cleaned: dict[str, Any] = {}
-        for name in (*OPTIONAL_PATH_FIELDS, *REQUIRED_PATH_FIELDS):
-            if name not in data:
-                continue
-            if name in OPTIONAL_PATH_FIELDS and not data[name]:
-                cleaned[name] = ""
-            elif (path := absolute_path(data[name])) is not None:
-                cleaned[name] = path
-            else:
-                _add(errors, name, ABSOLUTE_PATH_REQUIRED, "absolute_path_required")
-        if "file_roots" in data:
-            roots = [absolute_path(root) for root in data["file_roots"]]
-            if None in roots:
-                _add(
-                    errors,
-                    "file_roots",
-                    ABSOLUTE_PATH_REQUIRED,
-                    "absolute_path_required",
-                )
-            else:
-                cleaned["file_roots"] = list(dict.fromkeys(roots))
-        return cleaned
-
-    def _runtime(
-        self, data: dict[str, Any], errors: Errors, *, current: Server | None
-    ) -> dict[str, Any]:
-        cleaned: dict[str, Any] = {}
-        if "compose_files" in data:
-            cleaned["compose_files"] = list(dict.fromkeys(data["compose_files"]))
-
-        def value(name: str, default: Any) -> Any:
-            if name in data:
-                return data[name]
-            return getattr(current, name) if current is not None else default
-
-        if value("runtime", Server.Runtime.HOST) != Server.Runtime.COMPOSE:
-            return cleaned
-        if not value("compose_service", ""):
-            _add(
-                errors,
-                "compose_service",
-                COMPOSE_SERVICE_REQUIRED,
-                "compose_service_required",
-            )
-        if not value("project_dir", ""):
-            _add(
-                errors,
-                "project_dir",
-                COMPOSE_FOLDER_REQUIRED,
-                "compose_folder_required",
-            )
-        return cleaned
 
     def _pinned(self, line: str, errors: Errors) -> dict[str, str]:
         try:
@@ -526,6 +353,10 @@ class ServerService:
         *,
         current: Server | None,
     ) -> dict[str, Any]:
+        if "auth_method" not in data and not any(
+            name in data for name in ("private_key", "key_passphrase", "password")
+        ) and current is not None:
+            return {}
         if auth_method == Server.AuthMethod.KEY:
             changes: dict[str, Any] = {
                 "auth_method": auth_method,
@@ -569,7 +400,42 @@ class ServerService:
             ) from exc
 
 
-def _output(
+def inspect_host(remote: RemoteHost) -> dict[str, Any]:
+    return {
+        "system": output_of(remote, ["uname", "-sr"]),
+        "engines": {engine: engine_report(remote, engine) for engine in ENGINES},
+        "timeout": remote.has_timeout(),
+    }
+
+
+def engine_report(remote: RemoteHost, engine: str) -> dict[str, Any]:
+    try:
+        found = remote.run(ENGINE_VERSIONS[engine])
+    except RemoteCommandFailed:
+        return dict(ABSENT)
+    if found.exit_status == NOT_FOUND:
+        return dict(ABSENT)
+    if not found.ok:
+        message = last_line(found)
+        denied = PERMISSION_DENIED in message.lower()
+        return {
+            "installed": True,
+            "usable": False,
+            "version": None,
+            "compose": None,
+            "error": "engine_permission_denied" if denied else message,
+        }
+    compose = output_of(remote, COMPOSE_VERSIONS[engine])
+    return {
+        "installed": True,
+        "usable": True,
+        "version": (found.stdout.strip().splitlines() or [""])[-1][:REPORTED_OUTPUT_LIMIT],
+        "compose": compose,
+        "error": "",
+    }
+
+
+def output_of(
     remote: RemoteHost, argv: list[str], *, cwd: str | None = None
 ) -> str | None:
     try:
@@ -582,80 +448,6 @@ def _output(
     return lines[-1][:REPORTED_OUTPUT_LIMIT]
 
 
-def _python_suggestion(
-    server: Server, remote: RemoteHost, profile: DbsProfile
-) -> dict[str, str] | None:
-    found_here = (
-        pythons.BARE_PYTHONS
-        if profile.compose
-        else pythons.candidates(remote, server.project_dir)
-    )
-    others = [python for python in found_here if python != server.python_path]
-    found = pythons.with_dbs(remote, others, profile)
-    if found is None:
-        return None
-    return {"python_path": found.python_path, "dbs_version": found.dbs_version}
-
-
-def _succeeds(remote: RemoteHost, profile: DbsProfile, arguments: list[str]) -> bool:
-    try:
-        ok: bool = remote.run_manage(profile, arguments).ok
-        return ok
-    except RemoteCommandFailed:
-        return False
-
-
-def _compose_report(remote: RemoteHost, profile: DbsProfile) -> dict[str, Any]:
-    service = profile.compose.service if profile.compose else ""
-    try:
-        version = remote.compose_version()
-    except RemoteCommandFailed:
-        return {"version": None, "error": "", "running": False}
-    if not version.ok:
-        return {"version": None, "error": _last_line(version), "running": False}
-    reported = version.stdout.strip()[:REPORTED_OUTPUT_LIMIT]
-    try:
-        listed = remote.run_compose(
-            profile, ["ps", "--status", "running", "--services"]
-        )
-    except RemoteCommandFailed:
-        return {"version": reported, "error": "", "running": False}
-    return {
-        "version": reported,
-        "error": "" if listed.ok else _last_line(listed),
-        "running": listed.ok and service in listed.stdout.split(),
-    }
-
-
-def _last_line(result: Any) -> str:
+def last_line(result: Any) -> str:
     lines = (result.stderr or result.stdout).strip().splitlines()
     return lines[-1][:REPORTED_OUTPUT_LIMIT] if lines else ""
-
-
-def _exists(remote: RemoteHost, path: str) -> bool:
-    try:
-        return remote.exists(path)
-    except RemoteCommandFailed:
-        return False
-
-
-def _ready(report: dict[str, Any]) -> bool:
-    compose = report.get("compose")
-    return (
-        (compose is None or (compose["version"] is not None and compose["running"]))
-        and report["dbs_version"] is not None
-        and report["backup_command"] is not False
-        and report["env_file"] is not False
-        and all(report["roots"].values())
-        and report["remote_backup_dir"]
-    )
-
-
-def _health_report(stdout: str) -> dict[str, Any] | None:
-    try:
-        report = json.loads(stdout.strip() or "null")
-    except ValueError:
-        return None
-    if not isinstance(report, dict) or report.get("status") not in HEALTH_STATUSES:
-        return None
-    return report

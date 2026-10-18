@@ -11,12 +11,17 @@ from django.utils import timezone
 
 from dbs import validate_backup
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.models import Application
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.storage import BackupStorage, Incoming, StoredFile
 from dbs.manager.servers.exceptions import RemoteNotFound, StreamBroken
-from dbs.manager.servers.gateways import DbsProfile, RemoteHost, ServerBackup
-from dbs.manager.servers.models import Server
+from dbs.manager.servers.gateways import (
+    CONTAINER_TMP,
+    DbsProfile,
+    RemoteHost,
+    ServerBackup,
+)
 from dbs.models import AuditEvent
 from dbs.naming import parse_backup_moment
 
@@ -68,7 +73,7 @@ class DbsRun:
     def __init__(
         self,
         job: AuditEvent,
-        server: Server,
+        application: Application,
         plan: BackupPlan | None,
         *,
         remote: RemoteHost,
@@ -78,7 +83,7 @@ class DbsRun:
         keep_remote: int,
     ) -> None:
         self.job = job
-        self.server = server
+        self.application = application
         self.plan = plan
         self.remote = remote
         self.profile = profile
@@ -90,10 +95,15 @@ class DbsRun:
 
     def run(self) -> DbsOutcome:
         outcome = DbsOutcome()
-        self.storage.sweep_partials(self.server.pk)
-        folder = self.remote.backup_folder(self.profile, self.server.remote_backup_dir)
-        if self.profile.compose is None and folder:
-            self.remote.sweep_partials(folder)
+        self.storage.sweep_partials(self.application.pk)
+        folder = self.remote.backup_folder(self.profile, self.application.remote_backup_dir)
+        if self.profile.container is None:
+            if folder:
+                self.remote.sweep_partials(folder)
+        else:
+            self.remote.sweep_in_container(
+                self.profile, *([folder] if folder else []), CONTAINER_TMP
+            )
         outcome.pulled = self._collect(folder)
         try:
             outcome.streamed = self._stream(folder)
@@ -106,7 +116,7 @@ class DbsRun:
     def _collect(self, folder: str) -> list[BackupFile]:
         waiting = self.remote.waiting_backups(self.profile, folder, self.prefix)
         recorded: dict[str, list[BackupFile]] = {}
-        for file in self.files.recorded_at(self.server.pk, (b.path for b in waiting)):
+        for file in self.files.recorded_at(self.application.pk, (b.path for b in waiting)):
             recorded.setdefault(file.remote_path, []).append(file)
         pulled = []
         for found in waiting:
@@ -125,7 +135,7 @@ class DbsRun:
         return any(file.sha256 == digest for file in same_size)
 
     def _pull(self, found: ServerBackup) -> BackupFile | None:
-        with self.storage.receiving(self.server.pk) as incoming:
+        with self.storage.receiving(self.application.pk) as incoming:
             try:
                 self.remote.pull_backup(
                     self.profile, found.path, incoming, Progress(self.job, COLLECTING)
@@ -141,7 +151,7 @@ class DbsRun:
             )
 
     def _stream(self, folder: str) -> BackupFile:
-        with self.storage.receiving(self.server.pk) as incoming:
+        with self.storage.receiving(self.application.pk) as incoming:
             streamed = self.remote.stream_dbs_backup(
                 self.profile,
                 passphrase=self.passphrase,
@@ -171,7 +181,7 @@ class DbsRun:
         incoming.close()
         problem = self._problem(incoming, remote_size, expected_sha256)
         stored = self.storage.install(
-            incoming, self.server.pk, f"{name}{QUARANTINE_SUFFIX}" if problem else name
+            incoming, self.application.pk, f"{name}{QUARANTINE_SUFFIX}" if problem else name
         )
         validation = (
             BackupFile.Validation.FAILED if problem else BackupFile.Validation.VERIFIED
@@ -199,7 +209,7 @@ class DbsRun:
         try:
             return self.files.create(
                 created_by=self.job.actor,
-                server=self.server,
+                application=self.application,
                 plan=self.plan,
                 kind=BackupFile.Kind.DBS,
                 name=PurePosixPath(stored.relative_path).name,
@@ -215,7 +225,7 @@ class DbsRun:
 
     def _release(self, folder: str) -> list[str]:
         copies = sorted(
-            self.files.server_copies(self.server.pk, self.plan and self.plan.pk),
+            self.files.server_copies(self.application.pk, self.plan and self.plan.pk),
             key=moment_of,
             reverse=True,
         )[self.keep_remote :]

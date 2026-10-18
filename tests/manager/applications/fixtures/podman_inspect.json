@@ -1,0 +1,121 @@
+[
+    {
+        "Id": "69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060",
+        "Created": "2026-10-11T16:02:47.311946154Z",
+        "Path": "gunicorn",
+        "Args": [
+            "wiki.wsgi"
+        ],
+        "State": {
+            "OciVersion": "1.2.0",
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 3117,
+            "ConmonPid": 3115,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-11T16:02:48.020511467Z",
+            "FinishedAt": "0001-01-01T00:00:00Z",
+            "CheckpointedAt": "0001-01-01T00:00:00Z",
+            "RestoredAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "3e2ec1403050d6b666251d39c15296d87273db246331881ea1f8b9389a69df72",
+        "ImageDigest": "sha256:b07eb71106b4254e26c97d5183e045d446c896ff52a86dc9c326f9e2fc3c4da9",
+        "ImageName": "localhost/wiki_web:latest",
+        "Rootfs": "",
+        "Pod": "",
+        "ResolvConfPath": "/run/user/1000/containers/overlay-containers/69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060/userdata/resolv.conf",
+        "HostnamePath": "/run/user/1000/containers/overlay-containers/69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060/userdata/hostname",
+        "HostsPath": "/run/user/1000/containers/overlay-containers/69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060/userdata/hosts",
+        "StaticDir": "/home/deploy/.local/share/containers/storage/overlay-containers/69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060/userdata",
+        "OCIRuntime": "crun",
+        "ConmonPidFile": "/run/user/1000/containers/overlay-containers/69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060/userdata/conmon.pid",
+        "PidFile": "/run/user/1000/containers/overlay-containers/69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060/userdata/pidfile",
+        "Name": "wiki-web-1",
+        "RestartCount": 0,
+        "Driver": "overlay",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "EffectiveCaps": [],
+        "BoundingCaps": [],
+        "ExecIDs": [],
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "${HOST}/srv/wiki/uploads",
+                "Destination": "/usr/src/app/uploads",
+                "Driver": "",
+                "Mode": "",
+                "Options": [
+                    "rbind"
+                ],
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Dependencies": [],
+        "IsInfra": false,
+        "IsService": false,
+        "KubeExitCodePropagation": "invalid",
+        "lockNumber": 4,
+        "Config": {
+            "Hostname": "69226291e583",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/src/app/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "container=podman",
+                "LANG=C.UTF-8",
+                "HOME=/root",
+                "HOSTNAME=69226291e583"
+            ],
+            "Cmd": [
+                "gunicorn",
+                "wiki.wsgi"
+            ],
+            "Image": "localhost/wiki_web:latest",
+            "Volumes": null,
+            "WorkingDir": "/usr/src/app",
+            "Entrypoint": null,
+            "OnBuild": null,
+            "Labels": {
+                "io.podman.compose.config-hash": "12a435ec8454c6d1c90a1d92812b09af11bee711fbe524d56a8f26ea7c5ccee8",
+                "io.podman.compose.project": "wiki",
+                "io.podman.compose.version": "1.2.0",
+                "io.podman.compose.project.working_dir": "${HOST}/srv/wiki",
+                "io.podman.compose.project.config_files": "${HOST}/srv/wiki/podman-compose.yml",
+                "io.podman.compose.service": "web",
+                "io.podman.compose.container-number": "1",
+                "PODMAN_SYSTEMD_UNIT": "podman-compose@wiki.service"
+            },
+            "Annotations": {
+                "io.container.manager": "libpod",
+                "io.podman.annotations.autoremove": "FALSE"
+            },
+            "StopSignal": "SIGTERM",
+            "HealthcheckOnFailureAction": "none",
+            "CreateCommand": [
+                "podman",
+                "run",
+                "--name",
+                "wiki-web-1"
+            ],
+            "Umask": "0022",
+            "Timeout": 0,
+            "StopTimeout": 10,
+            "Passwd": true,
+            "sdNotifyMode": "container"
+        }
+    }
+]

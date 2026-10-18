@@ -18,7 +18,7 @@ def stored(entry):
 @pytest.mark.django_db
 def test_a_recorded_action_is_finished_when_it_is_written(admin, server):
     entry = ActivityService(admin).record(
-        "server.delete", server=server, target="web-1", detail={"fields": ["name"]}
+        "server.delete", subject=server, target="web-1", detail={"fields": ["name"]}
     )
 
     entry = stored(entry)
@@ -31,6 +31,19 @@ def test_a_recorded_action_is_finished_when_it_is_written(admin, server):
     assert entry.error_code == ""
     assert entry.started_at is not None
     assert entry.started_at == entry.finished_at
+
+
+@pytest.mark.django_db
+def test_an_action_about_an_application_is_stored_against_it(admin, application):
+    service = ActivityService(admin)
+    recorded = service.record("application.check", subject=application, target="shop")
+    with service.track("application.update", subject=application) as tracked:
+        pass
+    queued = service.queue("backup.take", subject=application)
+
+    assert {stored(entry).subject for entry in (recorded, tracked, queued)} == {
+        str(application.pk)
+    }
 
 
 @pytest.mark.django_db
@@ -69,7 +82,7 @@ def test_the_address_is_the_requests_and_none_outside_one(admin, settings):
 @pytest.mark.django_db
 def test_a_tracked_action_runs_then_succeeds_with_its_detail(admin, server):
     with ActivityService(admin).track(
-        "server.check", server=server, target="web-1"
+        "server.check", subject=server, target="web-1"
     ) as entry:
         running = stored(entry)
         entry.detail = {"status": "ok"}
@@ -90,7 +103,7 @@ def test_a_tracked_action_that_fails_is_stored_failed_and_the_error_raised(
 ):
     with (
         pytest.raises(SSHUnreachable),
-        ActivityService(admin).track("server.check", server=server) as entry,
+        ActivityService(admin).track("server.check", subject=server) as entry,
     ):
         entry.detail = {"status": "failed"}
         raise SSHUnreachable()

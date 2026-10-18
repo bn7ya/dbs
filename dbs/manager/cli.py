@@ -289,6 +289,14 @@ def setup_django(data_dir, database_url=None, host=None, proxies=None):
     from django.core.management import call_command
 
     django.setup()
+    from .legacy import preserve_before_split
+
+    kept = preserve_before_split()
+    if kept is not None:
+        print(
+            f"Kept a copy of the database from before 0.8.0 at {kept}.",
+            file=sys.stderr,
+        )
     call_command("migrate", interactive=False, verbosity=0)
 
 

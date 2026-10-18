@@ -16,6 +16,7 @@ LIST_COLUMNS = (
     ("ACTION", "action"),
     ("STATUS", "status"),
     ("SERVER", "server_name"),
+    ("APPLICATION", "application_name"),
     ("TARGET", "target"),
     ("BY", "actor"),
     ("ERROR", "error_code"),
@@ -25,6 +26,7 @@ SHOWN_FIELDS = (
     "action",
     "status",
     "server_name",
+    "application_name",
     "target",
     "actor",
     "ip",
@@ -47,12 +49,16 @@ def list_activity(session: TerminalSession) -> int:
     }
     if args.server:
         body["server"] = references.server(session.user, args.server).pk
+    if args.application:
+        body["application"] = references.application(
+            session.user, args.application
+        ).pk
     service = ActivityService(session.user)
     entries = list(
         service.list(**validated(ActivityFilterSerializer, body))[: args.limit]
     )
-    servers = service.servers_for(entries)
-    rows = ActivitySerializer(entries, many=True, context={"servers": servers}).data
+    subjects = service.subjects_for(entries)
+    rows = ActivitySerializer(entries, many=True, context={"subjects": subjects}).data
     session.out.table(rows, LIST_COLUMNS, empty="Nothing has happened yet.")
     return 0
 

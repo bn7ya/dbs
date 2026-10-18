@@ -12,6 +12,7 @@ from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.servers.services import ServerService
 from dbs.manager.servers.versions import local_version
 
@@ -24,6 +25,7 @@ class DashboardService:
     def __init__(self, user: Any) -> None:
         self.user = user
         self.servers = ServerService(user)
+        self.applications = ApplicationService(user)
         self.files = BackupFileRepository()
         self.plans = BackupPlanRepository()
         self.entries = ActivityRepository()
@@ -31,12 +33,31 @@ class DashboardService:
 
     def summary(self) -> dict[str, Any]:
         servers = list(self.servers.list())
-        stored = self.files.stored_bytes_by_server()
-        following = self.plans.next_runs_by_server()
+        applications = list(self.applications.list())
+        stored = self.files.stored_bytes_by_application()
+        following = self.plans.next_runs_by_application()
         failures = self.entries.failures_by_subject(
-            [str(server.pk) for server in servers], timezone.now() - FAILURE_WINDOW
+            [str(application.pk) for application in applications],
+            timezone.now() - FAILURE_WINDOW,
         )
         recent = self.entries.recent_failures(RECENT_FAILURES)
+        grouped: dict[Any, list[dict[str, Any]]] = {}
+        for application in applications:
+            grouped.setdefault(application.server_id, []).append(
+                {
+                    "id": str(application.pk),
+                    "name": application.name,
+                    "kind": application.kind,
+                    "engine": application.engine,
+                    "check_status": application.last_check_status,
+                    "checked_at": application.last_checked_at,
+                    "last_backup": self._last_backup(application),
+                    "next_plan_run": following.get(application.pk),
+                    "failures_7d": failures.get(str(application.pk), 0),
+                    "storage_bytes": stored.get(application.pk, 0),
+                    "health": application.last_health,
+                }
+            )
         return {
             "servers": [
                 {
@@ -47,18 +68,14 @@ class DashboardService:
                     "checked_at": server.last_checked_at,
                     "connection_state": server.connection_state,
                     "last_seen_at": server.last_seen_at,
-                    "last_backup": self._last_backup(server),
-                    "next_plan_run": following.get(server.pk),
-                    "failures_7d": failures.get(str(server.pk), 0),
-                    "storage_bytes": stored.get(server.pk, 0),
-                    "health": server.last_health,
+                    "applications": grouped.get(server.pk, []),
                 }
                 for server in servers
             ],
             "storage_bytes": sum(stored.values()),
             "last_export_at": self.last_export_at(),
             "recent_failures": recent,
-            "recent_failure_servers": self.activity.servers_for(recent),
+            "recent_failure_subjects": self.activity.subjects_for(recent),
             "key_store": key_store(),
         }
 
@@ -78,8 +95,8 @@ class DashboardService:
             return None
         return export.finished_at or export.created_at
 
-    def _last_backup(self, server: Any) -> dict[str, Any] | None:
-        file = self.files.latest_of_kind(server.pk, BackupFile.Kind.DBS)
+    def _last_backup(self, application: Any) -> dict[str, Any] | None:
+        file = self.files.latest_of_kind(application.pk, BackupFile.Kind.DBS)
         if file is None:
             return None
         return {

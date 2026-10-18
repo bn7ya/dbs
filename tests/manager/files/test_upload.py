@@ -51,12 +51,12 @@ def partials(folder: Path) -> list[str]:
 
 
 @pytest.fixture
-def send(api, server, tree):
+def send(api, application, tree):
 
     def send(path=None, name="report.pdf", content=CONTENT, *, client=None, **extra):
         return (client or api).generic(
             "POST",
-            f"/api/files/{server.pk}/upload/",
+            f"/api/files/{application.pk}/upload/",
             form(
                 path=str(tree.media) if path is None else path,
                 name=name,
@@ -95,15 +95,15 @@ def test_a_file_is_written_into_the_folder_and_answered_as_an_entry(
 
 @pytest.mark.django_db
 def test_an_upload_is_recorded_with_its_path_and_size(
-    admin, server, send, tree, sessions, logged
+    admin, application, send, tree, sessions, logged
 ):
     send(path=f"{tree.media}/assets/")
 
     [entry] = logged("files.upload")
-    assert (entry.status, entry.actor, entry.server) == (
+    assert (entry.status, entry.actor, entry.application) == (
         audit.SUCCEEDED,
         admin,
-        server,
+        application,
     )
     assert entry.target == f"{tree.media}/assets/report.pdf"
     assert entry.data == {"size": len(CONTENT)}
@@ -302,9 +302,9 @@ def test_the_form_needs_a_folder_and_a_file(send, sessions):
 
 
 @pytest.mark.django_db
-def test_an_upload_is_a_form_not_json(api, server, tree):
+def test_an_upload_is_a_form_not_json(api, application, tree):
     response = api.post(
-        f"/api/files/{server.pk}/upload/",
+        f"/api/files/{application.pk}/upload/",
         json.dumps({"path": str(tree.media)}),
         content_type="application/json",
     )
@@ -346,13 +346,13 @@ def test_a_request_that_says_it_is_too_large_is_refused_before_it_is_read(
 
 @pytest.mark.django_db
 def test_the_service_refuses_a_file_over_the_limit_however_it_came(
-    settings, admin, server, tree, sessions
+    settings, admin, application, tree, sessions
 ):
     settings.FILES_UPLOAD_MAX_BYTES = 10
     upload = SimpleUploadedFile("report.pdf", b"x" * 11)
 
     with pytest.raises(UploadTooLarge):
-        FileService(admin).upload(server.pk, str(tree.media), upload)
+        FileService(admin).upload(application.pk, str(tree.media), upload)
 
     assert upload.closed
     assert sessions == []

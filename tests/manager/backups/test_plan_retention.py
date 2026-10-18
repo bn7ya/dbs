@@ -27,10 +27,12 @@ def logged(action: str):
 
 
 @pytest.mark.django_db
-def test_a_plan_keeps_five_here_and_none_on_the_server_unless_told(api, server):
+def test_a_plan_keeps_five_here_and_none_on_the_server_unless_told(
+    api, application
+):
     plan = api.post(
         PLANS,
-        {"server": str(server.pk), "name": "nightly", "kind": "dbs"},
+        {"application": str(application.pk), "name": "nightly", "kind": "dbs"},
         format="json",
     ).json()
 
@@ -48,9 +50,14 @@ def test_a_plan_keeps_five_here_and_none_on_the_server_unless_told(api, server):
     ],
 )
 def test_a_plan_keeps_one_to_five_here_and_up_to_five_there(
-    api, server, fields, errors
+    api, application, fields, errors
 ):
-    body = {"server": str(server.pk), "name": "nightly", "kind": "dbs", **fields}
+    body = {
+        "application": str(application.pk),
+        "name": "nightly",
+        "kind": "dbs",
+        **fields,
+    }
 
     response = api.post(PLANS, body, format="json")
 
@@ -97,11 +104,11 @@ def test_an_import_keeps_what_an_older_export_kept_in_range(
     exported = tmp_path / "manager.dbs"
     exported.write_bytes(b"an export")
 
-    def restored(data, passphrase, **options):
+    def restored(data, passphrase, translation, **options):
         BackupPlan.objects.filter(pk=plan.pk).update(keep=30, keep_remote=9)
         return SimpleNamespace(records_loaded=1, healed=False)
 
-    monkeypatch.setattr(restore, "restore_backup", restored)
+    monkeypatch.setattr(restore, "restore_translated", restored)
     monkeypatch.setattr(restore, "backup_files", lambda data, passphrase: iter(()))
 
     transfer.import_manager(exported, "a-long-export-passphrase", replace=True)
@@ -187,14 +194,14 @@ def test_only_a_confirmed_change_lets_a_run_delete_older_backups(api, make_plan,
 @pytest.mark.django_db
 @pytest.mark.parametrize("name", ["Nightly", "nightly!", "nightly.", "NIGHTLY "])
 def test_a_name_that_would_share_the_plans_files_on_the_server_is_taken(
-    api, server, make_plan, name
+    api, application, make_plan, name
 ):
     make_plan(name="nightly")
     other = make_plan(name="weekly")
 
     added = api.post(
         PLANS,
-        {"server": str(server.pk), "name": name, "kind": "dbs"},
+        {"application": str(application.pk), "name": name, "kind": "dbs"},
         format="json",
     )
     renamed = api.patch(url(other), {"name": name}, format="json")
@@ -204,12 +211,12 @@ def test_a_name_that_would_share_the_plans_files_on_the_server_is_taken(
 
 
 @pytest.mark.django_db
-def test_a_name_without_letters_or_digits_never_clashes(api, server, make_plan):
+def test_a_name_without_letters_or_digits_never_clashes(api, application, make_plan):
     make_plan(name="!!!")
 
     added = api.post(
         PLANS,
-        {"server": str(server.pk), "name": "???", "kind": "dbs"},
+        {"application": str(application.pk), "name": "???", "kind": "dbs"},
         format="json",
     )
 

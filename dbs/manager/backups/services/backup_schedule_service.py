@@ -50,7 +50,7 @@ class BackupScheduleService:
                 )
                 job = self.activity.queue(
                     Action.RUN,
-                    server=plan.server,
+                    subject=plan.application,
                     target=plan.name,
                     detail=run_detail(plan),
                 )
@@ -75,7 +75,7 @@ class BackupScheduleService:
         sweep_stale_jobs()
 
     def _start(self, job: AuditEvent, plan: BackupPlan) -> None:
-        if not self.locks.acquire(plan.server_id, job.pk):
+        if not self.locks.acquire(plan.application_id, job.pk):
             self.activity.fail(job.pk, BackupRunning())
             self.plans.update(plan, **last_run(self.activity.get(job.pk)))
             return
@@ -84,7 +84,7 @@ class BackupScheduleService:
             lambda job: get_runner().submit(
                 BackupRunService().run_plan, job.pk, plan.pk
             ),
-            on_failure=lambda: self.locks.release(plan.server_id, job.pk),
+            on_failure=lambda: self.locks.release(plan.application_id, job.pk),
         )
 
 

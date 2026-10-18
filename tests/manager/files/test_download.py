@@ -9,8 +9,8 @@ from dbs.manager.servers.gateways import ssh_gateway
 from tests.manager.servers.support import LocalFile
 
 
-def download(api, server, path: str):
-    return api.get(f"/api/files/{server.pk}/download/", {"path": path})
+def download(api, application, path: str):
+    return api.get(f"/api/files/{application.pk}/download/", {"path": path})
 
 
 def body(response) -> bytes:
@@ -19,12 +19,12 @@ def body(response) -> bytes:
 
 @pytest.mark.django_db
 def test_a_file_is_streamed_as_an_attachment_and_the_connection_closed_after(
-    monkeypatch, api, server, tree, sessions
+    monkeypatch, api, application, tree, sessions
 ):
     monkeypatch.setattr(ssh_gateway, "TRANSFER_WINDOW", 4)
     content = b"\x89PNG not really"
 
-    response = download(api, server, f"{tree.media}/logo.png")
+    response = download(api, application, f"{tree.media}/logo.png")
 
     assert response.status_code == 200
     assert response["Content-Type"] == "application/octet-stream"
@@ -41,15 +41,15 @@ def test_a_file_is_streamed_as_an_attachment_and_the_connection_closed_after(
 
 @pytest.mark.django_db
 def test_a_download_is_recorded_with_its_path_and_size(
-    admin, api, server, tree, sessions, logged
+    admin, api, application, tree, sessions, logged
 ):
-    body(download(api, server, f"{tree.media}/Docs/report.pdf"))
+    body(download(api, application, f"{tree.media}/Docs/report.pdf"))
 
     [entry] = logged("files.download")
-    assert (entry.status, entry.actor, entry.server) == (
+    assert (entry.status, entry.actor, entry.application) == (
         audit.SUCCEEDED,
         admin,
-        server,
+        application,
     )
     assert (entry.target, entry.data) == (
         f"{tree.media}/Docs/report.pdf",
@@ -59,7 +59,7 @@ def test_a_download_is_recorded_with_its_path_and_size(
 
 @pytest.mark.django_db
 def test_a_file_that_grew_since_it_was_opened_stops_at_its_size(
-    monkeypatch, api, server, tree, sessions
+    monkeypatch, api, application, tree, sessions
 ):
     readv = LocalFile.readv
 
@@ -69,17 +69,19 @@ def test_a_file_that_grew_since_it_was_opened_stops_at_its_size(
 
     monkeypatch.setattr(LocalFile, "readv", growing)
 
-    response = download(api, server, f"{tree.media}/Readme.md")
+    response = download(api, application, f"{tree.media}/Readme.md")
 
     assert response["Content-Length"] == "7"
     assert body(response) == b"# media"
 
 
 @pytest.mark.django_db
-def test_a_name_beyond_ascii_is_named_for_every_browser(api, server, tree, sessions):
+def test_a_name_beyond_ascii_is_named_for_every_browser(
+    api, application, tree, sessions
+):
     (tree.media / "نسخة.sql").write_bytes(b"x")
 
-    response = download(api, server, f"{tree.media}/نسخة.sql")
+    response = download(api, application, f"{tree.media}/نسخة.sql")
 
     assert response["Content-Disposition"] == (
         "attachment; filename*=utf-8''%D9%86%D8%B3%D8%AE%D8%A9.sql"
@@ -87,29 +89,29 @@ def test_a_name_beyond_ascii_is_named_for_every_browser(api, server, tree, sessi
 
 
 @pytest.mark.django_db
-def test_a_name_a_header_cannot_carry_is_cleaned(api, server, tree, sessions):
+def test_a_name_a_header_cannot_carry_is_cleaned(api, application, tree, sessions):
     (tree.media / "a\nb.txt").write_bytes(b"x")
 
-    response = download(api, server, f"{tree.media}/a\nb.txt")
+    response = download(api, application, f"{tree.media}/a\nb.txt")
 
     assert response.status_code == 200
     assert response["Content-Disposition"] == 'attachment; filename="ab.txt"'
 
 
 @pytest.mark.django_db
-def test_an_empty_file_downloads_empty(api, server, tree, sessions):
+def test_an_empty_file_downloads_empty(api, application, tree, sessions):
     (tree.media / "empty").write_bytes(b"")
 
-    response = download(api, server, f"{tree.media}/empty")
+    response = download(api, application, f"{tree.media}/empty")
 
     assert (response["Content-Length"], body(response)) == ("0", b"")
 
 
 @pytest.mark.django_db
 def test_a_link_to_a_file_in_an_allowed_folder_downloads_that_file_named_as_the_link(
-    api, server, tree, sessions
+    api, application, tree, sessions
 ):
-    response = download(api, server, f"{tree.media}/logo-link")
+    response = download(api, application, f"{tree.media}/logo-link")
 
     assert response["Content-Disposition"] == 'attachment; filename="logo-link"'
     assert body(response) == b"\x89PNG not really"
@@ -118,9 +120,9 @@ def test_a_link_to_a_file_in_an_allowed_folder_downloads_that_file_named_as_the_
 @pytest.mark.django_db
 @pytest.mark.parametrize("relative", ["secret-link", "escape/passwd"])
 def test_a_link_out_of_the_allowed_folders_is_refused_and_recorded(
-    api, server, tree, sessions, logged, relative
+    api, application, tree, sessions, logged, relative
 ):
-    response = download(api, server, f"{tree.media}/{relative}")
+    response = download(api, application, f"{tree.media}/{relative}")
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "path_outside_roots"
@@ -135,9 +137,9 @@ def test_a_link_out_of_the_allowed_folders_is_refused_and_recorded(
 
 @pytest.mark.django_db
 def test_a_path_outside_the_allowed_folders_is_refused_unreached_and_recorded(
-    api, server, tree, sessions, logged
+    api, application, tree, sessions, logged
 ):
-    response = download(api, server, str(tree.outside / "passwd"))
+    response = download(api, application, str(tree.outside / "passwd"))
 
     assert response.status_code == 403
     assert sessions == []
@@ -147,8 +149,8 @@ def test_a_path_outside_the_allowed_folders_is_refused_unreached_and_recorded(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("relative", ["Docs", "docs-link", ""])
-def test_a_folder_is_not_a_file(api, server, tree, sessions, logged, relative):
-    response = download(api, server, f"{tree.media}/{relative}")
+def test_a_folder_is_not_a_file(api, application, tree, sessions, logged, relative):
+    response = download(api, application, f"{tree.media}/{relative}")
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "not_a_file"
@@ -157,19 +159,19 @@ def test_a_folder_is_not_a_file(api, server, tree, sessions, logged, relative):
 
 
 @pytest.mark.django_db
-def test_a_pipe_is_not_a_file(api, server, tree, sessions):
+def test_a_pipe_is_not_a_file(api, application, tree, sessions):
     os.mkfifo(tree.media / "pipe")
 
-    response = download(api, server, f"{tree.media}/pipe")
+    response = download(api, application, f"{tree.media}/pipe")
 
     assert response.json()["error"]["code"] == "not_a_file"
 
 
 @pytest.mark.django_db
 def test_a_file_that_is_not_there_is_remote_not_found(
-    api, server, tree, sessions, logged
+    api, application, tree, sessions, logged
 ):
-    response = download(api, server, f"{tree.media}/missing.png")
+    response = download(api, application, f"{tree.media}/missing.png")
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "remote_not_found"
@@ -177,8 +179,8 @@ def test_a_file_that_is_not_there_is_remote_not_found(
 
 
 @pytest.mark.django_db
-def test_a_download_needs_a_path(api, server, sessions, logged):
-    response = api.get(f"/api/files/{server.pk}/download/")
+def test_a_download_needs_a_path(api, application, sessions, logged):
+    response = api.get(f"/api/files/{application.pk}/download/")
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {"path": ["required"]}
@@ -186,8 +188,8 @@ def test_a_download_needs_a_path(api, server, sessions, logged):
 
 
 @pytest.mark.django_db
-def test_a_download_needs_a_session(anonymous, server, tree, sessions):
-    response = download(anonymous, server, f"{tree.media}/logo.png")
+def test_a_download_needs_a_session(anonymous, application, tree, sessions):
+    response = download(anonymous, application, f"{tree.media}/logo.png")
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "not_authenticated"
@@ -196,11 +198,11 @@ def test_a_download_needs_a_session(anonymous, server, tree, sessions):
 
 @pytest.mark.django_db
 def test_a_path_is_recorded_printable_and_by_its_end_when_it_is_too_long(
-    api, server, tree, sessions, logged
+    api, application, tree, sessions, logged
 ):
     deep = f"{tree.media}/" + "deeper/" * 200 + "a\nb.txt"
 
-    response = download(api, server, deep)
+    response = download(api, application, deep)
 
     assert response.status_code == 404
     [entry] = logged("files.download")

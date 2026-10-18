@@ -11,6 +11,7 @@ from .backup_file import (
 from .backup_plan import (
     BackupPlanSerializer,
     PlanCreateSerializer,
+    PlanFilterSerializer,
     PlanUpdateSerializer,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "DownloadQuerySerializer",
     "BackupPlanSerializer",
     "PlanCreateSerializer",
+    "PlanFilterSerializer",
     "PlanUpdateSerializer",
     "RestoreSerializer",
     "TakeSerializer",

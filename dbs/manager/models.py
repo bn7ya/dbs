@@ -1,6 +1,7 @@
 from django.db import models
 
 from dbs.manager.accounts.models import Account, RecoveryCode
+from dbs.manager.applications.models import Application
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.envfiles.models import EnvVersion
 from dbs.manager.servers.models import Server
@@ -17,5 +18,5 @@ class ScheduledTask(models.Model):
         return f"{self.name} at {self.next_run_at:%Y-%m-%d %H:%M}"
 
 
-__all__ = ["BackupFile", "BackupPlan", "EnvVersion", "ScheduledTask", "Server"]
+__all__ = ["Application", "BackupFile", "BackupPlan", "EnvVersion", "ScheduledTask", "Server"]
 __all__ += ["Account", "RecoveryCode"]

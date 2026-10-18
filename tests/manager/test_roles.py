@@ -8,38 +8,29 @@ from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.permissions import Capability, Role, RoleRequired, requires
-from dbs.manager.servers.models import Server
-from dbs.manager.servers.services import ServerService
-from tests.manager.servers.support import (
-    BACKUP_PASSPHRASE,
-    PASSWORD,
-    host_key_line,
-    private_key_text,
-)
+from tests.manager.factories import make_application
+from tests.manager.servers.support import BACKUP_PASSPHRASE, PASSWORD
 
 
 @pytest.fixture
-def server(db):
-    return ServerService(None).create(
-        name="web-1",
-        host="10.0.0.5",
-        username="deploy",
-        auth_method=Server.AuthMethod.KEY,
-        private_key=private_key_text(),
-        host_key=host_key_line(),
-        backup_passphrase=BACKUP_PASSPHRASE,
-    )
+def application(db):
+    return make_application(None, backup_passphrase=BACKUP_PASSPHRASE)
 
 
 @pytest.fixture
-def backup(server):
+def server(application):
+    return application.server
+
+
+@pytest.fixture
+def backup(application):
     return BackupFileRepository().create(
-        server=server,
+        application=application,
         kind=BackupFile.Kind.DBS,
         name="nightly.dbs",
         size=11,
         sha256="0" * 64,
-        storage_path=f"{server.pk}/nightly.dbs",
+        storage_path=f"{application.pk}/nightly.dbs",
         validation=BackupFile.Validation.STRUCTURE_OK,
     )
 
@@ -71,6 +62,7 @@ def test_each_role_holds_every_capability_of_the_roles_below_it():
     assert master - admin == {Capability.ACCOUNTS_MANAGE}
     assert operator == {
         Capability.SERVERS_CHECK,
+        Capability.APPLICATIONS_CHECK,
         Capability.BACKUPS_TAKE,
         Capability.BACKUPS_VERIFY,
         Capability.BACKUPS_DOWNLOAD,
@@ -79,6 +71,19 @@ def test_each_role_holds_every_capability_of_the_roles_below_it():
         Capability.ENV_PULL,
         Capability.FILES_DOWNLOAD,
         Capability.REDEPLOY_REHEARSE,
+    }
+    assert admin - operator == {
+        Capability.SERVERS_MANAGE,
+        Capability.APPLICATIONS_MANAGE,
+        Capability.APPLICATIONS_PASSPHRASE,
+        Capability.BACKUPS_UPLOAD,
+        Capability.BACKUPS_DELETE,
+        Capability.BACKUPS_RESTORE,
+        Capability.PLANS_MANAGE,
+        Capability.ENV_REVEAL,
+        Capability.ENV_PUSH,
+        Capability.FILES_CHANGE,
+        Capability.REDEPLOY_RUN,
     }
 
 
@@ -130,26 +135,33 @@ def test_an_account_made_outside_the_manager_is_a_viewer(django_user_model):
 
 
 @pytest.mark.django_db
-def test_a_viewer_reads_everything_and_changes_nothing(as_role, server, backup):
+def test_a_viewer_reads_everything_and_changes_nothing(
+    as_role, server, application, backup
+):
     viewer = as_role(Role.VIEWER)
 
     assert viewer.get("/api/servers/").status_code == 200
     assert viewer.get(f"/api/servers/{server.pk}/").status_code == 200
-    assert viewer.get(f"/api/backups/?server={server.pk}").status_code == 200
+    assert viewer.get(f"/api/applications/?server={server.pk}").status_code == 200
+    assert viewer.get(f"/api/applications/{application.pk}/").status_code == 200
+    assert viewer.get(f"/api/backups/?application={application.pk}").status_code == 200
     assert viewer.get("/api/activity/").status_code == 200
     assert viewer.get("/api/dashboard/").status_code == 200
-    refused = refusal(viewer.post("/api/backups/take/", {"server": str(server.pk)}))
+    refused = refusal(
+        viewer.post("/api/backups/take/", {"application": str(application.pk)})
+    )
     assert refused["code"] == "role_required"
     assert refused["message"] == (
         "This needs the operator role or higher; your account is a viewer."
     )
     assert refusal(viewer.get(f"/api/backups/{backup.pk}/download/"))
     assert refusal(viewer.post(f"/api/servers/{server.pk}/check/"))
+    assert refusal(viewer.post(f"/api/applications/{application.pk}/check/"))
 
 
 @pytest.mark.django_db
 def test_an_operator_takes_and_rehearses_but_restores_nothing_for_real(
-    as_role, server, backup
+    as_role, server, application, backup
 ):
     operator = as_role(Role.OPERATOR)
     restore = f"/api/backups/{backup.pk}/restore/"
@@ -161,7 +173,7 @@ def test_an_operator_takes_and_rehearses_but_restores_nothing_for_real(
             "mode": "merge",
             "rehearse": False,
             "account_password": PASSWORD,
-            "server_name": server.name,
+            "application_name": application.name,
         },
     )
 
@@ -172,13 +184,32 @@ def test_an_operator_takes_and_rehearses_but_restores_nothing_for_real(
     assert refusal(operator.delete(f"/api/backups/{backup.pk}/"))
     assert refusal(operator.delete(f"/api/servers/{server.pk}/"))
     assert refusal(operator.patch(f"/api/servers/{server.pk}/", {"name": "web-2"}))
+    assert refusal(operator.delete(f"/api/applications/{application.pk}/"))
     assert refusal(
-        operator.post(f"/api/servers/{server.pk}/passphrase/", {"password": PASSWORD})
+        operator.patch(f"/api/applications/{application.pk}/", {"name": "web-2"})
+    )
+    assert refusal(
+        operator.post(
+            f"/api/applications/{application.pk}/passphrase/", {"password": PASSWORD}
+        )
+    )
+    assert refusal(
+        operator.post(f"/api/applications/{application.pk}/passphrase/capture/")
+    )
+    assert refusal(
+        operator.post("/api/applications/discover/", {"server": str(server.pk)})
+    )
+    assert refusal(
+        operator.post(
+            "/api/applications/",
+            {"server": str(server.pk), "name": "web-2"},
+            format="json",
+        )
     )
     assert refusal(
         operator.post(
             "/api/backups/plans/",
-            {"server": str(server.pk), "name": "nightly", "kind": "dbs"},
+            {"application": str(application.pk), "name": "nightly", "kind": "dbs"},
         )
     )
     assert refusal(operator.get("/api/accounts/"))
@@ -205,17 +236,19 @@ def test_an_operator_rehearses_putting_a_server_back_but_never_does_it(as_role):
 
 
 @pytest.mark.django_db
-def test_an_operator_takes_backups(as_role, server):
+def test_an_operator_takes_backups(as_role, application):
     operator = as_role(Role.OPERATOR)
 
     assert (
-        operator.post("/api/backups/take/", {"server": str(server.pk)}).status_code
+        operator.post(
+            "/api/backups/take/", {"application": str(application.pk)}
+        ).status_code
         == 202
     )
 
 
 @pytest.mark.django_db
-def test_an_admin_restores_for_real_behind_the_password(as_role, server, backup):
+def test_an_admin_restores_for_real_behind_the_password(as_role, application, backup):
     admin = as_role(Role.ADMIN)
 
     real = admin.post(
@@ -224,12 +257,12 @@ def test_an_admin_restores_for_real_behind_the_password(as_role, server, backup)
             "mode": "merge",
             "rehearse": False,
             "account_password": PASSWORD,
-            "server_name": server.name,
+            "application_name": application.name,
         },
     )
     unconfirmed = admin.post(
         f"/api/backups/{backup.pk}/restore/",
-        {"mode": "merge", "rehearse": False, "server_name": server.name},
+        {"mode": "merge", "rehearse": False, "application_name": application.name},
     )
 
     assert real.status_code == 202

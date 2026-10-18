@@ -42,7 +42,6 @@ def adding(mcp, confirmation, host="10.0.0.5", port=22):
         confirmation=confirmation,
         auth_method="password",
         password=SSH_PASSWORD,
-        discover=False,
     )
 
 

@@ -28,10 +28,10 @@ from dbs.manager.files.uploads import UploadHandler
 class DownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, server: UUID) -> StreamingHttpResponse:
+    def get(self, request: Request, application: UUID) -> StreamingHttpResponse:
         query = DownloadQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
-        download = FileService(request.user).download(server, **query.validated_data)
+        download = FileService(request.user).download(application, **query.validated_data)
         response = StreamingHttpResponse(
             download.content, content_type="application/octet-stream"
         )
@@ -43,16 +43,16 @@ class DownloadView(APIView):
         response["Cache-Control"] = "no-store"
         return response
 
-    def post(self, request: Request, server: UUID) -> Response:
+    def post(self, request: Request, application: UUID) -> Response:
         payload = DownloadRequestSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         ticket = FileService(request.user).download_ticket(
-            server, **payload.validated_data
+            application, **payload.validated_data
         )
         query = {"path": payload.validated_data["path"]}
         if ticket:
             query["ticket"] = ticket
-        url = f"{reverse('files:download', args=[server])}?{urlencode(query)}"
+        url = f"{reverse('files:download', args=[application])}?{urlencode(query)}"
         return Response(
             DownloadLinkSerializer({"url": url}).data,
             headers={"Cache-Control": "no-store"},
@@ -69,11 +69,11 @@ class UploadView(APIView):
         request.upload_handlers = [UploadHandler(request)]
         return super().initialize_request(request, *args, **kwargs)
 
-    def post(self, request: Request, server: UUID) -> Response:
+    def post(self, request: Request, application: UUID) -> Response:
         payload = FileUploadSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         created = FileService(request.user).upload(
-            server, payload.validated_data["path"], payload.validated_data["file"]
+            application, payload.validated_data["path"], payload.validated_data["file"]
         )
         return Response(
             FileEntrySerializer(created).data, status=status.HTTP_201_CREATED

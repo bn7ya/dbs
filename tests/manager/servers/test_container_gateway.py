@@ -11,21 +11,34 @@ from dbs.manager.servers.exceptions import (
     RestoreFailed,
     StreamBroken,
 )
-from dbs.manager.servers.gateways import ComposeService, DbsProfile, RemoteHost
+from dbs.manager.servers.gateways import ContainerTarget, DbsProfile, RemoteHost
+from dbs.manager.servers.gateways.ssh_gateway import RECEIVE_FILE
 from dbs.naming import backup_filename, is_backup_name
 from tests.manager.servers.compose import CONTAINER_BACKUP_DIR, ComposeHost
 from tests.manager.servers.support import BACKUP_PASSPHRASE, dbs_backup
 
 PROJECT = "/srv/shop"
-COMPOSE = ComposeService(service="backend", files=("compose.yaml", "compose.prod.yaml"))
+SERVICE = ContainerTarget(
+    service="backend", files=("compose.yaml", "compose.prod.yaml"), project="shop"
+)
 PROFILE = DbsProfile(
     python="python",
     manage="manage.py",
     project_dir=PROJECT,
     settings_module="config.settings.prod",
-    compose=COMPOSE,
+    container=SERVICE,
 )
-COMPOSE_PREFIX = ["docker", "compose", "-f", "compose.yaml", "-f", "compose.prod.yaml"]
+COMPOSE_PREFIX = [
+    "docker",
+    "compose",
+    "-f",
+    "compose.yaml",
+    "-f",
+    "compose.prod.yaml",
+    "-p",
+    "shop",
+]
+TOKEN = "dbs.manager.servers.gateways.ssh_gateway.secrets.token_hex"
 
 pytestmark = pytest.mark.django_db
 
@@ -42,10 +55,10 @@ def folders(tmp_path):
     }
 
 
-def streamed(host, folder=CONTAINER_BACKUP_DIR):
+def streamed(host, folder=CONTAINER_BACKUP_DIR, profile=PROFILE):
     sink = io.BytesIO()
     found = RemoteHost(host).stream_dbs_backup(
-        PROFILE,
+        profile,
         passphrase=BACKUP_PASSPHRASE,
         prefix="shop",
         folder=folder,
@@ -88,6 +101,51 @@ def test_a_manage_command_runs_inside_the_service_from_the_project_folder(folder
     assert run["setup"] == [f"cd {PROJECT} || exit 1"]
 
 
+def test_a_service_with_a_workdir_runs_its_commands_there(folders):
+    host = ComposeHost(folders["container"])
+    profile = DbsProfile(
+        python="/opt/venv/bin/python",
+        manage="/app/manage.py",
+        project_dir=PROJECT,
+        container=ContainerTarget(service="backend", workdir="/app"),
+    )
+
+    RemoteHost(host).run_manage(profile, ["dbs", "health", "--json"])
+
+    [run] = host.runs
+    assert run["argv"] == [
+        "docker",
+        "compose",
+        "exec",
+        "-T",
+        "-w",
+        "/app",
+        "backend",
+        "/opt/venv/bin/python",
+        "/app/manage.py",
+        "dbs",
+        "health",
+        "--json",
+    ]
+
+
+def test_a_podman_service_runs_through_podman_compose(folders):
+    host = ComposeHost(folders["container"], engine="podman")
+    profile = DbsProfile(
+        python="python",
+        manage="manage.py",
+        project_dir=PROJECT,
+        container=ContainerTarget(engine="podman", service="backend"),
+    )
+
+    found, received = streamed(host, profile=profile)
+
+    assert is_backup_name(found.name, "shop")
+    assert validate_backup(received, BACKUP_PASSPHRASE).ok
+    [run] = host.runs
+    assert run["argv"][:5] == ["podman", "compose", "exec", "-T", "backend"]
+
+
 def test_a_backup_streams_out_of_the_service_and_the_container_keeps_a_copy(
     folders,
 ):
@@ -128,7 +186,10 @@ def test_the_service_names_where_it_keeps_its_backups(folders):
     host = ComposeHost(folders["container"])
     unset = ComposeHost(folders["container"], backup_dir="")
 
-    assert RemoteHost(host).backup_folder(PROFILE, "/var/backups/dbs") == CONTAINER_BACKUP_DIR
+    assert (
+        RemoteHost(host).backup_folder(PROFILE, "/var/backups/dbs")
+        == CONTAINER_BACKUP_DIR
+    )
     assert RemoteHost(unset).backup_folder(PROFILE, "/var/backups/dbs") == ""
     assert host.runs[0]["argv"][-3:] == ["manage.py", "dbs_connection", "--json"]
 
@@ -156,7 +217,15 @@ def test_backups_waiting_in_the_container_are_listed_pulled_checked_and_removed(
     assert digest == hashlib.sha256(b"kept by the server").hexdigest()
     assert not (folder / name).exists()
     argvs = [run["argv"] for run in host.runs]
-    assert [*COMPOSE_PREFIX, "exec", "-T", "backend", "cat", "--", waiting.path] in argvs
+    assert [
+        *COMPOSE_PREFIX,
+        "exec",
+        "-T",
+        "backend",
+        "cat",
+        "--",
+        waiting.path,
+    ] in argvs
     assert [
         *COMPOSE_PREFIX,
         "exec",
@@ -205,28 +274,29 @@ def test_a_connection_lost_while_the_service_streams_leaves_the_copy_inside(fold
     assert is_backup_name(kept.name, "shop")
 
 
-def test_a_restore_hands_the_file_to_the_container_user_and_cleans_up(folders):
+def test_a_restore_streams_the_file_into_the_service_as_its_own_user(folders):
     host = ComposeHost(folders["container"])
+    sent = dbs_backup(BACKUP_PASSPHRASE)
 
     report = restore(host, folders)
 
     assert (report.records, report.files) == (3, 0)
     assert report.copy_left == ""
-    argvs = [run["argv"] for run in host.runs]
-    [copied] = [argv for argv in argvs if "cp" in argv]
-    inside = copied[-1].split(":", 1)[1]
-    assert inside.startswith("/tmp/.dbs-restore-")
-    assert [
+    [fed] = [run for run in host.runs if run.get("fed")]
+    inside = fed["argv"][-2]
+    assert inside.startswith("/tmp/.dbs-restore-") and inside.endswith(".dbs")
+    assert fed["argv"] == [
         *COMPOSE_PREFIX,
         "exec",
         "-T",
-        "-u",
-        "0",
         "backend",
-        "chown",
-        "10001",
+        "python",
+        "-c",
+        RECEIVE_FILE,
         inside,
-    ] in argvs
+        str(len(sent)),
+    ]
+    assert host.received[inside] == sent
     restore_run = next(run for run in host.runs if "dbs_restore" in run["argv"])
     assert restore_run["argv"][-4:] == [
         "dbs_restore",
@@ -235,8 +305,23 @@ def test_a_restore_hands_the_file_to_the_container_user_and_cleans_up(folders):
         "--dry-run",
     ]
     assert restore_run["stdin"] == BACKUP_PASSPHRASE
+    assert [*COMPOSE_PREFIX, "exec", "-T", "backend", "rm", "-f", "--", inside] in [
+        run["argv"] for run in host.runs
+    ]
     assert list(folders["container"].rglob("*.dbs")) == []
-    assert list(folders["host"].iterdir()) == []
+    assert not folders["host"].exists()
+    assert host.sftp.opened == []
+
+
+def test_a_restore_needs_no_root_no_copy_and_no_change_of_owner(folders):
+    host = ComposeHost(folders["container"])
+
+    restore(host, folders)
+
+    for run in host.runs:
+        assert "-u" not in run["argv"]
+        assert "cp" not in run["argv"]
+        assert "chown" not in run["argv"]
 
 
 def test_a_real_restore_with_flush_passes_both_flags(folders):
@@ -249,26 +334,6 @@ def test_a_real_restore_with_flush_passes_both_flags(folders):
     assert restore_run["argv"][-2:] == ["--passphrase-stdin", "--flush"]
 
 
-def test_a_container_running_as_root_is_handed_the_file_as_root(folders):
-    host = ComposeHost(folders["container"], container_uid="0")
-
-    report = restore(host, folders)
-
-    assert report.records == 3
-
-
-def test_a_file_the_container_user_cannot_be_given_stops_the_restore(folders):
-    host = ComposeHost(folders["container"], chown_fails=True)
-
-    with pytest.raises(RestoreFailed) as failed:
-        restore(host, folders)
-
-    assert "Operation not permitted" in failed.value.output
-    assert not any("dbs_restore" in run["argv"] for run in host.runs)
-    assert list(folders["container"].rglob("*.dbs")) == []
-    assert list(folders["host"].iterdir()) == []
-
-
 def test_a_restore_into_a_stopped_service_stops_before_it_starts(folders):
     host = ComposeHost(folders["container"], running=("db",))
 
@@ -276,18 +341,61 @@ def test_a_restore_into_a_stopped_service_stops_before_it_starts(folders):
         restore(host, folders)
 
     assert 'service "backend" is not running' in failed.value.output
-    assert list(folders["host"].iterdir()) == []
+    assert not any("dbs_restore" in run["argv"] for run in host.runs)
+    assert not folders["host"].exists()
+
+
+def test_a_file_the_container_already_has_is_never_written_over(folders, monkeypatch):
+    host = ComposeHost(folders["container"])
+    monkeypatch.setattr(TOKEN, lambda size: "0" * (2 * size))
+    taken = host.inside("/tmp/.dbs-restore-0000000000000000.dbs")
+    taken.parent.mkdir(parents=True)
+    taken.write_bytes(b"someone else's")
+
+    with pytest.raises(RestoreFailed):
+        restore(host, folders)
+
+    assert taken.read_bytes() == b"someone else's"
+    assert not any("dbs_restore" in run["argv"] for run in host.runs)
+
+
+def test_a_restore_that_fails_in_the_container_still_removes_its_copy(folders):
+    host = ComposeHost(folders["container"], with_dbs=())
+
+    with pytest.raises(RestoreFailed):
+        restore(host, folders)
+
+    assert any(run["argv"][-4:-1] == ["rm", "-f", "--"] for run in host.runs)
+    assert list(folders["container"].rglob("*.dbs")) == []
 
 
 @pytest.mark.parametrize(
-    ("compose", "expected"),
+    ("target", "expected"),
     [
-        (ComposeService("web"), ["docker", "compose", "exec", "-T", "web", "id"]),
         (
-            ComposeService("web", ("a.yaml",)),
+            ContainerTarget(service="web"),
+            ["docker", "compose", "exec", "-T", "web", "id"],
+        ),
+        (
+            ContainerTarget(service="web", files=("a.yaml",)),
             ["docker", "compose", "-f", "a.yaml", "exec", "-T", "web", "id"],
+        ),
+        (
+            ContainerTarget(service="web", files=("a.yaml",), project="shop"),
+            [
+                "docker",
+                "compose",
+                "-f",
+                "a.yaml",
+                "-p",
+                "shop",
+                "exec",
+                "-T",
+                "web",
+                "id",
+            ],
         ),
     ],
 )
-def test_compose_files_come_before_the_command(compose, expected):
-    assert compose.exec_argv(["id"]) == expected
+def test_compose_files_and_project_come_before_the_command(target, expected):
+    assert target.exec_argv(["id"]) == expected

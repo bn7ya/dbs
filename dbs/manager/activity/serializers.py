@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from dbs import audit
 from dbs.manager.activity import heartbeat
+from dbs.manager.applications.models import Application
 from dbs.models import AuditEvent
 
 
@@ -22,6 +23,8 @@ class ActivitySerializer(serializers.ModelSerializer):
     )
     server = serializers.SerializerMethodField()
     server_name = serializers.SerializerMethodField()
+    application = serializers.SerializerMethodField()
+    application_name = serializers.SerializerMethodField()
     connection = serializers.SerializerMethodField()
 
     class Meta:
@@ -37,6 +40,8 @@ class ActivitySerializer(serializers.ModelSerializer):
             "actor",
             "server",
             "server_name",
+            "application",
+            "application_name",
             "connection",
             "created_at",
             "started_at",
@@ -44,8 +49,16 @@ class ActivitySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def _subject(self, entry):
+        return self.context.get("subjects", {}).get(entry.subject)
+
+    def _application(self, entry):
+        found = self._subject(entry)
+        return found if isinstance(found, Application) else None
+
     def _server(self, entry):
-        return self.context.get("servers", {}).get(entry.subject)
+        found = self._subject(entry)
+        return found.server if isinstance(found, Application) else found
 
     def get_ip(self, entry):
         return entry.remote_addr or None
@@ -60,6 +73,16 @@ class ActivitySerializer(serializers.ModelSerializer):
         server = self._server(entry)
         return None if server is None else server.name
 
+    def get_application(self, entry):
+        application = self._application(entry)
+        if application is None or application.deleted_at is not None:
+            return None
+        return str(application.pk)
+
+    def get_application_name(self, entry):
+        application = self._application(entry)
+        return None if application is None else application.name
+
     def get_connection(self, entry):
         if entry.status != audit.RUNNING:
             return None
@@ -69,6 +92,7 @@ class ActivitySerializer(serializers.ModelSerializer):
 
 class ActivityFilterSerializer(serializers.Serializer):
     server = serializers.UUIDField(required=False)
+    application = serializers.UUIDField(required=False)
     action = serializers.CharField(required=False)
     status = serializers.CharField(required=False)
 

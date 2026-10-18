@@ -16,8 +16,8 @@ def finished(user: Any, job: AuditEvent) -> AuditEvent:
 
 
 def described(user: Any, entry: AuditEvent) -> dict[str, Any]:
-    servers = ActivityService(user).servers_for([entry])
-    return ActivitySerializer(entry, context={"servers": servers}).data
+    subjects = ActivityService(user).subjects_for([entry])
+    return ActivitySerializer(entry, context={"subjects": subjects}).data
 
 
 def succeeded(entry: AuditEvent) -> bool:

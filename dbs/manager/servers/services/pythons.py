@@ -20,6 +20,12 @@ VENV_PYTHON = ("bin", "python")
 ROOT_ID = 0
 VIRTUALENVS_HOME = ".virtualenvs"
 BARE_PYTHONS = ("python3", "python")
+CONTAINER_PYTHONS = (
+    "/opt/venv/bin/python",
+    "/venv/bin/python",
+    "/app/.venv/bin/python",
+    "/usr/local/bin/python3",
+)
 FOLDERS_PER_LOCATION = 100
 PROBES_PER_SEARCH = 8
 REPORTED_OUTPUT_LIMIT = 200
@@ -94,6 +100,11 @@ def candidates(remote: RemoteHost, project: str) -> list[str]:
         found += _marked_venvs(remote, posixpath.join(home, VIRTUALENVS_HOME))
     usable = [python for python in found if _trusted_venv(remote, python, allowed)]
     return list(dict.fromkeys([*usable, *BARE_PYTHONS]))
+
+
+def container_pythons(workdir: str = "", *extra: str) -> list[str]:
+    own = [posixpath.join(workdir, ".venv", *VENV_PYTHON)] if workdir else []
+    return list(dict.fromkeys([*extra, *own, *CONTAINER_PYTHONS, *BARE_PYTHONS]))
 
 
 def probe(remote: RemoteHost, profile: DbsProfile, python: str | None = None) -> Probe:

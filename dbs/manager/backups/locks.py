@@ -11,42 +11,42 @@ from dbs.manager.backups.exceptions import BackupRunning, ServerSettling
 from dbs.manager.servers.settling import settling_until
 
 
-def _key(server_id: UUID) -> str:
-    return f"backups:take:{server_id}"
+def _key(application_id: UUID) -> str:
+    return f"backups:take:{application_id}"
 
 
 class TakeLock:
-    def acquire(self, server_id: UUID, job_id: UUID) -> bool:
-        if settling_until(server_id) is not None:
+    def acquire(self, application_id: UUID, job_id: UUID) -> bool:
+        if settling_until(application_id) is not None:
             return False
         return cache.add(
-            _key(server_id), str(job_id), timeout=settings.BACKUP_TASK_TIME_LIMIT
+            _key(application_id), str(job_id), timeout=settings.BACKUP_TASK_TIME_LIMIT
         )
 
-    def hold(self, server_id: UUID, job_id: UUID) -> bool:
-        return self.acquire(server_id, job_id) or self.holder(server_id) == str(
+    def hold(self, application_id: UUID, job_id: UUID) -> bool:
+        return self.acquire(application_id, job_id) or self.holder(application_id) == str(
             job_id
         )
 
-    def release(self, server_id: UUID, job_id: UUID) -> None:
-        if self.holder(server_id) == str(job_id):
-            cache.delete(_key(server_id))
+    def release(self, application_id: UUID, job_id: UUID) -> None:
+        if self.holder(application_id) == str(job_id):
+            cache.delete(_key(application_id))
 
-    def holder(self, server_id: UUID) -> str | None:
-        return cache.get(_key(server_id))
+    def holder(self, application_id: UUID) -> str | None:
+        return cache.get(_key(application_id))
 
-    def refusal(self, server_id: UUID) -> APIException:
-        if settling_until(server_id) is not None:
+    def refusal(self, application_id: UUID) -> APIException:
+        if settling_until(application_id) is not None:
             return ServerSettling()
         return BackupRunning()
 
     def release_abandoned(
-        self, server_ids: Iterable[UUID], unfinished: set[str]
+        self, application_ids: Iterable[UUID], unfinished: set[str]
     ) -> list[UUID]:
         released = []
-        for server_id in server_ids:
-            holder = self.holder(server_id)
+        for application_id in application_ids:
+            holder = self.holder(application_id)
             if holder is not None and holder not in unfinished:
-                self.release(server_id, holder)
-                released.append(server_id)
+                self.release(application_id, holder)
+                released.append(application_id)
         return released

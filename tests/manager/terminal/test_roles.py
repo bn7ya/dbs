@@ -16,23 +16,31 @@ def viewer(db):
 
 @pytest.mark.django_db
 def test_acting_as_a_viewer_reads_but_never_changes(
-    terminal, admin, viewer, make_server
+    terminal, admin, viewer, make_application
 ):
-    make_server()
+    make_application()
 
     listed = terminal("server", "list", "--as", "vera")
+    applications = terminal("app", "list", "--as", "vera")
     taken = terminal("backup", "take", "web-1", "--as", "vera")
+    checked = terminal("app", "check", "web-1", "--as", "vera")
     removed = terminal("server", "remove", "web-1", "--as", "vera", "--yes")
+    dropped = terminal("app", "remove", "web-1", "--as", "vera", "--yes")
+    looked = terminal("app", "discover", "web-1", "--folder", "/srv", "--as", "vera")
 
     assert listed.code == 0 and "web-1" in listed.out
+    assert applications.code == 0 and "web-1" in applications.out
     assert taken.code == 1
     assert "This needs the operator role or higher; your account is a viewer." in (
         taken.out
     )
-    assert removed.code == 1
-    assert "This needs the admin role or higher; your account is a viewer." in (
-        removed.err
-    )
+    assert checked.code == 1
+    assert "needs the operator role or higher" in checked.out
+    for refused in (removed, dropped, looked):
+        assert refused.code == 1
+        assert "This needs the admin role or higher; your account is a viewer." in (
+            refused.err
+        )
 
 
 @pytest.mark.django_db

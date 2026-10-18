@@ -10,8 +10,8 @@ from dbs.manager.permissions import Role
 from tests.manager.servers.support import PASSWORD
 
 
-def call(server, tool, **arguments):
-    return server.handle(
+def call(toolbox, tool, **arguments):
+    return toolbox.handle(
         {
             "jsonrpc": "2.0",
             "id": 1,
@@ -28,18 +28,24 @@ def instructions(server):
 
 
 @pytest.mark.django_db
-def test_claude_can_never_do_more_than_the_account_it_acts_as(admin, make_server):
-    make_server()
+def test_claude_can_never_do_more_than_the_account_it_acts_as(admin, make_application):
+    make_application()
     viewer = UserRepository().create(
         username="vera", password=PASSWORD, role=Role.VIEWER
     )
-    server = build(viewer)
+    toolbox = build(viewer)
 
-    listed = call(server, "list_servers")
-    taken = call(server, "take_backups", servers=["web-1"])
-    checked = call(server, "check_servers", servers=["web-1"])
+    listed = call(toolbox, "list_servers")
+    applications = call(toolbox, "list_applications")
+    taken = call(toolbox, "take_backups", applications=["web-1"])
+    checked = call(toolbox, "check_servers", servers=["web-1"])
+    checked_applications = call(toolbox, "check_applications", applications=["web-1"])
+    found = call(toolbox, "discover_applications", server="web-1", folder="/srv/app")
+    added = call(
+        toolbox, "add_application", server="web-1", folder="/srv/app", name="shop"
+    )
 
-    assert not listed["isError"]
+    assert not listed["isError"] and not applications["isError"]
     assert taken["structuredContent"]["results"][0]["error"] == (
         "This needs the operator role or higher; your account is a viewer."
     )
@@ -47,6 +53,15 @@ def test_claude_can_never_do_more_than_the_account_it_acts_as(admin, make_server
         "needs the operator role"
         in checked["structuredContent"]["results"][0]["problem"]
     )
+    assert (
+        "needs the operator role"
+        in checked_applications["structuredContent"]["results"][0]["problem"]
+    )
+    for refused in (found, added):
+        assert refused["isError"]
+        assert refused["content"][0]["text"] == (
+            "This needs the admin role or higher; your account is a viewer."
+        )
 
 
 @pytest.mark.django_db

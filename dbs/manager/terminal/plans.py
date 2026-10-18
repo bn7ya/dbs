@@ -8,7 +8,7 @@ from dbs.manager.backups.serializers import (
     PlanUpdateSerializer,
 )
 from dbs.manager.backups.services import BackupPlanService
-from dbs.manager.servers.services import ServerService
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.adapters import jobs, references
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.adapters.forms import validated
@@ -45,16 +45,16 @@ FIELDS = ("paths", "pattern", "interval_minutes", "keep", "keep_remote")
 
 def list_plans(session: TerminalSession) -> int:
     service = BackupPlanService(session.user)
-    if session.args.server:
-        chosen = [references.server(session.user, session.args.server)]
+    if session.args.application:
+        chosen = [references.application(session.user, session.args.application)]
     else:
-        chosen = list(ServerService(session.user).list().order_by("name"))
+        chosen = list(ApplicationService(session.user).list())
     rows = [
-        {**row, "server_name": server.name}
-        for server in chosen
-        for row in BackupPlanSerializer(service.list(server.pk), many=True).data
+        {**row, "application_name": application.name}
+        for application in chosen
+        for row in BackupPlanSerializer(service.list(application.pk), many=True).data
     ]
-    columns = (("SERVER", "server_name"), *LIST_COLUMNS)
+    columns = (("APPLICATION", "application_name"), *LIST_COLUMNS)
     session.out.table(rows, columns, empty="No plans yet.")
     return 0
 
@@ -67,9 +67,9 @@ def show(session: TerminalSession) -> int:
 
 def add(session: TerminalSession) -> int:
     args = session.args
-    server = references.server(session.user, args.server)
+    application = references.application(session.user, args.application)
     body = {
-        "server": server.pk,
+        "application": application.pk,
         "name": args.name,
         "kind": args.kind,
         "enabled": not args.disabled,

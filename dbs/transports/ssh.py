@@ -620,6 +620,68 @@ class SSHSession:
         tail.join(STDERR_WAIT)
         return RemoteResult(status, "", tail.text())
 
+    def feed(
+        self,
+        command: str,
+        source,
+        *,
+        stdin_line: str | None = None,
+        timeout: float | None = None,
+    ) -> RemoteResult:
+        """Run ``command`` with an optional first line and then everything ``source`` reads on its standard input; a broken or slow transfer raises ``StreamInterrupted``."""
+        guarded = _Guarded(self.target.command_timeout if timeout is None else timeout)
+        stdin, stdout, stderr = guarded(
+            lambda: self._client.exec_command(command, get_pty=False)
+        )
+        channel = stdout.channel
+        out, err = _StderrTail(stdout), _StderrTail(stderr)
+        finished = False
+        try:
+            out.start()
+            err.start()
+            if stdin_line is not None:
+                guarded(lambda: _write_line(stdin, stdin_line))
+            while True:
+                chunk = source.read(STREAM_CHUNK)
+                if not chunk:
+                    break
+                guarded(lambda: guarded.send(channel, chunk))
+                self._moved(len(chunk))
+            guarded(channel.shutdown_write)
+            status = guarded(lambda: guarded.exit_status(channel))
+            if status == CLOSED_WITHOUT_STATUS:
+                raise StreamInterrupted("The connection closed before the command finished.")
+            finished = True
+        finally:
+            if not finished:
+                _close_quietly(channel)
+        out.join(STDERR_WAIT)
+        err.join(STDERR_WAIT)
+        return RemoteResult(status, out.text(), err.text())
+
+    def open_terminal(
+        self,
+        command: str | None = None,
+        *,
+        term: str = "xterm-256color",
+        cols: int = 80,
+        rows: int = 24,
+    ):
+        """Open a channel with a pseudo-terminal running a login shell, or ``command`` when given; the caller reads, writes, resizes and closes it."""
+        transport = self._transport()
+        if transport is None or not transport.is_active():
+            raise self._lost()
+        try:
+            channel = transport.open_session(timeout=self.target.connect_timeout)
+            channel.get_pty(term=term, width=cols, height=rows)
+            if command is None:
+                channel.invoke_shell()
+            else:
+                channel.exec_command(command)
+        except _connection_gone() as exc:
+            raise self._failure(exc) from exc
+        return channel
+
     def _moved(self, count: int) -> None:
         if self.on_activity is not None:
             self.on_activity(count)
@@ -929,6 +991,10 @@ class _Guarded:
         channel.settimeout(self.remaining())
         return channel.recv(STREAM_CHUNK)
 
+    def send(self, channel, data: bytes) -> None:
+        channel.settimeout(self.remaining())
+        channel.sendall(data)
+
     def exit_status(self, channel) -> int:
         if self.deadline is not None and not channel.status_event.wait(
             self.remaining()
@@ -939,9 +1005,13 @@ class _Guarded:
 
 def _send_line(stdin, line: str | None) -> None:
     if line is not None:
-        stdin.write(line + "\n")
-        stdin.flush()
+        _write_line(stdin, line)
     stdin.channel.shutdown_write()
+
+
+def _write_line(stdin, line: str) -> None:
+    stdin.write(line + "\n")
+    stdin.flush()
 
 
 def _connection_gone() -> tuple[type[BaseException], ...]:

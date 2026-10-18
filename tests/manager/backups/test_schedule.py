@@ -11,6 +11,7 @@ from django.utils import timezone
 from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
@@ -23,7 +24,7 @@ from dbs.manager.backups.services import (
 from dbs.manager.backups.services.backup_schedule_service import following
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.scheduler import TASKS
-from dbs.manager.servers.services import ServerService
+from tests.manager.factories import make_application
 from tests.manager.support import PASSWORD, backdated
 
 DAY = timedelta(days=1)
@@ -51,7 +52,7 @@ def dispatch(run_jobs) -> None:
 
 @pytest.mark.django_db
 def test_a_due_plan_is_run_by_no_one_and_scheduled_one_interval_on(
-    server, host, make_plan, run_jobs
+    application, host, make_plan, run_jobs
 ):
     plan = make_plan()
     was_due = due(plan)
@@ -61,7 +62,7 @@ def test_a_due_plan_is_run_by_no_one_and_scheduled_one_interval_on(
     [job] = runs()
     assert (job.status, job.subject, job.target_name) == (
         audit.SUCCEEDED,
-        str(server.pk),
+        str(application.pk),
         "django-dbs",
     )
     assert (job.actor, job.remote_addr) == (None, "")
@@ -85,8 +86,8 @@ def test_a_plan_that_is_not_due_yet_waits(host, make_plan, run_jobs):
 
 
 @pytest.mark.django_db
-def test_disabled_manual_and_deleted_plans_and_deleted_servers_are_never_run(
-    admin, server, host, make_plan, run_jobs
+def test_disabled_manual_and_deleted_plans_and_deleted_applications_are_never_run(
+    admin, application, host, make_plan, run_jobs
 ):
     disabled = make_plan(name="disabled", enabled=False)
     manual = make_plan(name="manual", interval_minutes=None)
@@ -94,17 +95,10 @@ def test_disabled_manual_and_deleted_plans_and_deleted_servers_are_never_run(
     BackupPlanService(admin).delete(deleted.pk)
     for plan in (disabled, manual, deleted):
         due(plan)
-    other = ServerService(admin).create(
-        name="web-2",
-        host="10.0.0.6",
-        username="deploy",
-        auth_method="password",
-        password="ssh-password",
-        host_key=server.host_key,
-    )
-    orphan = make_plan(server=other.pk, name="orphan")
+    other = make_application(admin, name="web-2", server=application.server)
+    orphan = make_plan(application=other.pk, name="orphan")
     due(orphan)
-    ServerService(admin).delete(other.pk, account_password=PASSWORD)
+    ApplicationService(admin).delete(other.pk, account_password=PASSWORD)
 
     dispatch(run_jobs)
 
@@ -138,13 +132,13 @@ def test_the_next_run_is_the_first_on_the_plans_beat_after_now():
 
 
 @pytest.mark.django_db
-def test_a_scheduled_run_that_finds_the_server_busy_fails_at_once(
-    admin, server, host, make_plan, run_jobs, django_capture_on_commit_callbacks
+def test_a_scheduled_run_that_finds_the_application_busy_fails_at_once(
+    admin, application, host, make_plan, run_jobs, django_capture_on_commit_callbacks
 ):
     plan = make_plan()
     was_due = due(plan)
     with django_capture_on_commit_callbacks():
-        take = BackupService(admin).take(server.pk)
+        take = BackupService(admin).take(application.pk)
 
     dispatch(run_jobs)
 
@@ -157,12 +151,12 @@ def test_a_scheduled_run_that_finds_the_server_busy_fails_at_once(
     assert (plan.last_status, plan.last_error_code) == ("failed", "backup_running")
     assert plan.last_run_at == job.finished_at
     assert plan.next_run_at == was_due + DAY
-    assert TakeLock().hold(server.pk, take.pk)
+    assert TakeLock().hold(application.pk, take.pk)
 
 
 @pytest.mark.django_db
-def test_a_scheduled_run_the_broker_refuses_fails_and_lets_the_server_go(
-    monkeypatch, server, host, make_plan, run_jobs
+def test_a_scheduled_run_the_broker_refuses_fails_and_lets_the_application_go(
+    monkeypatch, application, host, make_plan, run_jobs
 ):
     def unreachable(*args):
         raise RuntimeError("cannot schedule new futures after shutdown")
@@ -174,7 +168,7 @@ def test_a_scheduled_run_the_broker_refuses_fails_and_lets_the_server_go(
 
     [job] = runs()
     assert (job.status, job.error_code) == (audit.FAILED, "unexpected")
-    assert TakeLock().acquire(server.pk, uuid4())
+    assert TakeLock().acquire(application.pk, uuid4())
 
 
 def deleted(admin, backup: BackupFile, ago: timedelta) -> BackupFile:
@@ -185,7 +179,7 @@ def deleted(admin, backup: BackupFile, ago: timedelta) -> BackupFile:
 
 @pytest.mark.django_db
 def test_files_deleted_longer_ago_than_the_grace_period_leave_the_disk(
-    api, admin, server, storage, taken, run_jobs
+    api, admin, application, storage, taken, run_jobs
 ):
     expired = deleted(admin, taken(), ago=8 * DAY)
     recent = deleted(admin, taken(), ago=6 * DAY)
@@ -252,9 +246,11 @@ def test_what_an_upload_that_never_finished_left_leaves_the_disk_after_a_day(run
     assert list(ActivityRepository().filtered(action="backup.expire")) == []
 
 
-def job_entry(admin, server, *, queued_ago: timedelta, started_ago: timedelta | None):
+def job_entry(
+    admin, application, *, queued_ago: timedelta, started_ago: timedelta | None
+):
     activity = ActivityService(admin)
-    job = activity.queue("backup.take", server=server, target=server.name)
+    job = activity.queue("backup.take", subject=application, target=application.name)
     if started_ago is not None:
         job = ActivityService(None).start(job.pk)
         job = backdated(job, started_at=timezone.now() - started_ago)
@@ -263,18 +259,26 @@ def job_entry(admin, server, *, queued_ago: timedelta, started_ago: timedelta | 
 
 @pytest.mark.django_db
 def test_jobs_no_worker_will_finish_are_failed_as_interrupted(
-    admin, server, host, settings, run_jobs
+    admin, application, host, settings, run_jobs
 ):
     settings.BACKUP_TASK_TIME_LIMIT = 6 * 60 * 60
     never_started = job_entry(
-        admin, server, queued_ago=timedelta(hours=8), started_ago=None
+        admin, application, queued_ago=timedelta(hours=8), started_ago=None
     )
     died = job_entry(
-        admin, server, queued_ago=timedelta(hours=9), started_ago=timedelta(hours=8)
+        admin,
+        application,
+        queued_ago=timedelta(hours=9),
+        started_ago=timedelta(hours=8),
     )
-    waiting = job_entry(admin, server, queued_ago=timedelta(hours=6), started_ago=None)
+    waiting = job_entry(
+        admin, application, queued_ago=timedelta(hours=6), started_ago=None
+    )
     running = job_entry(
-        admin, server, queued_ago=timedelta(hours=9), started_ago=timedelta(hours=6)
+        admin,
+        application,
+        queued_ago=timedelta(hours=9),
+        started_ago=timedelta(hours=6),
     )
 
     with run_jobs():
@@ -298,7 +302,7 @@ def test_jobs_no_worker_will_finish_are_failed_as_interrupted(
 
 
 @pytest.mark.django_db
-def test_a_finished_job_is_never_swept(admin, server, run_jobs, taken):
+def test_a_finished_job_is_never_swept(admin, application, run_jobs, taken):
     taken()
     [finished] = ActivityRepository().filtered(action="backup.take")
     backdated(finished, created_at=timezone.now() - 30 * DAY)

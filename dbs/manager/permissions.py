@@ -38,7 +38,9 @@ class Capability:
     ACCOUNTS_MANAGE = "accounts.manage"
     SERVERS_MANAGE = "servers.manage"
     SERVERS_CHECK = "servers.check"
-    SERVERS_PASSPHRASE = "servers.passphrase"
+    APPLICATIONS_MANAGE = "applications.manage"
+    APPLICATIONS_CHECK = "applications.check"
+    APPLICATIONS_PASSPHRASE = "applications.passphrase"
     BACKUPS_TAKE = "backups.take"
     BACKUPS_VERIFY = "backups.verify"
     BACKUPS_DOWNLOAD = "backups.download"
@@ -61,7 +63,9 @@ MINIMUM_ROLE = {
     Capability.ACCOUNTS_MANAGE: Role.MASTER,
     Capability.SERVERS_MANAGE: Role.ADMIN,
     Capability.SERVERS_CHECK: Role.OPERATOR,
-    Capability.SERVERS_PASSPHRASE: Role.ADMIN,
+    Capability.APPLICATIONS_MANAGE: Role.ADMIN,
+    Capability.APPLICATIONS_CHECK: Role.OPERATOR,
+    Capability.APPLICATIONS_PASSPHRASE: Role.ADMIN,
     Capability.BACKUPS_TAKE: Role.OPERATOR,
     Capability.BACKUPS_VERIFY: Role.OPERATOR,
     Capability.BACKUPS_DOWNLOAD: Role.OPERATOR,

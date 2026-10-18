@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
 
 from dbs.manager.common.repositories import BaseRepository
 from dbs.manager.servers.models import Server
@@ -13,15 +13,16 @@ class ServerRepository(BaseRepository):
     model = Server
 
     def search(self, query: str | None = None) -> QuerySet[Server]:
-        servers = self.active()
+        servers = self.active().annotate(
+            application_count=Count(
+                "applications", filter=Q(applications__deleted_at__isnull=True)
+            )
+        )
         if query:
             servers = servers.filter(
                 Q(name__icontains=query) | Q(host__icontains=query)
             )
         return servers.order_by("name")
-
-    def with_env_path(self) -> QuerySet[Server]:
-        return self.active().exclude(env_path="").order_by("name")
 
     def by_subject(self, subjects: set[str]) -> dict[str, Server]:
         ids = []

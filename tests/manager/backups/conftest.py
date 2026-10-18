@@ -9,12 +9,12 @@ from rest_framework.test import APIClient
 
 from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.activity.repositories import ActivityRepository
+from dbs.manager.applications.models import Application
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupPlanService, BackupService
-from dbs.manager.servers.models import Server
-from dbs.manager.servers.services import ServerService
 from tests.manager.backups.support import BackupHost, server_tree
+from tests.manager.factories import make_application
 from tests.manager.servers.support import (
     BACKUP_DIR,
     BACKUP_PASSPHRASE,
@@ -23,7 +23,6 @@ from tests.manager.servers.support import (
     PYTHON,
     SETTINGS_MODULE,
     connecting_to,
-    host_key_line,
     private_key_text,
 )
 
@@ -65,15 +64,10 @@ def private_key() -> str:
 
 
 @pytest.fixture
-def server(admin, private_key) -> Server:
-    return ServerService(admin).create(
-        name="web-1",
-        host="10.0.0.5",
-        port=2222,
-        username="deploy",
-        auth_method=Server.AuthMethod.KEY,
+def application(admin, private_key) -> Application:
+    return make_application(
+        admin,
         private_key=private_key,
-        host_key=host_key_line(),
         project_dir=PROJECT_DIR,
         python_path=PYTHON,
         settings_module=SETTINGS_MODULE,
@@ -102,23 +96,23 @@ def entry() -> Callable:
 
 
 @pytest.fixture
-def taken(admin, server, host, run_jobs, entry) -> Callable[[], BackupFile]:
+def taken(admin, application, host, run_jobs, entry) -> Callable[[], BackupFile]:
 
     def take() -> BackupFile:
         with run_jobs():
-            job = BackupService(admin).take(server.pk)
+            job = BackupService(admin).take(application.pk)
         return BackupFileRepository().get(entry(job.pk).data["backup"])
 
     return take
 
 
 @pytest.fixture
-def make_plan(admin, server) -> Callable[..., BackupPlan]:
+def make_plan(admin, application) -> Callable[..., BackupPlan]:
 
     def make(**fields) -> BackupPlan:
         values = {
             "account_password": PASSWORD,
-            "server": server.pk,
+            "application": application.pk,
             "name": "django-dbs",
             "kind": "dbs",
             "interval_minutes": 1440,

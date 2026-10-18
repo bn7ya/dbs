@@ -14,8 +14,12 @@ class EnvVersionRepository(BaseRepository):
     def active(self) -> QuerySet[EnvVersion]:
         return super().active().select_related("created_by")
 
-    def for_server(self, server_id: UUID) -> QuerySet[EnvVersion]:
-        return self.active().filter(server_id=server_id).order_by("-created_at", "-id")
+    def for_application(self, application_id: UUID) -> QuerySet[EnvVersion]:
+        return (
+            self.active()
+            .filter(application_id=application_id)
+            .order_by("-created_at", "-id")
+        )
 
-    def newest_for(self, server_id: UUID) -> EnvVersion | None:
-        return self.for_server(server_id).first()
+    def newest_for(self, application_id: UUID) -> EnvVersion | None:
+        return self.for_application(application_id).first()

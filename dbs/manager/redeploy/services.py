@@ -12,6 +12,8 @@ from dbs.manager.accounts.exceptions import InvalidPassword, TooManyAttempts
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.models import Application
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.exceptions import BackupMissing
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile
@@ -27,7 +29,7 @@ from dbs.manager.redeploy.exceptions import (
     ConfirmNameMismatch,
     NoBackupToRehearse,
     NotRevertable,
-    SameServer,
+    SameApplication,
     SourceUnreachable,
     TargetNotReady,
 )
@@ -42,8 +44,7 @@ from dbs.manager.servers.exceptions import (
     SSHUnreachable,
     failure_facts,
 )
-from dbs.manager.servers.models import Server
-from dbs.manager.servers.services import ServerConnectionService, ServerService
+from dbs.manager.servers.services import ServerConnectionService
 from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
@@ -70,11 +71,11 @@ FAILED = "failed"
 SKIPPED = "skipped"
 UNREACHABLE = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
 NO_OP = ["true"]
-NOT_FOUND = "Choose one of the source server's own files."
+NOT_FOUND = "Choose one of the source application's own files."
 PASSWORD_REQUIRED = "Enter your own password to redeploy for real."
 
 Detail = dict[str, Any]
-Step = Callable[[Detail, Server, AuditEvent], Optional[Detail]]
+Step = Callable[[Detail, Application, AuditEvent], Optional[Detail]]
 
 
 def _not_found(field: str) -> ValidationError:
@@ -84,7 +85,7 @@ def _not_found(field: str) -> ValidationError:
 class RedeployService:
     def __init__(self, user: Any = None) -> None:
         self.user = user
-        self.servers = ServerService(user)
+        self.applications = ApplicationService(user)
         self.files = BackupFileRepository()
         self.versions = EnvVersionRepository()
         self.activity = ActivityService(user)
@@ -93,8 +94,8 @@ class RedeployService:
     def start(
         self,
         *,
-        source_server: UUID,
-        target_server: UUID,
+        source_application: UUID,
+        target_application: UUID,
         backup: UUID | None = None,
         env_version: UUID | None = None,
         flush: bool = False,
@@ -102,10 +103,10 @@ class RedeployService:
         password: str = "",
         confirm_name: str = "",
     ) -> AuditEvent:
-        source = self.servers.get(source_server)
-        target = self.servers.get(target_server)
+        source = self.applications.get(source_application)
+        target = self.applications.get(target_application)
         if source.pk == target.pk:
-            raise SameServer()
+            raise SameApplication()
         chosen = self._chosen_backup(backup, source)
         if env_version is not None:
             self._source_version(env_version, source)
@@ -114,8 +115,8 @@ class RedeployService:
         if not source.has_backup_passphrase:
             raise PassphraseMissing()
         detail: Detail = {
-            "source_server": str(source.pk),
-            "target_server": str(target.pk),
+            "source_application": str(source.pk),
+            "target_application": str(target.pk),
             "backup": chosen,
             "env_version": None if env_version is None else str(env_version),
             "flush": flush,
@@ -142,10 +143,10 @@ class RedeployService:
         move = self.activity.get(move_id)
         if not _revertable(move):
             raise NotRevertable()
-        target = self.servers.get(UUID(move.subject))
+        target = self.applications.get(UUID(move.subject))
         detail: Detail = {
             "move": move.pk,
-            "target_server": str(target.pk),
+            "target_application": str(target.pk),
             "env_version": move.data.get("target_env_version"),
             "backup": move.data.get("safety_backup"),
             "rehearsal": rehearsal,
@@ -192,10 +193,10 @@ class RedeployService:
                 continue
             step["status"] = RUNNING
             jobs.progress(job.pk, detail)
-            target = ServerService(actor).get(target_id)
+            target = ApplicationService(actor).get(target_id)
             try:
                 with ActivityService(actor).track(
-                    f"{prefix}{step['step']}", server=target, target=target.name
+                    f"{prefix}{step['step']}", subject=target, target=target.name
                 ) as entry:
                     outcome = work[step["step"]](detail, target, job)
                     entry.detail = outcome or {}
@@ -229,8 +230,8 @@ class RedeployService:
             "final_check": self._check,
         }
 
-    def _check(self, detail: Detail, target: Server, job: AuditEvent) -> Detail:
-        checked = ServerService(job.actor).check(target.pk)
+    def _check(self, detail: Detail, target: Application, job: AuditEvent) -> Detail:
+        checked = ApplicationService(job.actor).check(target.pk)
         report = checked.last_check_report or {}
         if (
             report.get("dbs_version") is None
@@ -240,9 +241,11 @@ class RedeployService:
         return {"status": checked.last_check_status}
 
     def _source_backup(
-        self, detail: Detail, target: Server, job: AuditEvent
+        self, detail: Detail, target: Application, job: AuditEvent
     ) -> Detail:
-        source = ServerService(job.actor).get(UUID(detail["source_server"]))
+        source = ApplicationService(job.actor).get(
+            UUID(detail.get("source_application") or detail["source_server"])
+        )
         if detail["rehearsal"]:
             reachable = self._answers(source, job.actor)
             detail["source_reachable"] = reachable
@@ -264,7 +267,7 @@ class RedeployService:
         return {"backup": str(file.pk), "fresh": True}
 
     def _record_env(
-        self, detail: Detail, target: Server, job: AuditEvent
+        self, detail: Detail, target: Application, job: AuditEvent
     ) -> Detail | None:
         if not target.env_path:
             return None
@@ -276,7 +279,7 @@ class RedeployService:
         return {"version": str(pulled.version.pk)}
 
     def _safety_backup(
-        self, detail: Detail, target: Server, job: AuditEvent
+        self, detail: Detail, target: Application, job: AuditEvent
     ) -> Detail | None:
         holds_data = self._migrated(target, job.actor)
         detail["target_had_data"] = holds_data
@@ -288,11 +291,11 @@ class RedeployService:
         detail["safety_backup"] = str(file.pk)
         return {"backup": str(file.pk)}
 
-    def _push_env(self, detail: Detail, target: Server, job: AuditEvent) -> Detail:
+    def _push_env(self, detail: Detail, target: Application, job: AuditEvent) -> Detail:
         version = EnvFileService(job.actor).copy_to(UUID(detail["env_version"]), target)
         return {"version": str(version.pk)}
 
-    def _migrate(self, detail: Detail, target: Server, job: AuditEvent) -> Detail:
+    def _migrate(self, detail: Detail, target: Application, job: AuditEvent) -> Detail:
         result = self._manage(target, job.actor, "migrate", "--noinput")
         if not result.ok:
             raise RemoteCommandFailed(
@@ -300,7 +303,7 @@ class RedeployService:
             )
         return {}
 
-    def _restore(self, detail: Detail, target: Server, job: AuditEvent) -> Detail:
+    def _restore(self, detail: Detail, target: Application, job: AuditEvent) -> Detail:
         file = self._stored(detail.get("used_backup") or detail["backup"])
         if detail["rehearsal"] and not detail.get("target_had_data"):
             return self._validate(file, job.actor)
@@ -313,19 +316,19 @@ class RedeployService:
         )
 
     def _push_recorded_env(
-        self, detail: Detail, target: Server, job: AuditEvent
+        self, detail: Detail, target: Application, job: AuditEvent
     ) -> Detail:
         return self._push_env(detail, target, job)
 
     def _restore_safety_backup(
-        self, detail: Detail, target: Server, job: AuditEvent
+        self, detail: Detail, target: Application, job: AuditEvent
     ) -> Detail:
         file = self._stored(detail["backup"])
         return self._restore_file(
             file, target, job.actor, flush=True, dry_run=detail["rehearsal"]
         )
 
-    def _fresh_backup(self, source: Server, job: AuditEvent) -> BackupFile:
+    def _fresh_backup(self, source: Application, job: AuditEvent) -> BackupFile:
         locks = TakeLock()
         if not locks.hold(source.pk, job.pk):
             raise locks.refusal(source.pk)
@@ -334,15 +337,15 @@ class RedeployService:
         finally:
             locks.release(source.pk, job.pk)
 
-    def _answers(self, server: Server, actor: Any) -> bool:
+    def _answers(self, application: Application, actor: Any) -> bool:
         try:
-            with ServerConnectionService(actor).open(server) as remote:
+            with ServerConnectionService(actor).open(application) as remote:
                 remote.run(NO_OP)
         except UNREACHABLE:
             return False
         return True
 
-    def _manage(self, target: Server, actor: Any, *arguments: str) -> Any:
+    def _manage(self, target: Application, actor: Any, *arguments: str) -> Any:
         connections = ServerConnectionService(actor)
         with connections.open(target) as remote:
             return remote.run_manage(
@@ -351,7 +354,7 @@ class RedeployService:
                 timeout=settings.BACKUP_EXEC_TIMEOUT,
             )
 
-    def _migrated(self, target: Server, actor: Any) -> bool:
+    def _migrated(self, target: Application, actor: Any) -> bool:
         return bool(self._manage(target, actor, "migrate", "--check", "--noinput").ok)
 
     def _stored(self, file_id: str) -> BackupFile:
@@ -361,7 +364,7 @@ class RedeployService:
         return file
 
     def _validate(self, file: BackupFile, actor: Any) -> Detail:
-        passphrase = ServerConnectionService(actor).backup_passphrase(file.server)
+        passphrase = ServerConnectionService(actor).backup_passphrase(file.application)
         try:
             with BackupStorage().open_read(file.storage_path) as handle:
                 result = validate_backup(handle, passphrase)
@@ -374,7 +377,7 @@ class RedeployService:
     def _restore_file(
         self,
         file: BackupFile,
-        target: Server,
+        target: Application,
         actor: Any,
         *,
         flush: bool,
@@ -389,8 +392,8 @@ class RedeployService:
             report = remote.restore_dbs_backup(
                 handle,
                 profile=connections.dbs_profile(target),
-                passphrase=connections.backup_passphrase(file.server),
-                remote_dir=target.remote_backup_dir,
+                passphrase=connections.backup_passphrase(file.application),
+                remote_dir=connections.staging_folder(target, remote),
                 flush=flush,
                 dry_run=dry_run,
             )
@@ -405,29 +408,29 @@ class RedeployService:
             outcome["copy_left"] = report.copy_left
         return outcome
 
-    def _chosen_backup(self, backup: UUID | None, source: Server) -> str | None:
+    def _chosen_backup(self, backup: UUID | None, source: Application) -> str | None:
         if backup is None:
             newest = self.files.latest_of_kind(source.pk, BackupFile.Kind.DBS)
             return None if newest is None else str(newest.pk)
         file = self.files.find(backup)
         if (
             file is None
-            or file.server_id != source.pk
+            or file.application_id != source.pk
             or file.kind != BackupFile.Kind.DBS
             or file.removed_at is not None
         ):
             raise _not_found("backup")
         return str(file.pk)
 
-    def _source_version(self, version_id: UUID, source: Server) -> None:
+    def _source_version(self, version_id: UUID, source: Application) -> None:
         version = self.versions.find(version_id)
-        if version is None or version.server_id != source.pk:
+        if version is None or version.application_id != source.pk:
             raise _not_found("env_version")
 
-    def _queue(self, action: str, target: Server, detail: Detail) -> AuditEvent:
+    def _queue(self, action: str, target: Application, detail: Detail) -> AuditEvent:
         return JobQueue(self.user).queue_backup(
             action,
-            server=target,
+            application=target,
             target=target.name,
             detail=detail,
             send=lambda job: get_runner().submit(RedeployService().run, job.pk),
@@ -441,7 +444,7 @@ class RedeployService:
     def _confirm(
         self,
         action: str,
-        target: Server,
+        target: Application,
         detail: Detail,
         password: str,
         confirm_name: str,
@@ -457,7 +460,7 @@ class RedeployService:
         except (InvalidPassword, TooManyAttempts) as exc:
             self.activity.record(
                 action,
-                server=target,
+                subject=target,
                 target=target.name,
                 detail=detail,
                 status=audit.FAILED,

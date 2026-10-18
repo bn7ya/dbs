@@ -17,7 +17,7 @@ from dbs import create_backup
 from dbs.crypto.kdf import KDFParams
 from dbs.manager.servers.exceptions import RemoteCommandFailed
 from dbs.manager.servers.gateways import EntryKind, RemoteEntry, RemoteHost
-from dbs.manager.servers.services.server_service import DBS_VERSION
+from dbs.manager.servers.services.pythons import VERSION_PROBE as DBS_VERSION
 
 PASSWORD = "correct-horse-battery-staple"
 SSH_PASSWORD = "ssh-password-6d1f0c2e"
@@ -31,6 +31,7 @@ ENV_PATH = "/srv/app/.env"
 MEDIA_ROOT = "/srv/app/media"
 BACKUP_DIR = "/var/backups/dbs"
 SETTINGS_MODULE = "config.settings.prod"
+REMOTE_DBS_VERSION = "0.8.0"
 
 
 def host_key_line() -> str:
@@ -112,8 +113,8 @@ class FakeRemote:
     run_python = RemoteHost.run_python
     run_manage = RemoteHost.run_manage
     run_compose = RemoteHost.run_compose
+    run_engine = RemoteHost.run_engine
     run_in_container = RemoteHost.run_in_container
-    compose_version = RemoteHost.compose_version
     has_timeout = RemoteHost.has_timeout
 
     def exists(self, path: str) -> bool:
@@ -123,6 +124,9 @@ class FakeRemote:
 
     def realpath(self, path: str) -> str:
         return HOME if path == "." else path
+
+    def home_folder(self, name: str) -> str:
+        return os.path.join(HOME, name)
 
     def listdir(self, folder: str) -> list:
         return []
@@ -143,7 +147,7 @@ def healthy_remote() -> FakeRemote:
     return FakeRemote(
         answers={
             ("uname", "-sr"): Result(0, "Linux 6.1.0-18-amd64\n"),
-            (PYTHON, "-c", DBS_VERSION): Result(0, "0.4.0\n"),
+            (PYTHON, "-c", DBS_VERSION): Result(0, f"{REMOTE_DBS_VERSION}\n"),
             (PYTHON, "manage.py", "dbs_backup", "--help"): Result(
                 0, "usage: dbs_backup\n"
             ),

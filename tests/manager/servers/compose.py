@@ -4,22 +4,38 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+from dbs.manager.applications.services.application_service import IS_FILE, IS_FOLDER
 from dbs.manager.servers.gateways import RemoteHost
-from dbs.manager.servers.gateways.ssh_gateway import LIST_FILES
+from dbs.manager.servers.gateways.ssh_gateway import (
+    LIST_FILES,
+    MODE_OF,
+    READ_SMALL,
+    RECEIVE_FILE,
+    SWEEP_STALE,
+)
 from dbs.manager.servers.services.pythons import VERSION_PROBE
 from dbs.naming import backup_filename
 from dbs.transports import RemoteResult
 from dbs.transports.ssh import StreamInterrupted
 from tests.manager.remote import argv_of
-from tests.manager.servers.support import LocalSftpSession, dbs_backup
+from tests.manager.servers.support import (
+    REMOTE_DBS_VERSION,
+    LocalSftpSession,
+    dbs_backup,
+)
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
 HOST_UID = "1000"
 COMPOSE_VERSION = "2.29.1"
+ENGINE_VERSION = "27.3.1"
+SYSTEM = "Linux 6.1.0-18-amd64"
 CONTAINER_BACKUP_DIR = "/app/backups"
+LOCAL_SCRIPTS = (READ_SMALL, MODE_OF, SWEEP_STALE, IS_FILE, IS_FOLDER)
 
 
 class ComposeHost(LocalSftpSession):
@@ -35,8 +51,12 @@ class ComposeHost(LocalSftpSession):
         chown_fails: bool = False,
         backup_dir: str = CONTAINER_BACKUP_DIR,
         stream_breaks: bool = False,
+        engine: str = "docker",
+        dbs_version: str = REMOTE_DBS_VERSION,
     ) -> None:
         super().__init__()
+        self.engine = engine
+        self.dbs_version = dbs_version
         self.backup_dir = backup_dir
         self.stream_breaks = stream_breaks
         self.container = container
@@ -48,6 +68,7 @@ class ComposeHost(LocalSftpSession):
         self.chown_fails = chown_fails
         self.owners: dict[str, str] = {}
         self.runs: list[dict] = []
+        self.received: dict[str, bytes] = {}
 
     def inside(self, path: str) -> Path:
         return self.container / path.lstrip("/")
@@ -55,13 +76,17 @@ class ComposeHost(LocalSftpSession):
     def run(self, script, stdin_line=None, timeout=None):
         argv, setup = argv_of(script)
         self.runs.append({"argv": argv, "setup": setup, "stdin": stdin_line})
-        if argv[:2] != ["docker", "compose"]:
+        if argv == ["uname", "-sr"]:
+            return RemoteResult(0, f"{SYSTEM}\n", "")
+        if argv[:1] != [self.engine]:
             return RemoteResult(127, "", f"{argv[0]}: not found")
         if not self.docker:
-            return RemoteResult(127, "", "sh: 1: docker: not found")
-        rest = argv[2:]
-        while rest[:1] == ["-f"]:
-            rest = rest[2:]
+            return RemoteResult(127, "", f"sh: 1: {self.engine}: not found")
+        if argv[1:2] == ["version"]:
+            return RemoteResult(0, f"{ENGINE_VERSION}\n", "")
+        if argv[1:2] != ["compose"]:
+            return RemoteResult(1, "", f"unknown {self.engine} command {argv[1]}")
+        rest = compose_verb(argv)
         verb, arguments = rest[0], rest[1:]
         if verb == "version":
             return RemoteResult(0, f"{COMPOSE_VERSION}\n", "")
@@ -96,9 +121,7 @@ class ComposeHost(LocalSftpSession):
         self.runs.append(
             {"argv": argv, "setup": setup, "stdin": stdin_line, "streamed": True}
         )
-        rest = argv[2:]
-        while rest[:1] == ["-f"]:
-            rest = rest[2:]
+        rest = compose_verb(argv)
         options, service, command = self.split_exec(rest[1:])
         if service not in self.running:
             return RemoteResult(1, "", f'service "{service}" is not running')
@@ -134,15 +157,51 @@ class ComposeHost(LocalSftpSession):
         }
         return RemoteResult(0, "", f"Streamed {name}\n{json.dumps(summary)}\n")
 
+    def feed(self, script, source, stdin_line=None, timeout=None):
+        argv, setup = argv_of(script)
+        self.runs.append(
+            {"argv": argv, "setup": setup, "stdin": stdin_line, "fed": True}
+        )
+        if argv[:2] != [self.engine, "compose"]:
+            return RemoteResult(127, "", f"{argv[0]}: not found")
+        rest = compose_verb(argv)
+        options, service, command = self.split_exec(rest[1:])
+        if service not in self.running:
+            return RemoteResult(1, "", f'service "{service}" is not running')
+        if command[1:3] == ["-c", RECEIVE_FILE]:
+            return self.receive(command[3:], source, options["user"])
+        return self.exec(rest[1:], stdin_line)
+
+    def receive(self, arguments: list[str], source, user: str) -> RemoteResult:
+        path, size = arguments[0], int(arguments[1])
+        mode = int(arguments[2], 8) if len(arguments) > 2 else 0o600
+        partial = arguments[3] if len(arguments) > 3 else ""
+        target = self.inside(partial or path)
+        if target.exists():
+            return RemoteResult(1, "", f"FileExistsError: {partial or path}")
+        data = source.read(size)
+        if len(data) < size:
+            return RemoteResult(5, "", "")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        target.chmod(mode)
+        if partial:
+            os.replace(target, self.inside(path))
+        self.owners[path] = user
+        self.received[path] = data
+        return RemoteResult(0, "", "")
+
     def listed(self, folder: str) -> list:
         return _listed_entries(self.inside(folder))
 
     def split_exec(self, arguments: list[str]) -> tuple[dict, str, list[str]]:
-        options = {"user": self.container_uid, "env": {}}
-        while arguments[0] in ("-T", "-u", "-e"):
+        options = {"user": self.container_uid, "env": {}, "workdir": ""}
+        while arguments[0] in ("-T", "-i", "-u", "-w", "-e"):
             flag = arguments.pop(0)
             if flag == "-u":
                 options["user"] = arguments.pop(0)
+            elif flag == "-w":
+                options["workdir"] = arguments.pop(0)
             elif flag == "-e":
                 name, _, value = arguments.pop(0).partition("=")
                 options["env"][name] = value
@@ -172,13 +231,29 @@ class ComposeHost(LocalSftpSession):
             self.inside(path).unlink(missing_ok=True)
             self.owners.pop(path, None)
             return RemoteResult(0, "", "")
+        if command[1:2] == ["-c"] and command[2:3] and command[2] in LOCAL_SCRIPTS:
+            return self.script(command[2], command[3:])
         if command[1:] == ["-c", VERSION_PROBE]:
             if service in self.with_dbs and command[0] in ("python", "python3"):
-                return RemoteResult(0, "0.5.0\n", "")
+                return RemoteResult(0, f"{self.dbs_version}\n", "")
             return RemoteResult(127, "", f"exec: {command[0]}: not found")
         if service not in self.with_dbs:
             return RemoteResult(127, "", f"exec: {command[0]}: not found")
         return self.manage(command[2:], stdin_line, options)
+
+    def script(self, source: str, arguments: list[str]) -> RemoteResult:
+        mapped = [
+            str(self.inside(argument)) if argument.startswith("/") else argument
+            for argument in arguments
+        ]
+        done = subprocess.run(
+            [sys.executable, "-c", source, *mapped],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        return RemoteResult(done.returncode, done.stdout, done.stderr)
 
     def manage(
         self, command: list[str], stdin_line: str | None, options: dict
@@ -217,6 +292,13 @@ class ComposeHost(LocalSftpSession):
         if command[:1] == ["migrate"]:
             return RemoteResult(0, "No migrations to apply.", "")
         return RemoteResult(1, "", f"Unknown command: {command}")
+
+
+def compose_verb(argv: list[str]) -> list[str]:
+    rest = argv[2:]
+    while rest[:1] in (["-f"], ["-p"]):
+        rest = rest[2:]
+    return rest
 
 
 def connected_to(monkeypatch, host: ComposeHost) -> ComposeHost:

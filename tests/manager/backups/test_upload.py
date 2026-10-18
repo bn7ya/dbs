@@ -15,11 +15,11 @@ from dbs import audit
 from dbs.manager import vault
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupService, backup_service
 from dbs.manager.backups.uploads import UploadHandler
 from dbs.manager.common.uploads import FORM_ALLOWANCE, UploadTooLarge
-from dbs.manager.servers.services import ServerService
 from tests.manager.support import PASSWORD, downloaded
 
 URL = "/api/backups/upload/"
@@ -28,6 +28,8 @@ CONTENT = b"-- PostgreSQL database dump\nCOPY accounts (email) FROM stdin;\nsara
 CSRF_TOKEN = "a" * 32
 SHAPE = {
     "id",
+    "application",
+    "application_name",
     "server",
     "server_name",
     "kind",
@@ -45,12 +47,15 @@ SHAPE = {
 }
 
 
-def form(*, server=None, name: str | None = None, content: bytes = CONTENT) -> bytes:
+def form(
+    *, application=None, name: str | None = None, content: bytes = CONTENT
+) -> bytes:
     parts = []
-    if server is not None:
+    if application is not None:
         parts.append(
-            f'--{BOUNDARY}\r\nContent-Disposition: form-data; name="server"\r\n\r\n'
-            f"{server}\r\n".encode()
+            f"--{BOUNDARY}\r\n"
+            'Content-Disposition: form-data; name="application"\r\n\r\n'
+            f"{application}\r\n".encode()
         )
     if name is not None:
         parts.append(
@@ -83,8 +88,8 @@ def waiting(storage: Path) -> list[Path]:
     return sorted(uploads.iterdir()) if uploads.exists() else []
 
 
-def stored(storage: Path, server) -> list[str]:
-    directory = storage / str(server.pk)
+def stored(storage: Path, application) -> list[str]:
+    directory = storage / str(application.pk)
     return (
         sorted(path.name for path in directory.iterdir()) if directory.exists() else []
     )
@@ -95,12 +100,16 @@ def logged(action: str):
 
 
 @pytest.fixture
-def send(api, server):
+def send(api, application):
 
     def send(
         name: str | None = "db.sql.gz", content: bytes = CONTENT, *, to=None, **extra
     ):
-        body = form(server=server.pk if to is None else to, name=name, content=content)
+        body = form(
+            application=application.pk if to is None else to,
+            name=name,
+            content=content,
+        )
         return post(extra.pop("client", api), body, **extra)
 
     return send
@@ -108,14 +117,21 @@ def send(api, server):
 
 @pytest.mark.django_db
 def test_an_upload_is_kept_sealed_and_answered_as_a_backup(
-    api, admin, server, storage, send
+    api, admin, application, storage, send
 ):
     response = send()
 
     assert response.status_code == 201
     body = response.json()
     assert set(body) == SHAPE
-    assert body["server"] == str(server.pk)
+    assert (body["application"], body["application_name"]) == (
+        str(application.pk),
+        "web-1",
+    )
+    assert (body["server"], body["server_name"]) == (
+        str(application.server_id),
+        application.server.name,
+    )
     assert (body["kind"], body["name"]) == ("uploaded", "db.sql.gz")
     assert (body["size"], body["sha256"]) == (
         len(CONTENT),
@@ -127,15 +143,15 @@ def test_an_upload_is_kept_sealed_and_answered_as_a_backup(
     assert body["taken_by"] == "sara"
     assert (body["plan"], body["plan_name"]) == (None, None)
     row = BackupFileRepository().get(body["id"])
-    assert (row.sealed, row.created_by, row.server) == (True, admin, server)
-    assert row.storage_path == f"{server.pk}/db.sql.gz.sealed"
+    assert (row.sealed, row.created_by, row.application) == (True, admin, application)
+    assert row.storage_path == f"{application.pk}/db.sql.gz.sealed"
     sealed = storage / row.storage_path
     assert mode(sealed) == 0o600
     assert b"PostgreSQL" not in sealed.read_bytes()
-    assert stored(storage, server) == ["db.sql.gz.sealed"]
+    assert stored(storage, application) == ["db.sql.gz.sealed"]
     assert waiting(storage) == []
-    [listed] = api.get("/api/backups/", {"server": server.pk}).json()["results"]
-    assert listed == body
+    listed = api.get("/api/backups/", {"application": application.pk}).json()
+    assert listed["results"] == [body]
 
 
 @pytest.mark.django_db
@@ -174,14 +190,14 @@ def test_an_upload_is_verified_deleted_and_brought_back_like_any_backup(
 
 
 @pytest.mark.django_db
-def test_an_upload_is_logged_with_its_name_and_size(admin, server, send):
+def test_an_upload_is_logged_with_its_name_and_size(admin, application, send):
     send(name="nightly.dump")
 
     [upload] = logged("backup.upload")
     assert (upload.status, upload.actor, upload.subject) == (
         audit.SUCCEEDED,
         admin,
-        str(server.pk),
+        str(application.pk),
     )
     assert (upload.target_name, upload.data) == ("nightly.dump", {"size": len(CONTENT)})
 
@@ -251,7 +267,7 @@ def test_only_the_upload_handler_reads_the_body_even_when_the_csrf_check_reads_i
     ],
 )
 def test_a_backup_is_named_after_the_file_without_its_folders_or_unprintable_characters(
-    api, server, send, sent, kept
+    api, application, send, sent, kept
 ):
     response = send(name=sent)
 
@@ -263,13 +279,15 @@ def test_a_backup_is_named_after_the_file_without_its_folders_or_unprintable_cha
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("sent", ["   ", " .. ", ". "])
-def test_a_name_that_is_only_spaces_or_dots_is_refused(server, storage, send, sent):
+def test_a_name_that_is_only_spaces_or_dots_is_refused(
+    application, storage, send, sent
+):
     response = send(name=sent)
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid"
     assert response.json()["error"]["fields"] == {"file": ["invalid_name"]}
-    assert stored(storage, server) == []
+    assert stored(storage, application) == []
     assert waiting(storage) == []
 
 
@@ -292,14 +310,14 @@ def test_a_file_with_no_name_at_all_is_not_a_file(send, sent, code):
 
 @pytest.mark.django_db
 def test_files_that_share_a_name_are_each_kept_and_download_as_they_were(
-    api, server, storage, send
+    api, application, storage, send
 ):
     first = send(name="db.sql.gz", content=b"monday").json()
     second = send(name="backups/db.sql.gz", content=b"tuesday").json()
     third = send(name="C:\\dumps\\db.sql.gz", content=b"wednesday").json()
 
     assert [backup["name"] for backup in (first, second, third)] == ["db.sql.gz"] * 3
-    assert stored(storage, server) == [
+    assert stored(storage, application) == [
         "db.sql.gz-2.sealed",
         "db.sql.gz-3.sealed",
         "db.sql.gz.sealed",
@@ -314,39 +332,45 @@ def test_files_that_share_a_name_are_each_kept_and_download_as_they_were(
 
 
 @pytest.mark.django_db
-def test_an_empty_file_is_refused(server, storage, send):
+def test_an_empty_file_is_refused(application, storage, send):
     response = send(content=b"")
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {"file": ["empty"]}
-    assert stored(storage, server) == []
+    assert stored(storage, application) == []
     assert waiting(storage) == []
     assert logged("backup.upload") == []
 
 
 @pytest.mark.django_db
-def test_the_form_needs_a_server_and_a_file(api, server):
-    no_file = post(api, form(server=server.pk))
-    no_server = post(api, form(name="db.sql.gz"))
-    not_a_uuid = post(api, form(server="web-1", name="db.sql.gz"))
+def test_the_form_needs_an_application_and_a_file(api, application):
+    no_file = post(api, form(application=application.pk))
+    no_application = post(api, form(name="db.sql.gz"))
+    not_a_uuid = post(api, form(application="web-1", name="db.sql.gz"))
     not_a_file = post(
         api,
-        form(server=server.pk)[: -len(f"--{BOUNDARY}--\r\n")]
+        form(application=application.pk)[: -len(f"--{BOUNDARY}--\r\n")]
         + f'--{BOUNDARY}\r\nContent-Disposition: form-data; name="file"\r\n\r\n'
         f"db.sql.gz\r\n--{BOUNDARY}--\r\n".encode(),
     )
 
-    assert {no_file.status_code, no_server.status_code, not_a_uuid.status_code} == {400}
+    assert {
+        no_file.status_code,
+        no_application.status_code,
+        not_a_uuid.status_code,
+    } == {400}
     assert no_file.json()["error"]["fields"] == {"file": ["required"]}
-    assert no_server.json()["error"]["fields"] == {"server": ["required"]}
-    assert not_a_uuid.json()["error"]["fields"] == {"server": ["invalid"]}
+    assert no_application.json()["error"]["fields"] == {"application": ["required"]}
+    assert not_a_uuid.json()["error"]["fields"] == {"application": ["invalid"]}
     assert not_a_file.json()["error"]["fields"] == {"file": ["invalid"]}
 
 
 @pytest.mark.django_db
-def test_an_upload_is_a_form_not_json(api, server):
+def test_an_upload_is_a_form_not_json(api, application):
     response = api.post(
-        URL, json.dumps({"server": str(server.pk)}), content_type="application/json"
+        URL,
+        json.dumps({"application": str(application.pk)}),
+        content_type="application/json"
     )
 
     assert response.status_code == 415
@@ -365,7 +389,7 @@ def test_a_file_as_large_as_the_limit_is_kept(settings, send):
     "size", [len(CONTENT) + 1, 200_000], ids=["one-chunk", "many-chunks"]
 )
 def test_a_file_larger_than_the_limit_is_refused_as_it_arrives(
-    settings, server, storage, send, size
+    settings, application, storage, send, size
 ):
     settings.BACKUP_UPLOAD_MAX_BYTES = size - 1
 
@@ -373,7 +397,7 @@ def test_a_file_larger_than_the_limit_is_refused_as_it_arrives(
 
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "upload_too_large"
-    assert stored(storage, server) == []
+    assert stored(storage, application) == []
     assert waiting(storage) == []
     assert logged("backup.upload") == []
     assert list(BackupFileRepository().active()) == []
@@ -403,7 +427,7 @@ def test_a_refused_request_reads_as_an_empty_form_afterwards(
     request = rf.generic(
         "POST",
         URL,
-        form(server=uuid4(), name="db.sql.gz", content=b"x" * 2048),
+        form(application=uuid4(), name="db.sql.gz", content=b"x" * 2048),
         content_type=f"multipart/form-data; boundary={BOUNDARY}",
         **extra,
     )
@@ -420,21 +444,21 @@ def test_a_refused_request_reads_as_an_empty_form_afterwards(
 
 @pytest.mark.django_db
 def test_the_service_refuses_a_file_over_the_limit_however_it_came(
-    settings, admin, server, storage
+    settings, admin, application, storage
 ):
     settings.BACKUP_UPLOAD_MAX_BYTES = 10
     upload = SimpleUploadedFile("db.sql.gz", b"x" * 11)
 
     with pytest.raises(UploadTooLarge):
-        BackupService(admin).upload(server.pk, upload)
+        BackupService(admin).upload(application.pk, upload)
 
     assert upload.closed
-    assert stored(storage, server) == []
+    assert stored(storage, application) == []
 
 
 @pytest.mark.django_db
 def test_an_upload_whose_row_cannot_be_written_takes_its_sealed_file_with_it(
-    monkeypatch, admin, server, storage
+    monkeypatch, admin, application, storage
 ):
     def broken(self, action, **fields):
         raise RuntimeError("the log is down")
@@ -443,25 +467,25 @@ def test_an_upload_whose_row_cannot_be_written_takes_its_sealed_file_with_it(
     upload = SimpleUploadedFile("db.sql.gz", CONTENT)
 
     with pytest.raises(RuntimeError):
-        BackupService(admin).upload(server.pk, upload)
+        BackupService(admin).upload(application.pk, upload)
 
     assert upload.closed
-    assert stored(storage, server) == []
+    assert stored(storage, application) == []
     assert list(BackupFileRepository().active()) == []
 
 
 @pytest.mark.django_db
-def test_an_upload_to_a_server_that_is_not_there_is_not_found(
-    api, admin, server, storage, send
+def test_an_upload_to_an_application_that_is_not_there_is_not_found(
+    api, admin, application, storage, send
 ):
     unknown = send(to=uuid4())
-    ServerService(admin).delete(server.pk, account_password=PASSWORD)
+    ApplicationService(admin).delete(application.pk, account_password=PASSWORD)
     deleted = send()
 
     for response in (unknown, deleted):
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "not_found"
-    assert stored(storage, server) == []
+    assert stored(storage, application) == []
     assert waiting(storage) == []
     assert logged("backup.upload") == []
 

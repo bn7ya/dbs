@@ -13,12 +13,12 @@ from dbs.manager.accounts.services import (
     setup_service,
     sign_in_service,
 )
+from dbs.manager.applications.services import application_service, discovery_service
 from dbs.manager.backups.services import actions as backup_actions
 from dbs.manager.envfiles.services import env_file_service
 from dbs.manager.files.services import file_service
 from dbs.manager.redeploy import services as redeploy
 from dbs.manager.servers.services import (
-    discovery_service,
     host_key_confirmation_service,
     server_service,
 )
@@ -31,6 +31,7 @@ ACTION_HOLDERS = (
     backup_actions.Action,
     file_service.Action,
     server_service.Action,
+    application_service.Action,
     host_key_confirmation_service.Action,
     account_management_service.Action,
     account_service.Action,

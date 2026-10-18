@@ -8,14 +8,15 @@ from django.utils import timezone
 
 from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services import BackupRunService, BackupService
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.servers.exceptions import DbsTooOld, RestoreFailed
 from dbs.manager.servers.gateways import RestoreReport
-from dbs.manager.servers.services import ServerService
 from tests.manager.backups.support import BackupHost
+from tests.manager.factories import make_application
 from tests.manager.servers.support import (
     BACKUP_DIR,
     BACKUP_PASSPHRASE,
@@ -28,22 +29,37 @@ from tests.manager.servers.support import (
 )
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
-FOR_REAL = {"account_password": PASSWORD, "server_name": "web-1"}
+FOR_REAL = {"account_password": PASSWORD, "application_name": "web-1"}
 
 
 def url(backup) -> str:
     return f"/api/backups/{backup.pk}/restore/"
 
 
-def restore_entries(server):
+def restore_entries(application):
     return list(
-        ActivityRepository().filtered(subject=str(server.pk), action="backup.restore")
+        ActivityRepository().filtered(
+            subjects=[str(application.pk)], action="backup.restore"
+        )
+    )
+
+
+@pytest.fixture
+def other(admin, application):
+    return make_application(
+        admin,
+        name="web-2",
+        server=application.server,
+        project_dir="/srv/other",
+        python_path=PYTHON,
+        remote_backup_dir="/var/backups/other",
+        backup_passphrase="other-backup-passphrase",
     )
 
 
 @pytest.mark.django_db
 def test_a_rehearsal_needs_only_the_session_and_changes_nothing(
-    api, admin, server, host, run_jobs, taken, entry, storage
+    api, admin, application, host, run_jobs, taken, entry, storage
 ):
     backup = taken()
 
@@ -56,7 +72,7 @@ def test_a_rehearsal_needs_only_the_session_and_changes_nothing(
     job = entry(response.json()["activity"])
     assert job.action == "backup.restore"
     assert (job.subject, job.target_name, job.actor) == (
-        str(server.pk),
+        str(application.pk),
         backup.name,
         admin,
     )
@@ -109,7 +125,12 @@ def test_the_name_may_carry_spaces_around_it(api, host, run_jobs, taken):
     with run_jobs():
         response = api.post(
             url(backup),
-            {"mode": "merge", "rehearse": False, **FOR_REAL, "server_name": "  web-1 "},
+            {
+                "mode": "merge",
+                "rehearse": False,
+                **FOR_REAL,
+                "application_name": "  web-1 ",
+            },
             format="json",
         )
 
@@ -118,20 +139,72 @@ def test_the_name_may_carry_spaces_around_it(api, host, run_jobs, taken):
 
 
 @pytest.mark.django_db
+def test_a_restore_into_another_application_runs_there_with_the_backups_passphrase(
+    api, application, other, host, run_jobs, taken, entry
+):
+    backup = taken()
+
+    with run_jobs():
+        response = api.post(
+            url(backup),
+            {"mode": "merge", "rehearse": True, "target_application": str(other.pk)},
+            format="json",
+        )
+
+    assert response.status_code == 202
+    job = entry(response.json()["activity"])
+    assert job.status == audit.SUCCEEDED
+    assert (job.subject, job.target_name) == (str(other.pk), backup.name)
+    assert (job.data["source_application"], job.data["target_application"]) == (
+        str(application.pk),
+        str(other.pk),
+    )
+    [restore] = host.restores
+    assert restore.passphrase == BACKUP_PASSPHRASE
+    assert restore.remote_dir == "/var/backups/other"
+    assert restore.profile.project_dir == "/srv/other"
+    assert restore_entries(application) == []
+
+
+@pytest.mark.django_db
+def test_a_restore_for_real_into_another_application_needs_that_applications_name(
+    api, other, host, run_jobs, taken
+):
+    backup = taken()
+    body = {"mode": "merge", "rehearse": False, "target_application": str(other.pk)}
+
+    with run_jobs():
+        refused = api.post(url(backup), {**body, **FOR_REAL}, format="json")
+        accepted = api.post(
+            url(backup),
+            {**body, **FOR_REAL, "application_name": "web-2"},
+            format="json",
+        )
+
+    assert refused.status_code == 400
+    assert refused.json()["error"]["fields"] == {"application_name": ["name_mismatch"]}
+    assert accepted.status_code == 202
+    assert len(host.restores) == 1
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("sent", "fields"),
     [
-        ({}, {"account_password": ["required"], "server_name": ["name_mismatch"]}),
-        ({"server_name": "web-1"}, {"account_password": ["required"]}),
-        ({"account_password": PASSWORD}, {"server_name": ["name_mismatch"]}),
         (
-            {"account_password": PASSWORD, "server_name": "WEB-1"},
-            {"server_name": ["name_mismatch"]},
+            {},
+            {"account_password": ["required"], "application_name": ["name_mismatch"]},
+        ),
+        ({"application_name": "web-1"}, {"account_password": ["required"]}),
+        ({"account_password": PASSWORD}, {"application_name": ["name_mismatch"]}),
+        (
+            {"account_password": PASSWORD, "application_name": "WEB-1"},
+            {"application_name": ["name_mismatch"]},
         ),
     ],
 )
 def test_a_restore_for_real_without_both_writes_nothing(
-    api, server, host, run_jobs, taken, sent, fields
+    api, application, host, run_jobs, taken, sent, fields
 ):
     backup = taken()
 
@@ -145,11 +218,13 @@ def test_a_restore_for_real_without_both_writes_nothing(
     assert error["code"] == "invalid"
     assert error["fields"] == fields
     assert host.restores == []
-    assert restore_entries(server) == []
+    assert restore_entries(application) == []
 
 
 @pytest.mark.django_db
-def test_a_wrong_password_is_refused_and_logged(api, server, host, run_jobs, taken):
+def test_a_wrong_password_is_refused_and_logged(
+    api, application, host, run_jobs, taken
+):
     backup = taken()
 
     with run_jobs():
@@ -167,7 +242,7 @@ def test_a_wrong_password_is_refused_and_logged(api, server, host, run_jobs, tak
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_password"
     assert host.restores == []
-    [refused] = restore_entries(server)
+    [refused] = restore_entries(application)
     assert refused.status == audit.FAILED
     assert refused.error_code == "invalid_password"
     assert refused.target_name == backup.name
@@ -180,7 +255,7 @@ def test_a_wrong_password_is_refused_and_logged(api, server, host, run_jobs, tak
 
 @pytest.mark.django_db
 def test_too_many_wrong_passwords_are_refused_whatever_the_next_one_is(
-    api, settings, server, host, run_jobs, taken
+    api, settings, application, host, run_jobs, taken
 ):
     settings.AUTH_FAILURES_PER_USER = 2
     backup = taken()
@@ -194,7 +269,7 @@ def test_too_many_wrong_passwords_are_refused_whatever_the_next_one_is(
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "too_many_attempts"
     assert host.restores == []
-    assert [entry.error_code for entry in restore_entries(server)] == [
+    assert [entry.error_code for entry in restore_entries(application)] == [
         "too_many_attempts",
         "invalid_password",
         "invalid_password",
@@ -202,9 +277,9 @@ def test_too_many_wrong_passwords_are_refused_whatever_the_next_one_is(
 
 
 @pytest.mark.django_db
-def test_only_a_django_dbs_backup_restores(api, admin, server, host):
+def test_only_a_django_dbs_backup_restores(api, admin, application, host):
     uploaded = BackupService(admin).upload(
-        server.pk, SimpleUploadedFile("db.sql", b"dump")
+        application.pk, SimpleUploadedFile("db.sql", b"dump")
     )
 
     response = api.post(
@@ -236,7 +311,9 @@ def test_a_body_without_a_mode_or_a_rehearse_is_refused(api, host, taken, body):
 
 
 @pytest.mark.django_db
-def test_a_deleted_backup_or_server_is_not_found(api, admin, server, host, taken):
+def test_a_deleted_backup_or_application_is_not_found(
+    api, admin, application, host, taken
+):
     backup = taken()
     other = taken()
     BackupService(admin).delete(backup.pk, account_password=PASSWORD)
@@ -244,22 +321,24 @@ def test_a_deleted_backup_or_server_is_not_found(api, admin, server, host, taken
     deleted_backup = api.post(
         url(backup), {"mode": "merge", "rehearse": True}, format="json"
     )
-    ServerService(admin).delete(server.pk, account_password=PASSWORD)
-    deleted_server = api.post(
+    ApplicationService(admin).delete(application.pk, account_password=PASSWORD)
+    deleted_application = api.post(
         url(other), {"mode": "merge", "rehearse": True}, format="json"
     )
 
     assert deleted_backup.status_code == 404
-    assert deleted_server.status_code == 404
+    assert deleted_application.status_code == 404
     assert host.restores == []
 
 
 @pytest.mark.django_db
-def test_a_restore_and_a_backup_of_one_server_never_overlap(api, server, host, taken):
+def test_a_restore_and_a_backup_of_one_application_never_overlap(
+    api, application, host, taken
+):
     backup = taken()
 
     restore = api.post(url(backup), {"mode": "merge", "rehearse": True}, format="json")
-    take = api.post("/api/backups/take/", {"server": server.pk})
+    take = api.post("/api/backups/take/", {"application": application.pk})
 
     assert restore.status_code == 202
     assert take.status_code == 409
@@ -267,27 +346,29 @@ def test_a_restore_and_a_backup_of_one_server_never_overlap(api, server, host, t
 
 
 @pytest.mark.django_db
-def test_a_restore_is_refused_while_a_backup_of_the_server_is_queued(
-    api, server, host, taken
+def test_a_restore_is_refused_while_a_backup_of_the_application_is_queued(
+    api, application, host, taken
 ):
     backup = taken()
 
-    api.post("/api/backups/take/", {"server": server.pk})
+    api.post("/api/backups/take/", {"application": application.pk})
     response = api.post(url(backup), {"mode": "merge", "rehearse": True}, format="json")
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "backup_running"
-    assert restore_entries(server) == []
+    assert restore_entries(application) == []
 
 
 @pytest.mark.django_db
-def test_the_lock_is_let_go_when_the_restore_ends(api, server, host, run_jobs, taken):
+def test_the_lock_is_let_go_when_the_restore_ends(
+    api, application, host, run_jobs, taken
+):
     backup = taken()
 
     with run_jobs():
         api.post(url(backup), {"mode": "merge", "rehearse": True}, format="json")
     with run_jobs():
-        take = api.post("/api/backups/take/", {"server": server.pk})
+        take = api.post("/api/backups/take/", {"application": application.pk})
 
     assert take.status_code == 202
 
@@ -331,22 +412,22 @@ def test_a_restore_the_server_refuses_fails_the_job_with_its_output(
 
 @pytest.mark.django_db
 def test_a_job_that_finds_another_backup_running_fails_with_backup_running(
-    admin, server, host, django_capture_on_commit_callbacks, taken, entry
+    admin, application, host, django_capture_on_commit_callbacks, taken, entry
 ):
     backup = taken()
     with django_capture_on_commit_callbacks() as queued:
         job = BackupService(admin).restore(backup.pk, mode="merge", rehearse=True)
     locks = TakeLock()
-    locks.release(server.pk, job.pk)
+    locks.release(application.pk, job.pk)
     other = uuid4()
-    locks.acquire(server.pk, other)
+    locks.acquire(application.pk, other)
 
     for send in queued:
         send()
 
     assert entry(job.pk).error_code == "backup_running"
     assert host.restores == []
-    assert locks.hold(server.pk, other)
+    assert locks.hold(application.pk, other)
 
 
 @pytest.mark.django_db
@@ -433,7 +514,7 @@ def test_a_backup_deleted_after_it_was_queued_is_still_restored(
 
 @pytest.mark.django_db
 def test_a_restore_holds_no_secret_in_the_log(
-    api, server, host, private_key, run_jobs, taken
+    api, application, host, private_key, run_jobs, taken
 ):
     backup = taken()
 
@@ -448,7 +529,7 @@ def test_a_restore_holds_no_secret_in_the_log(
     )
 
     body = api.get(
-        "/api/activity/", {"server": server.pk, "page_size": 200}
+        "/api/activity/", {"server": application.server_id, "page_size": 200}
     ).content.decode()
     for secret in (BACKUP_PASSPHRASE, body_line(private_key), PASSWORD, "nope"):
         assert secret not in body

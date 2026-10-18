@@ -8,6 +8,7 @@ from dbs.manager.servers.gateways import parse_host_key
 from tests.manager.accounts.support import enrolled, signed_in
 from tests.manager.servers.support import (
     BACKUP_PASSPHRASE,
+    ENV_PATH,
     KEY_PASSPHRASE,
     PASSWORD,
     SSH_PASSWORD,
@@ -25,6 +26,10 @@ LOG = "/api/activity/"
 
 def server_url(server_id, action: str = "") -> str:
     return f"/api/servers/{server_id}/{action}"
+
+
+def application_url(application_id, action: str = "") -> str:
+    return f"/api/applications/{application_id}/{action}"
 
 
 def latest(logged, action: str):
@@ -61,6 +66,19 @@ def test_a_refused_server_is_not_logged(api, logged):
 
 
 @pytest.mark.django_db
+def test_adding_an_application_is_logged(api, admin, logged, server):
+    response = api.post(
+        "/api/applications/", {"server": server.pk, "name": "blog"}, format="json"
+    )
+
+    entry = latest(logged, "application.create")
+    assert entry.subject == response.json()["id"]
+    assert entry.target_name == "blog"
+    assert entry.actor == admin
+    assert entry.status == audit.SUCCEEDED
+
+
+@pytest.mark.django_db
 def test_a_change_names_the_fields_it_changed(api, logged, server):
     api.patch(
         server_url(server.pk),
@@ -68,7 +86,6 @@ def test_a_change_names_the_fields_it_changed(api, logged, server):
             "name": "web-1",
             "port": 2222,
             "username": "deploy",
-            "project_dir": "/srv/app",
             "account_password": PASSWORD,
         },
     )
@@ -76,7 +93,28 @@ def test_a_change_names_the_fields_it_changed(api, logged, server):
     entry = latest(logged, "server.update")
     assert entry.target_name == "web-1"
     assert entry.subject == str(server.pk)
-    assert entry.data == {"fields": ["port", "project_dir"]}
+    assert entry.data == {"fields": ["port"]}
+
+
+@pytest.mark.django_db
+def test_a_change_to_an_application_names_the_fields_it_changed(
+    api, logged, application
+):
+    api.patch(
+        application_url(application.pk),
+        {
+            "name": "shop",
+            "project_dir": "/srv/shop",
+            "manage_path": "manage.py",
+            "account_password": PASSWORD,
+        },
+        format="json",
+    )
+
+    entry = latest(logged, "application.update")
+    assert entry.target_name == "shop"
+    assert entry.subject == str(application.pk)
+    assert entry.data == {"fields": ["project_dir"]}
 
 
 @pytest.mark.django_db
@@ -86,7 +124,6 @@ def test_a_changed_secret_is_named_and_never_valued(api, logged, server):
         {
             "auth_method": "password",
             "password": SSH_PASSWORD,
-            "backup_passphrase": "new-one",
             "account_password": PASSWORD,
         },
     )
@@ -95,12 +132,25 @@ def test_a_changed_secret_is_named_and_never_valued(api, logged, server):
     assert entry.data == {
         "fields": [
             "auth_method",
-            "backup_passphrase",
             "key_passphrase",
             "password",
             "private_key",
         ]
     }
+
+
+@pytest.mark.django_db
+def test_a_changed_backup_passphrase_is_named_and_never_valued(
+    api, logged, application
+):
+    api.patch(
+        application_url(application.pk),
+        {"backup_passphrase": "new-one", "account_password": PASSWORD},
+        format="json",
+    )
+
+    entry = latest(logged, "application.update")
+    assert entry.data == {"fields": ["backup_passphrase"]}
 
 
 @pytest.mark.django_db
@@ -117,6 +167,17 @@ def test_deleting_a_server_is_logged(api, logged, server):
     entry = latest(logged, "server.delete")
     assert entry.subject == str(server.pk)
     assert entry.target_name == "web-1"
+
+
+@pytest.mark.django_db
+def test_removing_an_application_is_logged(api, logged, application):
+    api.delete(
+        application_url(application.pk), {"account_password": PASSWORD}, format="json"
+    )
+
+    entry = latest(logged, "application.delete")
+    assert entry.subject == str(application.pk)
+    assert entry.target_name == "shop"
 
 
 @pytest.mark.django_db
@@ -157,17 +218,46 @@ def test_a_check_is_logged_with_its_result(api, logged, monkeypatch, server):
     entry = latest(logged, "server.check")
     assert entry.subject == str(server.pk)
     assert entry.status == audit.SUCCEEDED
+    assert entry.data == {"status": "ok"}
+    assert entry.finished_at >= entry.started_at
+
+
+@pytest.mark.django_db
+def test_an_application_check_is_logged_with_its_result(
+    api, logged, monkeypatch, application
+):
+    remote = healthy_remote()
+    remote.paths.discard(ENV_PATH)
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+
+    api.post(application_url(application.pk, "check/"))
+
+    entry = latest(logged, "application.check")
+    assert entry.subject == str(application.pk)
+    assert entry.target_name == "shop"
+    assert entry.status == audit.SUCCEEDED
     assert entry.data == {"status": "problem"}
     assert entry.finished_at >= entry.started_at
 
 
 @pytest.mark.django_db
-def test_a_check_that_cannot_connect_is_logged_failed(api, logged, monkeypatch, server):
+@pytest.mark.parametrize(
+    ("action", "subject", "url"),
+    [
+        ("server.check", "server", server_url),
+        ("application.check", "application", application_url),
+    ],
+)
+def test_a_check_that_cannot_connect_is_logged_failed(
+    api, logged, monkeypatch, request, action, subject, url
+):
+    checked = request.getfixturevalue(subject)
     monkeypatch.setattr(CONNECT, refusing_with(HostKeyChanged()))
 
-    assert api.post(server_url(server.pk, "check/")).status_code == 409
+    assert api.post(url(checked.pk, "check/")).status_code == 409
 
-    entry = latest(logged, "server.check")
+    entry = latest(logged, action)
+    assert entry.subject == str(checked.pk)
     assert entry.status == audit.FAILED
     assert entry.error_code == "host_key_changed"
     assert entry.data == {"status": "failed"}
@@ -191,25 +281,33 @@ def test_trusting_a_new_host_key_is_logged_with_its_fingerprint(api, logged, ser
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("action", "path", "payload"),
+    ("action", "subject", "url", "payload"),
     [
         (
             "server.repin",
-            "host-key/",
+            "server",
+            lambda pk: server_url(pk, "host-key/"),
             {"host_key": "ssh-ed25519 AAAA", "password": "wrong"},
         ),
-        ("server.passphrase_reveal", "passphrase/", {"password": "wrong"}),
+        (
+            "application.passphrase_reveal",
+            "application",
+            lambda pk: application_url(pk, "passphrase/"),
+            {"password": "wrong"},
+        ),
     ],
 )
 def test_a_refused_password_is_logged_failed(
-    api, logged, server, action, path, payload
+    api, logged, request, action, subject, url, payload
 ):
-    assert api.post(server_url(server.pk, path), payload).status_code == 400
+    refused = request.getfixturevalue(subject)
+
+    assert api.post(url(refused.pk), payload).status_code == 400
 
     entry = latest(logged, action)
     assert entry.status == audit.FAILED
     assert entry.error_code == "invalid_password"
-    assert entry.subject == str(server.pk)
+    assert entry.subject == str(refused.pk)
     assert entry.data == {}
 
 
@@ -227,17 +325,20 @@ def test_a_refused_host_key_is_logged_with_its_own_code(api, logged, server):
 
 
 @pytest.mark.django_db
-def test_showing_the_passphrase_is_logged(api, logged, server):
-    api.post(server_url(server.pk, "passphrase/"), {"password": PASSWORD})
+def test_showing_the_passphrase_is_logged(api, logged, application):
+    api.post(application_url(application.pk, "passphrase/"), {"password": PASSWORD})
 
-    entry = latest(logged, "server.passphrase_reveal")
+    entry = latest(logged, "application.passphrase_reveal")
     assert entry.status == audit.SUCCEEDED
-    assert entry.target_name == "web-1"
+    assert entry.subject == str(application.pk)
+    assert entry.target_name == "shop"
     assert entry.data == {}
 
 
 @pytest.mark.django_db
-def test_no_secret_reaches_the_log(api, admin, monkeypatch, server, private_key):
+def test_no_secret_reaches_the_log(
+    api, admin, monkeypatch, server, application, private_key
+):
     enrolled(admin)
     replacement_key = host_key_line()
     monkeypatch.setattr(CONNECT, refusing_with(SSHUnreachable()))
@@ -250,8 +351,9 @@ def test_no_secret_reaches_the_log(api, admin, monkeypatch, server, private_key)
         },
     )
     api.patch(
-        server_url(server.pk),
+        application_url(application.pk),
         {"backup_passphrase": BACKUP_PASSPHRASE, "account_password": PASSWORD},
+        format="json",
     )
     api.patch(
         server_url(server.pk),
@@ -262,12 +364,17 @@ def test_no_secret_reaches_the_log(api, admin, monkeypatch, server, private_key)
         },
     )
     api.patch(
-        server_url(server.pk),
+        application_url(application.pk),
         {"project_dir": "/srv/other", "account_password": f"{PASSWORD}-typo"},
+        format="json",
     )
     api.post(server_url(server.pk, "check/"))
-    api.post(server_url(server.pk, "passphrase/"), {"password": PASSWORD})
-    api.post(server_url(server.pk, "passphrase/"), {"password": f"{PASSWORD}-typo"})
+    api.post(application_url(application.pk, "check/"))
+    api.post(application_url(application.pk, "passphrase/"), {"password": PASSWORD})
+    api.post(
+        application_url(application.pk, "passphrase/"),
+        {"password": f"{PASSWORD}-typo"},
+    )
     api.post(
         server_url(server.pk, "host-key/"),
         {"host_key": replacement_key, "password": PASSWORD},
@@ -278,7 +385,7 @@ def test_no_secret_reaches_the_log(api, admin, monkeypatch, server, private_key)
 
     response = api.get(LOG, {"page_size": 200})
 
-    assert response.json()["count"] == 12
+    assert response.json()["count"] == 14
     body = response.content.decode()
     for secret in (
         body_line(private_key),

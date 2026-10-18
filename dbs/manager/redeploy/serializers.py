@@ -18,8 +18,8 @@ def _confirm_name() -> serializers.CharField:
 
 
 class RedeploySerializer(serializers.Serializer):
-    source_server = serializers.UUIDField()
-    target_server = serializers.UUIDField()
+    source_application = serializers.UUIDField()
+    target_application = serializers.UUIDField()
     backup = serializers.UUIDField(required=False, allow_null=True)
     env_version = serializers.UUIDField(required=False, allow_null=True)
     flush = serializers.BooleanField(required=False, default=False)

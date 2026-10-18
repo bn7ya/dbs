@@ -15,13 +15,13 @@ class ActivityRepository:
     def filtered(
         self,
         *,
-        subject: str | None = None,
+        subjects: list[str] | None = None,
         action: str | None = None,
         status: str | None = None,
     ) -> QuerySet:
         entries = self.joined()
-        if subject is not None:
-            entries = entries.filter(subject=subject)
+        if subjects is not None:
+            entries = entries.filter(subject__in=subjects)
         if action:
             entries = entries.filter(action=action)
         if status:

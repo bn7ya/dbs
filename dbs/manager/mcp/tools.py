@@ -10,8 +10,22 @@ from dbs.manager.activity.serializers import (
     ActivitySerializer,
 )
 from dbs.manager.activity.services import ActivityService
-from dbs.manager.adapters import AdapterError, backups, jobs, references, servers
+from dbs.manager.adapters import (
+    AdapterError,
+    applications,
+    backups,
+    jobs,
+    references,
+    servers,
+)
 from dbs.manager.adapters.forms import validated
+from dbs.manager.applications.models import Application
+from dbs.manager.applications.serializers import (
+    ApplicationListSerializer,
+    ApplicationSerializer,
+    ApplicationUpdateSerializer,
+)
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.serializers import (
     BackupFileSerializer,
     BackupPlanSerializer,
@@ -45,7 +59,6 @@ from dbs.manager.servers.serializers import (
 from dbs.manager.servers.serializers.browse import BrowseEntrySerializer
 from dbs.manager.servers.services import (
     BrowseService,
-    DiscoveryService,
     HostKeyConfirmationService,
     ServerService,
 )
@@ -57,15 +70,20 @@ ACTIVITY_LIMIT_MAX = 200
 DEFAULT_PORT = 22
 AUTH_METHODS = ("password", "key_file", "generate_key")
 SETTING_FIELDS = (
-    "runtime",
+    "kind",
+    "engine",
+    "compose_project",
     "compose_service",
     "compose_files",
+    "container_name",
     "project_dir",
+    "workdir",
     "python_path",
     "manage_path",
     "settings_module",
     "remote_backup_dir",
     "env_path",
+    "env_location",
     "file_roots",
 )
 
@@ -76,7 +94,14 @@ SERVERS = {
     "items": SERVER,
     "description": "The servers by name or id. Leave empty and set all to use every server.",
 }
-EVERY = {"type": "boolean", "description": "Use every server instead of naming them."}
+APPLICATION = {"type": "string", "description": "The application's name or id."}
+APPLICATIONS = {
+    "type": "array",
+    "items": APPLICATION,
+    "description": "The applications by name or id. Leave empty and set all to use "
+    "every application.",
+}
+EVERY = {"type": "boolean", "description": "Use every one instead of naming them."}
 BACKUP = {"type": "string", "description": "The backup's id, from list_backups."}
 PLAN = {"type": "string", "description": "The plan's id, from list_plans."}
 VERSION = {
@@ -84,49 +109,70 @@ VERSION = {
     "description": "A .env version's id, from list_env_versions.",
 }
 REMOTE_PATH = {"type": "string", "description": "An absolute path on the server."}
+FOLDER = {
+    "type": "string",
+    "description": "The application's folder on the server, such as /srv/shop.",
+}
 PORT = {"type": "integer", "minimum": 1, "maximum": 65535}
 SETTINGS = {
-    "runtime": {
+    "kind": {
         "type": "string",
-        "enum": ["host", "compose"],
+        "enum": ["host", "compose", "container"],
         "description": (
-            "Where the project runs: host when manage.py runs on the server itself, "
-            "compose when it runs in a Docker Compose service."
+            "Where the application runs: host when manage.py runs on the server "
+            "itself, compose in a Compose service, container in a container."
         ),
     },
+    "engine": {
+        "type": "string",
+        "enum": ["docker", "podman"],
+        "description": "For compose and container: the container engine.",
+    },
+    "compose_project": {"type": "string", "description": "For compose: the project."},
     "compose_service": {
         "type": "string",
-        "description": "For compose: the service that runs the project, such as backend.",
+        "description": "For compose: the service that runs the application.",
     },
     "compose_files": {
         "type": "array",
         "items": {"type": "string"},
-        "description": "For compose: the files to pass to docker compose -f, in order.",
+        "description": "For compose: the files to pass with -f, in order.",
+    },
+    "container_name": {
+        "type": "string",
+        "description": "For container: the container's name.",
     },
     "project_dir": {
         "type": "string",
-        "description": "The folder that holds manage.py; for compose, the compose file.",
+        "description": "The folder on the server with manage.py or the compose file.",
+    },
+    "workdir": {
+        "type": "string",
+        "description": "For compose and container: the folder inside with manage.py.",
     },
     "python_path": {
         "type": "string",
-        "description": "The Python that has django-dbs; for compose, inside the service.",
+        "description": "The Python that has django-dbs; inside the container for one.",
     },
-    "manage_path": {
-        "type": "string",
-        "description": "The manage.py to run; for compose, inside the service.",
-    },
+    "manage_path": {"type": "string", "description": "The manage.py to run."},
     "settings_module": {"type": "string", "description": "DJANGO_SETTINGS_MODULE."},
     "remote_backup_dir": {
         "type": "string",
-        "description": "Where the server writes backups.",
+        "description": "Where the application writes backups.",
     },
     "env_path": {"type": "string", "description": "The .env file to keep versions of."},
+    "env_location": {
+        "type": "string",
+        "enum": ["host", "container"],
+        "description": "Whether env_path is on the server or inside the container.",
+    },
     "file_roots": {
         "type": "array",
         "items": {"type": "string"},
         "description": "Folders the Files tab may open.",
     },
 }
+
 PLAN_FIELDS = {
     "paths": {
         "type": "array",
@@ -166,15 +212,20 @@ SEALED_DOWNLOAD = (
 )
 
 INSTRUCTIONS = (
-    "These tools drive the DBS manager, which backs up the Django projects on the servers "
-    "it knows over SSH. Start with manager_overview or list_servers. To add a server, call "
-    "fingerprint_host, show the fingerprint to the person and ask them to confirm it on "
-    "the manager's Servers page or with the confirm_with command in a terminal; once they "
-    "have, call add_server with that confirmation. Taking a backup waits until it is done. "
+    "These tools drive the DBS manager, which backs up Django applications on the servers "
+    "it reaches over SSH. A server is a machine; an application is one Django project on "
+    "it, run on the server itself, in a Compose service or in a container, with Docker "
+    "or Podman. Start with manager_overview, list_servers or list_applications. To add a "
+    "server, call fingerprint_host, show the fingerprint to the person and ask them to "
+    "confirm it on the manager's Servers page or with the confirm_with command in a "
+    "terminal; once they have, call add_server with that confirmation. Then call "
+    "discover_applications with the application's folder and add_application with the "
+    "candidate to keep. Taking a backup waits until it is done. "
     "A plan can be made to keep more backups here, never fewer. Restores, moves and "
-    "reverts of a move here are always rehearsals: nothing on the server changes. A "
-    "server's backup passphrase must never be changed, because older backups would no "
-    "longer open; capture it only while adding a server, before its first backup. "
+    "reverts of a move here are always rehearsals: nothing on the server changes. An "
+    "application's backup passphrase must never be changed, because older backups would "
+    "no longer open; capture it only while adding an application, before its first "
+    "backup. "
     "Revealing secrets, real restores, moves and reverts, pushing a .env, keeping fewer "
     "backups, saving a backup the manager keeps encrypted, and removing or deleting "
     "anything are not available here; the person does those in the manager's interface "
@@ -196,8 +247,9 @@ class Toolbox:
             Tool(
                 "manager_overview",
                 "Overview",
-                "Every server's last check, last backup, next planned run and failures in "
-                "the last 7 days, plus the latest failures. The manager's dashboard.",
+                "Every server and its applications: last check, last backup, next "
+                "planned run and failures in the last 7 days, plus the latest failures. "
+                "The manager's dashboard.",
                 {},
                 self.overview,
                 read_only=True,
@@ -205,7 +257,7 @@ class Toolbox:
             Tool(
                 "list_servers",
                 "List servers",
-                "The servers the manager knows.",
+                "The servers the manager reaches over SSH.",
                 dict(
                     search={"type": "string", "description": "Part of a name or host."}
                 ),
@@ -215,7 +267,8 @@ class Toolbox:
             Tool(
                 "get_server",
                 "Show a server",
-                "One server's settings and its last check report. Never holds a secret.",
+                "One server's address, container engines and last check. Never holds "
+                "a secret.",
                 dict(server=SERVER),
                 self.get_server,
                 required=("server",),
@@ -224,8 +277,8 @@ class Toolbox:
             Tool(
                 "browse_server",
                 "Browse a server",
-                "List a folder on a server: names, kinds, sizes. Use it to find the "
-                "project (a folder with manage.py) before add_server or update_server.",
+                "List a folder on a server: names, kinds, sizes. Use it to find an "
+                "application's folder before discover_applications.",
                 dict(server=SERVER, path=REMOTE_PATH),
                 self.browse_server,
                 required=("server",),
@@ -249,9 +302,9 @@ class Toolbox:
                 "fingerprint_host returned as confirmation, with the same host and port. "
                 "auth_method is password (pass password), key_file (the path of a "
                 "private key on this computer, read by the manager), or generate_key (a new "
-                "key: show the person the authorized_keys line it returns). Then it finds "
-                "the project and the Python with django-dbs, saves them and checks the "
-                "server, unless discover is false. A password passes through this chat.",
+                "key: show the person the authorized_keys line it returns). Then it checks "
+                "the server and the container engines on it. A password passes through "
+                "this chat.",
                 dict(
                     name={"type": "string", "description": "A name for the server."},
                     host=TEXT,
@@ -272,11 +325,6 @@ class Toolbox:
                         "type": "string",
                         "description": "Unlocks key_file.",
                     },
-                    discover={
-                        "type": "boolean",
-                        "description": "Find the project. Defaults to true.",
-                    },
-                    **SETTINGS,
                 ),
                 self.add_server,
                 required=("name", "host", "username", "confirmation", "auth_method"),
@@ -284,74 +332,131 @@ class Toolbox:
             Tool(
                 "update_server",
                 "Change a server",
-                "Change a server's name, address or project settings. Once a server's "
-                "check has passed, changing its paths needs the account password, which "
-                "this tool never takes: it says so, and the person does it in the manager.",
-                dict(
-                    server=SERVER,
-                    name=TEXT,
-                    host=TEXT,
-                    port=PORT,
-                    username=TEXT,
-                    **SETTINGS,
-                ),
+                "Change a server's name or address. Changing its address needs the "
+                "account password once its first hour has passed, which this tool never "
+                "takes: it says so, and the person does it in the manager.",
+                dict(server=SERVER, name=TEXT, host=TEXT, port=PORT, username=TEXT),
                 self.update_server,
                 required=("server",),
             ),
             Tool(
                 "check_servers",
                 "Check servers",
-                "Connect to servers and check they are ready: SSH, django-dbs, manage.py, "
-                "the backup folder. Each result names what is wrong.",
+                "Connect to servers and check they answer, and which of Docker and "
+                "Podman each can use.",
                 dict(servers=SERVERS, all=EVERY),
                 self.check_servers,
                 idempotent=True,
             ),
             Tool(
-                "discover_server",
-                "Find a project",
-                "Look for the Django project and the Python that has django-dbs. "
-                "With save, write what it found to the server.",
+                "list_applications",
+                "List applications",
+                "The Django applications the manager backs up, with the server each "
+                "runs on.",
                 dict(
                     server=SERVER,
-                    project_dir={
-                        "type": "string",
-                        "description": "Look in this folder only.",
-                    },
-                    save={"type": "boolean"},
+                    search={"type": "string", "description": "Part of a name."},
                 ),
-                self.discover_server,
+                self.list_applications,
+                read_only=True,
+            ),
+            Tool(
+                "get_application",
+                "Show an application",
+                "One application's settings and its last check report. Never holds a "
+                "secret.",
+                dict(application=APPLICATION),
+                self.get_application,
+                required=("application",),
+                read_only=True,
+            ),
+            Tool(
+                "discover_applications",
+                "Find an application",
+                "Look in a folder on a server for the Django application: on the server "
+                "itself, in Compose services or in containers, with Docker or Podman. "
+                "Each candidate names where it runs, its Python, django-dbs version, "
+                "settings, backup folder, .env and the problems found. Without folder it "
+                "suggests folders that look like projects. In a server's first hour "
+                "it needs no password; after that the person does it in the manager.",
+                dict(server=SERVER, folder=FOLDER),
+                self.discover_applications,
                 required=("server",),
+                idempotent=True,
+            ),
+            Tool(
+                "add_application",
+                "Add an application",
+                "Look in the folder, add the candidate chosen (1 is the best match) and "
+                "check it. Settings passed here replace what was found.",
+                dict(
+                    server=SERVER,
+                    folder=FOLDER,
+                    name={
+                        "type": "string",
+                        "description": "A name for the application.",
+                    },
+                    candidate={
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Which candidate from discover_applications. "
+                        "Defaults to 1.",
+                    },
+                    **SETTINGS,
+                ),
+                self.add_application,
+                required=("server", "folder", "name"),
+            ),
+            Tool(
+                "update_application",
+                "Change an application",
+                "Change an application's name or settings. Once its check has passed, "
+                "changing anything but its name needs the account password, which this "
+                "tool never takes: it says so, and the person does it in the manager.",
+                dict(application=APPLICATION, name=TEXT, **SETTINGS),
+                self.update_application,
+                required=("application",),
+            ),
+            Tool(
+                "check_applications",
+                "Check applications",
+                "Connect and check applications are ready: the container, django-dbs, "
+                "manage.py, the backup folder, the .env. Each result names what is wrong.",
+                dict(applications=APPLICATIONS, all=EVERY),
+                self.check_applications,
+                idempotent=True,
             ),
             Tool(
                 "capture_passphrase",
                 "Store the backup passphrase",
-                "Read the server's backup passphrase from the server and store it, "
-                "encrypted. It is never returned. Use it only while adding a server, "
-                "before its first backup: a server's backup passphrase must never be "
-                "changed, because older backups would no longer open.",
-                dict(server=SERVER),
+                "Read the application's backup passphrase from the application and store "
+                "it, encrypted. It is never returned. Use it only while adding an "
+                "application, before its first backup: an application's backup "
+                "passphrase must never be changed, because older backups would no longer "
+                "open.",
+                dict(application=APPLICATION),
                 self.capture_passphrase,
-                required=("server",),
+                required=("application",),
                 idempotent=True,
             ),
             Tool(
                 "list_backups",
                 "List backups",
                 "The backups the manager holds, newest first.",
-                dict(server=SERVER),
+                dict(application=APPLICATION),
                 self.list_backups,
                 read_only=True,
             ),
             Tool(
                 "take_backups",
                 "Take backups",
-                "Take a backup of each server, one after another, and wait for each. "
-                "The manager first collects the backups waiting on the server, then "
-                "streams a fresh one to itself. When the connection breaks, the result "
-                "says kept_on_server: the server keeps that backup and the next take "
-                "collects it. A server already backing up is reported, not waited for.",
-                dict(servers=SERVERS, all=EVERY),
+                "Take a backup of each application, one after another, and wait for "
+                "each. The manager first collects the backups waiting on the server, "
+                "then streams a fresh one to itself. When the connection breaks, the "
+                "result says kept_on_server: the server keeps that backup and the next "
+                "take collects it. An application already backing up is reported, not "
+                "waited for.",
+                dict(applications=APPLICATIONS, all=EVERY),
                 self.take_backups,
             ),
             Tool(
@@ -371,9 +476,9 @@ class Toolbox:
                 dict(
                     backup=BACKUP,
                     mode={"type": "string", "enum": ["merge", "replace"]},
-                    target_server={
-                        **SERVER,
-                        "description": "Rehearse onto this server instead.",
+                    target_application={
+                        **APPLICATION,
+                        "description": "Rehearse into this application instead.",
                     },
                 ),
                 self.rehearse_restore,
@@ -396,7 +501,7 @@ class Toolbox:
                 "list_plans",
                 "List plans",
                 "Backup plans that run on their own.",
-                dict(server=SERVER),
+                dict(application=APPLICATION),
                 self.list_plans,
                 read_only=True,
             ),
@@ -415,13 +520,13 @@ class Toolbox:
                 "Add a plan. kind dbs takes a django-dbs backup; archive and collect plans "
                 "need the account password, which this tool never takes.",
                 dict(
-                    server=SERVER,
+                    application=APPLICATION,
                     name=TEXT,
                     kind={"type": "string", "enum": ["dbs", "archive", "collect"]},
                     **PLAN_FIELDS,
                 ),
                 self.add_plan,
-                required=("server", "name", "kind"),
+                required=("application", "name", "kind"),
             ),
             Tool(
                 "update_plan",
@@ -446,7 +551,12 @@ class Toolbox:
                 "List activity",
                 "What the manager did, newest first, and who did it.",
                 dict(
-                    server=SERVER,
+                    server={
+                        **SERVER,
+                        "description": "Only this server's activity and its "
+                        "applications'.",
+                    },
+                    application=APPLICATION,
                     action={
                         "type": "string",
                         "description": "For example backup.take.",
@@ -476,21 +586,21 @@ class Toolbox:
             Tool(
                 "list_env_versions",
                 "List .env versions",
-                "The kept versions of a server's .env file: when, size and key names. "
-                "Never values.",
-                dict(server=SERVER),
+                "The kept versions of an application's .env file: when, size and key "
+                "names. Never values.",
+                dict(application=APPLICATION),
                 self.list_env_versions,
-                required=("server",),
+                required=("application",),
                 read_only=True,
             ),
             Tool(
                 "pull_env",
                 "Keep the .env",
-                "Keep the server's .env file as it is now, encrypted. Returns its key names, "
-                "never values.",
-                dict(server=SERVER),
+                "Keep the application's .env file as it is now, encrypted. Returns its "
+                "key names, never values.",
+                dict(application=APPLICATION),
                 self.pull_env,
-                required=("server",),
+                required=("application",),
                 idempotent=True,
             ),
             Tool(
@@ -504,41 +614,41 @@ class Toolbox:
             ),
             Tool(
                 "list_files",
-                "List server files",
-                "List a folder inside the server's allowed folders.",
-                dict(server=SERVER, path=REMOTE_PATH),
+                "List an application's files",
+                "List a folder inside the application's allowed folders on its server.",
+                dict(application=APPLICATION, path=REMOTE_PATH),
                 self.list_files,
-                required=("server",),
+                required=("application",),
                 read_only=True,
             ),
             Tool(
                 "rehearse_redeploy",
                 "Rehearse a move",
-                "Check that a project could move onto a new server with the same "
-                "environment: the new server is checked, the old one is asked whether it "
+                "Check that an application could move onto another with the same "
+                "environment: the new one is checked, the old one is asked whether it "
                 "answers, and a backup is restored in a transaction that is rolled back. "
-                "Nothing changes on either server. A real move is done by the person.",
+                "Nothing changes on either side. A real move is done by the person.",
                 dict(
-                    source_server=SERVER,
-                    target_server=SERVER,
+                    source_application=APPLICATION,
+                    target_application=APPLICATION,
                     backup={
                         **BACKUP,
-                        "description": "The old server's backup to restore. Defaults "
-                        "to its newest.",
+                        "description": "The old application's backup to restore. "
+                        "Defaults to its newest.",
                     },
                     env_version=VERSION,
                     flush={"type": "boolean"},
                 ),
                 self.rehearse_redeploy,
-                required=("source_server", "target_server"),
+                required=("source_application", "target_application"),
                 idempotent=True,
             ),
             Tool(
                 "rehearse_revert",
-                "Rehearse putting a new server back",
-                "For a move that stopped after it changed the new server, rehearse "
-                "restoring the new server's safety backup. Nothing changes. Putting the "
-                "server back for real is done by the person.",
+                "Rehearse putting an application back",
+                "For a move that stopped after it changed the new application, rehearse "
+                "restoring its safety backup. Nothing changes. Putting it back for real "
+                "is done by the person.",
                 dict(
                     move={
                         "type": "integer",
@@ -555,7 +665,7 @@ class Toolbox:
         return DashboardSerializer(DashboardService(self.user).summary()).data
 
     def list_servers(self, arguments: Arguments) -> dict[str, Any]:
-        found = ServerService(self.user).list(arguments.get("search")).order_by("name")
+        found = ServerService(self.user).list(arguments.get("search"))
         return {"results": ServerListSerializer(found, many=True).data}
 
     def get_server(self, arguments: Arguments) -> dict[str, Any]:
@@ -585,9 +695,6 @@ class Toolbox:
         }
 
     def add_server(self, arguments: Arguments) -> dict[str, Any]:
-        given = {
-            field: arguments[field] for field in SETTING_FIELDS if field in arguments
-        }
         port = arguments.get("port") or DEFAULT_PORT
         confirmation = str(arguments["confirmation"])
         confirmations = HostKeyConfirmationService(self.user)
@@ -598,25 +705,17 @@ class Toolbox:
             "username": arguments["username"],
             "host_key": confirmations.approved(confirmation, arguments["host"], port),
             **_auth(arguments),
-            **given,
         }
         added = ServerService(self.user).add(**validated(ServerCreateSerializer, body))
         confirmations.settle(confirmation)
         answer = dict(AddedServerSerializer(added).data)
         if added.public_key:
             return answer
-        server = added.server
-        if arguments.get("discover", True):
-            settled = servers.settle(
-                self.user, server, arguments.get("project_dir"), given
-            )
-            server = settled.server
-            answer["discovery"] = settled.found or {"error": settled.error}
-        [check] = servers.checked(self.user, [server])
+        [check] = servers.checked(self.user, [added.server])
         return {
             **answer,
-            **ServerSerializer(server).data,
-            "check": {"status": check.status, "problem": check.problem, **check.result},
+            **check.result,
+            "check": {"status": check.status, "problem": check.problem},
         }
 
     def update_server(self, arguments: Arguments) -> dict[str, Any]:
@@ -628,41 +727,91 @@ class Toolbox:
         return ServerSerializer(ServerService(self.user).update(server.pk, **data)).data
 
     def check_servers(self, arguments: Arguments) -> dict[str, Any]:
-        chosen = self._servers(arguments)
+        named = [str(reference) for reference in arguments.get("servers") or []]
+        chosen = references.servers(self.user, named, bool(arguments.get("all")))
         return {
             "results": [
-                {"status": item.status, "problem": item.problem, **item.result}
+                {**item.result, "status": item.status, "problem": item.problem}
                 for item in servers.checked(self.user, chosen)
             ]
         }
 
-    def discover_server(self, arguments: Arguments) -> dict[str, Any]:
-        server = self._server(arguments["server"])
-        project = arguments.get("project_dir") or None
-        if arguments.get("save"):
-            settled = servers.settle(self.user, server, project, ())
-            if settled.error:
-                raise AdapterError(settled.error)
-            return {**(settled.found or {}), "saved": True}
-        return DiscoveryService(self.user).discover(server.pk, project_dir=project)
+    def list_applications(self, arguments: Arguments) -> dict[str, Any]:
+        server = self._server(arguments["server"]) if arguments.get("server") else None
+        found = ApplicationService(self.user).list(
+            arguments.get("search"), None if server is None else server.pk
+        )
+        return {"results": ApplicationListSerializer(found, many=True).data}
 
-    def capture_passphrase(self, arguments: Arguments) -> dict[str, Any]:
-        server = self._server(arguments["server"])
-        ServerService(self.user).capture_passphrase(server.pk)
-        return {"captured": True}
+    def get_application(self, arguments: Arguments) -> dict[str, Any]:
+        return ApplicationSerializer(self._application(arguments["application"])).data
 
-    def list_backups(self, arguments: Arguments) -> dict[str, Any]:
-        service = BackupService(self.user)
+    def discover_applications(self, arguments: Arguments) -> dict[str, Any]:
+        server = self._server(arguments["server"])
+        return applications.discover(self.user, server, arguments.get("folder") or "")
+
+    def add_application(self, arguments: Arguments) -> dict[str, Any]:
+        server = self._server(arguments["server"])
+        report = applications.discover(self.user, server, arguments["folder"])
+        given = {
+            field: arguments[field] for field in SETTING_FIELDS if field in arguments
+        }
+        candidate = arguments.get("candidate")
+        added = applications.add(
+            self.user,
+            server,
+            report,
+            name=arguments["name"],
+            choice=1 if candidate is None else int(candidate),
+            given=given,
+        )
+        [check] = applications.checked(self.user, [added.application])
+        return {
+            **check.result,
+            "candidate": added.candidate,
+            "check": {"status": check.status, "problem": check.problem},
+        }
+
+    def update_application(self, arguments: Arguments) -> dict[str, Any]:
+        application = self._application(arguments["application"])
+        changes = {
+            key: value for key, value in arguments.items() if key != "application"
+        }
+        if not changes:
+            raise AdapterError("name at least one setting to change.")
+        data = validated(ApplicationUpdateSerializer, changes, partial=True)
+        return ApplicationSerializer(
+            ApplicationService(self.user).update(application.pk, **data)
+        ).data
+
+    def check_applications(self, arguments: Arguments) -> dict[str, Any]:
         return {
             "results": [
-                row
-                for server in self._listed(arguments)
-                for row in BackupFileSerializer(service.list(server.pk), many=True).data
+                {**item.result, "status": item.status, "problem": item.problem}
+                for item in applications.checked(
+                    self.user, self._applications(arguments)
+                )
             ]
         }
 
+    def capture_passphrase(self, arguments: Arguments) -> dict[str, Any]:
+        application = self._application(arguments["application"])
+        ApplicationService(self.user).capture_passphrase(application.pk)
+        return {"captured": True}
+
+    def list_backups(self, arguments: Arguments) -> dict[str, Any]:
+        application = (
+            self._application(arguments["application"])
+            if arguments.get("application")
+            else None
+        )
+        found = BackupService(self.user).list(
+            None if application is None else application.pk
+        )
+        return {"results": BackupFileSerializer(found, many=True).data}
+
     def take_backups(self, arguments: Arguments) -> dict[str, Any]:
-        taken = backups.take(self.user, self._servers(arguments))
+        taken = backups.take(self.user, self._applications(arguments))
         return {"results": [item.as_dict() for item in taken]}
 
     def verify_backup(self, arguments: Arguments) -> dict[str, Any]:
@@ -672,8 +821,10 @@ class Toolbox:
     def rehearse_restore(self, arguments: Arguments) -> dict[str, Any]:
         file_id = references.identifier(arguments["backup"], "backup")
         body: dict[str, Any] = {"mode": arguments["mode"], "rehearse": True}
-        if arguments.get("target_server"):
-            body["target_server"] = self._server(arguments["target_server"]).pk
+        if arguments.get("target_application"):
+            body["target_application"] = self._application(
+                arguments["target_application"]
+            ).pk
         data = validated(RestoreSerializer, body)
         return self._job(BackupService(self.user).restore(file_id, **data))
 
@@ -691,9 +842,11 @@ class Toolbox:
         service = BackupPlanService(self.user)
         return {
             "results": [
-                {**row, "server_name": server.name}
-                for server in self._listed(arguments)
-                for row in BackupPlanSerializer(service.list(server.pk), many=True).data
+                {**row, "application_name": application.name}
+                for application in self._listed(arguments)
+                for row in BackupPlanSerializer(
+                    service.list(application.pk), many=True
+                ).data
             ]
         }
 
@@ -702,8 +855,8 @@ class Toolbox:
         return BackupPlanSerializer(BackupPlanService(self.user).get(plan_id)).data
 
     def add_plan(self, arguments: Arguments) -> dict[str, Any]:
-        server = self._server(arguments["server"])
-        body = {**arguments, "server": server.pk}
+        application = self._application(arguments["application"])
+        body = {**arguments, "application": application.pk}
         data = validated(PlanCreateSerializer, body)
         return BackupPlanSerializer(BackupPlanService(self.user).create(**data)).data
 
@@ -728,12 +881,14 @@ class Toolbox:
         }
         if arguments.get("server"):
             body["server"] = self._server(arguments["server"]).pk
+        if arguments.get("application"):
+            body["application"] = self._application(arguments["application"]).pk
         limit = arguments.get("limit") or ACTIVITY_LIMIT
         service = ActivityService(self.user)
         entries = list(
             service.list(**validated(ActivityFilterSerializer, body))[:limit]
         )
-        context = {"servers": service.servers_for(entries)}
+        context = {"subjects": service.subjects_for(entries)}
         return {"results": ActivitySerializer(entries, many=True, context=context).data}
 
     def get_activity(self, arguments: Arguments) -> dict[str, Any]:
@@ -741,13 +896,13 @@ class Toolbox:
         return jobs.described(self.user, entry)
 
     def list_env_versions(self, arguments: Arguments) -> dict[str, Any]:
-        server = self._server(arguments["server"])
-        versions = EnvFileService(self.user).list(server.pk)
+        application = self._application(arguments["application"])
+        versions = EnvFileService(self.user).list(application.pk)
         return {"results": EnvVersionSerializer(versions, many=True).data}
 
     def pull_env(self, arguments: Arguments) -> dict[str, Any]:
-        server = self._server(arguments["server"])
-        return EnvPulledSerializer(EnvFileService(self.user).pull(server.pk)).data
+        application = self._application(arguments["application"])
+        return EnvPulledSerializer(EnvFileService(self.user).pull(application.pk)).data
 
     def compare_env_versions(self, arguments: Arguments) -> dict[str, Any]:
         first = references.identifier(arguments["version"], "version")
@@ -757,8 +912,10 @@ class Toolbox:
         ).data
 
     def list_files(self, arguments: Arguments) -> dict[str, Any]:
-        server = self._server(arguments["server"])
-        folder = FileService(self.user).list(server.pk, arguments.get("path") or None)
+        application = self._application(arguments["application"])
+        folder = FileService(self.user).list(
+            application.pk, arguments.get("path") or None
+        )
         entries = FileEntrySerializer(folder.entries, many=True).data
         return {
             "path": folder.path,
@@ -771,8 +928,12 @@ class Toolbox:
 
     def rehearse_redeploy(self, arguments: Arguments) -> dict[str, Any]:
         body: dict[str, Any] = {
-            "source_server": self._server(arguments["source_server"]).pk,
-            "target_server": self._server(arguments["target_server"]).pk,
+            "source_application": self._application(
+                arguments["source_application"]
+            ).pk,
+            "target_application": self._application(
+                arguments["target_application"]
+            ).pk,
             "flush": bool(arguments.get("flush")),
             "rehearsal": True,
         }
@@ -793,14 +954,17 @@ class Toolbox:
     def _server(self, reference: Any) -> Server:
         return references.server(self.user, str(reference))
 
-    def _servers(self, arguments: Arguments) -> list[Server]:
-        named = [str(reference) for reference in arguments.get("servers") or []]
-        return references.servers(self.user, named, bool(arguments.get("all")))
+    def _application(self, reference: Any) -> Application:
+        return references.application(self.user, str(reference))
 
-    def _listed(self, arguments: Arguments) -> list[Server]:
-        if arguments.get("server"):
-            return [self._server(arguments["server"])]
-        return list(ServerService(self.user).list().order_by("name"))
+    def _applications(self, arguments: Arguments) -> list[Application]:
+        named = [str(reference) for reference in arguments.get("applications") or []]
+        return references.applications(self.user, named, bool(arguments.get("all")))
+
+    def _listed(self, arguments: Arguments) -> list[Application]:
+        if arguments.get("application"):
+            return [self._application(arguments["application"])]
+        return list(ApplicationService(self.user).list())
 
     def _job(self, job: Any) -> dict[str, Any]:
         entry = jobs.finished(self.user, job)

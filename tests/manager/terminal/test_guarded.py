@@ -22,10 +22,10 @@ UPLOADED = b"-- PostgreSQL database dump\n"
 
 
 @pytest.fixture
-def plan(admin, make_server):
-    server = make_server(name="shop")
+def plan(admin, make_application):
+    application = make_application(name="shop")
     return BackupPlanService(admin).create(
-        server=server.pk, name="nightly", kind="dbs", keep=3, keep_remote=2
+        application=application.pk, name="nightly", kind="dbs", keep=3, keep_remote=2
     )
 
 
@@ -146,19 +146,19 @@ def mode(path) -> int:
 
 
 @pytest.fixture
-def uploaded(admin, make_server):
-    server = make_server(name="shop")
+def uploaded(admin, make_application):
+    application = make_application(name="shop")
     return BackupService(admin).upload(
-        server.pk, SimpleUploadedFile("db.sql", UPLOADED)
+        application.pk, SimpleUploadedFile("db.sql", UPLOADED)
     )
 
 
 @pytest.mark.django_db(transaction=True)
 def test_a_django_dbs_backup_is_saved_for_its_owner_alone(
-    terminal, admin, make_server, monkeypatch, tmp_path
+    terminal, admin, make_application, monkeypatch, tmp_path
 ):
     monkeypatch.setattr(CONNECT, connecting_to(BackupHost(content=b"DBS")))
-    make_server(name="shop")
+    make_application(name="shop")
     terminal("backup", "take", "shop")
     backup = BackupFile.objects.get()
     saved = tmp_path / "copy.dbs"
@@ -211,12 +211,12 @@ def test_deleting_a_backup_asks_for_the_password(terminal, admin, uploaded):
 
 @pytest.mark.django_db
 def test_saving_a_dotenv_file_asks_for_the_password(
-    terminal, admin, make_server, local_host, tmp_path
+    terminal, admin, make_application, local_host, tmp_path
 ):
     folder = tmp_path.resolve() / "srv"
     folder.mkdir()
     (folder / ".env").write_bytes(b"SECRET_KEY=x\n")
-    make_server(name="shop", file_roots=[str(folder)])
+    make_application(name="shop", file_roots=[str(folder)])
     saved = tmp_path / "copy.env"
 
     refused = terminal("files", "download", "shop", f"{folder}/.env", "-o", saved)

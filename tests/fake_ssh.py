@@ -4,6 +4,7 @@ import errno
 import io
 import os
 import posixpath
+import queue
 import threading
 import types
 
@@ -95,8 +96,74 @@ class FakeTransport:
         self._registry.global_requests.append((kind, wait))
         return None
 
+    def open_session(self, timeout=None):
+        channel = FakeTerminalChannel(timeout)
+        self._registry.terminals.append(channel)
+        return channel
+
     def close(self):
         self.closed = True
+
+
+class FakeTerminalChannel:
+    """A pseudo-terminal channel whose output a test writes with emit() and ends with exit()."""
+
+    def __init__(self, open_timeout=None):
+        self.open_timeout = open_timeout
+        self.pty = None
+        self.shell = False
+        self.command = None
+        self.sent = bytearray()
+        self.sizes = []
+        self.timeout = None
+        self.closed = False
+        self.status = None
+        self.refuse_input = False
+        self._output = queue.Queue()
+
+    def get_pty(self, term="vt100", width=80, height=24):
+        self.pty = (term, width, height)
+
+    def invoke_shell(self):
+        self.shell = True
+
+    def exec_command(self, command):
+        self.command = command
+
+    def resize_pty(self, width=80, height=24):
+        self.sizes.append((width, height))
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+    def sendall(self, data):
+        if self.closed or self.refuse_input:
+            raise OSError("Socket is closed")
+        self.sent += data
+
+    def recv(self, size):
+        item = self._output.get()
+        if item is None:
+            self._output.put(None)
+            return b""
+        return item
+
+    def emit(self, data):
+        self._output.put(data)
+
+    def exit(self, status=0):
+        self.status = status
+        self._output.put(None)
+
+    def exit_status_ready(self):
+        return self.status is not None
+
+    def recv_exit_status(self):
+        return -1 if self.status is None else self.status
+
+    def close(self):
+        self.closed = True
+        self._output.put(None)
 
 
 class FakeSocket:
@@ -220,6 +287,9 @@ class FakeChannel:
     def recv(self, size):
         return self._session.take(1, size)
 
+    def sendall(self, data):
+        self._session.sent += data
+
     def close(self):
         self._session.channel_closed = True
 
@@ -257,6 +327,7 @@ class FakeExec:
         self._outcome = None
         self.command = command
         self.stdin = ""
+        self.sent = bytearray()
         self.stdin_closed = False
         self.channel_closed = False
         self.timeouts = []
@@ -364,6 +435,7 @@ class FakeParamiko:
         self.presented_key = None
         self.dropped = False
         self.global_requests = []
+        self.terminals = []
         self._handler = None
 
     def SSHClient(self):

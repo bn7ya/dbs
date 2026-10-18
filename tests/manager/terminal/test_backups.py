@@ -26,15 +26,15 @@ def host(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def two_servers(make_server):
-    return make_server(name="shop", host="10.0.0.5"), make_server(
+def two_applications(make_application):
+    return make_application(name="shop", host="10.0.0.5"), make_application(
         name="blog", host="10.0.0.6"
     )
 
 
 @RUNS_JOBS
-def test_take_all_backs_up_every_server_and_waits_for_each(
-    terminal, admin, host, two_servers
+def test_take_all_backs_up_every_application_and_waits_for_each(
+    terminal, admin, host, two_applications
 ):
     ran = terminal("backup", "take", "--all")
 
@@ -43,21 +43,23 @@ def test_take_all_backs_up_every_server_and_waits_for_each(
     rows = dict(line.split()[:2] for line in ran.out.splitlines()[-2:])
     assert rows == {"blog": "ok", "shop": "ok"}
     assert BackupFile.objects.count() == 2
-    takes = ActivityRepository().filtered(
-        subject=None, action="backup.take", status=None
-    )
+    takes = ActivityRepository().filtered(action="backup.take")
     assert {entry.status for entry in takes} == {audit.SUCCEEDED}
     assert {entry.actor for entry in takes} == {admin}
+    assert {entry.subject for entry in takes} == {
+        str(application.pk) for application in two_applications
+    }
+    assert ran.out.splitlines()[-3].split()[:2] == ["APPLICATION", "RESULT"]
 
 
 @RUNS_JOBS
 def test_a_take_whose_connection_breaks_is_kept_on_the_server_not_failed(
-    terminal, admin, monkeypatch, tmp_path, make_server
+    terminal, admin, monkeypatch, tmp_path, make_application
 ):
     monkeypatch.setattr(
         CONNECT, connecting_to(BackupHost(root=tmp_path / "server", breaks=True))
     )
-    make_server(name="shop")
+    make_application(name="shop")
 
     ran = terminal("backup", "take", "shop")
     shown = terminal("backup", "take", "shop", "--json")
@@ -70,10 +72,10 @@ def test_a_take_whose_connection_breaks_is_kept_on_the_server_not_failed(
 
 
 @RUNS_JOBS
-def test_take_reports_a_server_already_backing_up_and_fails(
-    terminal, admin, host, two_servers
+def test_take_reports_an_application_already_backing_up_and_fails(
+    terminal, admin, host, two_applications
 ):
-    shop, blog = two_servers
+    shop, blog = two_applications
     TakeLock().acquire(blog.pk, uuid4())
 
     ran = terminal("backup", "take", "shop", "blog")
@@ -85,12 +87,12 @@ def test_take_reports_a_server_already_backing_up_and_fails(
 
 
 @RUNS_JOBS
-def test_a_server_whose_django_dbs_cannot_stream_names_the_version_it_needs(
-    terminal, admin, monkeypatch, make_server
+def test_an_application_whose_django_dbs_cannot_stream_names_the_version_it_needs(
+    terminal, admin, monkeypatch, make_application
 ):
     too_old = DbsTooOld("0.7.0", output="error: unrecognized arguments: --stream")
     monkeypatch.setattr(CONNECT, connecting_to(BackupHost(failure=too_old)))
-    make_server(name="shop")
+    make_application(name="shop")
 
     ran = terminal("backup", "take", "shop")
 
@@ -100,23 +102,29 @@ def test_a_server_whose_django_dbs_cannot_stream_names_the_version_it_needs(
 
 
 @pytest.mark.django_db
-def test_take_needs_servers_or_all(terminal, admin, two_servers):
+def test_take_needs_applications_or_all(terminal, admin, two_applications):
     assert "choose all of them" in terminal("backup", "take").err
     assert "not both" in terminal("backup", "take", "shop", "--all").err
 
 
 @RUNS_JOBS
-def test_list_json_is_what_the_api_returns(terminal, api, admin, host, two_servers):
-    shop, _ = two_servers
-    terminal("backup", "take", "shop")
+def test_list_json_is_what_the_api_returns(
+    terminal, api, admin, host, two_applications
+):
+    shop, _ = two_applications
+    terminal("backup", "take", "shop", "blog")
 
-    listed = terminal("backup", "list", "--server", "shop", "--json").json()
+    listed = terminal("backup", "list", "--app", "shop", "--json").json()
+    every = terminal("backup", "list", "--json").json()
 
-    assert listed == api.get(f"/api/backups/?server={shop.pk}").json()["results"]
+    assert listed == api.get(f"/api/backups/?application={shop.pk}").json()["results"]
+    assert [row["application_name"] for row in listed] == ["shop"]
+    assert every == api.get("/api/backups/").json()["results"]
+    assert {row["application_name"] for row in every} == {"shop", "blog"}
 
 
 @RUNS_JOBS
-def test_restore_rehearses_unless_real(terminal, admin, host, two_servers):
+def test_restore_rehearses_unless_real(terminal, admin, host, two_applications):
     terminal("backup", "take", "shop")
     backup = BackupFileRepository().all_including_deleted().get()
 
@@ -153,7 +161,9 @@ def test_restore_rehearses_unless_real(terminal, admin, host, two_servers):
 
 
 @RUNS_JOBS
-def test_restore_onto_another_server_needs_its_name(terminal, admin, host, two_servers):
+def test_restore_onto_another_application_needs_its_name(
+    terminal, admin, host, two_applications
+):
     terminal("backup", "take", "shop")
     backup = BackupFileRepository().all_including_deleted().get()
 
@@ -172,12 +182,14 @@ def test_restore_onto_another_server_needs_its_name(terminal, admin, host, two_s
         stdin=f"{PASSWORD}\n",
     )
 
-    assert ran.code == 1 and "server name" in ran.err
+    assert ran.code == 1 and "application name" in ran.err
     assert host.restores == []
 
 
 @RUNS_JOBS
-def test_download_upload_delete_and_undo(terminal, admin, host, two_servers, tmp_path):
+def test_download_upload_delete_and_undo(
+    terminal, admin, host, two_applications, tmp_path
+):
     terminal("backup", "take", "shop")
     backup = BackupFileRepository().all_including_deleted().get()
     saved = tmp_path / "copy.dbs"
@@ -189,21 +201,22 @@ def test_download_upload_delete_and_undo(terminal, admin, host, two_servers, tmp
     )
 
     uploaded = terminal("backup", "upload", "blog", saved, "--json").json()
-    assert uploaded["server_name"] == "blog" and uploaded["kind"] == "uploaded"
+    assert uploaded["application_name"] == "blog" and uploaded["kind"] == "uploaded"
+    assert uploaded["application"] == str(two_applications[1].pk)
 
     assert terminal("backup", "delete", backup.pk).code == 1
-    assert BackupService(admin).list(two_servers[0].pk).exists()
+    assert BackupService(admin).list(two_applications[0].pk).exists()
     deleted = terminal(
         "backup", "delete", backup.pk, "--password-stdin", stdin=f"{PASSWORD}\n"
     )
     assert deleted.code == 0, deleted.err
-    assert not BackupService(admin).list(two_servers[0].pk).exists()
+    assert not BackupService(admin).list(two_applications[0].pk).exists()
     assert terminal("backup", "undo-delete", backup.pk).code == 0
-    assert BackupService(admin).list(two_servers[0].pk).exists()
+    assert BackupService(admin).list(two_applications[0].pk).exists()
 
 
 @RUNS_JOBS
-def test_verify_waits_for_the_result(terminal, admin, host, two_servers):
+def test_verify_waits_for_the_result(terminal, admin, host, two_applications):
     terminal("backup", "take", "shop")
     backup = BackupFileRepository().all_including_deleted().get()
 
@@ -219,7 +232,9 @@ def test_a_bad_backup_id_is_named(terminal, admin):
 
 
 @RUNS_JOBS
-def test_plans_are_added_changed_run_and_removed(terminal, admin, host, two_servers):
+def test_plans_are_added_changed_run_and_removed(
+    terminal, admin, host, two_applications
+):
     added = terminal(
         "plan",
         "add",
@@ -246,12 +261,17 @@ def test_plans_are_added_changed_run_and_removed(terminal, admin, host, two_serv
 
     listed = terminal("plan", "list")
     assert "nightly" in listed.out and "manual" in listed.out
+    assert listed.out.splitlines()[0].split()[:2] == ["APPLICATION", "NAME"]
+    assert listed.out.splitlines()[1].split()[:2] == ["shop", "nightly"]
+    assert "nightly" not in terminal("plan", "list", "--app", "blog").out
     assert terminal("plan", "remove", plan_id).code == 0
     assert "No plans yet." in terminal("plan", "list").out
 
 
 @pytest.mark.django_db
-def test_an_archive_plan_asks_for_the_account_password(terminal, admin, two_servers):
+def test_an_archive_plan_asks_for_the_account_password(
+    terminal, admin, two_applications
+):
     refused = terminal(
         "plan", "add", "shop", "media", "--kind", "archive", "--path", "/srv/app/media"
     )
@@ -275,7 +295,7 @@ def test_an_archive_plan_asks_for_the_account_password(terminal, admin, two_serv
 
 @RUNS_JOBS
 def test_activity_shows_what_the_terminal_did_and_who(
-    terminal, admin, host, two_servers
+    terminal, admin, host, two_applications
 ):
     terminal("backup", "take", "shop")
 
@@ -284,8 +304,30 @@ def test_activity_shows_what_the_terminal_did_and_who(
     shown = terminal("activity", "show", entry_id, "--json").json()
 
     assert [entry["actor"] for entry in listed] == ["sara"]
-    assert shown["status"] == "succeeded" and shown["server_name"] == "shop"
+    assert shown["status"] == "succeeded"
+    assert (shown["application_name"], shown["server_name"]) == ("shop", "shop")
     assert (
         "Nothing has happened yet."
         in terminal("activity", "list", "--status", "running").out
     )
+
+
+@RUNS_JOBS
+def test_activity_lists_a_server_with_its_applications_or_one_application(
+    terminal, admin, host, two_applications
+):
+    terminal("backup", "take", "--all")
+
+    by_application = terminal("activity", "list", "--app", "shop", "--json").json()
+    by_server = terminal("activity", "list", "--server", "blog", "--json").json()
+    table = terminal("activity", "list").out.splitlines()
+
+    assert {row["application_name"] for row in by_application} == {"shop"}
+    assert {"application.create", "backup.take"} <= {
+        row["action"] for row in by_application
+    }
+    assert {row["server_name"] for row in by_server} == {"blog"}
+    assert {"server.create", "application.create", "backup.take"} <= {
+        row["action"] for row in by_server
+    }
+    assert table[0].split()[4:6] == ["SERVER", "APPLICATION"]
