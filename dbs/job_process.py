@@ -138,11 +138,16 @@ class Child:
             cwd=os.getcwd(),
             start_new_session=True,
         )
+        stdin, self.process.stdin = self.process.stdin, None
         try:
-            self.process.stdin.write((json.dumps(spec) + "\n").encode("utf-8"))
-            self.process.stdin.close()
+            stdin.write((json.dumps(spec) + "\n").encode("utf-8"))
         except OSError:
             pass
+        finally:
+            try:
+                stdin.close()
+            except OSError:
+                pass
 
     @property
     def pid(self) -> int:
