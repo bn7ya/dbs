@@ -3,17 +3,22 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
+from dbs.manager.applications.services import ApplicationService
+from dbs.manager.backups.services import BackupService
 from dbs.manager.backups.storage import BackupStorage
-from dbs.manager.servers.services import ServerService
+from tests.manager.factories import make_application
 from tests.manager.support import PASSWORD
 
 LIST = "/api/backups/"
 
 SHAPE = {
     "id",
+    "application",
+    "application_name",
     "server",
     "server_name",
     "kind",
@@ -60,27 +65,52 @@ def test_every_endpoint_needs_a_session(anonymous, method, path):
 
 
 @pytest.mark.django_db
-def test_the_list_needs_a_server(api):
-    missing = api.get(LIST)
-    malformed = api.get(LIST, {"server": "web-1"})
+def test_the_list_refuses_an_application_that_is_not_an_id(api):
+    malformed = api.get(LIST, {"application": "web-1"})
 
-    assert missing.status_code == malformed.status_code == 400
-    assert missing.json()["error"]["code"] == "invalid"
-    assert missing.json()["error"]["fields"] == {"server": ["required"]}
-    assert malformed.json()["error"]["fields"] == {"server": ["invalid"]}
+    assert malformed.status_code == 400
+    assert malformed.json()["error"]["code"] == "invalid"
+    assert malformed.json()["error"]["fields"] == {"application": ["invalid"]}
 
 
 @pytest.mark.django_db
-def test_a_backup_has_the_documented_shape(api, server, taken):
+def test_the_list_without_an_application_holds_every_live_applications_backups(
+    api, admin, application, taken
+):
+    backup = taken()
+    other = make_application(admin, name="web-2", server=application.server)
+    uploaded = BackupService(admin).upload(
+        other.pk, SimpleUploadedFile("db.sql", b"dump")
+    )
+    gone = make_application(admin, name="web-3", server=application.server)
+    BackupService(admin).upload(gone.pk, SimpleUploadedFile("old.sql", b"old"))
+    ApplicationService(admin).delete(gone.pk, account_password=PASSWORD)
+
+    body = api.get(LIST).json()
+
+    assert body["count"] == 2
+    assert [row["id"] for row in body["results"]] == [str(uploaded.pk), str(backup.pk)]
+    assert [row["application_name"] for row in body["results"]] == ["web-2", "web-1"]
+
+
+@pytest.mark.django_db
+def test_a_backup_has_the_documented_shape(api, application, taken):
     backup = taken()
 
-    body = api.get(LIST, {"server": server.pk}).json()
+    body = api.get(LIST, {"application": application.pk}).json()
 
     assert (body["count"], body["next"], body["previous"]) == (1, None, None)
     [row] = body["results"]
     assert set(row) == SHAPE
     assert row["id"] == str(backup.pk)
-    assert (row["server"], row["server_name"]) == (str(server.pk), "web-1")
+    assert (row["application"], row["application_name"]) == (
+        str(application.pk),
+        "web-1",
+    )
+    assert (row["server"], row["server_name"]) == (
+        str(application.server_id),
+        application.server.name,
+    )
     assert row["kind"] == "dbs"
     assert row["name"] == backup.name
     assert row["size"] == backup.size
@@ -95,11 +125,13 @@ def test_a_backup_has_the_documented_shape(api, server, taken):
 
 
 @pytest.mark.django_db
-def test_the_list_is_newest_first_and_paginated(api, server, taken):
+def test_the_list_is_newest_first_and_paginated(api, application, taken):
     oldest, middle, newest = taken(), taken(), taken()
 
-    first = api.get(LIST, {"server": server.pk, "page_size": 2}).json()
-    second = api.get(LIST, {"server": server.pk, "page_size": 2, "page": 2}).json()
+    first = api.get(LIST, {"application": application.pk, "page_size": 2}).json()
+    second = api.get(
+        LIST, {"application": application.pk, "page_size": 2, "page": 2}
+    ).json()
 
     assert first["count"] == 3
     assert [row["id"] for row in first["results"]] == [str(newest.pk), str(middle.pk)]
@@ -107,24 +139,30 @@ def test_the_list_is_newest_first_and_paginated(api, server, taken):
 
 
 @pytest.mark.django_db
-def test_the_list_holds_only_that_servers_backups_that_are_not_deleted(
-    api, admin, server, taken
+def test_the_list_holds_only_that_applications_backups_that_are_not_deleted(
+    api, admin, application, taken
 ):
     kept, deleted = taken(), taken()
     api.delete(url(deleted), {"account_password": PASSWORD}, format="json")
+    other = make_application(admin, name="web-2", server=application.server)
+    BackupService(admin).upload(other.pk, SimpleUploadedFile("db.sql", b"dump"))
 
-    ids = [row["id"] for row in api.get(LIST, {"server": server.pk}).json()["results"]]
+    listed = api.get(LIST, {"application": application.pk}).json()["results"]
+    ids = [row["id"] for row in listed]
 
     assert ids == [str(kept.pk)]
-    assert api.get(LIST, {"server": uuid4()}).json()["count"] == 0
+    assert api.get(LIST, {"application": uuid4()}).json()["count"] == 0
 
 
 @pytest.mark.django_db
-def test_a_deleted_servers_backups_are_still_listed(api, admin, server, taken):
+def test_a_deleted_applications_backups_are_still_listed_under_it(
+    api, admin, application, taken
+):
     backup = taken()
-    ServerService(admin).delete(server.pk, account_password=PASSWORD)
+    ApplicationService(admin).delete(application.pk, account_password=PASSWORD)
 
-    ids = [row["id"] for row in api.get(LIST, {"server": server.pk}).json()["results"]]
+    listed = api.get(LIST, {"application": application.pk}).json()["results"]
+    ids = [row["id"] for row in listed]
 
     assert ids == [str(backup.pk)]
 
@@ -136,7 +174,7 @@ def test_one_backup_is_read_from_the_list_not_on_its_own(api, taken):
 
 @pytest.mark.django_db
 def test_a_download_is_the_stored_file_as_an_attachment(
-    api, admin, server, storage, taken
+    api, admin, application, storage, taken
 ):
     backup = taken()
 
@@ -153,7 +191,7 @@ def test_a_download_is_the_stored_file_as_an_attachment(
     assert response["Cache-Control"] == "no-store"
     [entry] = logged("backup.download")
     assert entry.status == audit.SUCCEEDED
-    assert entry.subject == str(server.pk)
+    assert entry.subject == str(application.pk)
     assert entry.target_name == backup.name
     assert entry.actor == admin
 
@@ -183,18 +221,18 @@ def test_a_deleted_backup_is_not_downloaded(api, taken):
 
 @pytest.mark.django_db
 def test_a_deleted_backup_is_hidden_and_its_file_kept(
-    api, admin, server, storage, taken
+    api, admin, application, storage, taken
 ):
     backup = taken()
 
     response = api.delete(url(backup), {"account_password": PASSWORD}, format="json")
 
     assert response.status_code == 204
-    assert api.get(LIST, {"server": server.pk}).json()["count"] == 0
+    assert api.get(LIST, {"application": application.pk}).json()["count"] == 0
     assert (storage / backup.storage_path).is_file()
     [entry] = logged("backup.delete")
     assert (entry.subject, entry.target_name, entry.actor) == (
-        str(server.pk),
+        str(application.pk),
         backup.name,
         admin,
     )
@@ -207,19 +245,21 @@ def test_a_deleted_backup_is_hidden_and_its_file_kept(
 
 
 @pytest.mark.django_db
-def test_a_delete_can_be_undone_while_the_file_is_on_disk(api, admin, server, taken):
+def test_a_delete_can_be_undone_while_the_file_is_on_disk(
+    api, admin, application, taken
+):
     backup = taken()
-    [listed] = api.get(LIST, {"server": server.pk}).json()["results"]
+    [listed] = api.get(LIST, {"application": application.pk}).json()["results"]
     api.delete(url(backup), {"account_password": PASSWORD}, format="json")
 
     response = api.post(url(backup, "undo-delete/"))
 
     assert response.status_code == 200
     assert response.json() == listed
-    assert api.get(LIST, {"server": server.pk}).json()["count"] == 1
+    assert api.get(LIST, {"application": application.pk}).json()["count"] == 1
     [entry] = logged("backup.undo_delete")
     assert (entry.subject, entry.target_name, entry.actor) == (
-        str(server.pk),
+        str(application.pk),
         backup.name,
         admin,
     )

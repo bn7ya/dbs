@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { Api } from './support/api';
 import { ADMIN, SSH } from './support/config';
-import { expect, test } from './support/fixtures';
+import { baseUrlOf, expect, test } from './support/fixtures';
 import { folderSnapshot, readRemote, remoteExists, remoteReachable, scratchFile } from './support/ssh-fs';
 
 test.describe.configure({ mode: 'serial' });
@@ -9,26 +9,25 @@ test.describe.configure({ mode: 'serial' });
 test.describe('files', () => {
   const uploads = `${SSH.mediaDir}/uploads`;
   let api: Api;
-  let serverId = '';
+  let name = '';
   let filesUrl = '';
   let uploadsFolder: ReturnType<typeof folderSnapshot>;
   let fileName = '';
   let folderName = '';
 
   test.beforeAll(async ({}, testInfo) => {
-    api = await Api.signIn(testInfo.project.use.baseURL ?? 'http://localhost:4200');
+    api = await Api.signIn(baseUrlOf(testInfo));
     uploadsFolder = folderSnapshot(uploads);
-    const server = await api.createServer(`e2e files ${testInfo.project.name} ${Date.now().toString(36)}`);
-    serverId = server.id;
-    filesUrl = `/servers/${serverId}/files`;
+    name = `e2e files ${testInfo.project.name} ${Date.now().toString(36)}`;
+    const { application } = await api.createServerWithApplication(name);
+    filesUrl = `/applications/${application.id}/files`;
     const stamp = `${testInfo.project.name}-${Date.now().toString(36)}`;
     fileName = `e2e-${stamp}.txt`;
     folderName = `e2e-folder-${stamp}`;
   });
 
   test.afterAll(async () => {
-    await api.deleteServer(serverId);
-    await api.dispose();
+    await api.deleteServersNamed(name);
     uploadsFolder.restore();
   });
 
@@ -41,12 +40,12 @@ test.describe('files', () => {
     await expect(page.getByRole('navigation', { name: t('folderPath') })).toContainText(SSH.mediaDir);
     await journey.shot(page, 'files-root');
 
-    await page.getByRole('link', { name: journey.named('openFolder', 'uploads') }).click();
+    await page.getByRole('link', { name: journey.say('openFolder', { name: 'uploads' }) }).click();
 
     await expect(page).toHaveURL(new RegExp(`${filesUrl}\\?path=${encodeURIComponent(uploads).replace(/%/g, '%')}`));
     await expect(page.getByRole('navigation', { name: t('folderPath') })).toContainText('uploads');
-    await expect(page.getByRole('button', { name: journey.named('download', 'a.txt') })).toBeVisible();
-    await expect(page.getByRole('button', { name: journey.named('download', 'b.bin') })).toBeVisible();
+    await expect(page.getByRole('button', { name: journey.say('fileDownloadNamed', { name: 'a.txt' }) })).toBeVisible();
+    await expect(page.getByRole('button', { name: journey.say('fileDownloadNamed', { name: 'b.bin' }) })).toBeVisible();
     await journey.shot(page, 'files-uploads');
   });
 
@@ -56,7 +55,7 @@ test.describe('files', () => {
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: journey.named('download', 'a.txt') }).click(),
+      page.getByRole('button', { name: journey.say('fileDownloadNamed', { name: 'a.txt' }) }).click(),
     ]);
 
     expect(download.suggestedFilename()).toBe('a.txt');
@@ -78,7 +77,7 @@ test.describe('files', () => {
     await chooser.setFiles(file);
 
     await expect(journey.toast(page, 'fileUploaded')).toBeVisible();
-    await expect(page.getByRole('button', { name: journey.named('download', fileName) })).toBeVisible();
+    await expect(page.getByRole('button', { name: journey.say('fileDownloadNamed', { name: fileName }) })).toBeVisible();
     if (remoteReachable) expect(remoteExists(`${uploads}/${fileName}`)).toBe(true);
   });
 
@@ -108,7 +107,7 @@ test.describe('files', () => {
     await dialog.getByRole('button', { name: t('createFolder') }).click();
 
     await expect(journey.toast(page, 'folderCreated')).toBeVisible();
-    await expect(page.getByRole('link', { name: journey.named('openFolder', folderName) })).toBeVisible();
+    await expect(page.getByRole('link', { name: journey.say('openFolder', { name: folderName }) })).toBeVisible();
     if (remoteReachable) expect(remoteExists(`${uploads}/${folderName}`)).toBe(true);
     await journey.shot(page, 'files-created');
   });
@@ -118,7 +117,7 @@ test.describe('files', () => {
     await journey.signIn(page);
     await page.goto(`${filesUrl}?path=${encodeURIComponent(uploads)}`);
 
-    await page.getByRole('button', { name: journey.named('delete', folderName) }).click();
+    await page.getByRole('button', { name: journey.say('fileDeleteNamed', { name: folderName }) }).click();
     const confirmFolder = page.getByRole('alertdialog');
     await expect(confirmFolder.getByRole('heading', { level: 2 })).toHaveText(t('deleteThisFolder'));
     await expect(confirmFolder).toContainText(`${uploads}/${folderName}`);
@@ -126,15 +125,15 @@ test.describe('files', () => {
     await confirmFolder.getByRole('button', { name: t('delete'), exact: true }).click();
 
     await expect(journey.toast(page, 'folderDeleted')).toBeVisible();
-    await expect(page.getByRole('link', { name: journey.named('openFolder', folderName) })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: journey.say('openFolder', { name: folderName }) })).toHaveCount(0);
 
-    await page.getByRole('button', { name: journey.named('delete', fileName) }).click();
+    await page.getByRole('button', { name: journey.say('fileDeleteNamed', { name: fileName }) }).click();
     const confirmFile = page.getByRole('alertdialog');
     await expect(confirmFile.getByRole('heading', { level: 2 })).toHaveText(t('deleteThisFile'));
     await confirmFile.getByRole('button', { name: t('delete'), exact: true }).click();
 
     await expect(journey.toast(page, 'fileDeleted')).toBeVisible();
-    await expect(page.getByRole('button', { name: journey.named('download', fileName) })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: journey.say('fileDownloadNamed', { name: fileName }) })).toHaveCount(0);
     if (remoteReachable) {
       expect(remoteExists(`${uploads}/${folderName}`)).toBe(false);
       expect(remoteExists(`${uploads}/${fileName}`)).toBe(false);

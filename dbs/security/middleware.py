@@ -29,11 +29,6 @@ ADMIN_ACTIONS = (
 
 EXPORT_FRAGMENTS = ("/download/", "/export/")
 
-CONTRIB_ACTIONS = (
-    ("dbs:backup_download", "download"),
-    ("dbs:restore_upload", "restore"),
-)
-
 FLAGGED = "DBS flagged this session, so it must sign in again before doing this."
 
 IDLE = "This session was idle for too long, so DBS ended it."
@@ -123,14 +118,10 @@ class DBSSecurityMiddleware:
             if path.startswith(admin_root + "logout"):
                 return None
             return "admin"
-        if _contrib_paths() and path in _contrib_paths():
-            return "contrib"
         return None
 
     def _action(self, request, scope) -> str:
         unsafe = request.method in UNSAFE_METHODS
-        if scope == "contrib":
-            return _contrib_action(request.path) if unsafe else "view"
         if any(fragment in request.path for fragment in EXPORT_FRAGMENTS):
             return "download"
         if not unsafe:
@@ -168,26 +159,6 @@ class DBSSecurityMiddleware:
                 status=401,
             )
         return redirect_to_login(request.get_full_path())
-
-
-def _contrib_paths():
-    paths = []
-    for name, _ in CONTRIB_ACTIONS:
-        try:
-            paths.append(reverse(name))
-        except NoReverseMatch:
-            continue
-    return paths
-
-
-def _contrib_action(path) -> str:
-    for name, action in CONTRIB_ACTIONS:
-        try:
-            if path == reverse(name):
-                return action
-        except NoReverseMatch:
-            continue
-    return "download"
 
 
 def _account_paths():

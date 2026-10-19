@@ -1,0 +1,42 @@
+@use "layout" as *;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.engines__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(calc($card-max / 2), 100%), 1fr));
+  gap: var(--app-space-4) var(--app-space-6);
+  margin: 0;
+}
+
+.engines__fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.engines__fact dd {
+  margin: 0;
+}
+
+.engines__value {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.engines__state {
+  display: inline-flex;
+  gap: var(--app-space-2);
+  align-items: center;
+}
+
+.engines__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}

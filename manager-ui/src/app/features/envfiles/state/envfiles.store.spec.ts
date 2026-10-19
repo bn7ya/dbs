@@ -10,7 +10,7 @@ import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { Toaster } from '@shared/toaster/toaster';
 import type { ToastMessage } from '@shared/toaster/toaster.types';
-import type { EnvVersion } from '../data/envfiles.types';
+import type { EnvLocation, EnvVersion } from '../data/envfiles.types';
 import ar from '../i18n/ar.json';
 import en from '../i18n/en.json';
 import {
@@ -19,13 +19,13 @@ import {
   ENV_PATH,
   OLDER,
   OLDEST,
-  SERVER_ID,
+  APPLICATION_ID,
   VERSION,
   pageOf,
 } from '../testing/envfiles.fixtures';
 import { EnvfilesStore } from './envfiles.store';
 
-const OTHER_SERVER = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002';
+const OTHER_APPLICATION = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002';
 
 const PULLED: EnvVersion = { ...VERSION, id: '7a1e4c20-5555-4d3b-8c9f-1e2d3c4b0004', created_at: '2026-10-01T08:00:00Z' };
 
@@ -34,17 +34,22 @@ describe('EnvfilesStore', () => {
   let http: HttpTestingController;
   let toasts: MockInstance<(message: ToastMessage) => void>;
 
-  const listRequest = (server = SERVER_ID): TestRequest =>
-    http.expectOne((request) => request.url === '/api/envfiles/' && request.params.get('server') === server);
-  const pathRequest = (server = SERVER_ID): TestRequest => http.expectOne(`/api/servers/${server}/`);
+  const listRequest = (application = APPLICATION_ID): TestRequest =>
+    http.expectOne((request) => request.url === '/api/envfiles/' && request.params.get('application') === application);
+  const placeRequest = (application = APPLICATION_ID): TestRequest => http.expectOne(`/api/applications/${application}/`);
 
   const settle = (): Promise<void> => TestBed.inject(ApplicationRef).whenStable();
 
-  const openWith = async (page: Page<EnvVersion>, envPath = ENV_PATH, server = SERVER_ID): Promise<void> => {
-    store.open(server);
+  const openWith = async (
+    page: Page<EnvVersion>,
+    envPath = ENV_PATH,
+    application = APPLICATION_ID,
+    envLocation: EnvLocation = 'host',
+  ): Promise<void> => {
+    store.open(application);
     TestBed.tick();
-    pathRequest(server).flush({ id: server, env_path: envPath });
-    listRequest(server).flush(page);
+    placeRequest(application).flush({ id: application, env_path: envPath, env_location: envLocation });
+    listRequest(application).flush(page);
     await settle();
     store.versions();
   };
@@ -93,7 +98,7 @@ describe('EnvfilesStore', () => {
   });
 
   describe('the versions', () => {
-    it('loads nothing until the page opens a server', () => {
+    it('loads nothing until the page opens an application', () => {
       TestBed.tick();
 
       http.expectNone(() => true);
@@ -103,11 +108,11 @@ describe('EnvfilesStore', () => {
     });
 
     it('lists the newest first, says where the file is, and selects the newest', async () => {
-      store.open(SERVER_ID);
+      store.open(APPLICATION_ID);
       TestBed.tick();
       expect(store.pending()).toBe(true);
 
-      pathRequest().flush({ id: SERVER_ID, env_path: ENV_PATH });
+      placeRequest().flush({ id: APPLICATION_ID, env_path: ENV_PATH, env_location: 'host' });
       const request = listRequest();
       expect(request.request.params.get('page')).toBe('1');
       expect(request.request.params.get('page_size')).toBe('20');
@@ -116,13 +121,21 @@ describe('EnvfilesStore', () => {
 
       expect(store.envPath()).toBe(ENV_PATH);
       expect(store.noPath()).toBe(false);
+      expect(store.inContainer()).toBe(false);
       expect(store.versions()).toEqual([VERSION, OLDER, OLDEST]);
       expect(store.selected()).toEqual(VERSION);
       expect(store.hasPrevious()).toBe(true);
       expect(store.empty()).toBe(false);
     });
 
-    it('knows when the server has no .env file set', async () => {
+    it('knows when the application keeps its .env file inside the container', async () => {
+      await openWith(pageOf([VERSION]), ENV_PATH, APPLICATION_ID, 'container');
+
+      expect(store.inContainer()).toBe(true);
+      expect(store.envPath()).toBe(ENV_PATH);
+    });
+
+    it('knows when the application has no .env file set', async () => {
       await openWith(pageOf([]), '');
 
       expect(store.noPath()).toBe(true);
@@ -146,16 +159,16 @@ describe('EnvfilesStore', () => {
       expect(store.hasPrevious()).toBe(true);
     });
 
-    it("never shows one server's versions on another's tab", async () => {
+    it("never shows one application's versions on another's tab", async () => {
       await openWith(pageOf([VERSION]));
 
-      store.open(OTHER_SERVER);
+      store.open(OTHER_APPLICATION);
       TestBed.tick();
 
       expect(store.versions()).toEqual([]);
       expect(store.pending()).toBe(true);
-      pathRequest(OTHER_SERVER).flush({ id: OTHER_SERVER, env_path: ENV_PATH });
-      listRequest(OTHER_SERVER).flush(pageOf([]));
+      placeRequest(OTHER_APPLICATION).flush({ id: OTHER_APPLICATION, env_path: ENV_PATH, env_location: 'host' });
+      listRequest(OTHER_APPLICATION).flush(pageOf([]));
       await settle();
     });
   });
@@ -168,7 +181,7 @@ describe('EnvfilesStore', () => {
       const pulling = store.pull();
       expect(store.pulling()).toBe(true);
       const request = http.expectOne('/api/envfiles/pull/');
-      expect(request.request.body).toEqual({ server: SERVER_ID });
+      expect(request.request.body).toEqual({ application: APPLICATION_ID });
       request.flush({ created: true, version: PULLED });
       await pulling;
 
@@ -318,7 +331,7 @@ describe('EnvfilesStore', () => {
   });
 
   describe('push', () => {
-    it('pushes a version, says so, and selects what the server now holds', async () => {
+    it('pushes a version, says so, and selects what the application now holds', async () => {
       await openWith(pageOf([VERSION, OLDER]));
       store.select(OLDER);
       const pushed: EnvVersion = { ...OLDER, id: '7a1e4c20-5555-4d3b-8c9f-1e2d3c4b0005', source: 'pushed' };
@@ -329,7 +342,7 @@ describe('EnvfilesStore', () => {
       request.flush({ version: pushed });
 
       await expect(pushing).resolves.toBe(true);
-      expect(lastToast()).toEqual({ severity: 'success', summary: 'Version pushed to the server.' });
+      expect(lastToast()).toEqual({ severity: 'success', summary: 'Version pushed to the application.' });
       await answerReload(pageOf([pushed, PULLED, VERSION, OLDER]));
       expect(store.selected()).toEqual(pushed);
     });

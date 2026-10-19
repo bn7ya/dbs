@@ -171,3 +171,35 @@ class HostKeyDecided(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "host_key_decided"
     default_detail = "This host key was already confirmed or rejected."
+
+
+class ServerHasApplications(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "server_has_applications"
+    default_detail = "Remove or move the applications on this server before deleting it."
+
+
+class ServersDiffer(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "servers_differ"
+    default_detail = (
+        "Only two servers with the same address, user and host key are one machine."
+    )
+
+
+class ContainerEngineMissing(RemoteCommandFailed):
+    default_code = "container_engine_missing"
+    default_detail = "Neither Docker nor Podman answers on this server."
+
+
+class EnginePermissionDenied(RemoteCommandFailed):
+    default_code = "engine_permission_denied"
+    default_detail = (
+        "The SSH user may not use the container engine. Add it to the engine's group, "
+        "or run the containers with rootless Podman as that user."
+    )
+
+
+class ContainerNotRunning(RemoteCommandFailed):
+    default_code = "container_not_running"
+    default_detail = "The application's container is not running."

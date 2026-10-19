@@ -12,7 +12,9 @@ REQUIRED = (
     re.compile(re.escape(BUNDLE) + r"3rdpartylicenses\.txt$"),
     re.compile(r"dbs/manager/templates/dbs_manager/missing_ui\.html$"),
     re.compile(r"dbs/migrations/0004_schedule_lease\.py$"),
+    re.compile(r"dbs/management/commands/django-dbs\.py$"),
 )
+COMMANDS = ("django-dbs", "django_dbs", "dbs")
 FORBIDDEN = (b"kit.fontawesome.com", b"primeng")
 
 
@@ -23,6 +25,11 @@ def problems(path):
         for pattern in REQUIRED:
             if not any(pattern.search(name) for name in names):
                 found.append(f"missing {pattern.pattern}")
+        entry_points = [name for name in names if name.endswith(".dist-info/entry_points.txt")]
+        scripts = wheel.read(entry_points[0]).decode() if entry_points else ""
+        for command in COMMANDS:
+            if f"{command} = dbs.manager.cli:main" not in scripts:
+                found.append(f"missing the {command} console script")
         for name in names:
             if not name.startswith(BUNDLE) or not name.endswith((".js", ".html", ".css")):
                 continue

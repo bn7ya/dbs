@@ -1,32 +1,17 @@
-import { DestroyRef, Injectable, inject, signal, type WritableSignal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { finalize, firstValueFrom, last, switchMap, type Observable } from 'rxjs';
+import { Injectable, inject, signal, type WritableSignal } from '@angular/core';
+import { firstValueFrom, type Observable } from 'rxjs';
 
 import type { ApiError } from '@core/http/api.types';
-import { JobWatcher } from '@core/jobs/job-watcher';
-import type { Job } from '@core/jobs/job.types';
 import { ServersApi } from '../data/servers.api';
-import type {
-  CheckedServer,
-  CreatedServer,
-  Discovery,
-  HostKey,
-  HostKeyTarget,
-  ProjectSettings,
-  ServerCreate,
-} from '../data/servers.types';
+import type { CreatedServer, HostKey, HostKeyTarget, Server, ServerCreate } from '../data/servers.types';
 
 @Injectable()
 export class ServerWizardStore {
   private readonly api = inject(ServersApi);
-  private readonly jobs = inject(JobWatcher);
-  private readonly destroyRef = inject(DestroyRef);
 
   readonly server = signal<CreatedServer | null>(null);
   readonly publicKey = signal<string | null>(null);
-  readonly checked = signal<CheckedServer | null>(null);
-  readonly captured = signal(false);
-  readonly backupJob = signal<Job | null>(null);
+  readonly checked = signal<Server | null>(null);
 
   readonly fetchingHostKey = signal(false);
   readonly hostKeyError = signal<ApiError | null>(null);
@@ -34,16 +19,8 @@ export class ServerWizardStore {
   readonly createError = signal<ApiError | null>(null);
   readonly readingKey = signal(false);
   readonly keyError = signal<ApiError | null>(null);
-  readonly discovering = signal(false);
-  readonly discoverError = signal<ApiError | null>(null);
-  readonly savingProject = signal(false);
-  readonly projectError = signal<ApiError | null>(null);
   readonly checking = signal(false);
   readonly checkError = signal<ApiError | null>(null);
-  readonly capturing = signal(false);
-  readonly captureError = signal<ApiError | null>(null);
-  readonly backingUp = signal(false);
-  readonly backupError = signal<ApiError | null>(null);
 
   fetchHostKey(target: HostKeyTarget): Promise<HostKey | null> {
     return this.run(this.api.fingerprint(target), this.fetchingHostKey, this.hostKeyError);
@@ -68,79 +45,14 @@ export class ServerWizardStore {
     }
   }
 
-  discover(projectDir?: string, accountPassword?: string): Promise<Discovery | null> {
-    const id = this.server()?.id;
-    return id
-      ? this.run(this.api.discover(id, projectDir, accountPassword), this.discovering, this.discoverError)
-      : Promise.resolve(null);
-  }
-
-  async usePython(pythonPath: string, accountPassword?: string): Promise<CheckedServer | null> {
-    const id = this.server()?.id;
-    if (!id) {
-      return null;
-    }
-    const changes = { python_path: pythonPath, ...(accountPassword ? { account_password: accountPassword } : {}) };
-    const saved = await this.run(this.api.update(id, changes), this.savingProject, this.projectError);
-    if (!saved) {
-      return null;
-    }
-    this.server.update((current) => (current ? { ...current, ...saved } : current));
-    return this.check();
-  }
-
-  async saveProject(settings: ProjectSettings): Promise<boolean> {
+  async check(): Promise<boolean> {
     const id = this.server()?.id;
     if (!id) {
       return false;
-    }
-    const saved = await this.run(this.api.update(id, settings), this.savingProject, this.projectError);
-    if (saved) {
-      this.server.update((current) => (current ? { ...current, ...saved } : current));
-    }
-    return saved !== null;
-  }
-
-  async check(): Promise<CheckedServer | null> {
-    const id = this.server()?.id;
-    if (!id) {
-      return null;
     }
     const checked = await this.run(this.api.check(id), this.checking, this.checkError);
     this.checked.set(checked);
-    return checked;
-  }
-
-  async capturePassphrase(): Promise<boolean> {
-    const id = this.server()?.id;
-    if (!id) {
-      return false;
-    }
-    const answer = await this.run(this.api.capturePassphrase(id), this.capturing, this.captureError);
-    this.captured.set(answer?.captured ?? false);
-    return this.captured();
-  }
-
-  takeBackup(): void {
-    const id = this.server()?.id;
-    if (!id || this.backingUp()) {
-      return;
-    }
-    this.backingUp.set(true);
-    this.backupError.set(null);
-    this.backupJob.set(null);
-    this.api
-      .takeBackup(id)
-      .pipe(
-        switchMap(({ activity }) => this.jobs.watch(activity)),
-        last(),
-        finalize(() => this.backingUp.set(false)),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (job) => this.backupJob.set(job),
-        error: (error: unknown) => this.backupError.set(error as ApiError),
-      });
+    return checked !== null;
   }
 
   private async run<T>(

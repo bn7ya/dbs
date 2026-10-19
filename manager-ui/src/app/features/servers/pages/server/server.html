@@ -13,7 +13,7 @@
     </header>
 
     <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" [attr.aria-label]="'servers.page.sections' | t">
-      @for (tab of tabs; track tab.path) {
+      @for (tab of tabs(); track tab.path) {
         <a
           mat-tab-link
           [routerLink]="tab.path"

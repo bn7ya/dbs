@@ -11,20 +11,13 @@ from rest_framework.views import APIView
 from dbs.manager.servers.serializers import (
     BrowseListingSerializer,
     BrowseQuerySerializer,
-    CheckedServerSerializer,
-    DiscoverRequestSerializer,
     FingerprintRequestSerializer,
     HostKeySerializer,
-    PassphraseSerializer,
-    PasswordSerializer,
     RepinSerializer,
+    ServerMergeSerializer,
     ServerSerializer,
 )
-from dbs.manager.servers.services import (
-    BrowseService,
-    DiscoveryService,
-    ServerService,
-)
+from dbs.manager.servers.services import BrowseService, ServerService
 
 
 class FingerprintView(APIView):
@@ -41,8 +34,8 @@ class CheckView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk: UUID) -> Response:
-        checked = ServerService(request.user).checked(pk)
-        return Response(CheckedServerSerializer(checked).data)
+        server = ServerService(request.user).check(pk)
+        return Response(ServerSerializer(server).data)
 
 
 class PublicKeyView(APIView):
@@ -50,17 +43,6 @@ class PublicKeyView(APIView):
 
     def get(self, request: Request, pk: UUID) -> Response:
         return Response({"public_key": ServerService(request.user).public_key(pk)})
-
-
-class DiscoverView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request: Request, pk: UUID) -> Response:
-        payload = DiscoverRequestSerializer(data=request.data)
-        payload.is_valid(raise_exception=True)
-        return Response(
-            DiscoveryService(request.user).discover(pk, **payload.validated_data)
-        )
 
 
 class BrowseView(GenericAPIView):
@@ -83,14 +65,6 @@ class BrowseView(GenericAPIView):
         return Response(BrowseListingSerializer(listing).data)
 
 
-class PassphraseCaptureView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request: Request, pk: UUID) -> Response:
-        ServerService(request.user).capture_passphrase(pk)
-        return Response({"captured": True})
-
-
 class HostKeyView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -101,16 +75,11 @@ class HostKeyView(APIView):
         return Response(ServerSerializer(server).data)
 
 
-class PassphraseView(APIView):
+class MergeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk: UUID) -> Response:
-        payload = PasswordSerializer(data=request.data)
+        payload = ServerMergeSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
-        passphrase = ServerService(request.user).reveal_passphrase(
-            pk, **payload.validated_data
-        )
-        return Response(
-            PassphraseSerializer({"passphrase": passphrase}).data,
-            headers={"Cache-Control": "no-store"},
-        )
+        server = ServerService(request.user).merge(pk, **payload.validated_data)
+        return Response(ServerSerializer(server).data)

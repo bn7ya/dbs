@@ -7,13 +7,13 @@ from rest_framework.exceptions import APIException
 class NoAllowedFolders(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_code = "no_allowed_folders"
-    default_detail = "This server has no folders its files may be browsed in."
+    default_detail = "This application has no folders its files may be browsed in."
 
 
 class PathOutsideRoots(APIException):
     status_code = status.HTTP_403_FORBIDDEN
     default_code = "path_outside_roots"
-    default_detail = "That path is outside the folders allowed on this server."
+    default_detail = "That path is outside the folders allowed for this application."
 
 
 class NotAFile(APIException):

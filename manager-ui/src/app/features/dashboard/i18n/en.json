@@ -1,11 +1,12 @@
 {
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Every server at a glance: checks, backups and health.",
+    "subtitle": "Every server and the applications it runs: checks, backups and health.",
     "add": "Add a server",
     "totals": {
       "label": "Totals",
       "servers": "Servers",
+      "applications": "Applications",
       "storage": "Stored here",
       "failures": "Failures in the last 7 days",
       "lastExport": "Last export",
@@ -16,8 +17,7 @@
       "stale": "Last export: {age}. Keep a fresh copy of the DBS data with this command:"
     },
     "keyInFile": "No system keychain works on this computer, so the key that seals the DBS data sits in a file in the same folder. Keep that folder readable by your account alone, and keep exports somewhere else.",
-    "servers": {
-      "title": "Servers",
+    "card": {
       "check": "Check: {status}",
       "health": "Health: {status}",
       "lastBackup": "Last backup",
@@ -26,6 +26,25 @@
       "noPlan": "No plan scheduled",
       "failures": "Failures in the last 7 days",
       "storage": "Stored here"
+    },
+    "applications": {
+      "none": "No applications on this server yet.",
+      "add": "Add an application"
+    },
+    "where": {
+      "host": "On the server",
+      "compose": "Compose service, {engine}",
+      "container": "Container, {engine}"
+    },
+    "engine": {
+      "docker": "Docker",
+      "podman": "Podman",
+      "none": "None"
+    },
+    "validation": {
+      "verified": "Verified",
+      "structure_ok": "Structure checked",
+      "failed": "Failed verification"
     },
     "check": {
       "unknown": "Not checked",
@@ -44,14 +63,14 @@
       "label": "Recent failures",
       "none": "No failures recorded.",
       "when": "When",
-      "server": "Server",
       "target": "On",
       "reason": "Reason",
-      "all": "See all activity"
+      "all": "See all activity",
+      "subject": "Application or server"
     },
     "empty": {
       "title": "No servers yet",
-      "body": "Add a server to check it and back it up."
+      "body": "Add a server, then the applications it runs, to check them and back them up."
     }
   }
 }

@@ -5,22 +5,20 @@ import { filter, map, type Observable } from 'rxjs';
 import type { Page } from '@core/http/api.types';
 import type { JobStarted } from '@core/jobs/job.types';
 import type {
+  ApplicationChoice,
   BackupFile,
   BackupListQuery,
-  BackupPlan,
+  Dashboard,
   DownloadLink,
-  PlanCreate,
-  PlanListQuery,
-  PlanUpdate,
   RestoreRequest,
-  TargetServer,
   UnfinishedJob,
   UploadEvent,
 } from './backups.types';
 
 const UNFINISHED_JOBS_PAGE_SIZE = 100;
 
-const TARGET_SERVERS_PAGE_SIZE = 100;
+// The most the backend serves in one page.
+const APPLICATIONS_PAGE_SIZE = 200;
 
 @Injectable({ providedIn: 'root' })
 export class BackupsApi {
@@ -28,15 +26,15 @@ export class BackupsApi {
   private readonly base = '/api/backups';
 
   list(query: BackupListQuery): Observable<Page<BackupFile>> {
-    const params = new HttpParams()
-      .set('server', query.server)
-      .set('page', query.page)
-      .set('page_size', query.page_size);
+    let params = new HttpParams().set('page', query.page).set('page_size', query.page_size);
+    if (query.application !== null) {
+      params = params.set('application', query.application);
+    }
     return this.http.get<Page<BackupFile>>(`${this.base}/`, { params });
   }
 
-  take(server: string): Observable<JobStarted> {
-    return this.http.post<JobStarted>(`${this.base}/take/`, { server });
+  take(application: string): Observable<JobStarted> {
+    return this.http.post<JobStarted>(`${this.base}/take/`, { application });
   }
 
   downloadUrl(id: string): string {
@@ -55,11 +53,6 @@ export class BackupsApi {
     return this.http.post<JobStarted>(`${this.base}/${id}/restore/`, request);
   }
 
-  targetServers(): Observable<Page<TargetServer>> {
-    const params = new HttpParams().set('page', 1).set('page_size', TARGET_SERVERS_PAGE_SIZE);
-    return this.http.get<Page<TargetServer>>('/api/servers/', { params });
-  }
-
   remove(id: string, accountPassword: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/${id}/`, { body: { account_password: accountPassword } });
   }
@@ -69,9 +62,9 @@ export class BackupsApi {
   }
 
   // Bytes sent are reported by the XHR backend only (`withXhr()` in `app.config.ts`); fetch has no upload progress.
-  upload(server: string, file: File): Observable<UploadEvent> {
+  upload(application: string, file: File): Observable<UploadEvent> {
     const body = new FormData();
-    body.append('server', server);
+    body.append('application', application);
     body.append('file', file);
     return this.http
       .post<BackupFile>(`${this.base}/upload/`, body, { reportProgress: true, observe: 'events' })
@@ -81,36 +74,20 @@ export class BackupsApi {
       );
   }
 
-  plans(query: PlanListQuery): Observable<Page<BackupPlan>> {
-    const params = new HttpParams()
-      .set('server', query.server)
-      .set('page', query.page)
-      .set('page_size', query.page_size);
-    return this.http.get<Page<BackupPlan>>(`${this.base}/plans/`, { params });
+  applications(): Observable<Page<ApplicationChoice>> {
+    const params = new HttpParams().set('page', 1).set('page_size', APPLICATIONS_PAGE_SIZE);
+    return this.http.get<Page<ApplicationChoice>>('/api/applications/', { params });
   }
 
-  createPlan(plan: PlanCreate): Observable<BackupPlan> {
-    return this.http.post<BackupPlan>(`${this.base}/plans/`, plan);
+  storage(): Observable<Dashboard> {
+    return this.http.get<Dashboard>('/api/dashboard/');
   }
 
-  updatePlan(id: string, changes: PlanUpdate): Observable<BackupPlan> {
-    return this.http.patch<BackupPlan>(`${this.base}/plans/${id}/`, changes);
-  }
-
-  removePlan(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.base}/plans/${id}/`);
-  }
-
-  runPlan(id: string): Observable<JobStarted> {
-    return this.http.post<JobStarted>(`${this.base}/plans/${id}/run/`, {});
-  }
-
-  unfinishedJobs(server: string, status: UnfinishedJob['status']): Observable<Page<UnfinishedJob>> {
-    const params = new HttpParams()
-      .set('server', server)
-      .set('status', status)
-      .set('page', 1)
-      .set('page_size', UNFINISHED_JOBS_PAGE_SIZE);
+  unfinishedJobs(application: string | null, status: UnfinishedJob['status']): Observable<Page<UnfinishedJob>> {
+    let params = new HttpParams().set('status', status).set('page', 1).set('page_size', UNFINISHED_JOBS_PAGE_SIZE);
+    if (application !== null) {
+      params = params.set('application', application);
+    }
     return this.http.get<Page<UnfinishedJob>>('/api/activity/', { params });
   }
 }

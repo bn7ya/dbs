@@ -3,7 +3,13 @@ from __future__ import annotations
 import os
 
 from dbs.manager import keystore, paths
-from dbs.manager.conf import DATABASE_URL_ENV, HOST_ENV, LOCAL_HOSTS, TRUSTED_PROXY_ENV
+from dbs.manager.conf import (
+    DATABASE_URL_ENV,
+    HOST_ENV,
+    LOCAL_HOSTS,
+    TERMINAL_ENV,
+    TRUSTED_PROXY_ENV,
+)
 from dbs.manager.database import parse_database_url, sqlite_database
 from dbs.manager.middleware import trusted_networks
 
@@ -129,6 +135,7 @@ STATIC_URL = "/static/"
 DBS_SCHEDULER = "off"
 DBS_EXCLUDE_MODELS = ["-dbs.auditevent", "-dbs.backuprecord"]
 DBS_MANAGER_JOBS_INLINE = False
+DBS_MANAGER_TERMINAL = os.environ.get(TERMINAL_ENV, "").strip().lower() or "admins"
 
 SSH_CONNECT_TIMEOUT = 15.0
 SSH_COMMAND_TIMEOUT = 20.0
@@ -137,7 +144,11 @@ SSH_IO_TIMEOUT = 30.0
 REMOTE_KILL_AFTER = 30
 BACKUP_STORAGE_DIR = str(paths.backups_path(DBS_MANAGER_DATA_DIR))
 BACKUP_EXEC_TIMEOUT = 3600.0
-BACKUP_TASK_TIME_LIMIT = 6 * 60 * 60
+BACKUP_TOTAL_TIMEOUT = 24 * 60 * 60.0
+BACKUP_IDLE_TIMEOUT = 900.0
+BACKUP_QUIET_TIMEOUT = 1800.0
+BACKUP_PROGRESS_SECONDS = 30
+BACKUP_TASK_TIME_LIMIT = 25 * 60 * 60
 BACKUP_GRACE_DAYS = 7
 BACKUP_UPLOAD_MAX_BYTES = 5 * 1024**3
 FILES_UPLOAD_MAX_BYTES = 2 * 1024**3

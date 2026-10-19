@@ -33,12 +33,30 @@ class Logged:
         return getattr(self.event, name)
 
     @property
-    def server(self):
+    def subject(self):
+        from dbs.manager.applications.models import Application
         from dbs.manager.servers.models import Server
 
         if not self.event.subject:
             return None
-        return Server.all_objects.filter(pk=self.event.subject).first()
+        return (
+            Application.all_objects.filter(pk=self.event.subject).first()
+            or Server.all_objects.filter(pk=self.event.subject).first()
+        )
+
+    @property
+    def application(self):
+        from dbs.manager.applications.models import Application
+
+        found = self.subject
+        return found if isinstance(found, Application) else None
+
+    @property
+    def server(self):
+        from dbs.manager.applications.models import Application
+
+        found = self.subject
+        return found.server if isinstance(found, Application) else found
 
     @property
     def detail(self):

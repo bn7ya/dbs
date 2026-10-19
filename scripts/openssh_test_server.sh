@@ -18,6 +18,8 @@ directory=$(cd "$directory" && pwd)
 id "$account" >/dev/null 2>&1 || useradd --create-home --shell /bin/sh "$account"
 echo "$account:$password" | chpasswd
 home=$(getent passwd "$account" | cut -d: -f6)
+runtime="/run/user/$(id -u "$account")"
+install -d -m 700 -o "$account" "$runtime"
 
 rm -f "$directory/client_key" "$directory/client_key.pub" "$directory/host_key" "$directory/host_key.pub"
 ssh-keygen -q -t ed25519 -N "" -C dbs-test-client -f "$directory/client_key"
@@ -37,6 +39,7 @@ KbdInteractiveAuthentication no
 UsePAM yes
 AllowUsers $account
 Subsystem sftp internal-sftp
+SetEnv XDG_RUNTIME_DIR=$runtime
 EOF
 
 mkdir -p /run/sshd

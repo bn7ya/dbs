@@ -16,10 +16,10 @@ def compare(api, version_id, to):
 
 
 @pytest.mark.django_db
-def test_two_versions_compare_by_name(api, server, env_file, pull, logged):
-    old = pull(server)["version"]["id"]
+def test_two_versions_compare_by_name(api, application, env_file, pull, logged):
+    old = pull(application)["version"]["id"]
     env_file.write_bytes(CHANGED)
-    new = pull(server)["version"]["id"]
+    new = pull(application)["version"]["id"]
 
     response = compare(api, old, new)
 
@@ -42,8 +42,8 @@ def test_two_versions_compare_by_name(api, server, env_file, pull, logged):
 
 
 @pytest.mark.django_db
-def test_a_version_compared_with_itself_has_no_differences(api, server, pull):
-    version = pull(server)["version"]["id"]
+def test_a_version_compared_with_itself_has_no_differences(api, application, pull):
+    version = pull(application)["version"]["id"]
 
     assert compare(api, version, version).json() == {
         "from": version,
@@ -55,23 +55,23 @@ def test_a_version_compared_with_itself_has_no_differences(api, server, pull):
 
 
 @pytest.mark.django_db
-def test_versions_of_two_servers_are_not_compared(
-    api, make_server, server, env_file, pull
+def test_versions_of_two_applications_are_not_compared(
+    api, make_application, application, env_file, pull
 ):
-    other = make_server(name="web-2", host="10.0.0.6", env_path=str(env_file))
-    mine, theirs = pull(server)["version"]["id"], pull(other)["version"]["id"]
+    other = make_application(name="web-2", host="10.0.0.6", env_path=str(env_file))
+    mine, theirs = pull(application)["version"]["id"], pull(other)["version"]["id"]
 
     response = compare(api, mine, theirs)
 
     assert (response.status_code, response.json()["error"]["code"]) == (
         400,
-        "different_servers",
+        "different_applications",
     )
 
 
 @pytest.mark.django_db
-def test_an_unknown_version_on_either_side_is_not_found(api, server, pull):
-    version = pull(server)["version"]["id"]
+def test_an_unknown_version_on_either_side_is_not_found(api, application, pull):
+    version = pull(application)["version"]["id"]
 
     for pair in ((uuid4(), version), (version, uuid4())):
         response = compare(api, *pair)
@@ -85,8 +85,8 @@ def test_an_unknown_version_on_either_side_is_not_found(api, server, pull):
 @pytest.mark.parametrize(
     ("query", "code"), [({}, "required"), ({"to": "previous"}, "invalid")]
 )
-def test_a_comparison_needs_the_other_versions_id(api, server, pull, query, code):
-    version = pull(server)["version"]["id"]
+def test_a_comparison_needs_the_other_versions_id(api, application, pull, query, code):
+    version = pull(application)["version"]["id"]
 
     response = api.get(f"{LIST}{version}/compare/", query)
 

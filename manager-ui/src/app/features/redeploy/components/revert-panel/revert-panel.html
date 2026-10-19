@@ -1,0 +1,18 @@
+<section class="revert-panel" [attr.aria-labelledby]="headingId">
+  <h3 [id]="headingId">{{ prefix() + '.title' | t }}</h3>
+  <p class="text-secondary">{{ prefix() + '.body' | t }}</p>
+
+  <app-confirmed-run
+    [prefix]="prefix() + '.run'"
+    [expectedName]="expectedName()"
+    [busy]="busy()"
+    [rehearsing]="rehearsing()"
+    [error]="error()"
+    (run)="run.emit($event)"
+    (edited)="edited.emit()"
+  />
+
+  @if (job(); as undoing) {
+    <app-job-progress [job]="undoing" [prefix]="prefix() + '.progress'" labels="redeploy.revert.steps" [headingLevel]="4" />
+  }
+</section>

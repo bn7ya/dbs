@@ -21,13 +21,13 @@ export class EnvfilesStore {
 
   private readonly isOpen = signal(false);
 
-  readonly server = signal<string | null>(null);
+  readonly application = signal<string | null>(null);
 
-  private readonly listed = computed(() => (this.isOpen() ? this.server() : null));
+  private readonly listed = computed(() => (this.isOpen() ? this.application() : null));
 
-  open(server: string): void {
+  open(application: string): void {
     this.hide();
-    this.server.set(server);
+    this.application.set(application);
     this.page.set(0);
     this.chosen.set(null);
     this.isOpen.set(true);
@@ -38,21 +38,25 @@ export class EnvfilesStore {
     this.isOpen.set(false);
   }
 
-  private readonly pathResource = rxResource({
+  private readonly placeResource = rxResource({
     params: () => this.listed() ?? undefined,
-    stream: ({ params }) => this.api.envPath(params),
+    stream: ({ params }) => this.api.place(params),
   });
 
-  readonly envPath = computed(() => (this.pathResource.hasValue() ? this.pathResource.value() : null));
+  private readonly place = computed(() => (this.placeResource.hasValue() ? this.placeResource.value() : null));
+
+  readonly envPath = computed(() => this.place()?.env_path ?? null);
 
   readonly noPath = computed(() => this.envPath() === '');
+
+  readonly inContainer = computed(() => this.place()?.env_location === 'container');
 
   readonly page = signal(0);
   readonly pageSize = signal(ENV_PAGE_SIZES[0]);
 
   private readonly query = computed<EnvListQuery | undefined>(() => {
-    const server = this.listed();
-    return server === null ? undefined : { server, page: this.page() + 1, page_size: this.pageSize() };
+    const application = this.listed();
+    return application === null ? undefined : { application, page: this.page() + 1, page_size: this.pageSize() };
   });
 
   private readonly listResource = rxResource({
@@ -73,7 +77,7 @@ export class EnvfilesStore {
         return { query, page };
       }
       const kept = previous?.value;
-      return kept !== undefined && kept.query.server === query.server ? kept : undefined;
+      return kept !== undefined && kept.query.application === query.application ? kept : undefined;
     },
   });
 
@@ -208,39 +212,39 @@ export class EnvfilesStore {
     if (position >= shown.page.count) {
       return null;
     }
-    const found = await firstValueFrom(this.api.list({ server: shown.query.server, page: position + 1, page_size: 1 }));
+    const found = await firstValueFrom(this.api.list({ application: shown.query.application, page: position + 1, page_size: 1 }));
     return found.results.find((row) => row.id !== version.id) ?? null;
   }
 
   private readonly pullingOn = signal<ReadonlySet<string>>(new Set());
 
   readonly pulling = computed(() => {
-    const server = this.server();
-    return server !== null && this.pullingOn().has(server);
+    const application = this.application();
+    return application !== null && this.pullingOn().has(application);
   });
 
   async pull(): Promise<void> {
-    const server = this.server();
-    if (server === null || this.pullingOn().has(server)) {
+    const application = this.application();
+    if (application === null || this.pullingOn().has(application)) {
       return;
     }
-    this.pullingOn.update((servers) => new Set(servers).add(server));
+    this.pullingOn.update((applications) => new Set(applications).add(application));
     let result: PullResult;
     try {
-      result = await firstValueFrom(this.api.pull(server));
+      result = await firstValueFrom(this.api.pull(application));
     } catch (error) {
       this.toast.add({ severity: 'danger', summary: errorText(this.locale, error as ApiError) });
       return;
     } finally {
-      this.pullingOn.update((servers) => {
-        const rest = new Set(servers);
-        rest.delete(server);
+      this.pullingOn.update((applications) => {
+        const rest = new Set(applications);
+        rest.delete(application);
         return rest;
       });
     }
     if (result.created) {
       this.toast.add({ severity: 'success', summary: this.locale.translate('envfiles.pull.created') });
-      this.showNewest(server, result.version);
+      this.showNewest(application, result.version);
     } else {
       this.toast.add({ severity: 'info', summary: this.locale.translate('envfiles.pull.unchanged') });
     }
@@ -258,12 +262,12 @@ export class EnvfilesStore {
       return false;
     }
     this.toast.add({ severity: 'success', summary: this.locale.translate('envfiles.push.done') });
-    this.showNewest(version.server, result.version);
+    this.showNewest(version.application, result.version);
     return true;
   }
 
-  private showNewest(server: string, version: EnvVersion): void {
-    if (this.server() !== server) {
+  private showNewest(application: string, version: EnvVersion): void {
+    if (this.application() !== application) {
       return;
     }
     this.hide();

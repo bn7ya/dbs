@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.contrib.auth.signals import user_logged_out
 from django.db.backends.signals import connection_created
 
 SQLITE_PRAGMAS = (
@@ -24,3 +25,6 @@ class ManagerConfig(AppConfig):
 
     def ready(self):
         connection_created.connect(tune_sqlite, dispatch_uid="dbs.manager.sqlite")
+        from dbs.manager.shell.service import close_signed_out
+
+        user_logged_out.connect(close_signed_out, dispatch_uid="dbs.manager.terminals")

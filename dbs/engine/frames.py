@@ -43,6 +43,10 @@ FILE_CHUNK_BYTES = 1024 * 1024
 
 MANIFEST_BATCH = 1000
 
+SMALL_PIECE_BYTES = 1024 * 1024
+
+COMPACT_BYTES = 4 * 1024 * 1024
+
 ENTRY_KINDS = ("storage", "path", "root")
 
 _SCALARS = (str, int, float, bool, type(None))
@@ -52,6 +56,16 @@ def frame(kind: int, body: bytes) -> bytes:
     if len(body) > MAX_FRAME_BYTES:
         raise ValueError(f"A {KIND_NAMES[kind]} frame of {len(body)} bytes is above the limit.")
     return FRAME_PREFIX.pack(kind, len(body)) + body
+
+
+def frame_parts(kind: int, pieces: list) -> list:
+    length = sum(len(piece) for piece in pieces)
+    if length > MAX_FRAME_BYTES:
+        raise ValueError(f"A {KIND_NAMES[kind]} frame of {length} bytes is above the limit.")
+    prefix = FRAME_PREFIX.pack(kind, length)
+    if pieces and len(pieces[0]) <= SMALL_PIECE_BYTES:
+        return [prefix + pieces[0], *pieces[1:]]
+    return [prefix, *pieces]
 
 
 def json_bytes(value) -> bytes:
@@ -90,8 +104,15 @@ def malformed(problem: str) -> ContainerError:
 
 def _parsed(body: bytes, what: str):
     try:
-        return json.loads(body.decode("utf-8"))
+        return json.loads(body)
     except (UnicodeDecodeError, ValueError, RecursionError):
+        raise malformed(f"its {what} is not valid JSON") from None
+
+
+def _decoded(body: bytes, what: str) -> str:
+    try:
+        return body.decode("utf-8")
+    except UnicodeDecodeError:
         raise malformed(f"its {what} is not valid JSON") from None
 
 
@@ -211,8 +232,12 @@ class FrameReader:
     def _take(self, size: int) -> bytes:
         if not self._fill(size):
             raise malformed("it ends in the middle of a frame")
-        taken = bytes(self._buffer[self._start : self._start + size])
+        with memoryview(self._buffer) as view:
+            taken = bytes(view[self._start : self._start + size])
         self._start += size
+        if self._start >= COMPACT_BYTES:
+            del self._buffer[: self._start]
+            self._start = 0
         return taken
 
     def next_frame(self) -> tuple[int, bytes] | None:
@@ -349,9 +374,12 @@ class PayloadReader:
             if not parse:
                 yield None
                 continue
-            records, self._position = checked_records(
-                _parsed(body, "records"), self.rank, self._position
-            )
+            text = _decoded(body, "records")
+            del body
+            parsed = _parsed(text, "records")
+            del text
+            records, self._position = checked_records(parsed, self.rank, self._position)
+            del parsed
             yield records
         self._phase = "trailer"
 

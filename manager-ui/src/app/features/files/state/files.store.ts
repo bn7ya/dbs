@@ -6,6 +6,7 @@ import { apiErrorOf } from '@core/http/api-error';
 import type { ApiError } from '@core/http/api.types';
 import { errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
+import { isolated } from '@shared/isolated/isolated';
 import { Toaster } from '@shared/toaster/toaster';
 import { FilesApi } from '../data/files.api';
 import { rootOf, trailOf } from '../data/files.types';
@@ -23,12 +24,12 @@ export class FilesStore {
 
   private readonly isOpen = signal(false);
 
-  readonly server = signal<string | null>(null);
+  readonly application = signal<string | null>(null);
 
   readonly requested = signal<string | null>(null);
 
-  show(server: string, path: string | null): void {
-    this.server.set(server);
+  show(application: string, path: string | null): void {
+    this.application.set(application);
     this.requested.set(path);
     this.page.set(0);
     this.isOpen.set(true);
@@ -39,16 +40,16 @@ export class FilesStore {
   }
 
   readonly page = linkedSignal({
-    source: () => `${this.server()}\n${this.requested()}`,
+    source: () => `${this.application()}\n${this.requested()}`,
     computation: () => 0,
   });
   readonly pageSize = signal(FILE_PAGE_SIZES[0]);
 
   private readonly query = computed<ListingQuery | undefined>(() => {
-    const server = this.isOpen() ? this.server() : null;
-    return server === null
+    const application = this.isOpen() ? this.application() : null;
+    return application === null
       ? undefined
-      : { server, path: this.requested(), page: this.page() + 1, page_size: this.pageSize() };
+      : { application, path: this.requested(), page: this.page() + 1, page_size: this.pageSize() };
   });
 
   private readonly listResource = rxResource({
@@ -60,7 +61,7 @@ export class FilesStore {
     source: () => {
       const query = this.query();
       return {
-        place: query === undefined ? null : `${query.server}\n${query.path}`,
+        place: query === undefined ? null : `${query.application}\n${query.path}`,
         listing: this.listResource.hasValue() ? this.listResource.value() : undefined,
       };
     },
@@ -82,9 +83,9 @@ export class FilesStore {
   readonly current = computed(() => this.shown()?.path ?? null);
 
   private readonly knownRoots = linkedSignal<KnownRootsSource, readonly string[]>({
-    source: () => ({ server: this.server(), roots: this.shown()?.roots }),
-    computation: ({ server, roots }, previous) =>
-      roots ?? (previous !== undefined && previous.source.server === server ? previous.value : []),
+    source: () => ({ application: this.application(), roots: this.shown()?.roots }),
+    computation: ({ application, roots }, previous) =>
+      roots ?? (previous !== undefined && previous.source.application === application ? previous.value : []),
   });
 
   readonly roots = computed(() => this.knownRoots());
@@ -125,21 +126,21 @@ export class FilesStore {
   private readonly preparing = signal<ReadonlySet<string>>(new Set());
 
   isPreparing(entry: Entry): boolean {
-    const server = this.server();
-    return server !== null && this.preparing().has(entryKey(server, entry));
+    const application = this.application();
+    return application !== null && this.preparing().has(entryKey(application, entry));
   }
 
   // Asked without a password, a refusal that wants one is the prompt's to show; any other is said here.
   async downloadLink(entry: Entry, password = ''): Promise<string | null> {
-    const server = this.server();
-    if (server === null) {
+    const application = this.application();
+    if (application === null) {
       return null;
     }
-    const key = entryKey(server, entry);
+    const key = entryKey(application, entry);
     this.preparing.update((keys) => withItem(keys, key));
     this.downloadError.set(null);
     try {
-      const { url } = await firstValueFrom(this.api.downloadLink(server, entry.path, password));
+      const { url } = await firstValueFrom(this.api.downloadLink(application, entry.path, password));
       return url;
     } catch (error) {
       const failure = error as ApiError;
@@ -158,8 +159,8 @@ export class FilesStore {
   private readonly uploadRequests = new Map<string, Subscription>();
 
   readonly upload = computed(() => {
-    const server = this.server();
-    return this.uploads().find((upload) => upload.server === server) ?? null;
+    const application = this.application();
+    return this.uploads().find((upload) => upload.application === application) ?? null;
   });
 
   readonly uploading = computed(() => this.upload() !== null);
@@ -173,44 +174,44 @@ export class FilesStore {
   });
 
   uploadFile(folder: string, file: File): void {
-    const server = this.server();
-    if (server === null || this.uploads().some((upload) => upload.server === server)) {
+    const application = this.application();
+    if (application === null || this.uploads().some((upload) => upload.application === application)) {
       return;
     }
-    this.uploads.update((uploads) => [...uploads, { server, folder, name: file.name, sent: 0, total: file.size }]);
+    this.uploads.update((uploads) => [...uploads, { application, folder, name: file.name, sent: 0, total: file.size }]);
     const request = this.api
-      .upload(server, folder, file)
+      .upload(application, folder, file)
       .pipe(
         finalize(() => {
-          this.uploadRequests.delete(server);
-          this.uploads.update((uploads) => uploads.filter((upload) => upload.server !== server));
+          this.uploadRequests.delete(application);
+          this.uploads.update((uploads) => uploads.filter((upload) => upload.application !== application));
         }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (event) => this.onUploadEvent(server, folder, event),
+        next: (event) => this.onUploadEvent(application, folder, event),
         error: (error: ApiError) => this.notifyFailure(uploadErrorOf(error), file.name),
       });
     if (!request.closed) {
-      this.uploadRequests.set(server, request);
+      this.uploadRequests.set(application, request);
     }
   }
 
   cancelUpload(): void {
-    const server = this.server();
-    if (server !== null) {
-      this.uploadRequests.get(server)?.unsubscribe();
+    const application = this.application();
+    if (application !== null) {
+      this.uploadRequests.get(application)?.unsubscribe();
     }
   }
 
-  private onUploadEvent(server: string, folder: string, event: UploadEvent): void {
+  private onUploadEvent(application: string, folder: string, event: UploadEvent): void {
     if (event.kind === 'progress') {
       this.uploads.update((uploads) =>
-        uploads.map((upload) => (upload.server === server ? { ...upload, sent: event.sent, total: event.total } : upload)),
+        uploads.map((upload) => (upload.application === application ? { ...upload, sent: event.sent, total: event.total } : upload)),
       );
       return;
     }
-    this.reloadIfShowing(server, folder);
+    this.reloadIfShowing(application, folder);
     this.toast.add({
       severity: 'success',
       summary: this.locale.translate('files.upload.done'),
@@ -226,22 +227,22 @@ export class FilesStore {
   }
 
   async createFolder(folder: string, name: string): Promise<Entry | null> {
-    const server = this.server();
-    if (server === null) {
+    const application = this.application();
+    if (application === null) {
       return null;
     }
     this.creating.set(true);
     this.createError.set(null);
     let created: Entry;
     try {
-      created = await firstValueFrom(this.api.createFolder(server, { path: folder, name }));
+      created = await firstValueFrom(this.api.createFolder(application, { path: folder, name }));
     } catch (error) {
       this.createError.set(error as ApiError);
       return null;
     } finally {
       this.creating.set(false);
     }
-    this.reloadIfShowing(server, folder);
+    this.reloadIfShowing(application, folder);
     this.toast.add({
       severity: 'success',
       summary: this.locale.translate('files.newFolder.done'),
@@ -253,20 +254,20 @@ export class FilesStore {
   private readonly deleting = signal<ReadonlySet<string>>(new Set());
 
   isDeleting(entry: Entry): boolean {
-    const server = this.server();
-    return server !== null && this.deleting().has(entryKey(server, entry));
+    const application = this.application();
+    return application !== null && this.deleting().has(entryKey(application, entry));
   }
 
   async remove(entry: Entry): Promise<boolean> {
-    const server = this.server();
+    const application = this.application();
     const folder = this.current();
-    if (server === null) {
+    if (application === null) {
       return false;
     }
-    const key = entryKey(server, entry);
+    const key = entryKey(application, entry);
     this.deleting.update((keys) => withItem(keys, key));
     try {
-      await firstValueFrom(this.api.remove(server, entry.path));
+      await firstValueFrom(this.api.remove(application, entry.path));
     } catch (error) {
       this.notifyFailure(error as ApiError, entry.name);
       return false;
@@ -274,15 +275,15 @@ export class FilesStore {
       this.deleting.update((keys) => withoutItem(keys, key));
     }
     if (folder !== null) {
-      this.afterRemoval(server, folder);
+      this.afterRemoval(application, folder);
     }
     const done = entry.kind === 'folder' ? 'files.delete.folderDone' : 'files.delete.fileDone';
     this.toast.add({ severity: 'success', summary: this.locale.translate(done), detail: isolated(entry.name) });
     return true;
   }
 
-  private afterRemoval(server: string, folder: string): void {
-    if (this.server() !== server || this.current() !== folder) {
+  private afterRemoval(application: string, folder: string): void {
+    if (this.application() !== application || this.current() !== folder) {
       return;
     }
     if (this.entries().length === 1 && this.page() > 0) {
@@ -292,8 +293,8 @@ export class FilesStore {
     this.listResource.reload();
   }
 
-  private reloadIfShowing(server: string, folder: string): void {
-    if (this.server() === server && this.current() === folder) {
+  private reloadIfShowing(application: string, folder: string): void {
+    if (this.application() === application && this.current() === folder) {
       this.listResource.reload();
     }
   }
@@ -303,17 +304,12 @@ export class FilesStore {
   }
 }
 
-// FSI ... PDI: a name keeps its own direction inside a line of either language.
-function isolated(text: string): string {
-  return `⁨${text}⁩`;
-}
-
 function uploadErrorOf(error: ApiError): ApiError | string {
   return error.fields?.['file']?.[0] ?? error.fields?.['path']?.[0] ?? error;
 }
 
-function entryKey(server: string, entry: Entry): string {
-  return `${server}\n${entry.path}`;
+function entryKey(application: string, entry: Entry): string {
+  return `${application}\n${entry.path}`;
 }
 
 function asksForPassword(failure: ApiError | null): boolean {

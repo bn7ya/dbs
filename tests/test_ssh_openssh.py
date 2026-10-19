@@ -1,6 +1,7 @@
 """The SSH transport against a real OpenSSH server, when DBS_TEST_SSH_HOST names one."""
 
 import hashlib
+import io
 import os
 import stat
 import uuid
@@ -115,6 +116,20 @@ def test_a_passphrase_line_arrives_on_standard_input():
 
     expected = hashlib.sha256((PASSPHRASE + "\n").encode()).hexdigest()
     assert result.stdout.split()[0] == expected
+
+
+def test_a_fed_file_arrives_whole_after_its_first_line():
+    payload = os.urandom(3 * 1024 * 1024 + 17)
+
+    with open_session(target()) as session:
+        result = session.feed(
+            "read line && printf '%s ' \"$line\" && sha256sum",
+            io.BytesIO(payload),
+            stdin_line="first",
+        )
+
+    assert result.ok
+    assert result.stdout.split() == ["first", hashlib.sha256(payload).hexdigest(), "-"]
 
 
 def test_a_command_that_never_exits_is_stopped_at_its_timeout():

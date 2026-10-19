@@ -17,6 +17,8 @@ ACCOUNT_PASSWORD = "account_password"
 
 
 class TerminalSession:
+    waits = True
+
     def __init__(self, args: Any) -> None:
         self.args = args
         self.out = Output(as_json=getattr(args, "json", False))

@@ -72,11 +72,16 @@ def empty_converters(monkeypatch):
     monkeypatch.setattr(upgrade, "CONVERTERS", {})
 
 
+@pytest.fixture(autouse=True)
+def own_folder(tmp_path_factory, monkeypatch):
+    monkeypatch.chdir(tmp_path_factory.mktemp("project"))
+
+
 @pytest.mark.django_db
 def test_a_correctly_configured_project_is_up_to_date():
     report = upgrade.run_steps(apply_fixes=False)
 
-    assert not report.blocked
+    assert not report.blocked, [f for f in report.findings if f.level == "action"]
     assert levels(report)["installed app"] == OK
     assert levels(report)["session guard"] == OK
     assert levels(report)["passphrase"] == OK
@@ -93,23 +98,6 @@ def test_an_unapplied_dbs_migration_is_reported_and_applied():
     call_command("migrate", "dbs", "0001", verbosity=0)
     try:
         step = upgrade.Migrations()
-
-        reported = step.check()
-        applied = step.fix()
-
-        assert reported.level == ACTION
-        assert reported.remedy == "python manage.py migrate dbs"
-        assert applied.level == FIXED
-        assert step.check().level == OK
-    finally:
-        call_command("migrate", "dbs", verbosity=0)
-
-
-@pytest.mark.django_db(transaction=True)
-def test_the_audit_trail_step_applies_its_migration():
-    call_command("migrate", "dbs", "0002", verbosity=0)
-    try:
-        step = upgrade.AuditTrail()
 
         reported = step.check()
         applied = step.fix()
@@ -408,15 +396,12 @@ def test_an_interpreter_outside_a_virtual_environment_is_the_system_one(tmp_path
     assert upgrade.is_system_interpreter(str(conda), str(conda)) is False
 
 
-def test_the_install_command_pins_one_version_with_the_installed_extras():
+def test_the_install_command_pins_one_version():
     import sys
 
-    command = upgrade.pinned_install_command("0.7.0", ["manager", "guard"])
+    command = upgrade.pinned_install_command("0.7.0")
 
-    assert command == [
-        sys.executable, "-m", "pip", "install", "django-dbs[guard,manager]==0.7.0"
-    ]
-    assert upgrade.pinned_install_command("0.7.0")[-1] == "django-dbs==0.7.0"
+    assert command == [sys.executable, "-m", "pip", "install", "django-dbs==0.7.0"]
     assert "--upgrade" not in command and "-U" not in command
 
 
@@ -474,7 +459,7 @@ def test_self_installs_the_exact_version_it_shows(pip, tmp_path, monkeypatch):
 
     assert len(pip.calls) == 1
     assert pip.calls[0][1:4] == ["-m", "pip", "install"]
-    assert pip.calls[0][-1].startswith("django-dbs[") and pip.calls[0][-1].endswith("]==9.9.9")
+    assert pip.calls[0][-1] == "django-dbs==9.9.9"
     assert "--upgrade" not in pip.calls[0]
     assert pip.calls[0][-1] in printed
     assert "Pin django-dbs==9.9.9 in requirements.txt" in printed
@@ -843,9 +828,9 @@ def test_every_command_name_reaches_the_upgrade_command():
     from django.core.management import get_commands, load_command_class
 
     commands = get_commands()
-    for name in ("dbs_upgrade", "dbs-upgrade"):
-        assert commands[name] == "dbs", name
-    assert load_command_class("dbs", "dbs-upgrade").__module__.endswith("dbs_upgrade")
+    assert commands["dbs_upgrade"] == "dbs"
+    assert "dbs-upgrade" not in commands
+    assert load_command_class("dbs", "dbs_upgrade").__module__.endswith("dbs_upgrade")
 
 
 def test_the_umbrella_lists_upgrade():
@@ -857,111 +842,9 @@ def test_the_umbrella_lists_upgrade():
     assert "manage.py dbs upgrade" in out.getvalue()
 
 
-@pytest.mark.django_db
-def test_models_whose_default_manager_hides_rows_are_named(monkeypatch):
-    from dbs.registry import BackupRegistry
-    from tests.softdeleteapp.models import Category, Item
-
-    registry = BackupRegistry()
-    for model in (Author, Category, Item):
-        registry.register(model)
-    monkeypatch.setattr("dbs.registry.backup_registry", registry)
-
-    finding = next(
-        f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == "hidden rows"
-    )
-
-    assert finding.level == OK
-    assert "softdeleteapp.category" in finding.message
-    assert "softdeleteapp.item" in finding.message
-    assert "testapp.author" not in finding.message
-
-
-@pytest.mark.django_db
-def test_a_custom_get_queryset_is_left_alone(monkeypatch):
-    from dbs import ModelBackup
-    from dbs.registry import BackupRegistry
-    from tests.softdeleteapp.models import Category
-
-    class LiveOnly(ModelBackup):
-        def get_queryset(self, model):
-            return model._default_manager.all()
-
-    registry = BackupRegistry()
-    registry.register(Category)(LiveOnly)
-    monkeypatch.setattr("dbs.registry.backup_registry", registry)
-
-    finding = next(
-        f for f in upgrade.run_steps(apply_fixes=False).findings if f.step == "hidden rows"
-    )
-
-    assert finding.message == "no backed-up model has a default manager that hides rows"
-
-
 def without(monkeypatch, *modules):
     for module in modules:
         monkeypatch.setitem(sys.modules, module, None)
-
-
-def test_the_guard_extra_is_fine_when_scikit_learn_is_installed():
-    assert upgrade.GuardExtra().check().level == OK
-
-
-def test_the_guard_middleware_without_scikit_learn_asks_for_the_guard_extra(monkeypatch):
-    without(monkeypatch, "sklearn")
-
-    finding = upgrade.GuardExtra().check()
-
-    assert finding.level == ACTION
-    assert "DBSSecurityMiddleware" in finding.message
-    assert "ModuleNotFoundError" in finding.message
-    assert finding.remedy == 'pip install "django-dbs[guard]"'
-
-
-def test_a_scikit_learn_that_fails_to_import_counts_as_missing(monkeypatch):
-    import importlib
-
-    real = importlib.import_module
-
-    def broken(name, *args, **kwargs):
-        if name == "sklearn":
-            raise ValueError("numpy.dtype size changed, may indicate binary incompatibility")
-        return real(name, *args, **kwargs)
-
-    monkeypatch.setattr(importlib, "import_module", broken)
-
-    finding = upgrade.GuardExtra().check()
-
-    assert finding.level == ACTION
-    assert "binary incompatibility" in finding.message
-
-
-@pytest.mark.django_db
-def test_without_the_guard_middleware_scikit_learn_is_not_needed(settings, monkeypatch):
-    without(monkeypatch, "sklearn")
-    settings.MIDDLEWARE = [m for m in settings.MIDDLEWARE if "DBSSecurityMiddleware" not in m]
-
-    assert upgrade.GuardExtra().check().level == OK
-    assert levels(upgrade.run_steps(apply_fixes=False))["guard extra"] == OK
-
-
-def test_the_manager_extra_is_reported_when_installed():
-    finding = upgrade.ManagerExtra().check()
-
-    assert finding.level == OK
-    assert "django_dbs run" in finding.message
-
-
-@pytest.mark.django_db
-def test_a_missing_manager_extra_is_named_but_never_demanded(monkeypatch):
-    without(monkeypatch, "waitress")
-
-    finding = upgrade.ManagerExtra().check()
-
-    assert finding.level == OK
-    assert "waitress" in finding.message and "paramiko" not in finding.message
-    assert 'pip install "django-dbs[manager]"' in finding.remedy
-    assert not upgrade.run_steps(apply_fixes=False).blocked
 
 
 def test_missing_numpy_is_reported(monkeypatch):
@@ -980,7 +863,50 @@ def test_missing_numpy_is_reported(monkeypatch):
 
     assert finding.level == ACTION
     assert "numpy" in finding.message
-    assert "django-dbs>=0.7" in finding.remedy
+    assert finding.remedy == 'pip install --force-reinstall "django-dbs"'
+
+
+def test_everything_dbs_uses_is_installed():
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == OK
+    assert "manager" in finding.message
+
+
+def test_a_scikit_learn_that_fails_to_import_is_reported(monkeypatch):
+    import importlib
+
+    real = importlib.import_module
+
+    def broken(name, *args, **kwargs):
+        if name == "sklearn":
+            raise ValueError("numpy.dtype size changed, may indicate binary incompatibility")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", broken)
+
+    finding = upgrade.Dependencies().check()
+
+    assert finding.level == ACTION
+    assert "binary incompatibility" in finding.message
+
+
+def test_a_requirement_naming_an_old_extra_is_warned(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "requirements.txt").write_text("django-dbs[guard,manager]==0.7.0\n")
+
+    finding = upgrade.RetiredExtras().check()
+
+    assert finding.level == WARN
+    assert "requirements.txt" in finding.message
+    assert "without the brackets" in finding.remedy
+
+
+def test_plain_django_dbs_requirements_are_ok(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "requirements.txt").write_text("django-dbs==0.8.0\n")
+
+    assert upgrade.RetiredExtras().check().level == OK
 
 
 def _finding(step):
@@ -1179,3 +1105,262 @@ def test_the_audit_chain_step_applies_its_migration():
         assert "dbs audit verify" in step.check().message
     finally:
         call_command("migrate", "dbs", verbosity=0)
+
+
+@pytest.mark.django_db
+def test_nothing_naming_the_contrib_views_is_ok():
+    finding = upgrade.ContribViewsRemoved().check()
+
+    assert finding.level == OK
+
+
+@pytest.mark.django_db
+def test_an_urlconf_that_still_includes_the_contrib_views_needs_action(
+    tmp_path, settings, monkeypatch
+):
+    package = tmp_path / "oldsite"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "urls.py").write_text(
+        'from django.urls import include, path\n'
+        'urlpatterns = [path("dbs/", include("dbs.contrib.urls"))]\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    settings.ROOT_URLCONF = "oldsite.urls"
+
+    finding = upgrade.ContribViewsRemoved().check()
+
+    assert finding.level == ACTION
+    assert "oldsite.urls" in finding.message
+    assert 'include("dbs.contrib.urls")' in finding.remedy
+    assert "oldsite.urls" not in sys.modules
+
+
+@pytest.mark.django_db
+def test_upgrade_reports_a_broken_urlconf_instead_of_crashing(tmp_path, settings, monkeypatch):
+    package = tmp_path / "brokensite"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "urls.py").write_text(
+        'from django.urls import include, path\n'
+        'urlpatterns = [path("dbs/", include("dbs.contrib.urls"))]\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    settings.ROOT_URLCONF = "brokensite.urls"
+    out = StringIO()
+
+    with pytest.raises(CommandError):
+        call_command("dbs", "upgrade", "--check", offline=True, stdout=out, skip_checks=False)
+
+    assert "contrib views" in out.getvalue()
+
+
+def test_a_script_still_running_the_old_upgrade_name_is_named(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+    (tmp_path / "deploy.sh").write_text("python manage.py dbs-upgrade --check\n")
+    (tmp_path / "Makefile").write_text("upgrade:\n\tpython manage.py dbs upgrade\n")
+
+    finding = upgrade.CommandNames().check()
+
+    assert finding.level == WARN
+    assert "deploy.sh" in finding.message
+    assert "Makefile" not in finding.message
+
+
+def test_no_old_command_name_is_ok(tmp_path, settings):
+    settings.BASE_DIR = tmp_path
+
+    assert upgrade.CommandNames().check().level == OK
+
+
+def test_old_partial_files_are_named_and_left_alone(tmp_path, settings):
+    from dbs.naming import backup_filename
+
+    settings.DBS_BACKUP_DIR = str(tmp_path)
+    old = tmp_path / (backup_filename("web") + ".part")
+    old.write_bytes(b"x")
+    (tmp_path / "notes.part").write_bytes(b"x")
+
+    finding = upgrade.LegacyPartials().check()
+
+    assert finding.level == WARN
+    assert finding.remedy.startswith("rm ")
+    assert old.name in finding.remedy
+    assert "notes.part" not in finding.remedy
+    assert old.exists()
+
+
+def test_no_old_partial_files_is_ok(tmp_path, settings):
+    settings.DBS_BACKUP_DIR = str(tmp_path)
+
+    assert upgrade.LegacyPartials().check().level == OK
+
+
+def test_the_ssh_target_keys_step_names_the_current_keys():
+    finding = upgrade.SSHTargetKeys().check()
+
+    assert finding.level == OK
+    assert "key_filename" in finding.message
+
+
+@pytest.mark.django_db
+def test_mysql_reads_say_nothing_changes_on_another_database():
+    from django.db import connection
+
+    finding = upgrade.MySQLReads().check()
+
+    if connection.vendor == "mysql":
+        assert finding.level in (OK, WARN)
+        assert "consistent snapshot" in finding.message
+    else:
+        assert finding.level == OK
+        assert "not MySQL" in finding.message
+
+
+@pytest.mark.django_db
+def test_a_small_mysql_packet_is_warned(monkeypatch):
+    from django.db import connection
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, sql):
+            assert "max_allowed_packet" in sql
+
+        def fetchone(self):
+            return (16 * 1024 * 1024,)
+
+    monkeypatch.setattr(connection, "vendor", "mysql")
+    monkeypatch.setattr(connection, "cursor", lambda: Cursor())
+
+    finding = upgrade.MySQLReads().check()
+
+    assert finding.level == WARN
+    assert "16 MiB" in finding.message
+    assert "max_allowed_packet = 256M" in finding.remedy
+
+
+@pytest.mark.django_db
+def test_sqlite_writes_say_nothing_changes_on_another_database_or_in_memory():
+    from django.db import connection
+
+    finding = upgrade.SQLiteWrites().check()
+
+    assert finding.level == OK
+    if connection.vendor == "sqlite":
+        assert "in memory" in finding.message
+    else:
+        assert "not SQLite" in finding.message
+
+
+class Journal:
+    def __init__(self, mode):
+        self.mode = mode
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, sql):
+        assert sql == "PRAGMA journal_mode"
+
+    def fetchone(self):
+        return (self.mode,)
+
+
+@pytest.mark.django_db
+def test_sqlite_in_rollback_journal_mode_is_warned(monkeypatch):
+    import django
+    from django.db import connection
+
+    monkeypatch.setattr(connection, "vendor", "sqlite")
+    monkeypatch.setattr(connection, "cursor", lambda: Journal("delete"))
+    monkeypatch.setitem(connection.settings_dict, "OPTIONS", {})
+
+    finding = upgrade.SQLiteWrites().check()
+
+    assert finding.level == WARN
+    assert "the journal mode is delete" in finding.message
+    assert "database is locked" in finding.message
+    assert "journal_mode=WAL" in finding.remedy
+    if django.VERSION >= (5, 1):
+        assert "transactions start deferred" in finding.message
+        assert '"transaction_mode": "IMMEDIATE"' in finding.remedy
+
+
+@pytest.mark.django_db
+def test_sqlite_in_wal_mode_with_immediate_transactions_is_fine(monkeypatch):
+    from django.db import connection
+
+    monkeypatch.setattr(connection, "vendor", "sqlite")
+    monkeypatch.setattr(connection, "cursor", lambda: Journal("wal"))
+    monkeypatch.setitem(
+        connection.settings_dict, "OPTIONS", {"transaction_mode": "IMMEDIATE"}
+    )
+
+    finding = upgrade.SQLiteWrites().check()
+
+    assert finding.level == OK
+    assert "WAL mode" in finding.message
+
+
+def test_panel_jobs_in_the_web_process_are_named(settings):
+    settings.DBS_JOB_PROCESS = False
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == OK
+    assert "inside the web process" in finding.message
+
+
+def test_panel_jobs_whose_interpreter_cannot_load_the_project_warn(settings, monkeypatch):
+    from dbs import job_process
+
+    settings.DBS_JOB_PROCESS = True
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "tests.settings")
+    monkeypatch.setattr(job_process, "probe", lambda: "ModuleNotFoundError: No module named 'site'")
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == WARN
+    assert "ModuleNotFoundError" in finding.message
+    assert "DBS_JOB_PYTHON" in finding.remedy
+
+
+def test_panel_jobs_that_can_start_report_their_limits(settings, monkeypatch):
+    from dbs import job_process
+
+    settings.DBS_JOB_PROCESS = True
+    settings.DBS_JOB_TIME_LIMIT = "2h"
+    settings.DBS_JOB_MEMORY_LIMIT = "1G"
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "tests.settings")
+    monkeypatch.setattr(job_process, "probe", lambda: "")
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == OK
+    assert "2 h" in finding.message and "1024 MiB" in finding.message
+
+
+def test_an_unreadable_job_limit_needs_action(settings):
+    settings.DBS_JOB_PROCESS = True
+    settings.DBS_JOB_MEMORY_LIMIT = "lots"
+
+    finding = upgrade.PanelJobProcess().check()
+
+    assert finding.level == ACTION
+    assert "512M" in finding.message
+
+
+def test_the_probe_starts_the_project_in_a_fresh_interpreter(monkeypatch):
+    from dbs import job_process
+
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "tests.settings")
+
+    assert job_process.probe() == ""

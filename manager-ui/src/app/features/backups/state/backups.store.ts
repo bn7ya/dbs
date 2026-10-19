@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, computed, inject, linkedSignal, signal, type ResourceRef, type Signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, linkedSignal, signal } from '@angular/core';
 import { rxResource, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   catchError,
@@ -15,43 +15,38 @@ import {
 } from 'rxjs';
 
 import { apiErrorOf } from '@core/http/api-error';
-import type { ApiError, Page } from '@core/http/api.types';
-import { errorText } from '@core/i18n/error-text.pipe';
+import type { ApiError } from '@core/http/api.types';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { JobWatcher } from '@core/jobs/job-watcher';
 import type { Job, JobConnection, JobStarted } from '@core/jobs/job.types';
+import { isolated } from '@shared/isolated/isolated';
 import { Toaster } from '@shared/toaster/toaster';
-import type { ToastSeverity } from '@shared/toaster/toaster.types';
+import type { ToastMessage } from '@shared/toaster/toaster.types';
 import { BackupsApi } from '../data/backups.api';
 import type {
+  ApplicationChoice,
   BackupFile,
-  BackupKind,
   BackupListQuery,
-  BackupPlan,
-  BackupWarning,
-  PlanListQuery,
-  PlanPassword,
-  PlanSettings,
+  Dashboard,
   RestoreRequest,
   RestoreResult,
-  TargetServer,
   UnfinishedJob,
   UploadEvent,
   VerifyOutcome,
 } from '../data/backups.types';
+import { backedUpToast, failureToast, toast } from './backup-toasts';
 import type {
-  CollectCounts,
+  BackupScope,
   JobTarget,
   LiveJob,
-  PlanRun,
   RestoreProgress,
   RestoreTarget,
+  Storage,
   Upload,
 } from './backups.store.types';
+import { shownPageOf, withItem, withoutItem, withoutKey } from './store-helpers';
 
 export const BACKUP_PAGE_SIZES: readonly number[] = [20, 50, 100];
-
-export const PLAN_PAGE_SIZE = 20;
 
 @Injectable()
 export class BackupsStore {
@@ -61,31 +56,58 @@ export class BackupsStore {
   private readonly locale = inject(LocaleStore);
   private readonly destroyRef = inject(DestroyRef);
 
-  private readonly isOpen = signal(false);
+  private readonly scope = signal<BackupScope | null>(null);
 
-  readonly server = signal<string | null>(null);
+  readonly application = computed(() => this.scope()?.application ?? null);
 
-  private readonly listed = computed(() => (this.isOpen() ? this.server() : null));
+  private readonly everyApplication = computed(() => this.scope()?.every === true);
 
-  open(server: string): void {
-    this.server.set(server);
-    this.page.set(0);
-    this.planPage.set(0);
-    this.lastDeleted.set(null);
-    this.isOpen.set(true);
-    this.pickUpJobs(server);
+  private readonly listKey = computed(() => {
+    const scope = this.scope();
+    return scope === null ? null : `${scope.every ? 'every' : 'one'}:${scope.application ?? ''}`;
+  });
+
+  openApplication(application: string): void {
+    this.begin({ every: false, application });
+    this.pickUpJobs(application);
+  }
+
+  openEvery(): void {
+    this.begin({ every: true, application: null });
+    this.applicationsWanted.set(true);
+    this.pickUpJobs(null);
+  }
+
+  filterBy(application: string | null): void {
+    this.scope.update((scope) => (scope?.every ? { every: true, application } : scope));
   }
 
   close(): void {
-    this.isOpen.set(false);
+    this.scope.set(null);
   }
 
-  readonly page = linkedSignal({ source: this.server, computation: () => 0 });
+  private begin(scope: BackupScope): void {
+    this.scope.set(scope);
+    this.page.set(0);
+    this.lastDeleted.set(null);
+  }
+
+  private inScope(application: string): boolean {
+    const scope = this.scope();
+    if (scope === null) {
+      return false;
+    }
+    return scope.application === null ? scope.every : scope.application === application;
+  }
+
+  readonly page = linkedSignal({ source: this.listKey, computation: () => 0 });
   readonly pageSize = signal(BACKUP_PAGE_SIZES[0]);
 
   private readonly query = computed<BackupListQuery | undefined>(() => {
-    const server = this.listed();
-    return server === null ? undefined : { server, page: this.page() + 1, page_size: this.pageSize() };
+    const scope = this.scope();
+    return scope === null
+      ? undefined
+      : { application: scope.application, page: this.page() + 1, page_size: this.pageSize() };
   });
 
   private readonly listResource = rxResource({
@@ -93,7 +115,7 @@ export class BackupsStore {
     stream: ({ params }) => this.api.list(params),
   });
 
-  private readonly shownPage = shownPageOf(() => this.query()?.server ?? null, this.listResource);
+  private readonly shownPage = shownPageOf(this.listKey, this.listResource);
 
   readonly files = computed<readonly BackupFile[]>(() => this.shownPage()?.results ?? []);
   readonly count = computed(() => this.shownPage()?.count ?? 0);
@@ -113,6 +135,42 @@ export class BackupsStore {
     this.listResource.reload();
   }
 
+  private readonly storageResource = rxResource({
+    params: () => (this.everyApplication() ? true : undefined),
+    stream: () => this.api.storage(),
+  });
+
+  readonly storage = computed<Storage | null>(() => {
+    const resource = this.storageResource;
+    return resource.hasValue() ? storageOf(resource.value()) : null;
+  });
+
+  readonly storageError = computed(() => apiErrorOf(this.storageResource.error()));
+
+  reloadStorage(): void {
+    this.storageResource.reload();
+  }
+
+  // The list and, on the page of every backup, the storage it adds up to.
+  private changed(): void {
+    this.listResource.reload();
+    if (this.everyApplication()) {
+      this.storageResource.reload();
+    }
+  }
+
+  private readonly applicationsWanted = signal(false);
+
+  private readonly applicationsResource = rxResource({
+    params: () => (this.applicationsWanted() ? true : undefined),
+    stream: () => this.api.applications(),
+  });
+
+  readonly applications = computed<readonly ApplicationChoice[]>(() => {
+    const resource = this.applicationsResource;
+    return resource.hasValue() ? resource.value().results : [];
+  });
+
   downloadUrl(file: BackupFile): string {
     return this.api.downloadUrl(file.id);
   }
@@ -130,98 +188,14 @@ export class BackupsStore {
     }
   }
 
-  readonly planPage = linkedSignal({ source: this.server, computation: () => 0 });
-
-  private readonly planQuery = computed<PlanListQuery | undefined>(() => {
-    const server = this.listed();
-    return server === null ? undefined : { server, page: this.planPage() + 1, page_size: PLAN_PAGE_SIZE };
-  });
-
-  private readonly plansResource = rxResource({
-    params: () => this.planQuery(),
-    stream: ({ params }) => this.api.plans(params),
-  });
-
-  private readonly shownPlans = shownPageOf(() => this.planQuery()?.server ?? null, this.plansResource);
-
-  readonly plans = computed<readonly BackupPlan[]>(() => this.shownPlans()?.results ?? []);
-  readonly planCount = computed(() => this.shownPlans()?.count ?? 0);
-  readonly plansLoading = this.plansResource.isLoading;
-  readonly plansError = computed(() => apiErrorOf(this.plansResource.error()));
-
-  readonly plansPending = computed(() => this.shownPlans() === undefined && this.plansLoading());
-
-  readonly plansEmpty = computed(() => this.shownPlans()?.count === 0);
-
-  goToPlanPage(page: number): void {
-    this.planPage.set(page);
-  }
-
-  reloadPlans(): void {
-    this.plansResource.reload();
-  }
-
-  readonly savingPlan = signal(false);
-  readonly planSaveError = signal<ApiError | null>(null);
-
-  resetPlanForm(): void {
-    this.planSaveError.set(null);
-  }
-
-  async createPlan(kind: BackupKind, settings: PlanSettings, password: PlanPassword = {}): Promise<BackupPlan | null> {
-    const server = this.server();
-    if (server === null) {
-      return null;
-    }
-    return this.savePlan(this.api.createPlan({ ...settings, ...password, server, kind }), 'backups.plans.created');
-  }
-
-  async updatePlan(plan: BackupPlan, settings: PlanSettings, password: PlanPassword = {}): Promise<BackupPlan | null> {
-    return this.savePlan(this.api.updatePlan(plan.id, { ...settings, ...password }), 'backups.plans.saved');
-  }
-
-  private async savePlan(saving: Observable<BackupPlan>, doneKey: string): Promise<BackupPlan | null> {
-    this.savingPlan.set(true);
-    this.planSaveError.set(null);
-    let saved: BackupPlan;
-    try {
-      saved = await firstValueFrom(saving);
-    } catch (error) {
-      this.planSaveError.set(error as ApiError);
-      return null;
-    } finally {
-      this.savingPlan.set(false);
-    }
-    this.plansResource.reload();
-    this.notify('success', this.locale.translate(doneKey), isolated(saved.name));
-    return saved;
-  }
-
-  readonly deletingPlans = signal<ReadonlySet<string>>(new Set());
-
-  async removePlan(plan: BackupPlan): Promise<boolean> {
-    this.deletingPlans.update((ids) => withItem(ids, plan.id));
-    try {
-      await firstValueFrom(this.api.removePlan(plan.id));
-    } catch (error) {
-      this.notifyFailure(error as ApiError);
-      return false;
-    } finally {
-      this.deletingPlans.update((ids) => withoutItem(ids, plan.id));
-    }
-    this.plansResource.reload();
-    this.notify('success', this.locale.translate('backups.plans.delete.done'), isolated(plan.name));
-    return true;
-  }
-
   private readonly uploads = signal<readonly Upload[]>([]);
 
   // A handle for Cancel, not state on screen.
   private readonly uploadRequests = new Map<string, Subscription>();
 
   readonly upload = computed(() => {
-    const server = this.server();
-    return this.uploads().find((upload) => upload.server === server) ?? null;
+    const application = this.application();
+    return this.uploads().find((upload) => upload.application === application) ?? null;
   });
 
   readonly uploading = computed(() => this.upload() !== null);
@@ -235,96 +209,90 @@ export class BackupsStore {
   });
 
   uploadFile(file: File): void {
-    const server = this.server();
-    if (server === null || this.uploads().some((upload) => upload.server === server)) {
+    const application = this.application();
+    if (application === null || this.uploads().some((upload) => upload.application === application)) {
       return;
     }
-    this.uploads.update((uploads) => [...uploads, { server, name: file.name, sent: 0, total: file.size }]);
+    this.uploads.update((uploads) => [...uploads, { application, name: file.name, sent: 0, total: file.size }]);
     const request = this.api
-      .upload(server, file)
+      .upload(application, file)
       .pipe(
         finalize(() => {
-          this.uploadRequests.delete(server);
-          this.uploads.update((uploads) => uploads.filter((upload) => upload.server !== server));
+          this.uploadRequests.delete(application);
+          this.uploads.update((uploads) => uploads.filter((upload) => upload.application !== application));
         }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (event) => this.onUploadEvent(server, event),
-        error: (error: ApiError) => this.notifyFailure(uploadErrorOf(error), file.name),
+        next: (event) => this.onUploadEvent(application, event),
+        error: (error: ApiError) => this.notify(failureToast(this.locale, uploadErrorOf(error), file.name)),
       });
     if (!request.closed) {
-      this.uploadRequests.set(server, request);
+      this.uploadRequests.set(application, request);
     }
   }
 
   cancelUpload(): void {
-    const server = this.server();
-    if (server !== null) {
-      this.uploadRequests.get(server)?.unsubscribe();
+    const application = this.application();
+    if (application !== null) {
+      this.uploadRequests.get(application)?.unsubscribe();
     }
   }
 
-  private onUploadEvent(server: string, event: UploadEvent): void {
+  private onUploadEvent(application: string, event: UploadEvent): void {
     if (event.kind === 'progress') {
       this.uploads.update((uploads) =>
-        uploads.map((upload) => (upload.server === server ? { ...upload, sent: event.sent, total: event.total } : upload)),
+        uploads.map((upload) =>
+          upload.application === application ? { ...upload, sent: event.sent, total: event.total } : upload,
+        ),
       );
       return;
     }
-    this.listResource.reload();
-    this.notify('success', this.locale.translate('backups.upload.done'), isolated(event.file.name));
+    this.changed();
+    this.notify(toast('success', this.locale.translate('backups.upload.done'), event.file.name));
   }
 
   private readonly takingOn = signal<ReadonlySet<string>>(new Set());
 
-  private readonly runs = signal<readonly PlanRun[]>([]);
+  private readonly runs = signal<readonly JobTarget[]>([]);
 
   private readonly checks = signal<readonly JobTarget[]>([]);
 
   readonly taking = computed(() => {
-    const server = this.server();
-    return server !== null && this.takingOn().has(server);
+    const scope = this.scope();
+    return scope !== null && !scope.every && scope.application !== null && this.takingOn().has(scope.application);
   });
 
-  readonly backingUp = computed(() => {
-    const server = this.server();
-    return this.taking() || this.runs().some((run) => run.server === server);
-  });
+  readonly backingUp = computed(
+    () =>
+      [...this.takingOn()].some((application) => this.inScope(application)) ||
+      this.runs().some((run) => this.inScope(run.application)),
+  );
 
   private readonly liveJobs = signal<ReadonlyMap<number, LiveJob>>(new Map());
 
   readonly liveConnection = computed<JobConnection | null>(() => {
-    const server = this.server();
-    const live = [...this.liveJobs().values()].find((each) => each.server === server && each.job.connection);
+    const live = [...this.liveJobs().values()].find((each) => this.inScope(each.application) && each.job.connection);
     return live?.job.connection ?? null;
   });
-
-  isRunning(plan: BackupPlan): boolean {
-    return this.runs().some((run) => run.plan === plan.id);
-  }
 
   isVerifying(file: BackupFile): boolean {
     return includes(this.checks(), file);
   }
 
   take(): void {
-    const server = this.server();
-    if (server !== null) {
-      this.followTake(server, this.api.take(server));
+    const application = this.application();
+    if (application !== null && !this.everyApplication()) {
+      this.followTake(application, this.api.take(application));
     }
-  }
-
-  run(plan: BackupPlan): void {
-    this.followRun({ server: plan.server, plan: plan.id, name: plan.name }, this.api.runPlan(plan.id));
   }
 
   verify(file: BackupFile): void {
     this.followCheck(targetOf(file), this.api.verify(file.id));
   }
 
-  private pickUpJobs(server: string): void {
-    forkJoin([this.api.unfinishedJobs(server, 'running'), this.api.unfinishedJobs(server, 'queued')])
+  private pickUpJobs(application: string | null): void {
+    forkJoin([this.api.unfinishedJobs(application, 'running'), this.api.unfinishedJobs(application, 'queued')])
       .pipe(
         map((pages) => pages.flatMap((page) => page.results)),
         catchError(() => of<UnfinishedJob[]>([])),
@@ -332,68 +300,73 @@ export class BackupsStore {
       )
       .subscribe((jobs) => {
         for (const job of jobs) {
-          this.pickUp(server, job);
+          this.pickUp(application, job);
         }
       });
   }
 
-  private pickUp(server: string, job: UnfinishedJob): void {
+  private pickUp(scoped: string | null, job: UnfinishedJob): void {
+    const application = job.application ?? scoped;
+    if (application === null) {
+      return;
+    }
     const started = of<JobStarted>({ activity: job.id });
-    const plan = job.detail['plan'];
+    const target = { application, name: job.target };
     switch (job.action) {
       case 'backup.take':
-        this.followTake(server, started);
+        this.followTake(application, started);
         return;
       case 'backup.run':
-        if (typeof plan === 'string') {
-          this.followRun({ server, plan, name: job.target }, started);
-        }
+        this.followRun(target, started);
         return;
       case 'backup.verify':
-        this.followCheck({ server, name: job.target }, started);
+        this.followCheck(target, started);
         return;
-      case 'backup.restore':
-        this.followRestore({ server, name: job.target, rehearse: job.detail['rehearse'] !== false }, started);
+      case 'backup.restore': {
+        // A restore onto another application is listed under that one; its file belongs to the source.
+        const source = job.detail['source_application'];
+        const file = typeof source === 'string' ? { ...target, application: source } : target;
+        this.followRestore({ ...file, rehearse: job.detail['rehearse'] !== false }, started);
         return;
+      }
     }
   }
 
-  private followTake(server: string, started: Observable<JobStarted>): void {
-    if (this.takingOn().has(server)) {
+  private followTake(application: string, started: Observable<JobStarted>): void {
+    if (this.takingOn().has(application)) {
       return;
     }
-    this.takingOn.update((servers) => withItem(servers, server));
-    this.follow(server, started, () => this.takingOn.update((servers) => withoutItem(servers, server))).subscribe({
+    this.takingOn.update((applications) => withItem(applications, application));
+    this.follow(application, started, () =>
+      this.takingOn.update((applications) => withoutItem(applications, application)),
+    ).subscribe({
       next: (job) => {
-        this.listResource.reload();
-        if (job.status === 'succeeded') {
-          this.notifyBackedUp(job);
-        } else {
-          this.notifyFailure(job.error_code);
-        }
+        this.changed();
+        this.notify(
+          job.status === 'succeeded' ? backedUpToast(this.locale, job) : failureToast(this.locale, job.error_code),
+        );
       },
-      error: (error: ApiError) => this.notifyFailure(error),
+      error: (error: ApiError) => this.notify(failureToast(this.locale, error)),
     });
   }
 
-  private followRun(plan: PlanRun, started: Observable<JobStarted>): void {
-    if (this.runs().some((run) => run.plan === plan.plan)) {
+  private followRun(run: JobTarget, started: Observable<JobStarted>): void {
+    if (includes(this.runs(), run)) {
       return;
     }
-    this.runs.update((runs) => [...runs, plan]);
-    this.follow(plan.server, started, () =>
-      this.runs.update((runs) => runs.filter((run) => run.plan !== plan.plan)),
+    this.runs.update((runs) => [...runs, run]);
+    this.follow(run.application, started, () =>
+      this.runs.update((runs) => runs.filter((each) => !sameTarget(each, run))),
     ).subscribe({
       next: (job) => {
-        this.plansResource.reload();
-        this.listResource.reload();
-        if (job.status === 'succeeded') {
-          this.notifyBackedUp(job, plan.name);
-        } else {
-          this.notifyFailure(job.error_code, plan.name);
-        }
+        this.changed();
+        this.notify(
+          job.status === 'succeeded'
+            ? backedUpToast(this.locale, job, run.name)
+            : failureToast(this.locale, job.error_code, run.name),
+        );
       },
-      error: (error: ApiError) => this.notifyFailure(error, plan.name),
+      error: (error: ApiError) => this.notify(failureToast(this.locale, error, run.name)),
     });
   }
 
@@ -402,35 +375,32 @@ export class BackupsStore {
       return;
     }
     this.checks.update((checks) => [...checks, file]);
-    this.follow(file.server, started, () =>
+    this.follow(file.application, started, () =>
       this.checks.update((checks) => checks.filter((check) => !sameTarget(check, file))),
     ).subscribe({
-        next: (job) => {
-          this.listResource.reload();
-          if (job.status === 'failed') {
-            this.notifyFailure(job.error_code);
-            return;
-          }
-          const outcome = outcomeOf(job);
-          if (outcome === null) {
-            this.notifyFailure('unexpected');
-            return;
-          }
-          this.notify(
-            outcome === 'verified' ? 'success' : 'danger',
-            this.locale.translate(`backups.verify.${outcome}`),
-            isolated(file.name),
-          );
-        },
-        error: (error: ApiError) => this.notifyFailure(error),
-      });
+      next: (job) => {
+        this.listResource.reload();
+        if (job.status === 'failed') {
+          this.notify(failureToast(this.locale, job.error_code));
+          return;
+        }
+        const outcome = outcomeOf(job);
+        if (outcome === null) {
+          this.notify(failureToast(this.locale, 'unexpected'));
+          return;
+        }
+        const severity = outcome === 'verified' ? 'success' : 'danger';
+        this.notify(toast(severity, this.locale.translate(`backups.verify.${outcome}`), file.name));
+      },
+      error: (error: ApiError) => this.notify(failureToast(this.locale, error)),
+    });
   }
 
-  private follow(server: string, started: Observable<JobStarted>, done: () => void): Observable<Job> {
+  private follow(application: string, started: Observable<JobStarted>, done: () => void): Observable<Job> {
     return started.pipe(
       switchMap(({ activity }) =>
         this.jobs.watch(activity).pipe(
-          tap((job) => this.liveJobs.update((jobs) => new Map(jobs).set(activity, { server, job }))),
+          tap((job) => this.liveJobs.update((jobs) => new Map(jobs).set(activity, { application, job }))),
           finalize(() => this.liveJobs.update((jobs) => withoutKey(jobs, activity))),
         ),
       ),
@@ -453,21 +423,9 @@ export class BackupsStore {
     return restore.rehearse ? 'rehearse' : 'restore';
   }
 
-  private readonly targetsWanted = signal(false);
-
-  private readonly targetsResource = rxResource({
-    params: () => (this.targetsWanted() ? (this.server() ?? undefined) : undefined),
-    stream: () => this.api.targetServers(),
-  });
-
-  readonly targetServers = computed<readonly TargetServer[]>(() => {
-    const page = this.targetsResource.hasValue() ? this.targetsResource.value() : undefined;
-    return (page?.results ?? []).filter((each) => each.id !== this.server());
-  });
-
   resetRestoreForm(): void {
     this.restoreError.set(null);
-    this.targetsWanted.set(true);
+    this.applicationsWanted.set(true);
   }
 
   async restore(file: BackupFile, request: RestoreRequest): Promise<boolean> {
@@ -491,22 +449,22 @@ export class BackupsStore {
       return;
     }
     this.restores.update((restores) => [...restores, file]);
-    this.follow(file.server, started, () =>
+    this.follow(file.application, started, () =>
       this.restores.update((restores) => restores.filter((restore) => !sameTarget(restore, file))),
     ).subscribe({
       next: (job) => {
         const result = job.status === 'succeeded' ? restoreResultOf(job) : null;
-        if (result === null) {
-          this.notifyFailure(job.error_code || 'unexpected', file.name);
-        } else {
-          this.notifyRestored(result);
-        }
+        this.notify(
+          result === null
+            ? failureToast(this.locale, job.error_code || 'unexpected', file.name)
+            : this.restoredToast(result),
+        );
       },
-      error: (error: ApiError) => this.notifyFailure(error, file.name),
+      error: (error: ApiError) => this.notify(failureToast(this.locale, error, file.name)),
     });
   }
 
-  private notifyRestored(result: RestoreResult): void {
+  private restoredToast(result: RestoreResult): ToastMessage {
     const counted = (key: string, count: number | null) =>
       count === null ? [] : [this.locale.translate(`backups.restore.${key}`, { count })];
     const lines = [
@@ -520,11 +478,9 @@ export class BackupsStore {
     if (result.copy_left) {
       lines.push(this.locale.translate('backups.restore.copyLeft', { path: isolated(result.copy_left) }));
     }
-    this.notify(
-      result.copy_left ? 'warning' : 'success',
-      this.locale.translate(result.rehearse ? 'backups.restore.rehearsed' : 'backups.restore.done'),
-      lines.length === 0 ? undefined : lines.join(' '),
-    );
+    const summary = this.locale.translate(result.rehearse ? 'backups.restore.rehearsed' : 'backups.restore.done');
+    const severity = result.copy_left ? 'warning' : 'success';
+    return lines.length === 0 ? { severity, summary } : { severity, summary, detail: lines.join(' ') };
   }
 
   readonly deleting = signal<ReadonlySet<string>>(new Set());
@@ -534,7 +490,7 @@ export class BackupsStore {
 
   readonly deleted = computed(() => {
     const file = this.lastDeleted();
-    return file !== null && file.server === this.server() ? file : null;
+    return file !== null && this.inScope(file.application) ? file : null;
   });
 
   readonly undoing = signal(false);
@@ -552,7 +508,7 @@ export class BackupsStore {
     } finally {
       this.deleting.update((ids) => withoutItem(ids, file.id));
     }
-    this.listResource.reload();
+    this.changed();
     this.lastDeleted.set(file);
     return true;
   }
@@ -566,74 +522,41 @@ export class BackupsStore {
     try {
       await firstValueFrom(this.api.undoDelete(file.id));
     } catch (error) {
-      this.notifyFailure(error as ApiError);
+      this.notify(failureToast(this.locale, error as ApiError));
       return;
     } finally {
       this.undoing.set(false);
     }
     this.lastDeleted.set(null);
-    this.listResource.reload();
-    this.notify('success', this.locale.translate('backups.delete.undone'));
+    this.changed();
+    this.notify(toast('success', this.locale.translate('backups.delete.undone')));
   }
 
   dismissDeleted(): void {
     this.lastDeleted.set(null);
   }
 
-  private notifyBackedUp(job: Job, name?: string): void {
-    if (keptOnServer(job)) {
-      this.notify(
-        'warning',
-        this.locale.translate('backups.take.keptOnServer'),
-        name === undefined ? undefined : isolated(name),
-      );
-      return;
-    }
-    const warning = warningOf(job);
-    const collected = collectResultOf(job);
-    let summary: string;
-    if (collected !== null) {
-      summary = this.collectedText(collected);
-    } else if (warning !== null) {
-      summary = this.locale.translate(`backups.take.warning.${warning}`);
-    } else {
-      summary = this.locale.translate('backups.take.done');
-    }
-    this.notify(warning === null ? 'success' : 'warning', summary, name === undefined ? undefined : isolated(name));
-  }
-
-  private collectedText({ collected, skipped }: CollectCounts): string {
-    if (collected === 0) {
-      return this.locale.translate('backups.collect.nothingNew');
-    }
-    const lines = [this.locale.translate('backups.collect.collected', { count: collected })];
-    if (skipped > 0) {
-      lines.push(this.locale.translate('backups.collect.skipped', { count: skipped }));
-    }
-    return lines.join(' ');
-  }
-
-  private notifyFailure(error: ApiError | string, name?: string): void {
-    this.notify('danger', errorText(this.locale, error), name === undefined ? undefined : isolated(name));
-  }
-
-  private notify(severity: ToastSeverity, summary: string, detail?: string): void {
-    this.toaster.add(detail === undefined ? { severity, summary } : { severity, summary, detail });
+  private notify(message: ToastMessage): void {
+    this.toaster.add(message);
   }
 }
 
-function shownPageOf<T>(
-  server: () => string | null,
-  resource: ResourceRef<Page<T> | undefined>,
-): Signal<Page<T> | undefined> {
-  return linkedSignal<
-    { readonly server: string | null; readonly page: Page<T> | undefined },
-    Page<T> | undefined
-  >({
-    source: () => ({ server: server(), page: resource.hasValue() ? resource.value() : undefined }),
-    computation: ({ server, page }, previous) =>
-      page ?? (server !== null && server === previous?.source.server ? previous.value : undefined),
-  });
+function storageOf(dashboard: Dashboard): Storage {
+  const applications = dashboard.servers.flatMap((server) =>
+    server.applications.map((application) => ({
+      id: application.id,
+      name: application.name,
+      server: server.id,
+      serverName: server.name,
+      bytes: application.storage_bytes,
+    })),
+  );
+  const { disk } = dashboard;
+  return {
+    total: dashboard.storage_bytes,
+    disk: disk === null ? null : { total: disk.total_bytes, free: disk.free_bytes, low: disk.low },
+    applications: applications.sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name)),
+  };
 }
 
 function outcomeOf(job: Job): VerifyOutcome | null {
@@ -660,53 +583,19 @@ function countOf(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
 }
 
-function keptOnServer(job: Job): boolean {
-  return job.detail['outcome'] === 'kept_on_server';
-}
-
-function warningOf(job: Job): BackupWarning | null {
-  return job.detail['warning'] === 'files_changed' ? 'files_changed' : null;
-}
-
-function collectResultOf(job: Job): CollectCounts | null {
-  const { collected, skipped } = job.detail;
-  return typeof collected === 'number' && typeof skipped === 'number' ? { collected, skipped } : null;
-}
-
 // No file field is on screen, so the file's own code (`empty`, `invalid_name`) is the message.
 function uploadErrorOf(error: ApiError): ApiError | string {
   return error.fields?.['file']?.[0] ?? error;
 }
 
-// FSI … PDI: a name keeps its own direction inside a line of either language.
-function isolated(text: string): string {
-  return `⁨${text}⁩`;
-}
-
-function targetOf({ server, name }: JobTarget): JobTarget {
-  return { server, name };
+function targetOf({ application, name }: JobTarget): JobTarget {
+  return { application, name };
 }
 
 function sameTarget(a: JobTarget, b: JobTarget): boolean {
-  return a.server === b.server && a.name === b.name;
+  return a.application === b.application && a.name === b.name;
 }
 
 function includes(targets: readonly JobTarget[], target: JobTarget): boolean {
   return targets.some((each) => sameTarget(each, target));
-}
-
-function withItem(items: ReadonlySet<string>, item: string): ReadonlySet<string> {
-  return new Set(items).add(item);
-}
-
-function withoutItem(items: ReadonlySet<string>, item: string): ReadonlySet<string> {
-  const rest = new Set(items);
-  rest.delete(item);
-  return rest;
-}
-
-function withoutKey(jobs: ReadonlyMap<number, LiveJob>, key: number): ReadonlyMap<number, LiveJob> {
-  const rest = new Map(jobs);
-  rest.delete(key);
-  return rest;
 }

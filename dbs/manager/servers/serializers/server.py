@@ -10,24 +10,10 @@ HOST = RegexValidator(
     r"^(?!-)[A-Za-z0-9._:-]+$",
     message="Enter a host name or an IP address.",
 )
-PYTHON_MODULE = RegexValidator(
-    r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$",
-    message="Enter a dotted Python module path, such as config.settings.",
-)
-COMPOSE_SERVICE = RegexValidator(
-    r"^[A-Za-z0-9][A-Za-z0-9_.-]*$",
-    message="Enter the service name the compose file gives the project, such as backend.",
-)
-COMPOSE_FILE = RegexValidator(
-    r"^(?!-)(?!(.*/)?\.\.(/|$))[^\x00\r\n]+$",
-    message="Enter a compose file path without '..' in it, such as compose.prod.yaml.",
-)
-COMPOSE_FILES_MAX = 10
 PRIVATE_KEY_MAX_LENGTH = 16000
 SECRET_MAX_LENGTH = 1024
 ACCOUNT_PASSWORD_MAX_LENGTH = 128
 HOST_KEY_MAX_LENGTH = 8192
-FILE_ROOTS_MAX = 50
 REQUIRED = "This field is required."
 
 
@@ -42,6 +28,8 @@ def secret_field(max_length: int = SECRET_MAX_LENGTH) -> serializers.CharField:
 
 
 class ServerListSerializer(serializers.ModelSerializer):
+    application_count = serializers.IntegerField(read_only=True, default=0)
+
     class Meta:
         model = Server
         fields = [
@@ -50,6 +38,9 @@ class ServerListSerializer(serializers.ModelSerializer):
             "host",
             "port",
             "username",
+            "host_key_fingerprint",
+            "engines",
+            "application_count",
             "last_check_status",
             "last_checked_at",
             "connection_state",
@@ -60,6 +51,7 @@ class ServerListSerializer(serializers.ModelSerializer):
 
 
 class ServerSerializer(serializers.ModelSerializer):
+    application_count = serializers.SerializerMethodField()
     has_private_key = serializers.BooleanField(read_only=True)
     has_key_passphrase = serializers.BooleanField(read_only=True)
     has_password = serializers.BooleanField(read_only=True)
@@ -81,23 +73,13 @@ class ServerSerializer(serializers.ModelSerializer):
             "host_key",
             "host_key_type",
             "host_key_fingerprint",
-            "runtime",
-            "compose_service",
-            "compose_files",
-            "project_dir",
-            "python_path",
-            "manage_path",
-            "settings_module",
-            "remote_backup_dir",
-            "file_roots",
-            "env_path",
+            "engines",
+            "application_count",
             "last_check_status",
             "last_check_error",
             "last_checked_at",
             "last_check_report",
-            "last_health",
             "timeout_on_host",
-            "timeout_in_container",
             "connection_state",
             "last_seen_at",
             "last_connection_error",
@@ -105,6 +87,9 @@ class ServerSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_application_count(self, server: Server) -> int:
+        return server.applications.filter(deleted_at__isnull=True).count()
 
 
 class ServerSettingsSerializer(serializers.Serializer):
@@ -117,57 +102,9 @@ class ServerSettingsSerializer(serializers.Serializer):
     )
     username = serializers.CharField(max_length=64)
     auth_method = serializers.ChoiceField(choices=Server.AuthMethod.choices)
-    private_key = secret_field(
-        PRIVATE_KEY_MAX_LENGTH,
-    )
+    private_key = secret_field(PRIVATE_KEY_MAX_LENGTH)
     key_passphrase = secret_field()
     password = secret_field()
-    runtime = serializers.ChoiceField(choices=Server.Runtime.choices, required=False)
-    compose_service = serializers.CharField(
-        max_length=100,
-        allow_blank=True,
-        required=False,
-        validators=[COMPOSE_SERVICE],
-    )
-    compose_files = serializers.ListField(
-        child=serializers.CharField(max_length=512, validators=[COMPOSE_FILE]),
-        max_length=COMPOSE_FILES_MAX,
-        required=False,
-    )
-    project_dir = serializers.CharField(
-        max_length=512,
-        allow_blank=True,
-        required=False,
-    )
-    python_path = serializers.CharField(
-        max_length=512,
-        required=False,
-    )
-    manage_path = serializers.CharField(
-        max_length=255,
-        required=False,
-    )
-    settings_module = serializers.CharField(
-        max_length=200,
-        allow_blank=True,
-        required=False,
-        validators=[PYTHON_MODULE],
-    )
-    remote_backup_dir = serializers.CharField(
-        max_length=512,
-        required=False,
-    )
-    backup_passphrase = secret_field()
-    file_roots = serializers.ListField(
-        child=serializers.CharField(max_length=512),
-        max_length=FILE_ROOTS_MAX,
-        required=False,
-    )
-    env_path = serializers.CharField(
-        max_length=512,
-        allow_blank=True,
-        required=False,
-    )
 
 
 class AccountPasswordSerializer(serializers.Serializer):
@@ -175,9 +112,7 @@ class AccountPasswordSerializer(serializers.Serializer):
 
 
 class ServerUpdateSerializer(ServerSettingsSerializer):
-    account_password = secret_field(
-        ACCOUNT_PASSWORD_MAX_LENGTH,
-    )
+    account_password = secret_field(ACCOUNT_PASSWORD_MAX_LENGTH)
 
 
 class ServerCreateSerializer(ServerSettingsSerializer):
@@ -197,6 +132,11 @@ class ServerCreateSerializer(ServerSettingsSerializer):
         return attrs
 
 
+class ServerMergeSerializer(serializers.Serializer):
+    into = serializers.UUIDField()
+    account_password = secret_field(ACCOUNT_PASSWORD_MAX_LENGTH)
+
+
 class AddedServerSerializer(serializers.BaseSerializer):
     def to_representation(self, instance):
         body = dict(ServerSerializer(instance.server).data)
@@ -204,8 +144,3 @@ class AddedServerSerializer(serializers.BaseSerializer):
             body["public_key"] = instance.public_key
             body["authorized_keys_hint"] = instance.authorized_keys_hint
         return body
-
-
-class CheckedServerSerializer(serializers.BaseSerializer):
-    def to_representation(self, instance):
-        return {**ServerSerializer(instance.server).data, **instance.compatibility}

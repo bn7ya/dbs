@@ -4,9 +4,8 @@ import re
 
 import dbs
 
-COMPATIBLE_FROM = "0.2.2"
-HEALTH_FROM = "0.5.0"
-STREAM_FROM = "0.7.0"
+MINIMUM_REMOTE = "0.7.0"
+PROGRESS_FROM = "0.8.0"
 NUMBER = re.compile(r"\d+")
 
 
@@ -38,5 +37,5 @@ def compatibility(remote_version: str | None) -> dict:
         "local_version": local_version(),
         "remote_version": remote_version,
         "installed": remote_version is not None,
-        "compatible": at_least(remote_version, COMPATIBLE_FROM),
+        "compatible": at_least(remote_version, MINIMUM_REMOTE),
     }

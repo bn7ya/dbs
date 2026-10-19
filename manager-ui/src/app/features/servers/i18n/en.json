@@ -1,8 +1,8 @@
 {
   "servers": {
     "title": "Servers",
-    "subtitle": "The servers DBS connects to over SSH.",
-    "add": "Add server",
+    "subtitle": "The machines the manager reaches over SSH, and the container engines they have.",
+    "add": "Add a server",
     "search": {
       "label": "Search",
       "placeholder": "Name or host"
@@ -24,15 +24,19 @@
       "label": "Servers",
       "name": "Name",
       "address": "Address",
+      "engines": "Container engines",
+      "applications": "Applications",
+      "applicationsOf": "Applications on {name}: {count}",
       "connection": "Connection",
-      "status": "Status",
-      "lastChecked": "Last checked",
-      "never": "Never",
+      "status": "Check",
+      "noAccess": "no access",
+      "noEngines": "None",
+      "notChecked": "Not checked",
       "pages": "Server pages"
     },
     "empty": {
       "title": "No servers yet",
-      "body": "Add a server to check it and back it up."
+      "body": "Add a server, then the applications it runs."
     },
     "noMatch": {
       "title": "No matching servers",
@@ -52,9 +56,8 @@
       "back": "All servers",
       "sections": "Server sections",
       "overview": "Overview",
-      "backups": "Backups",
-      "files": "Files",
-      "environment": ".env file",
+      "applications": "Applications",
+      "terminal": "Terminal",
       "activity": "Activity",
       "missing": {
         "title": "Server not found",
@@ -68,47 +71,39 @@
       "run": "Check now",
       "wait": "A check can take up to a minute.",
       "done": "Check finished.",
-      "blocked": "Every operation on this server is blocked until the host key is reviewed.",
+      "blocked": "Every operation on this server is blocked until the host key is reviewed."
+    },
+    "engines": {
+      "system": "System",
+      "docker": "Docker",
+      "podman": "Podman",
+      "notChecked": "Not checked",
+      "state": {
+        "absent": "Not installed",
+        "denied": "Installed, but the SSH user may not use it",
+        "broken": "Installed, but it did not answer",
+        "ready": "Ready"
+      },
+      "compose": "Compose",
+      "noCompose": "No Compose",
+      "said": "It said:",
+      "timeout": "The timeout command, to stop a command that runs out of time",
       "found": "Found",
       "missing": "Not found",
-      "notSet": "Not set",
-      "notChecked": "Not checked",
-      "report": {
-        "system": "System",
-        "dbsVersion": "django-dbs version",
-        "backupCommand": "Backup command",
-        "envFile": ".env file",
-        "remoteBackupDir": "Remote backup folder",
-        "timeout": "The timeout command, to stop a command that runs out of time",
-        "roots": "Allowed folders",
-        "docker": "Docker Compose",
-        "service": "Compose service"
-      },
-      "running": "Running",
-      "stopped": "Not running",
-      "dockerSaid": "Docker said:"
+      "deniedHelp": "The SSH user may not use the container engine, so the manager cannot reach the containers on this server. Add the user to the engine's group, such as docker, or run the containers with rootless Podman as that user, then check again."
     },
     "settings": {
       "title": "Settings",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
       "authMethod": "Sign-in method",
       "privateKey": "Private key",
       "keyPassphrase": "Key passphrase",
       "password": "Server password",
-      "projectDir": "Project folder",
-      "pythonPath": "Python command",
-      "managePath": "manage.py path",
-      "settingsModule": "Settings module",
-      "remoteBackupDir": "Remote backup folder",
-      "envPath": ".env file",
-      "fileRoots": "Allowed folders",
       "saved": "Saved",
       "notSaved": "Not saved",
-      "notSet": "Not set",
-      "updated": "Changes saved.",
-      "runtime": "Where it runs",
-      "composeService": "Compose service",
-      "composeFiles": "Compose files",
-      "composeDefault": "The folder's own"
+      "updated": "Changes saved."
     },
     "hostKey": {
       "title": "Host key",
@@ -129,37 +124,31 @@
       "pin": "Pin new key",
       "done": "Host key pinned."
     },
-    "passphrase": {
-      "title": "Backup passphrase",
-      "body": "It encrypts the django-dbs backups of this server. Keep a copy somewhere safe.",
-      "label": "Passphrase",
-      "show": "Show passphrase",
-      "hide": "Hide passphrase",
-      "copy": "Copy passphrase",
-      "copied": "Passphrase copied.",
-      "copyUnavailable": "Copying is not available here. Select the passphrase and copy it.",
-      "neverChange": "Never change this passphrase: the backups taken with it would no longer open.",
-      "prompt": {
-        "title": "Show backup passphrase",
-        "body": "Enter your password to show the backup passphrase."
-      }
+    "publicKey": {
+      "title": "Public key",
+      "body": "The manager signs in with this key. It belongs in {path} on the server.",
+      "label": "Public key",
+      "show": "Show the public key",
+      "hide": "Hide the public key",
+      "copy": "Copy the key"
+    },
+    "merge": {
+      "notice": "Another server here is the same machine: the same address, user and host key. Merge this one into it, and its applications move there.",
+      "into": "Merge into",
+      "title": "Merge servers",
+      "prompt": "The applications of {name} move to {into}, and {name} is removed. Enter your password to merge them.",
+      "action": "Merge",
+      "done": "Servers merged."
     },
     "delete": {
       "title": "Delete server",
-      "body": "Removes this server from DBS. Backups stored on the server stay there.",
+      "body": "Removes this server from the manager. Remove its applications first.",
       "action": "Delete server",
-      "prompt": "{name} is removed from DBS, and backups stored on the server stay there. Enter your password to delete it.",
+      "prompt": "{name} is removed from the manager. Nothing on the server changes. Enter your password to delete it.",
       "done": "Server deleted."
     },
     "form": {
       "editTitle": "Edit server",
-      "submit": "Add server",
-      "added": "Server added.",
-      "steps": {
-        "label": "Steps",
-        "connection": "Connection",
-        "project": "django-dbs and files"
-      },
       "name": {
         "label": "Name",
         "hint": "A name to tell this server apart."
@@ -190,82 +179,25 @@
         "label": "Server password"
       },
       "secretSaved": "Saved. Leave empty to keep it.",
-      "hostKeyIntro": "Get the key the server presents, then compare its fingerprint on the server itself.",
-      "fetch": "Get host key",
-      "fetchAgain": "Get it again",
-      "projectIntro": "Fill these in to back up the Django project on this server. They can be added later.",
-      "projectDir": {
-        "label": "Project folder",
-        "hint": "The folder that holds manage.py.",
-        "placeholder": "/srv/app",
-        "composeHint": "The folder on the server that holds the compose file."
-      },
-      "pythonPath": {
-        "label": "Python command",
-        "hint": "python3, or the Python of the project's virtual environment.",
-        "composeHint": "The Python inside the service, such as python."
-      },
-      "managePath": {
-        "label": "manage.py path",
-        "hint": "Relative to the project folder.",
-        "composeHint": "Inside the service, relative to the folder it works in."
-      },
-      "settingsModule": {
-        "label": "Settings module",
-        "hint": "Leave empty to use the project's default.",
-        "placeholder": "config.settings.prod"
-      },
-      "remoteBackupDir": {
-        "label": "Remote backup folder",
-        "hint": "Where backups are written on the server."
-      },
-      "fileRoots": {
-        "label": "Allowed folders",
-        "hint": "Folders the Files tab can open. Press Enter after each one.",
-        "placeholder": "/srv/app/media",
-        "remove": "Remove {path}"
-      },
-      "envPath": {
-        "label": ".env file",
-        "hint": "Full path to the project's .env file, if it has one.",
-        "placeholder": "/srv/app/.env"
-      },
       "accountPassword": {
         "hint": "Changing anything but the name needs your password."
-      },
-      "composeService": {
-        "label": "Compose service",
-        "hint": "The service in the compose file that runs Django, such as backend."
-      },
-      "composeFiles": {
-        "label": "Compose files",
-        "hint": "Leave empty to use the folder's own compose file. Add files in the order docker compose -f takes them, pressing Enter after each one.",
-        "placeholder": "compose.prod.yaml",
-        "remove": "Remove {path}"
       }
     },
     "wizard": {
       "title": "Add a server",
+      "subtitle": "A server is a machine the manager reaches over SSH. Its applications come next.",
       "steps": {
-        "snippet": "Connection snippet",
-        "connection": "Address and host key",
+        "label": "Steps",
+        "address": "Address",
+        "hostKey": "Host key",
         "signIn": "Sign-in",
-        "project": "Project",
         "check": "Check",
-        "passphrase": "Backup passphrase",
-        "backup": "Test backup"
+        "done": "Applications"
       },
-      "snippet": {
-        "intro": "Paste the connection snippet from the server to fill in most of this. This step is optional.",
-        "label": "Connection snippet",
-        "hint": "Run manage.py dbs connection --json on the server and paste what it prints.",
-        "applied": "Filled in from the connection snippet. Check each value."
-      },
-      "connection": {
-        "keyType": "Key type",
-        "fingerprint": "Fingerprint",
-        "match": "Matches the snippet",
-        "mismatch": "Does not match the snippet"
+      "hostKey": {
+        "intro": "This is the key the server presents. Run the command below on the server itself and compare the fingerprint it prints.",
+        "read": "Read the host key",
+        "again": "Read it again"
       },
       "signIn": {
         "legend": "Sign-in method",
@@ -273,111 +205,34 @@
         "key": "Paste a key",
         "password": "Password",
         "generateHint": "A new key pair is created. The private key stays here, encrypted.",
+        "added": "Server added.",
         "publicKey": "Public key",
         "instruction": "Add this line to {path} on the server, then continue.",
         "copyKey": "Copy the key",
         "copyHint": "Copy the line",
-        "reread": "Show the key again"
-      },
-      "project": {
-        "intro": "Choose the Django project on the server. DBS finds it, and the Python that has django-dbs, and fills in the rest.",
-        "discover": "Find the project",
-        "discovering": "Searching…",
-        "skip": "Skip",
-        "browse": "Browse the server",
-        "pick": "Projects found on this server",
-        "none": "No Django project was found. Browse the server to choose its folder.",
-        "notProject": "This folder has no manage.py. Choose the folder that holds manage.py.",
-        "ready": "Ready: django-dbs {version} was found for this project.",
-        "noDbs": "The project was found, but no Python on the server could import django-dbs. Install django-dbs in the project's environment, then search again.",
-        "showDetails": "Show more settings",
-        "hideDetails": "Hide more settings",
-        "readyInService": "Ready: django-dbs {version} was found in the {service} service."
+        "reread": "Show the key again",
+        "submit": "Add the server"
       },
       "check": {
-        "local": "django-dbs here",
-        "remote": "django-dbs on the server",
-        "missing": "Not found",
-        "status": "Check",
-        "health": "Health",
-        "ok": "The two versions work together.",
-        "old": "django-dbs on the server is older than 0.5.0. Health and connection details are not available until it is upgraded.",
-        "incompatible": "This version of django-dbs on the server does not work with this manager. Install a matching version.",
-        "notFound": "django-dbs was not found with {python}.",
-        "suggestion": "django-dbs {version} was found in {python}.",
-        "usePython": "Use this Python",
-        "chooseAgain": "Choose the project again"
+        "addKey": "The server refused the new key. Add the public key to {path} on the server, then check again.",
+        "ok": "The manager can sign in to this server."
       },
-      "health": {
-        "ok": "Healthy",
-        "warn": "Warning",
-        "error": "Unhealthy"
-      },
-      "passphrase": {
-        "intro": "The backup passphrase can be read from the project settings on the server. This step is optional.",
-        "capture": "Read it from the server",
-        "neverChange": "Read it now, before the first backup. A server's backup passphrase must never change afterwards: older backups would no longer open.",
-        "captured": "The backup passphrase is saved."
-      },
-      "backup": {
-        "intro": "Take a first backup to confirm everything works.",
-        "take": "Take a test backup",
-        "running": "Backing up…",
-        "done": "The test backup worked.",
-        "openServer": "Open the server",
-        "openBackups": "See its backups"
-      },
-      "password": {
-        "title": "Confirm it is you",
-        "body": "This server's setup is over, so running commands on it needs your password.",
-        "submit": "Continue"
+      "done": {
+        "ready": "The server is ready.",
+        "next": "Add the Django projects it runs, on the server itself or in containers.",
+        "addApplication": "Add an application",
+        "openServer": "Open the server"
       }
-    },
-    "move": {
-      "title": "Move to another server",
-      "body": "Move this project onto a new server that already has the same environment.",
-      "action": "Move to another server"
-    },
-    "browser": {
-      "title": {
-        "project": "Choose the project folder",
-        "backups": "Choose where backups go on the server",
-        "env": "Choose the .env file",
-        "folder": "Choose a folder to allow"
-      },
-      "home": "Home",
-      "up": "Up one folder",
-      "trail": "Current folder",
-      "projects": "Django projects found on this server",
-      "isProject": "This folder is a Django project: it holds manage.py.",
-      "empty": "This folder is empty.",
-      "list": "Folders and files",
-      "name": "Name",
-      "size": "Size",
-      "modified": "Modified",
-      "open": "Open {name}",
-      "pick": "Choose {name}",
-      "pages": "Pages",
-      "chooseHere": "Choose this folder",
-      "browseLabel": "Browse the server for: {field}",
-      "truncated": "This folder holds more than 5000 entries. Only the first 5000 are listed."
-    },
-    "runtime": {
-      "label": "Where the project runs",
-      "host": "On the server",
-      "compose": "In a Docker Compose service"
     }
   },
   "errors": {
     "port_range": "Enter a port from 1 to 65535.",
-    "host_key_missing": "Get the host key first.",
+    "host_key_missing": "Read the host key first.",
     "host_key_unconfirmed": "Compare the fingerprints first.",
-    "snippet_invalid": "This is not valid JSON. Paste the whole snippet.",
-    "snippet_not_dbs": "This is not a DBS connection snippet.",
     "no_private_key": "This server signs in with a password, so it has no key.",
-    "compose_service_required": "Name the Compose service that runs the project.",
-    "compose_folder_required": "Enter the folder that holds the compose file.",
     "host_key_confirmation_missing": "This request has expired.",
-    "host_key_decided": "This host key was already confirmed or rejected."
+    "host_key_decided": "This host key was already confirmed or rejected.",
+    "server_has_applications": "This server still runs applications. Remove its applications first, or merge it into another server.",
+    "servers_differ": "Only two servers with the same address, user and host key are one machine."
   }
 }

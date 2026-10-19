@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, linkedSignal, signal } from '@angular/core';
 import { rxResource, toObservable, toSignal } from '@angular/core/rxjs-interop';
-import { debounceTime, firstValueFrom } from 'rxjs';
+import { debounceTime, firstValueFrom, forkJoin, map, of, switchMap, type Observable } from 'rxjs';
 
 import { apiErrorOf } from '@core/http/api-error';
 import type { ApiError, Page } from '@core/http/api.types';
@@ -15,10 +15,13 @@ import type {
   ServerSummary,
   ServerUpdate,
 } from '../data/servers.types';
+import type { TwinQuery } from './servers.store.types';
 
 export const SERVER_PAGE_SIZES: number[] = [20, 50, 100];
 
 const SEARCH_SETTLE_MS = 300;
+
+const TWINS_PAGE_SIZE = 200;
 
 @Injectable()
 export class ServersStore {
@@ -125,7 +128,6 @@ export class ServersStore {
   readonly server = computed<Server | undefined>(() =>
     this.serverResource.hasValue() ? this.serverResource.value() : undefined,
   );
-  readonly serverLoading = this.serverResource.isLoading;
   readonly serverError = computed(() => apiErrorOf(this.serverResource.error()));
   readonly serverMissing = computed(() => this.serverError()?.code === 'not_found');
 
@@ -147,7 +149,6 @@ export class ServersStore {
     this.saveError.set(null);
     this.hostKeyError.set(null);
   }
-
 
   async update(id: string, changes: ServerUpdate): Promise<Server | null> {
     this.saving.set(true);
@@ -247,35 +248,79 @@ export class ServersStore {
     }
   }
 
-  readonly revealing = signal(false);
-  readonly revealError = signal<ApiError | null>(null);
-
-  readonly passphrase = linkedSignal<string | undefined, string | null>({
+  readonly publicKey = linkedSignal<string | undefined, string | null>({
     source: this.serverId,
     computation: () => null,
   });
+  readonly readingKey = signal(false);
+  readonly keyError = signal<ApiError | null>(null);
 
-  async revealPassphrase(password: string): Promise<boolean> {
+  async readPublicKey(): Promise<boolean> {
     const id = this.serverId();
     if (!id) {
       return false;
     }
-    this.revealing.set(true);
-    this.revealError.set(null);
+    this.readingKey.set(true);
+    this.keyError.set(null);
     try {
-      const { passphrase } = await firstValueFrom(this.api.revealPassphrase(id, password));
-      this.passphrase.set(passphrase);
+      this.publicKey.set((await firstValueFrom(this.api.publicKey(id))).public_key);
       return true;
     } catch (error) {
-      this.revealError.set(error as ApiError);
+      this.keyError.set(error as ApiError);
       return false;
     } finally {
-      this.revealing.set(false);
+      this.readingKey.set(false);
     }
   }
 
-  hidePassphrase(): void {
-    this.passphrase.set(null);
+  hidePublicKey(): void {
+    this.publicKey.set(null);
+  }
+
+  private readonly twinsWanted = signal(false);
+
+  private readonly twinQuery = computed<TwinQuery | undefined>(
+    () => {
+      const server = this.server();
+      return server && this.twinsWanted()
+        ? { id: server.id, host: server.host, port: server.port, username: server.username, hostKey: server.host_key }
+        : undefined;
+    },
+    { equal: (before, after) => JSON.stringify(before) === JSON.stringify(after) },
+  );
+
+  private readonly twinsResource = rxResource({
+    params: () => this.twinQuery(),
+    stream: ({ params }) => this.twinsOf(params),
+  });
+
+  readonly twins = computed<readonly Server[]>(() =>
+    this.twinsResource.hasValue() ? (this.twinsResource.value() ?? []) : [],
+  );
+
+  watchTwins(wanted: boolean): void {
+    this.twinsWanted.set(wanted);
+  }
+
+  readonly merging = signal(false);
+  readonly mergeError = signal<ApiError | null>(null);
+
+  async merge(into: string, password: string): Promise<boolean> {
+    const id = this.serverId();
+    if (!id) {
+      return false;
+    }
+    this.merging.set(true);
+    this.mergeError.set(null);
+    try {
+      await firstValueFrom(this.api.merge(id, { into, account_password: password }));
+      return true;
+    } catch (error) {
+      this.mergeError.set(error as ApiError);
+      return false;
+    } finally {
+      this.merging.set(false);
+    }
   }
 
   readonly deleting = signal(false);
@@ -297,5 +342,27 @@ export class ServersStore {
     } finally {
       this.deleting.set(false);
     }
+  }
+
+  // The list leaves out host keys, so each server at the same address is read once to compare them.
+  private twinsOf(query: TwinQuery): Observable<readonly Server[]> {
+    return this.api.list({ search: query.host, page: 1, page_size: TWINS_PAGE_SIZE }).pipe(
+      map((page) =>
+        page.results.filter(
+          (other) =>
+            other.id !== query.id &&
+            other.host === query.host &&
+            other.port === query.port &&
+            other.username === query.username,
+        ),
+      ),
+      switchMap((same) =>
+        same.length === 0
+          ? of([])
+          : forkJoin(same.map((other) => this.api.get(other.id))).pipe(
+              map((servers) => servers.filter((other) => other.host_key === query.hostKey)),
+            ),
+      ),
+    );
   }
 }

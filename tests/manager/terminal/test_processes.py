@@ -25,15 +25,19 @@ django.setup()
 call_command("migrate", verbosity=0)
 from uuid import uuid4
 from dbs.manager.accounts.repositories import UserRepository
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.servers.services import ServerService
 
 user = UserRepository().create_superuser(username="sara", password=sys.argv[1])
 server = ServerService(user).create(
     name="web-1", host="10.0.0.5", username="deploy", auth_method="key",
-    private_key=sys.argv[2], host_key=sys.argv[3], backup_passphrase="a-passphrase",
+    private_key=sys.argv[2], host_key=sys.argv[3],
 )
-assert TakeLock().acquire(server.pk, uuid4())
+application = ApplicationService(user).create(
+    server=server.pk, name="shop", account_password=sys.argv[1], backup_passphrase="a-passphrase",
+)
+assert TakeLock().acquire(application.pk, uuid4())
 """
 
 
@@ -78,7 +82,7 @@ def test_a_take_from_the_terminal_waits_for_one_the_manager_is_running(tmp_path)
     python(SEED, home, PASSWORD, private_key_text(), host_key_line())
 
     ran = subprocess.run(
-        [sys.executable, "-m", "dbs.manager", "backup", "take", "web-1"],
+        [sys.executable, "-m", "dbs.manager", "backup", "take", "shop"],
         cwd=ROOT,
         env=clean_env(DBS_MANAGER_HOME=str(home)),
         capture_output=True,
@@ -94,10 +98,11 @@ def test_help_for_the_terminal_commands_needs_no_django():
     script = (
         "import sys\n"
         "from dbs.manager import cli\n"
-        "try:\n"
-        "    cli.main(['server', 'add', '--help'])\n"
-        "except SystemExit as stop:\n"
-        "    assert stop.code == 0\n"
+        "for area in ('server', 'app'):\n"
+        "    try:\n"
+        "        cli.main([area, 'add', '--help'])\n"
+        "    except SystemExit as stop:\n"
+        "        assert stop.code == 0\n"
         "loaded = [name for name in sys.modules if name.startswith(('rest_framework', "
         "'django.db', 'dbs.manager.terminal.session'))]\n"
         "print(loaded)\n"
@@ -112,5 +117,5 @@ def test_help_for_the_terminal_commands_needs_no_django():
     )
 
     assert ran.returncode == 0, ran.stderr
-    assert "--host-key" in ran.stdout
+    assert "--host-key" in ran.stdout and "--candidate" in ran.stdout
     assert ran.stdout.strip().splitlines()[-1] == "[]"

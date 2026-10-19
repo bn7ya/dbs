@@ -1,0 +1,66 @@
+@use "layout" as *;
+
+.all-backups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-7);
+}
+
+.all-backups__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.all-backups__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+// The filter belongs to the title beside it, and drops under it when the row is narrow.
+.all-backups__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+}
+
+.all-backups__filter {
+  flex: 0 1 calc($card-max / 1.5);
+  min-inline-size: min(calc($card-max / 2), 100%);
+}
+
+.all-backups__total {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0;
+}
+
+.all-backups__total dd {
+  margin: 0;
+  font-size: var(--app-text-3);
+  font-weight: var(--app-weight-medium);
+}
+
+.all-backups__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.all-backups__owner {
+  overflow-wrap: anywhere;
+}
+
+.all-backups__end {
+  text-align: end;
+}
+
+// Sizes line up digit under digit, and a number never breaks from its unit.
+.all-backups__size {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

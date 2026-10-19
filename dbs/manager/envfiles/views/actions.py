@@ -23,7 +23,7 @@ class EnvPullView(APIView):
     def post(self, request: Request) -> Response:
         payload = EnvPullSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
-        pulled = EnvFileService(request.user).pull(payload.validated_data["server"])
+        pulled = EnvFileService(request.user).pull(payload.validated_data["application"])
         return Response(EnvPulledSerializer(pulled).data)
 
 

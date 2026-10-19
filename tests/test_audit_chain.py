@@ -1,19 +1,18 @@
 """The audit trail: every DBS write recorded, the actor's name kept, and rows chained by hash."""
 
-import hashlib
-import io
+import errno
 from io import StringIO
 
 import pytest
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import OperationalError
 from django.test import Client
 
 from dbs import audit, jobs
 from dbs.exceptions import CorruptionError, DBSError, InvalidPassphrase
 from dbs.models import AuditEvent, BackupRecord, KnownLocation, SecurityPolicy
-from tests.testapp.models import Author
 
 PASS = "chain-pass-phrase"
 
@@ -219,48 +218,6 @@ def test_every_dbs_admin_write_is_audited(panel):
 
 
 @pytest.mark.django_db
-def test_a_full_export_from_the_original_views_is_audited(panel):
-    Author.objects.create(name="Ada")
-
-    response = panel.post("/dbs/backup/", {"passphrase": PASS, "passphrase2": PASS})
-    container = b"".join(response.streaming_content)
-
-    event = AuditEvent.objects.get(action="backup.export")
-    assert event.status == audit.SUCCEEDED
-    assert event.data["size"] == len(container)
-    assert event.data["sha256"] == hashlib.sha256(container).hexdigest()
-    assert event.data["verified"] is True
-    assert event.data["actor_username"] == "root"
-    assert event.target_name in response["Content-Disposition"]
-
-    upload = io.BytesIO(container)
-    upload.name = "export.dbs"
-    panel.post("/dbs/restore/", {"backup": upload, "passphrase": "wrong"})
-    upload.seek(0)
-    panel.post("/dbs/restore/", {"backup": upload, "passphrase": PASS})
-
-    failed, restored = AuditEvent.objects.filter(action="backup.restore").order_by("pk")
-    assert (failed.status, failed.error_code) == (audit.FAILED, "InvalidPassphrase")
-    assert restored.status == audit.SUCCEEDED and restored.data["records"] >= 1
-    assert restored.data["sha256"] == hashlib.sha256(container).hexdigest()
-    assert restored.target_name == "export.dbs"
-
-
-@pytest.mark.django_db
-def test_an_unexpected_failure_is_audited_as_unexpected(panel, monkeypatch):
-    def explode(*args, **kwargs):
-        raise RuntimeError("bug")
-
-    monkeypatch.setattr("dbs.contrib.admin.write_backup", explode)
-
-    with pytest.raises(RuntimeError):
-        panel.post("/dbs/backup/", {"passphrase": PASS, "passphrase2": PASS})
-
-    event = AuditEvent.objects.get(action="backup.export")
-    assert (event.status, event.error_code, event.detail) == (audit.FAILED, "unexpected", "bug")
-
-
-@pytest.mark.django_db
 def test_an_unexpected_failure_in_a_panel_job_is_audited_as_unexpected(
     tmp_path, settings, monkeypatch, inline_jobs
 ):
@@ -289,12 +246,32 @@ def test_an_unexpected_failure_in_a_panel_job_is_audited_as_unexpected(
         (CorruptionError("x"), "CorruptionError"),
         (CommandError("x"), "CommandError"),
         (ValueError("x"), "unexpected"),
+        (OSError(errno.ENOSPC, "No space left on device"), "disk_full"),
+        (OSError(errno.EDQUOT, "Disk quota exceeded"), "disk_full"),
+        (PermissionError(errno.EACCES, "Permission denied"), "permission_denied"),
+        (OSError(errno.EROFS, "Read-only file system"), "read_only"),
+        (OSError(errno.EIO, "Input/output error"), "unexpected"),
+        (OperationalError("server closed the connection unexpectedly"), "database_failed"),
         (KeyboardInterrupt(), "interrupted"),
         (jobs.Busy("x"), "busy"),
     ],
 )
 def test_error_codes_name_what_failed(exc, code):
     assert audit.error_code_for(exc) == code
+
+
+def test_a_command_error_carries_the_code_of_a_full_disk_but_not_of_any_os_error():
+    def wrapped(cause):
+        try:
+            try:
+                raise cause
+            except OSError as found:
+                raise CommandError("Cannot write") from found
+        except CommandError as exc:
+            return audit.error_code_for(exc)
+
+    assert wrapped(OSError(errno.ENOSPC, "No space left on device")) == "disk_full"
+    assert wrapped(OSError(errno.EIO, "Input/output error")) == "CommandError"
 
 
 def test_a_command_error_carries_the_code_of_its_cause():

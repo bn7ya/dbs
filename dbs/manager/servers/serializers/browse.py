@@ -12,7 +12,7 @@ ABSOLUTE_PATH_REQUIRED = (
 )
 
 
-def _absolute(value: str) -> str:
+def absolute_or_blank(value: str) -> str:
     if not value:
         return value
     path = absolute_path(value)
@@ -23,31 +23,17 @@ def _absolute(value: str) -> str:
     return path
 
 
-def _optional_path() -> serializers.CharField:
+def optional_path() -> serializers.CharField:
     return serializers.CharField(
         max_length=PATH_MAX, trim_whitespace=False, required=False, allow_blank=True
     )
 
 
 class BrowseQuerySerializer(serializers.Serializer):
-    path = _optional_path()
+    path = optional_path()
 
     def validate_path(self, value: str) -> str:
-        return _absolute(value)
-
-
-class DiscoverRequestSerializer(serializers.Serializer):
-    project_dir = _optional_path()
-    account_password = serializers.CharField(
-        max_length=128,
-        trim_whitespace=False,
-        required=False,
-        allow_blank=True,
-        write_only=True,
-    )
-
-    def validate_project_dir(self, value: str) -> str:
-        return _absolute(value)
+        return absolute_or_blank(value)
 
 
 class BrowseEntrySerializer(serializers.Serializer):

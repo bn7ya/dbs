@@ -1,7 +1,8 @@
 from .browse import (
     BrowseListingSerializer,
     BrowseQuerySerializer,
-    DiscoverRequestSerializer,
+    absolute_or_blank,
+    optional_path,
 )
 from .host_key import (
     FingerprintRequestSerializer,
@@ -13,20 +14,19 @@ from .passphrase import PassphraseSerializer, PasswordSerializer
 from .server import (
     AccountPasswordSerializer,
     AddedServerSerializer,
-    CheckedServerSerializer,
     ServerCreateSerializer,
     ServerListSerializer,
+    ServerMergeSerializer,
     ServerSerializer,
     ServerUpdateSerializer,
+    secret_field,
 )
 
 __all__ = [
     "AccountPasswordSerializer",
     "AddedServerSerializer",
-    "CheckedServerSerializer",
     "BrowseListingSerializer",
     "BrowseQuerySerializer",
-    "DiscoverRequestSerializer",
     "FingerprintRequestSerializer",
     "HostKeyConfirmationSerializer",
     "HostKeySerializer",
@@ -35,6 +35,10 @@ __all__ = [
     "RepinSerializer",
     "ServerCreateSerializer",
     "ServerListSerializer",
+    "ServerMergeSerializer",
     "ServerSerializer",
     "ServerUpdateSerializer",
+    "absolute_or_blank",
+    "optional_path",
+    "secret_field",
 ]

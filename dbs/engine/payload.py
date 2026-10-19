@@ -9,25 +9,6 @@ MAGIC = b"DBSPAY01"
 _LEN = struct.Struct(">I")
 
 
-def pack_payload(doc_meta: dict, records: list[dict], files: list[tuple[FileEntry, bytes]]) -> bytes:
-    blob_parts: list[bytes] = []
-    files_meta: list[dict] = []
-    offset = 0
-    for entry, data in files:
-        entry.offset = offset
-        entry.length = len(data)
-        offset += len(data)
-        files_meta.append(entry.to_dict())
-        blob_parts.append(data)
-
-    document = dict(doc_meta)
-    document["records"] = records
-    document["files"] = files_meta
-    json_bytes = json.dumps(document, default=str).encode("utf-8")
-
-    return b"".join([MAGIC, _LEN.pack(len(json_bytes)), json_bytes, *blob_parts])
-
-
 def unpack_payload(payload: bytes) -> tuple[dict, list[dict], list[tuple[FileEntry, bytes]]]:
     if payload[:8] != MAGIC:
         from ..exceptions import ContainerError

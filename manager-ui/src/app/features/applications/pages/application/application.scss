@@ -1,0 +1,36 @@
+// Name and status are one band, where it runs a second, the tab row a third, the tab's content last.
+.application {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+}
+
+.application__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  align-items: flex-start;
+}
+
+.application__title,
+.application__facts,
+.application__fact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  align-items: center;
+}
+
+.application__facts {
+  gap: var(--app-space-2) var(--app-space-6);
+}
+
+.application__fact {
+  gap: var(--app-space-2);
+}
+
+.application__failure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}

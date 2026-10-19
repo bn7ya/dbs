@@ -7,7 +7,7 @@ from dbs import audit
 from dbs.conf import setting
 from dbs.models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
 from dbs.security import detector, telemetry
-from dbs.security.checks import GUARD_EXTRA
+from dbs.security.checks import REPAIR
 
 ACTIONS = ("status", "unlock", "policy", "retrain", "reset-baseline", "events", "purge")
 
@@ -71,7 +71,7 @@ class Command(BaseCommand):
     def _model_state(self):
         if detector.model_available():
             return "on"
-        return f"off, rules only ({GUARD_EXTRA})"
+        return f"off, rules only (scikit-learn cannot be imported; {REPAIR})"
 
     def _retrain(self, options):
         from dbs.security import baseline
@@ -81,8 +81,8 @@ class Command(BaseCommand):
         if not detector.model_available():
             self.stdout.write(
                 self.style.WARNING(
-                    f"scikit-learn is not installed, so the guard scores with its rules "
-                    f"alone. {GUARD_EXTRA} turns the anomaly model on."
+                    f"scikit-learn cannot be imported, so the guard scores with its rules "
+                    f"alone. {REPAIR} turns the anomaly model back on."
                 )
             )
             return

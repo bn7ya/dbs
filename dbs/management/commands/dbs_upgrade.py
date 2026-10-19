@@ -6,7 +6,6 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from dbs import extras
 from dbs.container import FORMAT_VERSION
 from dbs.upgrade import (
     ACTION,
@@ -36,6 +35,7 @@ MARKS = {OK: "ok", ACTION: "todo", WARN: "warn", FIXED: "done"}
 
 class Command(BaseCommand):
     help = "Bring this project up to date with the installed version of DBS."
+    requires_system_checks = []
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -197,7 +197,7 @@ class Command(BaseCommand):
                 "your project's requirements and reinstall, or add --system-python if this "
                 "interpreter is yours to change."
             )
-        command = pinned_install_command(target, extras.installed())
+        command = pinned_install_command(target)
         self._line("warn", f"django-dbs {target} replaces {current} with:")
         self._detail(shlex.join(command))
         files = [path.name for path in requirement_files(Path.cwd())]

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from urllib.parse import parse_qsl, unquote, urlsplit
 
+import django
+
 SQLITE_TIMEOUT = 30
+SQLITE_WRITES_FIRST = (
+    {"transaction_mode": "IMMEDIATE"} if django.VERSION >= (5, 1) else {}
+)
 ENGINES = {
     "sqlite": "django.db.backends.sqlite3",
     "sqlite3": "django.db.backends.sqlite3",
@@ -25,7 +30,7 @@ def sqlite_database(path):
     return {
         "ENGINE": ENGINES["sqlite"],
         "NAME": str(path),
-        "OPTIONS": {"timeout": SQLITE_TIMEOUT},
+        "OPTIONS": {"timeout": SQLITE_TIMEOUT, **SQLITE_WRITES_FIRST},
     }
 
 

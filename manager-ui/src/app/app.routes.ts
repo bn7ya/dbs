@@ -54,6 +54,18 @@ export const routes: Routes = [
         loadChildren: () => import('@features/servers/servers.routes').then((m) => m.routes),
       },
       {
+        path: 'applications',
+        loadChildren: () => import('@features/applications/applications.routes').then((m) => m.routes),
+      },
+      {
+        path: 'backups',
+        loadChildren: () => import('@features/backups/all-backups.routes').then((m) => m.routes),
+      },
+      {
+        path: 'console',
+        loadChildren: () => import('@features/console/console.routes').then((m) => m.routes),
+      },
+      {
         path: 'activity',
         loadChildren: () => import('@features/activity/activity.routes').then((m) => m.routes),
       },

@@ -11,13 +11,12 @@ It never rewrites your settings.</p>
 
 <h2>Installing a new release</h2>
 <p>Pin the release in your requirements or lock file and reinstall, the same way every
-deploy does, with the extras you use:</p>
-<pre><code>pip install "django-dbs[guard]==X.Y.Z"</code></pre>
+deploy does:</p>
+<pre><code>pip install "django-dbs==X.Y.Z"</code></pre>
 <p>Inside a virtual environment DBS can run that step for you:</p>
 <pre><code>python manage.py dbs upgrade --self              # the newest release on PyPI
 python manage.py dbs upgrade --self --to X.Y.Z   # exactly this one</code></pre>
-<p>It prints the exact pinned <code>pip install</code> command, with the extras installed here,
-and asks before running it; <code>--yes</code> answers for a script. It leaves a source
+<p>It prints the exact pinned <code>pip install</code> command and asks before running it; <code>--yes</code> answers for a script. It leaves a source
 checkout alone, and an interpreter outside a virtual environment too unless you add
 <code>--system-python</code>. Pin the same version in your requirements afterwards.</p>
 
@@ -43,11 +42,29 @@ environment and restore from there.</p>
 flag for it, it needs an interactive terminal, and it needs an exact typed phrase naming how
 many backups you are giving up. Even then nothing is deleted.</p>
 
+<h2>From 0.7.x</h2>
+<p><code>pip install django-dbs</code> installs everything again; write <code>django-dbs</code>
+without <code>[guard]</code>, <code>[manager]</code>, <code>[ssh]</code> or <code>[all]</code>
+in your requirements, since those names are empty now and go away later. 0.8.0 adds no
+migration here and keeps the backup format, so 0.7.0 still reads every backup it writes. Then
+run <code>python manage.py dbs upgrade</code>, which reports each of these:</p>
+<ul>
+  <li><code>dbs.contrib</code> is gone: remove it from your URLconf and
+      <code>INSTALLED_APPS</code>.</li>
+  <li><code>dbs-upgrade</code> is gone: scripts and Dockerfiles run
+      <code>manage.py dbs upgrade</code>.</li>
+  <li>Panel backups and restores run in a process of their own; the step checks it can start
+      and names <code>DBS_JOB_PYTHON</code>, or <code>DBS_JOB_PROCESS = False</code>, when it
+      cannot.</li>
+  <li>On MySQL, a <code>max_allowed_packet</code> below 64 MiB; on SQLite, WAL mode and
+      immediate transactions, so the site keeps writing while a backup reads.</li>
+  <li>Partial files left in <code>DBS_BACKUP_DIR</code> by a backup before 0.7, which DBS no
+      longer sweeps.</li>
+</ul>
+<p>A project that pins djangorestframework below 3.15, scikit-learn below 1.4.2 or paramiko
+below 3.2 gets a resolver error from pip: raise the pin.</p>
 <h2>From 0.6.x</h2>
-<p><code>pip install django-dbs</code> is now the backup library alone. Install the extras you
-use &mdash; <code>[guard]</code> for the session guard's detector, <code>[manager]</code> for
-<code>django_dbs</code>, <code>[ssh]</code> for <code>dbs.transports</code> &mdash; then run
-<code>python manage.py dbs upgrade</code>. It applies the migration that seals the audit trail
+<p>Install 0.8.0 as above, then run <code>python manage.py dbs upgrade</code>. It applies the migration that seals the audit trail
 and drops the SFTP targets, and tells you about each of these:</p>
 <ul>
   <li>This server no longer pushes backups. <code>DBS_SSH_TARGETS</code>,
@@ -69,7 +86,7 @@ and drops the SFTP targets, and tells you about each of these:</p>
 </ul>
 <h2>From 0.2.x</h2>
 <ol>
-  <li><code>pip install "django-dbs[guard]==X.Y.Z"</code>, pinned in your requirements</li>
+  <li><code>pip install "django-dbs==X.Y.Z"</code>, pinned in your requirements</li>
   <li><code>python manage.py dbs upgrade</code></li>
 </ol>
 <p>That applies the migrations 0.3.0 added and reports anything else. Existing backups

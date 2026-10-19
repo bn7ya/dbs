@@ -90,7 +90,7 @@ def test_output_directory_is_created_and_read_from_settings(
 
 @pytest.mark.django_db
 def test_retention_keeps_only_the_newest(tmp_path, passphrase_env):
-    from dbs.container.format import write_container
+    from tests.format1 import write_container
 
     for hour in range(4):
         stale = backup_filename(moment=_moment(hour))

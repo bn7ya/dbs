@@ -68,8 +68,8 @@ class BackupStorage:
     def __init__(self) -> None:
         self.root = Path(settings.BACKUP_STORAGE_DIR)
 
-    def directory(self, server_id: UUID) -> Path:
-        return self._private(self.root / str(server_id))
+    def directory(self, application_id: UUID) -> Path:
+        return self._private(self.root / str(application_id))
 
     def uploads_directory(self) -> Path:
         return self._private(self.root / UPLOADS_DIRECTORY)
@@ -82,9 +82,9 @@ class BackupStorage:
             if path.is_file() and path.stat().st_mtime < before.timestamp():
                 path.unlink(missing_ok=True)
 
-    def sweep_partials(self, server_id: UUID) -> list[str]:
+    def sweep_partials(self, application_id: UUID) -> list[str]:
         removed = []
-        for path in self.directory(server_id).iterdir():
+        for path in self.directory(application_id).iterdir():
             if not path.name.endswith(PARTIAL_SUFFIX):
                 continue
             try:
@@ -97,8 +97,8 @@ class BackupStorage:
         return sorted(removed)
 
     @contextmanager
-    def receiving(self, server_id: UUID) -> Iterator[Incoming]:
-        path = self.directory(server_id) / (
+    def receiving(self, application_id: UUID) -> Iterator[Incoming]:
+        path = self.directory(application_id) / (
             f"{INCOMING_PREFIX}{secrets.token_hex(8)}{PARTIAL_SUFFIX}"
         )
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE)
@@ -109,24 +109,24 @@ class BackupStorage:
             incoming.close()
             path.unlink(missing_ok=True)
 
-    def install(self, incoming: Incoming, server_id: UUID, name: str) -> StoredFile:
+    def install(self, incoming: Incoming, application_id: UUID, name: str) -> StoredFile:
         incoming.close()
-        directory = self.directory(server_id)
+        directory = self.directory(application_id)
         chosen = next(
             candidate
             for candidate in _numbered(name)
             if place_without_replacing(str(incoming.path), str(directory / candidate))
         )
         (directory / chosen).chmod(FILE_MODE)
-        return StoredFile(f"{server_id}/{chosen}", incoming.size, incoming.sha256)
+        return StoredFile(f"{application_id}/{chosen}", incoming.size, incoming.sha256)
 
-    def sealed_path(self, server_id: UUID, name: str) -> str:
-        return f"{server_id}/{name}{SEALED_SUFFIX}"
+    def sealed_path(self, application_id: UUID, name: str) -> str:
+        return f"{application_id}/{name}{SEALED_SUFFIX}"
 
-    def unused_sealed_path(self, server_id: UUID, name: str) -> str:
+    def unused_sealed_path(self, application_id: UUID, name: str) -> str:
         stem = name.encode()[:STORED_NAME_MAX_BYTES].decode(errors="ignore")
         candidates = (
-            self.sealed_path(server_id, stem if ordinal == 1 else f"{stem}-{ordinal}")
+            self.sealed_path(application_id, stem if ordinal == 1 else f"{stem}-{ordinal}")
             for ordinal in count(1)
         )
         return next(path for path in candidates if not self.exists(path))

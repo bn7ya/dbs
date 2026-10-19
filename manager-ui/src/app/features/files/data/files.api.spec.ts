@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { FILE, FOLDER, ROOT, SERVER_ID, listingOf } from '../testing/files.fixtures';
+import { FILE, FOLDER, ROOT, APPLICATION_ID, listingOf } from '../testing/files.fixtures';
 import { FilesApi } from './files.api';
 import type { UploadEvent } from './files.types';
 
@@ -12,7 +12,7 @@ describe('FilesApi', () => {
   let api: FilesApi;
   let http: HttpTestingController;
 
-  const base = `/api/files/${SERVER_ID}/`;
+  const base = `/api/files/${APPLICATION_ID}/`;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -28,7 +28,7 @@ describe('FilesApi', () => {
   });
 
   it('lists the first allowed folder when no path is given', async () => {
-    const listing = firstValueFrom(api.list({ server: SERVER_ID, path: null, page: 1, page_size: 50 }));
+    const listing = firstValueFrom(api.list({ application: APPLICATION_ID, path: null, page: 1, page_size: 50 }));
     const request = http.expectOne(`${base}?page=1&page_size=50`);
     expect(request.request.method).toBe('GET');
     expect(request.request.params.has('path')).toBe(false);
@@ -39,7 +39,7 @@ describe('FilesApi', () => {
 
   it('lists a folder a page at a time, its path encoded whatever it holds', async () => {
     const path = '/srv/app/media/a b+c&d=e?#';
-    const listing = firstValueFrom(api.list({ server: SERVER_ID, path, page: 2, page_size: 100 }));
+    const listing = firstValueFrom(api.list({ application: APPLICATION_ID, path, page: 2, page_size: 100 }));
     const request = http.expectOne((each) => each.url === base);
     expect(request.request.params.get('path')).toBe(path);
     expect(request.request.params.get('page')).toBe('2');
@@ -50,14 +50,14 @@ describe('FilesApi', () => {
   });
 
   it('asks for a link to a file, with the password only when there is one', async () => {
-    const plain = firstValueFrom(api.downloadLink(SERVER_ID, FILE.path, ''));
+    const plain = firstValueFrom(api.downloadLink(APPLICATION_ID, FILE.path, ''));
     const first = http.expectOne(`${base}download/`);
     expect(first.request.method).toBe('POST');
     expect(first.request.body).toEqual({ path: FILE.path });
     first.flush({ url: `${base}download/?path=x` });
     await expect(plain).resolves.toEqual({ url: `${base}download/?path=x` });
 
-    const guarded = firstValueFrom(api.downloadLink(SERVER_ID, FILE.path, 'hunter2'));
+    const guarded = firstValueFrom(api.downloadLink(APPLICATION_ID, FILE.path, 'hunter2'));
     const second = http.expectOne(`${base}download/`);
     expect(second.request.body).toEqual({ path: FILE.path, account_password: 'hunter2' });
     second.flush({ url: `${base}download/?path=x&ticket=t1` });
@@ -65,7 +65,7 @@ describe('FilesApi', () => {
   });
 
   it('creates a folder inside another', async () => {
-    const creating = firstValueFrom(api.createFolder(SERVER_ID, { path: ROOT, name: 'photos' }));
+    const creating = firstValueFrom(api.createFolder(APPLICATION_ID, { path: ROOT, name: 'photos' }));
     const request = http.expectOne(`${base}folders/`);
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ path: ROOT, name: 'photos' });
@@ -75,7 +75,7 @@ describe('FilesApi', () => {
   });
 
   it('deletes by path', async () => {
-    const removing = firstValueFrom(api.remove(SERVER_ID, FILE.path));
+    const removing = firstValueFrom(api.remove(APPLICATION_ID, FILE.path));
     const request = http.expectOne((each) => each.url === base);
     expect(request.request.method).toBe('DELETE');
     expect(request.request.params.get('path')).toBe(FILE.path);
@@ -88,7 +88,7 @@ describe('FilesApi', () => {
     const file = (): File => new File(['file bytes'], FILE.name);
 
     it('sends the folder and the file as form data', () => {
-      api.upload(SERVER_ID, ROOT, file()).subscribe();
+      api.upload(APPLICATION_ID, ROOT, file()).subscribe();
 
       const request = http.expectOne(`${base}upload/`);
       expect(request.request.method).toBe('POST');
@@ -101,7 +101,7 @@ describe('FilesApi', () => {
 
     it('reports the bytes sent as they go, then the file as written', () => {
       const events: UploadEvent[] = [];
-      api.upload(SERVER_ID, ROOT, file()).subscribe((event) => events.push(event));
+      api.upload(APPLICATION_ID, ROOT, file()).subscribe((event) => events.push(event));
 
       const request = http.expectOne(`${base}upload/`);
       request.event({ type: HttpEventType.Sent });
@@ -118,7 +118,7 @@ describe('FilesApi', () => {
     });
 
     it('aborts the request when the upload is dropped', () => {
-      const uploading = api.upload(SERVER_ID, ROOT, file()).subscribe();
+      const uploading = api.upload(APPLICATION_ID, ROOT, file()).subscribe();
       const request = http.expectOne(`${base}upload/`);
 
       uploading.unsubscribe();

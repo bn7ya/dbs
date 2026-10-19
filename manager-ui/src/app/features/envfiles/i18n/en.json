@@ -10,12 +10,12 @@
     },
     "noPath": {
       "title": "No .env file set",
-      "body": "Set the path of the server's .env file under Settings on Overview.",
+      "body": "Set the path of the application's .env file in its settings on Overview.",
       "action": "Go to Overview"
     },
     "empty": {
       "title": "No versions yet",
-      "body": "Pull the file from the server to keep its first version."
+      "body": "Pull the file from the application to keep its first version."
     },
     "list": {
       "label": "Versions",
@@ -63,16 +63,19 @@
       "first": "This is the first version kept."
     },
     "push": {
-      "action": "Push this version to the server",
-      "confirmTitle": "Replace the .env file on the server?",
-      "confirmBody": "The file on the server now is kept as a version first. Then this version takes its place.",
+      "action": "Push this version to the application",
+      "confirmTitle": "Replace the application's .env file?",
+      "confirmBody": "The file there now is kept as a version first. Then this version takes its place.",
       "confirmAccept": "Continue",
       "prompt": {
         "title": "Push this version",
-        "body": "Enter your password to replace the .env file on the server with this version.",
+        "body": "Enter your password to replace the application's .env file with this version.",
         "submit": "Push version"
       },
-      "done": "Version pushed to the server."
+      "done": "Version pushed to the application."
+    },
+    "container": {
+      "lost": "This application keeps its .env file inside the container. A version pushed there is lost when the container is recreated."
     }
   }
 }

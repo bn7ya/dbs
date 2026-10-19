@@ -20,8 +20,8 @@ LIST_COLUMNS = (
 
 
 def list_folder(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
-    folder = FileService(session.user).list(server.pk, session.args.path or None)
+    application = references.application(session.user, session.args.application)
+    folder = FileService(session.user).list(application.pk, session.args.path or None)
     entries = FileEntrySerializer(folder.entries, many=True).data
     listing = {
         "path": folder.path,
@@ -32,7 +32,7 @@ def list_folder(session: TerminalSession) -> int:
         "results": entries,
     }
     if not session.out.as_json:
-        print(folder.path)
+        session.out.line(folder.path)
     session.out.table(
         entries, LIST_COLUMNS, empty="This folder is empty.", data=listing
     )
@@ -40,11 +40,11 @@ def list_folder(session: TerminalSession) -> int:
 
 
 def download(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
+    application = references.application(session.user, session.args.application)
     service = FileService(session.user)
     fetched = session.guarded(
         lambda password: service.download(
-            server.pk, session.args.path, account_password=password
+            application.pk, session.args.path, account_password=password
         )
     )
     target = Path(session.args.output or fetched.name)
@@ -70,27 +70,27 @@ def download(session: TerminalSession) -> int:
 
 
 def upload(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
+    application = references.application(session.user, session.args.application)
     created = FileService(session.user).upload(
-        server.pk, session.args.folder, local_file(session.args.file)
+        application.pk, session.args.folder, local_file(session.args.file)
     )
     session.out.say(f"Uploaded {created.path}.", FileEntrySerializer(created).data)
     return 0
 
 
 def mkdir(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
+    application = references.application(session.user, session.args.application)
     created = FileService(session.user).create_folder(
-        server.pk, session.args.folder, session.args.name
+        application.pk, session.args.folder, session.args.name
     )
     session.out.say(f"Made {created.path}.", FileEntrySerializer(created).data)
     return 0
 
 
 def delete(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
+    application = references.application(session.user, session.args.application)
     path = session.args.path
-    session.confirm(f"Delete {path} on {server.name}? [y/N]")
-    FileService(session.user).delete(server.pk, path)
+    session.confirm(f"Delete {path} on {application.name}? [y/N]")
+    FileService(session.user).delete(application.pk, path)
     session.out.say(f"Deleted {path}.", {"deleted": path})
     return 0

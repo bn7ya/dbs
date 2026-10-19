@@ -20,7 +20,13 @@ from ..exceptions import ContainerError, CorruptionError, RestoreError
 from ..files import StagedFiles, plan_entries, plan_restore, refusal_message
 from ..introspect import backup_plan, excluded_fields, topological_order
 from ..registry import ModelBackup, backup_registry
-from ..serialize import NaturalKeyResolver, RowLoader, resolve_natural_keys, save_records
+from ..serialize import (
+    NaturalKeyResolver,
+    RowLoader,
+    decode_large_binaries,
+    resolve_natural_keys,
+    save_records,
+)
 from .backup import migration_state
 from .frames import KNOWN_FLAGS, PayloadReader
 from .inputs import opened, stream_source, whole
@@ -38,6 +44,17 @@ FLUSH_BATCH = 500
 
 class _DryRunRollback(Exception):
     pass
+
+
+class Untranslated:
+    def labels(self, order: list) -> list:
+        return order
+
+    def records(self, record: dict) -> list:
+        return [record]
+
+
+UNTRANSLATED = Untranslated()
 
 
 @dataclass
@@ -64,13 +81,6 @@ class RestoreResult:
     @property
     def healed(self) -> bool:
         return bool(self.repair_report and self.repair_report.healed)
-
-
-def read_payload(data, passphrase: str) -> ReadResult:
-    with opened(data) as handle:
-        if read_format_version(handle) == STREAM_FORMAT_VERSION:
-            return _read_stream_payload(handle, passphrase)
-        return _read_v1_payload(whole(handle), passphrase)
 
 
 def _read_v1_payload(data: bytes, passphrase: str) -> ReadResult:
@@ -105,30 +115,6 @@ def _read_v1_payload(data: bytes, passphrase: str) -> ReadResult:
 
     document, records, files = unpack_payload(payload)
     return ReadResult(manifest, document, records, files, report)
-
-
-def _read_stream_payload(handle, passphrase: str) -> ReadResult:
-    records: list = []
-    files: list = []
-    with open_stream(handle, passphrase) as (reader, payload):
-        header = payload.read_header()
-        payload.read_manifest()
-        for stream in payload.files():
-            data = b"".join(stream.chunks())
-            if not stream.skipped:
-                files.append((stream.entry, data))
-        for batch in payload.record_batches():
-            records.extend(batch)
-        payload.read_trailer()
-        payload.finish()
-    document = {
-        **header,
-        "stats": payload.stats,
-        "records": records,
-        "files": [entry.to_dict() for entry, _data in files],
-    }
-    manifest = {"format": "DBS", "version": STREAM_FORMAT_VERSION, "flags": reader.flags}
-    return ReadResult(manifest, document, records, files, reader.report)
 
 
 def backup_files(data, passphrase: str):
@@ -220,14 +206,39 @@ def restore_backup(
     in ``files_refused`` and rehearses the load in a transaction it rolls back,
     changing nothing.
     """
-    registry = registry or backup_registry
+    return restore_translated(
+        data,
+        passphrase,
+        UNTRANSLATED,
+        using=using,
+        load_data=load_data,
+        write_files=write_files,
+        dry_run=dry_run,
+        flush=flush,
+        registry=registry,
+    )
+
+
+def restore_translated(
+    data,
+    passphrase: str,
+    translation,
+    *,
+    using: str = "default",
+    load_data: bool = True,
+    write_files: bool = True,
+    dry_run: bool = False,
+    flush: bool = False,
+    registry=None,
+) -> RestoreResult:
     options = {
         "using": using,
         "load_data": load_data,
         "write_files": write_files,
         "dry_run": dry_run,
         "flush": flush,
-        "registry": registry,
+        "registry": registry or backup_registry,
+        "translation": translation,
     }
     with opened(data) as handle:
         if read_format_version(handle) == STREAM_FORMAT_VERSION:
@@ -245,13 +256,21 @@ def _restore_v1(
     dry_run: bool,
     flush: bool,
     registry,
+    translation,
 ) -> RestoreResult:
     result = _read_v1_payload(data, passphrase)
     out = RestoreResult(repair_report=result.repair_report)
     out.models = result.document.get("stats", {}).get("models", [])
     _warn_on_environment_drift(result.document, connections[using])
+    document = {
+        **result.document,
+        "order": translation.labels(result.document.get("order") or []),
+    }
+    translated = [
+        found for record in result.records for found in translation.records(record)
+    ]
 
-    backup_models = _backup_models(result.document, result.records)
+    backup_models = _backup_models(document, translated)
     out.preexisting_models = [
         model._meta.label_lower
         for model in backup_models
@@ -260,14 +279,14 @@ def _restore_v1(
 
     logger.info(
         "restore started: %d records, %d files",
-        len(result.records),
+        len(translated),
         len(result.files),
     )
 
     placements = plan_restore(result.files, registry=registry) if write_files else []
     out.files_refused = [placement.problem for placement in placements if placement.problem]
     records = _point_rows_at_moved_files(
-        ordered_records(result.document, result.records), placements
+        ordered_records(document, translated), placements
     )
 
     if dry_run:
@@ -321,12 +340,14 @@ def _restore_stream(
     dry_run: bool,
     flush: bool,
     registry,
+    translation,
 ) -> RestoreResult:
     out = RestoreResult()
     with open_stream(handle, passphrase) as (reader, payload):
         header = payload.read_header()
         _warn_on_environment_drift(header, connections[using])
-        backup_models = _models_named(header["order"])
+        order = translation.labels(header["order"])
+        backup_models = _models_named(order)
         out.preexisting_models = [
             model._meta.label_lower
             for model in backup_models
@@ -336,7 +357,7 @@ def _restore_stream(
         logger.info("restore started: %d files", len(entries))
         placements = plan_entries(entries, registry=registry) if write_files else []
         out.files_refused = [placement.problem for placement in placements if placement.problem]
-        rows = _StreamedRows(payload, header["order"], placements, using)
+        rows = _StreamedRows(payload, order, placements, using, translation)
 
         if dry_run:
             out.files_would_write = len(placements) - len(out.files_refused)
@@ -379,16 +400,30 @@ def _restore_stream(
 
 
 class _StreamedRows:
-    def __init__(self, payload: PayloadReader, order: list, placements: list, using: str):
+    def __init__(
+        self,
+        payload: PayloadReader,
+        order: list,
+        placements: list,
+        using: str,
+        translation=UNTRANSLATED,
+    ):
         self.payload = payload
         self.moved = _moved_files(placements)
         self.resolver = NaturalKeyResolver([], using, carried=order)
         self.loader = RowLoader(using)
+        self.translation = translation
 
     def load(self) -> None:
         with self.loader.connection.constraint_checks_disabled():
             for batch in self.payload.record_batches():
-                pointed = _point_rows(batch, self.moved)
+                decode_large_binaries(batch)
+                translated = [
+                    found
+                    for record in batch
+                    for found in self.translation.records(record)
+                ]
+                pointed = _point_rows(translated, self.moved)
                 self.loader.save([self.resolver.record(record) for record in pointed])
 
     def finish(self, out: RestoreResult, *, adjust_sequences: bool) -> int:

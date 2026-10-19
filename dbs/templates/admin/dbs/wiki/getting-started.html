@@ -3,9 +3,9 @@
 {% block wiki %}
 <h1>Getting started</h1>
 <h2>What this project needs</h2>
-<pre><code>pip install "django-dbs[guard]"</code></pre>
-<p>The <code>guard</code> extra installs scikit-learn for the session guard. A project that
-does not run the guard needs only <code>pip install django-dbs</code>.</p>
+<pre><code>pip install django-dbs</code></pre>
+<p>It installs everything DBS uses, the session guard's scikit-learn and the manager
+included; this project's web process imports only what it uses.</p>
 <pre><code>INSTALLED_APPS = [..., "django.contrib.admin", "dbs"]
 MIDDLEWARE = [..., "dbs.security.middleware.DBSSecurityMiddleware"]
 DBS_BACKUP_DIR = "/var/backups/myproject"</code></pre>
@@ -29,7 +29,8 @@ class InvoiceBackup(ModelBackup):
     overrides = {"render_cache": FieldType.EXCLUDE}</code></pre>
 <h2>Take a backup</h2>
 <p>From this panel, use <em>Take a backup</em>: it writes the backup to
-<code>DBS_BACKUP_DIR</code> in the background and offers it for download once it is done.
+<code>DBS_BACKUP_DIR</code> in a process of its own, outside the web workers, and offers it
+for download once it is done.
 From a shell:</p>
 <pre><code>python manage.py dbs backup /var/backups/app.dbs</code></pre>
 <p>It refuses a path that already exists, and stops when a source file is missing or

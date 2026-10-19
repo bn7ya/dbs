@@ -20,6 +20,7 @@ from django.core.management import call_command
 django.setup()
 call_command("migrate", verbosity=0)
 from dbs.manager.accounts.repositories import UserRepository
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.storage import BackupStorage
@@ -28,16 +29,19 @@ from dbs.manager.servers.services import ServerService
 user = UserRepository().create_superuser(username="sara", password=sys.argv[1])
 server = ServerService(user).create(
     name="web-1", host="10.0.0.5", username="deploy", auth_method="key",
-    private_key=sys.argv[2], host_key=sys.argv[3], backup_passphrase="moved-passphrase",
+    private_key=sys.argv[2], host_key=sys.argv[3],
+)
+application = ApplicationService(user).create(
+    server=server.pk, name="shop", account_password=sys.argv[1], backup_passphrase="moved-passphrase",
 )
 storage = BackupStorage()
-storage.directory(server.pk)
-path = f"{server.pk}/nightly.dbs"
+storage.directory(application.pk)
+path = f"{application.pk}/nightly.dbs"
 with storage.writing(path) as handle:
     handle.write(b"DBS nightly")
 BackupFileRepository().create(
-    server=server, kind="dbs", name="nightly.dbs", size=11, sha256="0" * 64,
-    storage_path=path, validation="structure_ok",
+    application=application, kind="dbs", name="nightly.dbs", size=11,
+    sha256="0" * 64, storage_path=path, validation="structure_ok",
 )
 """
 
@@ -48,17 +52,22 @@ import django
 
 django.setup()
 from django.contrib.auth import authenticate
+from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.servers.repositories import ServerRepository
 from dbs.manager.servers.services import ServerConnectionService
 from dbs.models import AuditEvent
 
 server = ServerRepository().active().get()
+application = ApplicationRepository().active().get()
 connections = ServerConnectionService(None)
 [backup] = BackupFileRepository().all_including_deleted()
 print(json.dumps({
     "key": connections.credentials(server).private_key,
-    "passphrase": connections.backup_passphrase(server),
+    "passphrase": connections.backup_passphrase(application),
+    "runs_on": application.server_id == server.pk,
+    "backed_up": backup.application_id == application.pk,
+    "stored_under": backup.storage_path.split("/")[0] == str(application.pk),
     "removed": backup.removed_at is not None,
     "signs_in": authenticate(username="sara", password=%r) is not None,
     "actions": sorted(set(AuditEvent.objects.values_list("action", flat=True))),
@@ -128,11 +137,19 @@ def test_an_export_moves_the_manager_to_another_data_directory(source, tmp_path)
     state = checked(second)
     assert state["key"] == source["key"]
     assert state["passphrase"] == "moved-passphrase"
+    assert (state["runs_on"], state["backed_up"], state["stored_under"]) == (
+        True,
+        True,
+        True,
+    )
     assert state["signs_in"] is True
     assert state["removed"] is False
-    assert {"manager.export", "manager.import", "server.create"} <= set(
-        state["actions"]
-    )
+    assert {
+        "manager.export",
+        "manager.import",
+        "server.create",
+        "application.create",
+    } <= set(state["actions"])
     assert list((second / "backups").glob("*/nightly.dbs"))
 
 

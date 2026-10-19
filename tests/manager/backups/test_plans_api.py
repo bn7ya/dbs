@@ -8,8 +8,9 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from dbs.manager.activity.repositories import ActivityRepository
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.repositories import BackupPlanRepository
-from dbs.manager.servers.services import ServerService
+from tests.manager.factories import make_application
 from tests.manager.servers.support import PASSWORD
 from tests.manager.support import needs_partial_unique_constraints
 
@@ -17,7 +18,7 @@ PLANS = "/api/backups/plans/"
 
 SHAPE = {
     "id",
-    "server",
+    "application",
     "name",
     "kind",
     "paths",
@@ -26,6 +27,8 @@ SHAPE = {
     "keep",
     "keep_remote",
     "enabled",
+    "anchor_at",
+    "time_zone",
     "next_run_at",
     "last_run_at",
     "last_status",
@@ -42,9 +45,9 @@ def logged(action: str):
     return list(ActivityRepository().filtered(action=action))
 
 
-def body(server, **fields) -> dict:
+def body(application, **fields) -> dict:
     return {
-        "server": str(server.pk),
+        "application": str(application.pk),
         "name": "django-dbs",
         "kind": "dbs",
         "account_password": PASSWORD,
@@ -56,15 +59,8 @@ def about(moment: str | None, expected) -> bool:
 
 
 @pytest.fixture
-def other_server(admin, server):
-    return ServerService(admin).create(
-        name="web-2",
-        host="10.0.0.6",
-        username="deploy",
-        auth_method="password",
-        password="ssh-password",
-        host_key=server.host_key,
-    )
+def other_application(admin, application):
+    return make_application(admin, name="web-2", server=application.server)
 
 
 @pytest.mark.django_db
@@ -87,49 +83,52 @@ def test_every_plan_endpoint_needs_a_session(anonymous, method, path):
 
 
 @pytest.mark.django_db
-def test_the_list_needs_a_server(api):
+def test_the_list_needs_an_application(api):
     missing = api.get(PLANS)
-    malformed = api.get(PLANS, {"server": "web-1"})
+    malformed = api.get(PLANS, {"application": "web-1"})
 
     assert missing.status_code == malformed.status_code == 400
-    assert missing.json()["error"]["fields"] == {"server": ["required"]}
-    assert malformed.json()["error"]["fields"] == {"server": ["invalid"]}
+    assert missing.json()["error"]["fields"] == {"application": ["required"]}
+    assert malformed.json()["error"]["fields"] == {"application": ["invalid"]}
 
 
 @pytest.mark.django_db
-def test_the_list_is_one_servers_plans_by_name_and_paginated(
-    api, admin, other_server, make_plan
+def test_the_list_is_one_applications_plans_by_name_and_paginated(
+    api, admin, other_application, make_plan
 ):
     weekly = make_plan(name="weekly", interval_minutes=10080)
     daily = make_plan(name="daily")
-    make_plan(server=other_server.pk, name="elsewhere")
+    make_plan(application=other_application.pk, name="elsewhere")
     gone = make_plan(name="also-daily")
     api.delete(url(gone))
 
-    first = api.get(PLANS, {"server": weekly.server_id, "page_size": 1}).json()
+    first = api.get(
+        PLANS, {"application": weekly.application_id, "page_size": 1}
+    ).json()
     second = api.get(
-        PLANS, {"server": weekly.server_id, "page_size": 1, "page": 2}
+        PLANS, {"application": weekly.application_id, "page_size": 1, "page": 2}
     ).json()
 
     assert first["count"] == 2
     assert first["previous"] is None and first["next"] is not None
     assert [row["id"] for row in first["results"]] == [str(daily.pk)]
     assert [row["id"] for row in second["results"]] == [str(weekly.pk)]
-    assert api.get(PLANS, {"server": uuid4()}).json()["count"] == 0
+    assert api.get(PLANS, {"application": uuid4()}).json()["count"] == 0
 
 
 @pytest.mark.django_db
 def test_a_new_plan_has_the_documented_shape_and_runs_one_interval_from_now(
-    api, admin, server
+    api, admin, application
 ):
     response = api.post(
-        PLANS, body(server, interval_minutes=360, keep=4, keep_remote=0, enabled=True)
+        PLANS,
+        body(application, interval_minutes=360, keep=4, keep_remote=0, enabled=True),
     )
 
     assert response.status_code == 201
     plan = response.json()
     assert set(plan) == SHAPE
-    assert plan["server"] == str(server.pk)
+    assert plan["application"] == str(application.pk)
     assert (plan["name"], plan["kind"], plan["interval_minutes"]) == (
         "django-dbs",
         "dbs",
@@ -144,7 +143,7 @@ def test_a_new_plan_has_the_documented_shape_and_runs_one_interval_from_now(
     )
     [entry] = logged("plan.create")
     assert (entry.subject, entry.target_name, entry.actor) == (
-        str(server.pk),
+        str(application.pk),
         "django-dbs",
         admin,
     )
@@ -153,16 +152,18 @@ def test_a_new_plan_has_the_documented_shape_and_runs_one_interval_from_now(
 
 
 @pytest.mark.django_db
-def test_left_out_fields_take_the_models_defaults(api, server):
-    plan = api.post(PLANS, body(server)).json()
+def test_left_out_fields_take_the_models_defaults(api, application):
+    plan = api.post(PLANS, body(application)).json()
 
     assert (plan["interval_minutes"], plan["next_run_at"]) == (None, None)
     assert (plan["keep"], plan["keep_remote"], plan["enabled"]) == (5, 0, True)
 
 
 @pytest.mark.django_db
-def test_a_disabled_plan_has_no_next_run(api, server):
-    plan = api.post(PLANS, body(server, interval_minutes=60, enabled=False)).json()
+def test_a_disabled_plan_has_no_next_run(api, application):
+    plan = api.post(
+        PLANS, body(application, interval_minutes=60, enabled=False)
+    ).json()
 
     assert plan["next_run_at"] is None
 
@@ -184,9 +185,9 @@ def test_a_disabled_plan_has_no_next_run(api, server):
     ],
 )
 def test_a_plan_that_does_not_validate_is_refused_and_not_logged(
-    api, server, fields, errors
+    api, application, fields, errors
 ):
-    response = api.post(PLANS, body(server, **fields))
+    response = api.post(PLANS, body(application, **fields))
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid"
@@ -195,27 +196,27 @@ def test_a_plan_that_does_not_validate_is_refused_and_not_logged(
 
 
 @pytest.mark.django_db
-def test_a_plan_needs_a_server_a_name_and_a_kind(api):
+def test_a_plan_needs_an_application_a_name_and_a_kind(api):
     response = api.post(PLANS, {})
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {
         "name": ["required"],
-        "server": ["required"],
+        "application": ["required"],
         "kind": ["required"],
     }
 
 
 @pytest.mark.django_db
-def test_a_name_is_unique_among_a_servers_plans_that_are_not_deleted(
-    api, other_server, make_plan
+def test_a_name_is_unique_among_an_applications_plans_that_are_not_deleted(
+    api, other_application, make_plan
 ):
     taken = make_plan()
 
-    refused = api.post(PLANS, body(taken.server))
-    elsewhere = api.post(PLANS, body(other_server))
+    refused = api.post(PLANS, body(taken.application))
+    elsewhere = api.post(PLANS, body(other_application))
     api.delete(url(taken))
-    again = api.post(PLANS, body(taken.server))
+    again = api.post(PLANS, body(taken.application))
 
     assert refused.status_code == 400
     assert refused.json()["error"]["fields"] == {"name": ["name_taken"]}
@@ -231,15 +232,15 @@ def test_a_name_taken_between_the_check_and_the_write_is_still_name_taken(
     monkeypatch.setattr(
         BackupPlanRepository,
         "name_in_use",
-        lambda self, server_id, name, excluding=None: False,
+        lambda self, application_id, name, excluding=None: False,
     )
     monkeypatch.setattr(
         BackupPlanRepository,
-        "names_for_server",
-        lambda self, server_id, excluding=None: [],
+        "names_for_application",
+        lambda self, application_id, excluding=None: [],
     )
 
-    response = api.post(PLANS, body(taken.server))
+    response = api.post(PLANS, body(taken.application))
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {"name": ["name_taken"]}
@@ -252,7 +253,7 @@ def test_a_name_taken_between_the_check_and_the_write_is_still_name_taken(
 def test_both_service_errors_are_reported_together(api, make_plan):
     taken = make_plan()
 
-    response = api.post(PLANS, body(taken.server, interval_minutes=5))
+    response = api.post(PLANS, body(taken.application, interval_minutes=5))
 
     assert response.json()["error"]["fields"] == {
         "name": ["name_taken"],
@@ -261,12 +262,14 @@ def test_both_service_errors_are_reported_together(api, make_plan):
 
 
 @pytest.mark.django_db
-def test_a_plan_for_an_unknown_or_deleted_server_is_not_found(api, admin, server):
-    ServerService(admin).delete(server.pk, account_password=PASSWORD)
+def test_a_plan_for_an_unknown_or_deleted_application_is_not_found(
+    api, admin, application
+):
+    ApplicationService(admin).delete(application.pk, account_password=PASSWORD)
 
-    for server_id in (server.pk, uuid4()):
+    for application_id in (application.pk, uuid4()):
         response = api.post(
-            PLANS, {"server": str(server_id), "name": "p", "kind": "dbs"}
+            PLANS, {"application": str(application_id), "name": "p", "kind": "dbs"}
         )
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "not_found"
@@ -276,7 +279,7 @@ def test_a_plan_for_an_unknown_or_deleted_server_is_not_found(api, admin, server
 @pytest.mark.django_db
 def test_one_plan_reads_as_the_list_shows_it(api, make_plan):
     plan = make_plan()
-    [listed] = api.get(PLANS, {"server": plan.server_id}).json()["results"]
+    [listed] = api.get(PLANS, {"application": plan.application_id}).json()["results"]
 
     response = api.get(url(plan))
 
@@ -298,7 +301,7 @@ def test_an_unknown_or_deleted_plan_is_not_found(api, make_plan):
 
 @pytest.mark.django_db
 def test_a_change_touches_only_what_was_sent_and_logs_what_changed(
-    api, admin, server, other_server, make_plan
+    api, admin, application, other_application, make_plan
 ):
     plan = make_plan()
 
@@ -308,7 +311,7 @@ def test_a_change_touches_only_what_was_sent_and_logs_what_changed(
             "name": "nightly",
             "keep": 5,
             "keep_remote": 3,
-            "server": str(other_server.pk),
+            "application": str(other_application.pk),
         },
     )
 
@@ -319,11 +322,11 @@ def test_a_change_touches_only_what_was_sent_and_logs_what_changed(
         5,
         3,
     )
-    assert changed["server"] == str(server.pk)
+    assert changed["application"] == str(application.pk)
     assert changed["interval_minutes"] == 1440
     [entry] = logged("plan.update")
     assert (entry.subject, entry.target_name, entry.actor) == (
-        str(server.pk),
+        str(application.pk),
         "nightly",
         admin,
     )
@@ -395,7 +398,7 @@ def test_a_change_is_validated_like_a_new_plan(api, make_plan):
 
 @pytest.mark.django_db
 def test_a_deleted_plan_is_hidden_and_its_backups_keep_its_name(
-    api, admin, server, make_plan, ran
+    api, admin, application, make_plan, ran
 ):
     plan = make_plan()
     ran(plan)
@@ -403,27 +406,32 @@ def test_a_deleted_plan_is_hidden_and_its_backups_keep_its_name(
     response = api.delete(url(plan))
 
     assert response.status_code == 204
-    assert api.get(PLANS, {"server": server.pk}).json()["count"] == 0
-    [backup] = api.get("/api/backups/", {"server": server.pk}).json()["results"]
+    assert api.get(PLANS, {"application": application.pk}).json()["count"] == 0
+    backups = api.get("/api/backups/", {"application": application.pk}).json()
+    [backup] = backups["results"]
     assert (backup["plan"], backup["plan_name"]) == (str(plan.pk), "django-dbs")
     [entry] = logged("plan.delete")
     assert (entry.subject, entry.target_name, entry.actor) == (
-        str(server.pk),
+        str(application.pk),
         "django-dbs",
         admin,
     )
 
 
-def archive_body(server, **fields) -> dict:
-    return body(server, name="files", kind="archive", paths=["/srv/app/media"]) | fields
+def archive_body(application, **fields) -> dict:
+    return (
+        body(application, name="files", kind="archive", paths=["/srv/app/media"])
+        | fields
+    )
 
 
 @pytest.mark.django_db
-def test_an_archive_plan_keeps_its_paths_normalised_and_once_each(api, server):
+def test_an_archive_plan_keeps_its_paths_normalised_and_once_each(api, application):
     response = api.post(
         PLANS,
         archive_body(
-            server, paths=["/srv/app/media/", "//srv/app/./media", "/etc/app.conf", "/"]
+            application,
+            paths=["/srv/app/media/", "//srv/app/./media", "/etc/app.conf", "/"],
         ),
         format="json",
     )
@@ -441,9 +449,11 @@ def test_an_archive_plan_keeps_its_paths_normalised_and_once_each(api, server):
 
 
 @pytest.mark.django_db
-def test_a_dbs_plan_has_no_paths(api, server):
-    sent_none = api.post(PLANS, body(server), format="json")
-    sent_empty = api.post(PLANS, body(server, name="other", paths=[]), format="json")
+def test_a_dbs_plan_has_no_paths(api, application):
+    sent_none = api.post(PLANS, body(application), format="json")
+    sent_empty = api.post(
+        PLANS, body(application, name="other", paths=[]), format="json"
+    )
 
     assert sent_none.json()["paths"] == sent_empty.json()["paths"] == []
 
@@ -465,9 +475,9 @@ def test_a_dbs_plan_has_no_paths(api, server):
     ],
 )
 def test_an_archive_plan_with_paths_that_will_not_do_is_refused(
-    api, server, fields, errors
+    api, application, fields, errors
 ):
-    response = api.post(PLANS, archive_body(server, **fields), format="json")
+    response = api.post(PLANS, archive_body(application, **fields), format="json")
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == errors
@@ -475,8 +485,8 @@ def test_an_archive_plan_with_paths_that_will_not_do_is_refused(
 
 
 @pytest.mark.django_db
-def test_an_archive_plan_needs_its_paths(api, server):
-    sent = archive_body(server)
+def test_an_archive_plan_needs_its_paths(api, application):
+    sent = archive_body(application)
     del sent["paths"]
 
     response = api.post(PLANS, sent, format="json")
@@ -485,10 +495,10 @@ def test_an_archive_plan_needs_its_paths(api, server):
 
 
 @pytest.mark.django_db
-def test_fifty_paths_are_enough(api, server):
+def test_fifty_paths_are_enough(api, application):
     response = api.post(
         PLANS,
-        archive_body(server, paths=[f"/srv/{n}" for n in range(50)]),
+        archive_body(application, paths=[f"/srv/{n}" for n in range(50)]),
         format="json",
     )
 
@@ -497,15 +507,17 @@ def test_fifty_paths_are_enough(api, server):
 
 
 @pytest.mark.django_db
-def test_a_dbs_plan_given_paths_is_refused(api, server):
-    response = api.post(PLANS, body(server, paths=["/srv/app"]), format="json")
+def test_a_dbs_plan_given_paths_is_refused(api, application):
+    response = api.post(PLANS, body(application, paths=["/srv/app"]), format="json")
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == {"paths": ["paths_not_allowed"]}
 
 
 @pytest.mark.django_db
-def test_an_archive_plans_paths_change_and_are_logged(api, admin, server, make_plan):
+def test_an_archive_plans_paths_change_and_are_logged(
+    api, admin, application, make_plan
+):
     plan = make_plan(name="files", kind="archive", paths=["/srv/app/media"])
 
     response = api.patch(
@@ -553,21 +565,24 @@ def test_a_dbs_plan_takes_no_paths_on_change_and_keeps_its_kind(api, make_plan):
     assert [entry.data for entry in logged("plan.update")] == [{"fields": []}]
 
 
-def collect_body(server, **fields) -> dict:
+def collect_body(application, **fields) -> dict:
     return (
-        body(server, name="pg-dumps", kind="collect", paths=["/var/backups/pg"])
+        body(application, name="pg-dumps", kind="collect", paths=["/var/backups/pg"])
         | fields
     )
 
 
 @pytest.mark.django_db
 def test_a_collect_plan_keeps_one_folder_and_a_pattern_and_no_copy_on_the_server(
-    api, server
+    api, application
 ):
     response = api.post(
         PLANS,
         collect_body(
-            server, paths=["//var/backups/./pg/"], pattern="*.sql.gz", keep_remote=3
+            application,
+            paths=["//var/backups/./pg/"],
+            pattern="*.sql.gz",
+            keep_remote=3,
         ),
         format="json",
     )
@@ -590,17 +605,17 @@ def test_a_collect_plan_keeps_one_folder_and_a_pattern_and_no_copy_on_the_server
 
 
 @pytest.mark.django_db
-def test_a_collect_plan_sent_no_pattern_takes_every_file(api, server):
-    response = api.post(PLANS, collect_body(server), format="json")
+def test_a_collect_plan_sent_no_pattern_takes_every_file(api, application):
+    response = api.post(PLANS, collect_body(application), format="json")
 
     assert (response.json()["pattern"], response.json()["keep_remote"]) == ("*", 0)
 
 
 @pytest.mark.django_db
-def test_two_spellings_of_one_folder_are_one_folder(api, server):
+def test_two_spellings_of_one_folder_are_one_folder(api, application):
     response = api.post(
         PLANS,
-        collect_body(server, paths=["/var/backups/pg", "/var/backups/pg/"]),
+        collect_body(application, paths=["/var/backups/pg", "/var/backups/pg/"]),
         format="json",
     )
 
@@ -628,8 +643,10 @@ def test_two_spellings_of_one_folder_are_one_folder(api, server):
         ),
     ],
 )
-def test_a_collect_plan_that_will_not_do_is_refused(api, server, fields, errors):
-    response = api.post(PLANS, collect_body(server, **fields), format="json")
+def test_a_collect_plan_that_will_not_do_is_refused(
+    api, application, fields, errors
+):
+    response = api.post(PLANS, collect_body(application, **fields), format="json")
 
     assert response.status_code == 400
     assert response.json()["error"]["fields"] == errors
@@ -637,8 +654,8 @@ def test_a_collect_plan_that_will_not_do_is_refused(api, server, fields, errors)
 
 
 @pytest.mark.django_db
-def test_a_collect_plan_needs_its_folder(api, server):
-    sent = collect_body(server)
+def test_a_collect_plan_needs_its_folder(api, application):
+    sent = collect_body(application)
     del sent["paths"]
 
     response = api.post(PLANS, sent, format="json")
@@ -647,8 +664,10 @@ def test_a_collect_plan_needs_its_folder(api, server):
 
 
 @pytest.mark.django_db
-def test_two_hundred_characters_are_enough_for_a_pattern(api, server):
-    response = api.post(PLANS, collect_body(server, pattern="?" * 200), format="json")
+def test_two_hundred_characters_are_enough_for_a_pattern(api, application):
+    response = api.post(
+        PLANS, collect_body(application, pattern="?" * 200), format="json"
+    )
 
     assert response.status_code == 201
 
@@ -659,9 +678,9 @@ def test_two_hundred_characters_are_enough_for_a_pattern(api, server):
     [{"kind": "dbs"}, {"kind": "archive", "paths": ["/srv/app/media"]}],
     ids=["dbs", "archive"],
 )
-def test_a_pattern_means_nothing_to_the_other_kinds(api, server, fields):
+def test_a_pattern_means_nothing_to_the_other_kinds(api, application, fields):
     response = api.post(
-        PLANS, body(server, pattern="*.sql.gz", **fields), format="json"
+        PLANS, body(application, pattern="*.sql.gz", **fields), format="json"
     )
 
     assert response.status_code == 201
@@ -670,7 +689,7 @@ def test_a_pattern_means_nothing_to_the_other_kinds(api, server, fields):
 
 @pytest.mark.django_db
 def test_a_collect_plans_folder_and_pattern_change_and_its_server_copies_do_not(
-    api, admin, server, make_plan
+    api, admin, application, make_plan
 ):
     plan = make_plan(name="pg-dumps", kind="collect", paths=["/var/backups/pg"])
 
@@ -729,25 +748,27 @@ def test_a_pattern_sent_to_another_kind_is_not_a_change(api, make_plan):
         {"kind": "collect", "paths": ["/srv/dumps"], "pattern": "*.sql.gz"},
     ],
 )
-def test_a_plan_that_reads_the_server_needs_the_users_password(api, server, fields):
+def test_a_plan_that_reads_the_server_needs_the_users_password(
+    api, application, fields
+):
     missing = api.post(
-        PLANS, body(server, account_password="", **fields), format="json"
+        PLANS, body(application, account_password="", **fields), format="json"
     )
     wrong = api.post(
-        PLANS, body(server, account_password="wrong", **fields), format="json"
+        PLANS, body(application, account_password="wrong", **fields), format="json"
     )
 
     assert missing.status_code == wrong.status_code == 400
     assert missing.json()["error"]["fields"] == {"account_password": ["required"]}
     assert wrong.json()["error"]["code"] == "invalid_password"
-    assert api.get(PLANS, {"server": server.pk}).json()["count"] == 0
+    assert api.get(PLANS, {"application": application.pk}).json()["count"] == 0
     [refused] = logged("plan.create")
     assert (refused.status, refused.error_code) == ("failed", "invalid_password")
 
 
 @pytest.mark.django_db
-def test_a_dbs_plan_needs_no_password(api, server):
-    response = api.post(PLANS, body(server, account_password=""))
+def test_a_dbs_plan_needs_no_password(api, application):
+    response = api.post(PLANS, body(application, account_password=""))
 
     assert response.status_code == 201
 

@@ -14,19 +14,22 @@
       "when": "When",
       "action": "Action",
       "status": "Status",
+      "application": "Application",
       "server": "Server",
       "target": "Target",
       "by": "By",
       "ip": "IP address",
       "scheduled": "Scheduled task",
       "serverDeleted": "Deleted",
+      "applicationRemoved": "Removed",
       "none": "—",
       "pages": "Activity pages"
     },
     "empty": {
       "title": "No activity yet",
       "body": "Actions taken in DBS are listed here.",
-      "serverBody": "Actions taken on this server are listed here."
+      "serverBody": "Actions taken on this server and its applications are listed here.",
+      "applicationBody": "Actions taken on this application are listed here."
     },
     "noMatch": {
       "title": "No matching activity",
@@ -53,10 +56,21 @@
         "host_key_reject": "Reject host key for Claude",
         "keypair": "Create SSH key",
         "discover": "Find django-dbs settings",
-        "passphrase_capture": "Save backup passphrase"
+        "passphrase_capture": "Save backup passphrase",
+        "merge": "Join servers"
+      },
+      "application": {
+        "create": "Add application",
+        "update": "Edit application",
+        "delete": "Remove application",
+        "check": "Application check",
+        "passphrase_reveal": "Show backup passphrase",
+        "passphrase_capture": "Save backup passphrase",
+        "discover": "Find applications",
+        "deploy_steps": "Change deploy steps"
       },
       "backup": {
-        "take": "Back up server",
+        "take": "Back up application",
         "run": "Run backup plan",
         "verify": "Verify backup",
         "restore": "Restore backup",
@@ -70,7 +84,10 @@
       "plan": {
         "create": "Add backup plan",
         "update": "Edit backup plan",
-        "delete": "Delete backup plan"
+        "delete": "Delete backup plan",
+        "reschedule": "Move a backup plan's next run",
+        "pause": "Pause backup plan",
+        "resume": "Resume backup plan"
       },
       "files": {
         "download": "Download file",
@@ -103,24 +120,46 @@
         "password_expire": "Ask for a new password"
       },
       "redeploy": {
-        "run": "Move to another server",
-        "check": "Move: check the new server",
-        "source_backup": "Move: back up the old server",
-        "record_env": "Move: record the new server's .env file",
-        "safety_backup": "Move: back up the new server's data",
+        "run": "Move to another application",
+        "check": "Move: check the new application",
+        "source_backup": "Move: back up the old application",
+        "record_env": "Move: record the new application's .env file",
+        "safety_backup": "Move: back up the new application's data",
         "env": "Move: push the .env file",
         "migrate": "Move: run the migrations",
         "restore": "Move: restore the backup",
         "archives": "Move: unpack the folder archives",
         "final_check": "Move: check again",
-        "revert": "Revert the new server after a move",
-        "revert_check": "Revert: check the new server",
+        "revert": "Revert after a move or a deploy",
+        "revert_check": "Revert: check the application",
         "revert_env": "Revert: push the recorded .env file back",
-        "revert_restore": "Revert: restore the data from before the move"
+        "revert_restore": "Revert: restore the data kept before the change",
+        "deploy": "Deploy in place"
       },
       "manager": {
         "export": "Export DBS data",
         "import": "Import DBS data"
+      },
+      "shell": {
+        "session": "Use a terminal"
+      },
+      "deploy": {
+        "check": "Deploy: check the application",
+        "safety_backup": "Deploy: safety backup",
+        "record_env": "Deploy: record the .env",
+        "git_pull": "Deploy: git pull",
+        "compose_pull": "Deploy: pull images",
+        "compose_build": "Deploy: build images",
+        "compose_up": "Deploy: start services",
+        "restart": "Deploy: restart",
+        "systemd_user_restart": "Deploy: restart the service",
+        "pip_install": "Deploy: install requirements",
+        "migrate": "Deploy: migrate",
+        "collectstatic": "Deploy: collect static files",
+        "final_check": "Deploy: final check"
+      },
+      "console": {
+        "command": "Run a console command"
       }
     }
   }

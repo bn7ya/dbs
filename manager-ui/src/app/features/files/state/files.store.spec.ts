@@ -12,19 +12,19 @@ import type { ToastMessage } from '@shared/toaster/toaster.types';
 import type { Listing } from '../data/files.types';
 import ar from '../i18n/ar.json';
 import en from '../i18n/en.json';
-import { FILE, FOLDER, NESTED, OTHER_ROOT, ROOT, ROOTS, SERVER_ID, listingOf } from '../testing/files.fixtures';
+import { FILE, FOLDER, NESTED, OTHER_ROOT, ROOT, ROOTS, APPLICATION_ID, listingOf } from '../testing/files.fixtures';
 import { FilesStore } from './files.store';
 
-const OTHER_SERVER = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002';
+const OTHER_APPLICATION = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002';
 
 describe('FilesStore', () => {
   let store: FilesStore;
   let http: HttpTestingController;
   let toasts: MockInstance<(message: ToastMessage) => void>;
 
-  const base = (server = SERVER_ID): string => `/api/files/${server}/`;
-  const listRequest = (server = SERVER_ID): TestRequest =>
-    http.expectOne((request) => request.url === base(server) && request.method === 'GET');
+  const base = (application = APPLICATION_ID): string => `/api/files/${application}/`;
+  const listRequest = (application = APPLICATION_ID): TestRequest =>
+    http.expectOne((request) => request.url === base(application) && request.method === 'GET');
 
   const settle = (): Promise<void> => TestBed.inject(ApplicationRef).whenStable();
 
@@ -33,10 +33,10 @@ describe('FilesStore', () => {
     store.trail();
   };
 
-  const showWith = async (listing: Listing, path: string | null = null, server = SERVER_ID): Promise<void> => {
-    store.show(server, path);
+  const showWith = async (listing: Listing, path: string | null = null, application = APPLICATION_ID): Promise<void> => {
+    store.show(application, path);
     TestBed.tick();
-    listRequest(server).flush(listing);
+    listRequest(application).flush(listing);
     await settle();
     look();
   };
@@ -90,7 +90,7 @@ describe('FilesStore', () => {
     });
 
     it('lists the first allowed folder when none is asked for, with the way to it and every root', async () => {
-      store.show(SERVER_ID, null);
+      store.show(APPLICATION_ID, null);
       TestBed.tick();
       expect(store.pending()).toBe(true);
       expect(store.current()).toBeNull();
@@ -133,7 +133,7 @@ describe('FilesStore', () => {
       await settle();
       look();
 
-      store.show(SERVER_ID, FOLDER.path);
+      store.show(APPLICATION_ID, FOLDER.path);
       TestBed.tick();
       const request = listRequest();
       expect(request.request.params.get('path')).toBe(FOLDER.path);
@@ -150,22 +150,22 @@ describe('FilesStore', () => {
       expect(store.current()).toBe(FOLDER.path);
     });
 
-    it("forgets one server's roots on another's tab", async () => {
+    it("forgets one application's roots on another's tab", async () => {
       await showWith(listingOf([FILE]));
 
-      store.show(OTHER_SERVER, null);
+      store.show(OTHER_APPLICATION, null);
       TestBed.tick();
       expect(store.roots()).toEqual([]);
       expect(store.trail()).toEqual([]);
-      listRequest(OTHER_SERVER).flush(listingOf([], { path: OTHER_ROOT, roots: [OTHER_ROOT] }));
+      listRequest(OTHER_APPLICATION).flush(listingOf([], { path: OTHER_ROOT, roots: [OTHER_ROOT] }));
       await settle();
 
       expect(store.roots()).toEqual([OTHER_ROOT]);
       expect(store.empty()).toBe(true);
     });
 
-    it('says when the server has no allowed folders', async () => {
-      store.show(SERVER_ID, null);
+    it('says when the application has no allowed folders', async () => {
+      store.show(APPLICATION_ID, null);
       TestBed.tick();
       refuse(listRequest(), 'no_allowed_folders', 400);
       await settle();
@@ -175,7 +175,7 @@ describe('FilesStore', () => {
     });
 
     it('holds any other failure as an ApiError, and retries on reload', async () => {
-      store.show(SERVER_ID, '/etc');
+      store.show(APPLICATION_ID, '/etc');
       TestBed.tick();
       refuse(listRequest(), 'path_outside_roots', 403);
       await settle();
@@ -207,7 +207,7 @@ describe('FilesStore', () => {
         { status: 400, statusText: 'Bad Request' },
       ] as const;
 
-    it('answers with a link for the file on the server on screen, busy while it asks', async () => {
+    it('answers with a link for the file of the application on screen, busy while it asks', async () => {
       await showWith(listingOf([FILE]));
 
       const linking = store.downloadLink(FILE);
@@ -305,7 +305,7 @@ describe('FilesStore', () => {
       await answerReload(listingOf([FILE]));
     });
 
-    it('uploads one file to a server at a time', async () => {
+    it('uploads one file to an application at a time', async () => {
       await showWith(listingOf([FILE]));
       store.uploadFile(ROOT, chosen());
       store.uploadFile(ROOT, chosen());

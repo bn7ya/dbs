@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 
+import { capabilityGuard } from '@core/auth/guards/auth.guard';
 import { provideTranslations } from '@core/i18n/provide-translations';
 import { serversGuard } from './guards/servers.guard';
 import ar from './i18n/ar.json';
@@ -15,41 +16,46 @@ export const routes: Routes = [
     children: [
       {
         path: '',
+        canActivate: [serversGuard],
         loadComponent: () => import('./pages/servers/servers').then((m) => m.ServersPage),
       },
       {
         path: 'new',
+        canActivate: [capabilityGuard('servers.manage')],
         providers: [ServerWizardStore],
         loadComponent: () => import('./pages/server-wizard/server-wizard').then((m) => m.ServerWizardPage),
       },
       {
+        path: ':serverId/applications/new',
+        canActivate: [capabilityGuard('applications.manage')],
+        loadChildren: () => import('@features/applications/application-wizard.routes').then((m) => m.routes),
+      },
+      {
         path: ':serverId',
+        canActivate: [serversGuard],
         loadComponent: () => import('./pages/server/server').then((m) => m.ServerPage),
         children: [
           {
             path: '',
+            canActivate: [serversGuard],
             loadComponent: () =>
               import('./pages/server-overview/server-overview').then((m) => m.ServerOverviewPage),
           },
           {
-            path: 'backups',
-            loadChildren: () => import('@features/backups/backups.routes').then((m) => m.routes),
+            path: 'applications',
+            canActivate: [serversGuard],
+            loadChildren: () => import('@features/applications/server-applications.routes').then((m) => m.routes),
           },
           {
-            path: 'files',
-            loadChildren: () => import('@features/files/files.routes').then((m) => m.routes),
-          },
-          {
-            path: 'environment',
-            loadChildren: () => import('@features/envfiles/envfiles.routes').then((m) => m.routes),
+            path: 'terminal',
+            canActivate: [capabilityGuard('shell.open')],
+            data: { mode: 'server' },
+            loadChildren: () => import('@features/terminal/terminal.routes').then((m) => m.routes),
           },
           {
             path: 'activity',
+            canActivate: [serversGuard],
             loadChildren: () => import('@features/activity/activity.routes').then((m) => m.routes),
-          },
-          {
-            path: 'move',
-            loadChildren: () => import('@features/redeploy/redeploy.routes').then((m) => m.routes),
           },
         ],
       },

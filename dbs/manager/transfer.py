@@ -118,9 +118,10 @@ def manages_servers():
 
 
 def import_manager(source, passphrase, *, replace=False):
-    from dbs.engine.restore import backup_files, restore_backup
+    from dbs.engine.restore import backup_files, restore_translated
 
     from .backups.repositories import BackupPlanRepository
+    from .legacy import SplitServers
 
     if manages_servers() and not replace:
         raise TransferError(
@@ -128,7 +129,9 @@ def import_manager(source, passphrase, *, replace=False):
         )
     with opened_export(source) as handle:
         try:
-            result = restore_backup(handle, passphrase, flush=True, write_files=False)
+            result = restore_translated(
+                handle, passphrase, SplitServers(), flush=True, write_files=False
+            )
             written = write_roots(backup_files(handle, passphrase), conf.data_dir())
         except DBSError as exc:
             raise TransferError(str(exc)) from exc

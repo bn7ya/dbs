@@ -10,8 +10,8 @@ from dbs.manager.files.views import (
 app_name = "files"
 
 urlpatterns = [
-    path("<uuid:server>/", FolderView.as_view(), name="folder"),
-    path("<uuid:server>/download/", DownloadView.as_view(), name="download"),
-    path("<uuid:server>/upload/", UploadView.as_view(), name="upload"),
-    path("<uuid:server>/folders/", FolderCreateView.as_view(), name="folders"),
+    path("<uuid:application>/", FolderView.as_view(), name="folder"),
+    path("<uuid:application>/download/", DownloadView.as_view(), name="download"),
+    path("<uuid:application>/upload/", UploadView.as_view(), name="upload"),
+    path("<uuid:application>/folders/", FolderCreateView.as_view(), name="folders"),
 ]

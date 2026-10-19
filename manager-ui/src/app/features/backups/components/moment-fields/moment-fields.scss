@@ -1,0 +1,12 @@
+@use "layout" as *;
+
+:host {
+  display: block;
+}
+
+// The date and the time read as one moment, side by side, and stack when the dialog is narrow.
+.moment-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(calc($card-max / 3), 100%), 1fr));
+  gap: var(--app-space-4);
+}

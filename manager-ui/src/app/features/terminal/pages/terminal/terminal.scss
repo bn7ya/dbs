@@ -1,0 +1,23 @@
+.terminal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.terminal__header,
+.terminal__still-open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.terminal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  align-items: center;
+}
+
+.terminal__view {
+  block-size: 60dvh;
+}

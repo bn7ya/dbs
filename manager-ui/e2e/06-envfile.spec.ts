@@ -1,6 +1,6 @@
 import { Api } from './support/api';
 import { ADMIN, SSH } from './support/config';
-import { expect, test } from './support/fixtures';
+import { baseUrlOf, expect, test } from './support/fixtures';
 import { acquireLock } from './support/lock';
 import { appendRemote, readRemote, remoteReachable, writeRemote } from './support/ssh-fs';
 
@@ -8,7 +8,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('the .env file', () => {
   let api: Api;
-  let serverId = '';
+  let name = '';
   let envUrl = '';
   let original: Buffer | null = null;
   let release: () => void = () => undefined;
@@ -16,18 +16,17 @@ test.describe('the .env file', () => {
 
   test.beforeAll(async ({}, testInfo) => {
     release = await acquireLock('envfile');
-    api = await Api.signIn(testInfo.project.use.baseURL ?? 'http://localhost:4200');
+    api = await Api.signIn(baseUrlOf(testInfo));
     original = readRemote(SSH.envPath);
-    const server = await api.createServer(`e2e env ${testInfo.project.name} ${Date.now().toString(36)}`);
-    serverId = server.id;
-    envUrl = `/servers/${serverId}/environment`;
+    name = `e2e env ${testInfo.project.name} ${Date.now().toString(36)}`;
+    const { application } = await api.createServerWithApplication(name);
+    envUrl = `/applications/${application.id}/environment`;
     addedKey = `E2E_${testInfo.project.name.toUpperCase()}_${Date.now().toString(36).toUpperCase()}`;
   });
 
   test.afterAll(async () => {
     if (original) writeRemote(SSH.envPath, original);
-    await api.deleteServer(serverId);
-    await api.dispose();
+    await api.deleteServersNamed(name);
     release();
   });
 

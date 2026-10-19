@@ -11,10 +11,11 @@ from pathlib import Path
 import pytest
 
 from dbs.manager import cli
+from dbs.manager.applications.models import Application
 from dbs.manager.servers.gateways import RemoteHost
 from dbs.manager.servers.models import Server
-from dbs.manager.servers.services import ServerService
 from dbs.manager.terminal import session
+from tests.manager import factories
 from tests.manager.servers.support import (
     BACKUP_DIR,
     BACKUP_PASSPHRASE,
@@ -22,8 +23,6 @@ from tests.manager.servers.support import (
     PYTHON,
     SETTINGS_MODULE,
     LocalSftpSession,
-    host_key_line,
-    private_key_text,
 )
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
@@ -73,21 +72,31 @@ def typing(monkeypatch):
 def make_server(admin):
 
     def make(name: str = "web-1", host: str = "10.0.0.5", **fields) -> Server:
+        return factories.make_server(admin, name=name, host=host, **fields)
+
+    return make
+
+
+@pytest.fixture
+def make_application(admin):
+
+    def make(
+        name: str = "web-1",
+        host: str = "10.0.0.5",
+        *,
+        server: Server | None = None,
+        **fields,
+    ) -> Application:
         values = {
-            "name": name,
-            "host": host,
-            "port": 2222,
-            "username": "deploy",
-            "auth_method": Server.AuthMethod.KEY,
-            "private_key": private_key_text(),
-            "host_key": host_key_line(),
             "project_dir": PROJECT_DIR,
             "python_path": PYTHON,
             "settings_module": SETTINGS_MODULE,
             "remote_backup_dir": BACKUP_DIR,
             "backup_passphrase": BACKUP_PASSPHRASE,
         }
-        return ServerService(admin).create(**{**values, **fields})
+        return factories.make_application(
+            admin, name=name, host=host, server=server, **{**values, **fields}
+        )
 
     return make
 

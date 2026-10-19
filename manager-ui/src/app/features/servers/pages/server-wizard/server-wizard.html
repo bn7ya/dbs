@@ -2,6 +2,7 @@
   <header class="wizard__header">
     <a matButton routerLink="/servers">{{ 'servers.page.back' | t }}</a>
     <h1>{{ 'servers.wizard.title' | t }}</h1>
+    <p class="text-secondary">{{ 'servers.wizard.subtitle' | t }}</p>
   </header>
 
   <mat-card appearance="outlined">
@@ -11,50 +12,14 @@
           [linear]="true"
           orientation="vertical"
           [selectedIndex]="shownStep()"
-          [attr.aria-label]="'servers.form.steps.label' | t"
+          [attr.aria-label]="'servers.wizard.steps.label' | t"
           (selectionChange)="step.set($event.selectedIndex)"
         >
           <ng-template matStepperIcon="edit"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
           <ng-template matStepperIcon="done"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
 
-          <mat-step
-            [label]="'servers.wizard.steps.snippet' | t"
-            [completed]="stepDone('snippet')"
-            [editable]="!created()"
-            [optional]="true"
-          >
+          <mat-step [label]="'servers.wizard.steps.address' | t" [completed]="stepDone('address')" [editable]="!created()">
             <div class="wizard__step">
-              <p class="text-secondary">{{ 'servers.wizard.snippet.intro' | t }}</p>
-              <mat-form-field>
-                <mat-label>{{ 'servers.wizard.snippet.label' | t }}</mat-label>
-                <textarea
-                  matInput
-                  class="wizard__code"
-                  name="snippet"
-                  dir="ltr"
-                  rows="6"
-                  spellcheck="false"
-                  [appFieldError]="error('snippet') | errorText"
-                  [ngModel]="snippetText()"
-                  (ngModelChange)="snippetText.set($event)"
-                ></textarea>
-                <mat-hint>{{ 'servers.wizard.snippet.hint' | t }}</mat-hint>
-                @if (error('snippet') | errorText; as message) {
-                  <mat-error>{{ message }}</mat-error>
-                }
-              </mat-form-field>
-            </div>
-          </mat-step>
-
-          <mat-step
-            [label]="'servers.wizard.steps.connection' | t"
-            [completed]="stepDone('connection')"
-            [editable]="!created()"
-          >
-            <div class="wizard__step">
-              @if (fromSnippet()) {
-                <app-notice severity="info">{{ 'servers.wizard.snippet.applied' | t }}</app-notice>
-              }
               <mat-form-field>
                 <mat-label>{{ 'servers.form.name.label' | t }}</mat-label>
                 <input
@@ -135,8 +100,36 @@
                   <mat-error>{{ message }}</mat-error>
                 }
               </mat-form-field>
+            </div>
+          </mat-step>
 
-              <p class="text-secondary">{{ 'servers.form.hostKeyIntro' | t }}</p>
+          <mat-step [label]="'servers.wizard.steps.hostKey' | t" [completed]="stepDone('hostKey')" [editable]="!created()">
+            <div class="wizard__step" [attr.aria-busy]="fetchingHostKey()">
+              <p class="text-secondary">{{ 'servers.wizard.hostKey.intro' | t }}</p>
+
+              @if (hostKeyError(); as failure) {
+                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+              }
+
+              @if (hostKey(); as key) {
+                <app-host-key-facts [keyType]="key.key_type" [fingerprint]="key.fingerprint" compare />
+                <div class="wizard__check">
+                  <mat-checkbox
+                    name="host_key_confirmed"
+                    [aria-describedby]="error('host_key') ? confirmId : ''"
+                    [ngModel]="hostKeyConfirmed()"
+                    (ngModelChange)="hostKeyConfirmed.set($event)"
+                  >
+                    {{ 'servers.hostKey.matches' | t }}
+                  </mat-checkbox>
+                  @if (error('host_key'); as code) {
+                    <small class="wizard__error" role="alert" [id]="confirmId">{{ code | errorText }}</small>
+                  }
+                </div>
+              } @else if (error('host_key'); as code) {
+                <app-notice severity="warning">{{ code | errorText }}</app-notice>
+              }
+
               <div>
                 <button
                   matButton="outlined"
@@ -148,74 +141,23 @@
                   @if (fetchingHostKey()) {
                     <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                   }
-                  {{ (hostKey() ? 'servers.form.fetchAgain' : 'servers.form.fetch') | t }}
+                  {{ (hostKey() ? 'servers.wizard.hostKey.again' : 'servers.wizard.hostKey.read') | t }}
                 </button>
               </div>
-
-              @if (hostKeyError(); as failure) {
-                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-              }
-
-              @if (hostKey(); as key) {
-                <dl class="wizard__facts">
-                  <div class="wizard__fact">
-                    <dt class="text-label text-secondary">{{ 'servers.wizard.connection.keyType' | t }}</dt>
-                    <dd><bdi class="wizard__code" dir="ltr">{{ key.key_type }}</bdi></dd>
-                  </div>
-                  <div class="wizard__fact">
-                    <dt class="text-label text-secondary">{{ 'servers.wizard.connection.fingerprint' | t }}</dt>
-                    <dd><bdi class="wizard__code" dir="ltr">{{ key.fingerprint }}</bdi></dd>
-                  </div>
-                </dl>
-                @switch (fingerprintMatch()) {
-                  @case ('match') {
-                    <app-status-tag
-                      severity="success"
-                      icon="fa-solid fa-circle-check"
-                      [label]="'servers.wizard.connection.match' | t"
-                    />
-                  }
-                  @case ('mismatch') {
-                    <app-status-tag
-                      severity="danger"
-                      icon="fa-solid fa-circle-xmark"
-                      [label]="'servers.wizard.connection.mismatch' | t"
-                    />
-                  }
-                }
-                <div class="wizard__check">
-                  <mat-checkbox
-                    name="host_key_confirmed"
-                    [ngModel]="hostKeyConfirmed()"
-                    (ngModelChange)="hostKeyConfirmed.set($event)"
-                  >
-                    {{ 'servers.hostKey.matches' | t }}
-                  </mat-checkbox>
-                  @if (error('host_key'); as code) {
-                    <small class="wizard__error" role="alert">{{ code | errorText }}</small>
-                  }
-                </div>
-              } @else if (error('host_key'); as code) {
-                <app-notice severity="warning">{{ code | errorText }}</app-notice>
-              }
             </div>
           </mat-step>
 
-          <mat-step
-            [label]="'servers.wizard.steps.signIn' | t"
-            [completed]="stepDone('signIn')"
-            [editable]="!created()"
-          >
+          <mat-step [label]="'servers.wizard.steps.signIn' | t" [completed]="stepDone('signIn')" [editable]="!created()">
             <div class="wizard__step">
-              @if (createError(); as failure) {
+              @if (createFailure(); as failure) {
                 <app-notice severity="danger">{{ failure | errorText }}</app-notice>
               }
               @if (server(); as current) {
-                <app-notice severity="success">{{ 'servers.form.added' | t }}</app-notice>
+                <app-notice severity="success">{{ 'servers.wizard.signIn.added' | t }}</app-notice>
                 @if (publicKey(); as key) {
                   <section class="wizard__step">
                     <h3>{{ 'servers.wizard.signIn.publicKey' | t }}</h3>
-                    <p>{{ 'servers.wizard.signIn.instruction' | t: { path: '⁦' + authorizedKeysPath() + '⁩' } }}</p>
+                    <p>{{ 'servers.wizard.signIn.instruction' | t: { path: authorizedKeysPath() } }}</p>
                     <mat-form-field>
                       <mat-label>{{ 'servers.wizard.signIn.publicKey' | t }}</mat-label>
                       <textarea matInput class="wizard__code" readonly dir="ltr" rows="3" [value]="key"></textarea>
@@ -228,30 +170,13 @@
                       @if (current.authorized_keys_hint; as hint) {
                         <app-copy-button [text]="hint" [label]="'servers.wizard.signIn.copyHint' | t" />
                       }
-                      <button
-                        matButton
-                        type="button"
-                        [disabled]="readingKey()"
-                        [attr.aria-busy]="readingKey()"
-                        (click)="rereadPublicKey()"
-                      >
-                        {{ 'servers.wizard.signIn.reread' | t }}
-                      </button>
                     </div>
-                    @if (keyError(); as failure) {
-                      <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-                    }
                   </section>
                 }
               } @else {
                 <fieldset class="wizard__choice">
                   <legend class="text-label">{{ 'servers.wizard.signIn.legend' | t }}</legend>
-                  <mat-radio-group
-                    class="wizard__options"
-                    name="sign_in"
-                    [ngModel]="draft().sign_in"
-                    (ngModelChange)="setSignIn($event)"
-                  >
+                  <mat-radio-group class="wizard__options" name="sign_in" [ngModel]="draft().sign_in" (ngModelChange)="setSignIn($event)">
                     @for (choice of signInChoices; track choice) {
                       <mat-radio-button [value]="choice">{{ 'servers.wizard.signIn.' + choice | t }}</mat-radio-button>
                     }
@@ -306,283 +231,11 @@
             </div>
           </mat-step>
 
-          <mat-step [label]="'servers.wizard.steps.project' | t" [completed]="stepDone('project')">
-            <div class="wizard__step">
-              <p class="text-secondary">{{ 'servers.wizard.project.intro' | t }}</p>
-              <div class="wizard__actions">
-                <button matButton="filled" type="button" [disabled]="!created()" (click)="browse('project_dir')">
-                  <i matButtonIcon class="fa-solid fa-folder-tree" aria-hidden="true"></i>
-                  {{ 'servers.wizard.project.browse' | t }}
-                </button>
-                <button
-                  matButton="outlined"
-                  type="button"
-                  [disabled]="discovering()"
-                  [attr.aria-busy]="discovering()"
-                  (click)="discover()"
-                >
-                  @if (discovering()) {
-                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-                  }
-                  {{ (discovering() ? 'servers.wizard.project.discovering' : 'servers.wizard.project.discover') | t }}
-                </button>
-                @if (fromSnippet()) {
-                  <button matButton type="button" (click)="skipProject()">{{ 'servers.wizard.project.skip' | t }}</button>
-                }
-              </div>
-              @if (discoverError(); as failure) {
-                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-              }
-
-              @if (projects().length > 1) {
-                <fieldset class="wizard__choice">
-                  <legend class="text-label">{{ 'servers.wizard.project.pick' | t }}</legend>
-                  <mat-radio-group
-                    class="wizard__options wizard__options--stacked"
-                    name="project_choice"
-                    [ngModel]="draft().project_dir"
-                    (ngModelChange)="chooseProject($event)"
-                  >
-                    @for (candidate of projects(); track candidate) {
-                      <mat-radio-button [value]="candidate" [disabled]="discovering()">
-                        <bdi class="wizard__code" dir="ltr">{{ candidate }}</bdi>
-                      </mat-radio-button>
-                    }
-                  </mat-radio-group>
-                </fieldset>
-              }
-
-              @if (currentDiscovery(); as found) {
-                @if (!found.project_dir) {
-                  <app-notice severity="warning">{{ 'servers.wizard.project.none' | t }}</app-notice>
-                } @else if (!found.is_project) {
-                  <app-notice severity="warning">{{ 'servers.wizard.project.notProject' | t }}</app-notice>
-                } @else if (found.dbs_version; as version) {
-                  @if (found.runtime === 'compose') {
-                    <app-notice severity="success">{{ 'servers.wizard.project.readyInService' | t: { version, service: found.compose_service } }}</app-notice>
-                  } @else {
-                    <app-notice severity="success">{{ 'servers.wizard.project.ready' | t: { version } }}</app-notice>
-                  }
-                } @else {
-                  <app-notice severity="warning">{{ 'servers.wizard.project.noDbs' | t }}</app-notice>
-                }
-              }
-              @if (projectError(); as failure) {
-                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-              }
-
-              <app-runtime-fields
-                [runtime]="draft().runtime"
-                [composeService]="draft().compose_service"
-                [composeFiles]="draft().compose_files"
-                [services]="discovery()?.candidates?.compose_services ?? []"
-                [serviceError]="error('compose_service')"
-                [filesError]="error('compose_files')"
-                (changed)="updateRuntime($event)"
-              />
-
-              <mat-form-field>
-                <mat-label>{{ 'servers.form.projectDir.label' | t }}</mat-label>
-                <input
-                  matInput
-                  name="project_dir"
-                  dir="ltr"
-                  autocomplete="off"
-                  spellcheck="false"
-                  [appFieldError]="error('project_dir') | errorText"
-                  [ngModel]="draft().project_dir"
-                  (ngModelChange)="update('project_dir', $event)"
-                />
-                <button
-                  matIconButton
-                  matSuffix
-                  type="button"
-                  [disabled]="!created()"
-                  [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.projectDir.label' | t) }"
-                  (click)="browse('project_dir')"
-                >
-                  <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
-                </button>
-                <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.projectDir.composeHint' : 'servers.form.projectDir.hint') | t }}</mat-hint>
-                @if (error('project_dir') | errorText; as message) {
-                  <mat-error>{{ message }}</mat-error>
-                }
-              </mat-form-field>
-
-              <div class="wizard__pair">
-                <mat-form-field>
-                  <mat-label>{{ 'servers.form.pythonPath.label' | t }}</mat-label>
-                  <input
-                    matInput
-                    name="python_path"
-                    dir="ltr"
-                    autocomplete="off"
-                    spellcheck="false"
-                    [matAutocomplete]="pythonPaths"
-                    [ngModel]="draft().python_path"
-                    (ngModelChange)="update('python_path', $event)"
-                  />
-                  <mat-autocomplete #pythonPaths="matAutocomplete">
-                    @for (candidate of discovery()?.candidates?.python_paths ?? []; track candidate) {
-                      <mat-option [value]="candidate"><bdi dir="ltr">{{ candidate }}</bdi></mat-option>
-                    }
-                  </mat-autocomplete>
-                  <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.pythonPath.composeHint' : 'servers.form.pythonPath.hint') | t }}</mat-hint>
-                </mat-form-field>
-
-                <mat-form-field>
-                  <mat-label>{{ 'servers.form.settingsModule.label' | t }}</mat-label>
-                  <input
-                    matInput
-                    name="settings_module"
-                    dir="ltr"
-                    autocomplete="off"
-                    spellcheck="false"
-                    [placeholder]="'servers.form.settingsModule.placeholder' | t"
-                    [ngModel]="draft().settings_module"
-                    (ngModelChange)="update('settings_module', $event)"
-                  />
-                  <mat-hint>{{ 'servers.form.settingsModule.hint' | t }}</mat-hint>
-                </mat-form-field>
-              </div>
-
-              <div>
-                <button matButton type="button" [attr.aria-expanded]="detailsOpen()" aria-controls="wizard-details" (click)="toggleDetails()">
-                  <i matButtonIcon class="fa-solid" [class.fa-chevron-up]="detailsOpen()" [class.fa-chevron-down]="!detailsOpen()" aria-hidden="true"></i>
-                  {{ (detailsOpen() ? 'servers.wizard.project.hideDetails' : 'servers.wizard.project.showDetails') | t }}
-                </button>
-              </div>
-
-              <div id="wizard-details" class="wizard__details" [hidden]="!detailsOpen()">
-                <mat-form-field>
-                  <mat-label>{{ 'servers.form.managePath.label' | t }}</mat-label>
-                  <input
-                    matInput
-                    name="manage_path"
-                    dir="ltr"
-                    autocomplete="off"
-                    spellcheck="false"
-                    [ngModel]="draft().manage_path"
-                    (ngModelChange)="update('manage_path', $event)"
-                  />
-                  <mat-hint>{{ (draft().runtime === 'compose' ? 'servers.form.managePath.composeHint' : 'servers.form.managePath.hint') | t }}</mat-hint>
-                </mat-form-field>
-
-                <mat-form-field>
-                  <mat-label>{{ 'servers.form.remoteBackupDir.label' | t }}</mat-label>
-                  <input
-                    matInput
-                    name="remote_backup_dir"
-                    dir="ltr"
-                    autocomplete="off"
-                    spellcheck="false"
-                    required
-                    [appFieldError]="error('remote_backup_dir') | errorText"
-                    [ngModel]="draft().remote_backup_dir"
-                    (ngModelChange)="update('remote_backup_dir', $event)"
-                  />
-                  <button
-                    matIconButton
-                    matSuffix
-                    type="button"
-                    [disabled]="!created()"
-                    [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.remoteBackupDir.label' | t) }"
-                    (click)="browse('remote_backup_dir')"
-                  >
-                    <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
-                  </button>
-                  <mat-hint>{{ 'servers.form.remoteBackupDir.hint' | t }}</mat-hint>
-                  @if (error('remote_backup_dir') | errorText; as message) {
-                    <mat-error>{{ message }}</mat-error>
-                  }
-                </mat-form-field>
-
-                <mat-form-field>
-                  <mat-label>{{ 'servers.form.fileRoots.label' | t }}</mat-label>
-                  <mat-chip-grid
-                    #roots
-                    [appFieldError]="error('file_roots') | errorText"
-                    [attr.aria-label]="'servers.form.fileRoots.label' | t"
-                  >
-                    @for (root of draft().file_roots; track $index) {
-                      <mat-chip-row (removed)="removeFileRoot($index)">
-                        <bdi dir="ltr">{{ root }}</bdi>
-                        <button matChipRemove type="button" [attr.aria-label]="'servers.form.fileRoots.remove' | t: { path: root }">
-                          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
-                      </mat-chip-row>
-                    }
-                    <input
-                      name="file_roots"
-                      dir="ltr"
-                      autocomplete="off"
-                      spellcheck="false"
-                      [placeholder]="'servers.form.fileRoots.placeholder' | t"
-                      [matChipInputFor]="roots"
-                      [matChipInputSeparatorKeyCodes]="separators"
-                      [matChipInputAddOnBlur]="true"
-                      (matChipInputTokenEnd)="addFileRoot($event)"
-                    />
-                  </mat-chip-grid>
-                  <button
-                    matIconButton
-                    matSuffix
-                    type="button"
-                    [disabled]="!created()"
-                    [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.fileRoots.label' | t) }"
-                    (click)="browse('file_roots')"
-                  >
-                    <i class="fa-solid fa-folder-plus" aria-hidden="true"></i>
-                  </button>
-                  <mat-hint>{{ 'servers.form.fileRoots.hint' | t }}</mat-hint>
-                  @if (error('file_roots') | errorText; as message) {
-                    <mat-error>{{ message }}</mat-error>
-                  }
-                </mat-form-field>
-
-                <mat-form-field>
-                  <mat-label>{{ 'servers.form.envPath.label' | t }}</mat-label>
-                  <input
-                    matInput
-                    name="env_path"
-                    dir="ltr"
-                    autocomplete="off"
-                    spellcheck="false"
-                    [placeholder]="'servers.form.envPath.placeholder' | t"
-                    [appFieldError]="error('env_path') | errorText"
-                    [ngModel]="draft().env_path"
-                    (ngModelChange)="update('env_path', $event)"
-                  />
-                  <button
-                    matIconButton
-                    matSuffix
-                    type="button"
-                    [disabled]="!created()"
-                    [attr.aria-label]="'servers.browser.browseLabel' | t: { field: ('servers.form.envPath.label' | t) }"
-                    (click)="browse('env_path')"
-                  >
-                    <i class="fa-regular fa-file" aria-hidden="true"></i>
-                  </button>
-                  <mat-hint>{{ 'servers.form.envPath.hint' | t }}</mat-hint>
-                  @if (error('env_path') | errorText; as message) {
-                    <mat-error>{{ message }}</mat-error>
-                  }
-                </mat-form-field>
-              </div>
-            </div>
-          </mat-step>
-
           <mat-step [label]="'servers.wizard.steps.check' | t" [completed]="stepDone('check')">
             <div class="wizard__step">
               <p class="text-secondary">{{ 'servers.check.wait' | t }}</p>
               <div>
-                <button
-                  matButton="outlined"
-                  type="button"
-                  [disabled]="checking()"
-                  [attr.aria-busy]="checking()"
-                  (click)="check()"
-                >
+                <button matButton="outlined" type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="check()">
                   @if (checking()) {
                     <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
                   }
@@ -591,136 +244,41 @@
               </div>
               @if (checkError(); as failure) {
                 <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-              }
-              @if (checked(); as result) {
-                <dl class="wizard__facts">
-                  <div class="wizard__fact">
-                    <dt class="text-label text-secondary">{{ 'servers.wizard.check.local' | t }}</dt>
-                    <dd><bdi class="wizard__code" dir="ltr">{{ result.local_version }}</bdi></dd>
-                  </div>
-                  <div class="wizard__fact">
-                    <dt class="text-label text-secondary">{{ 'servers.wizard.check.remote' | t }}</dt>
-                    <dd>
-                      @if (result.remote_version; as remote) {
-                        <bdi class="wizard__code" dir="ltr">{{ remote }}</bdi>
-                      } @else {
-                        <span class="text-muted">{{ 'servers.wizard.check.missing' | t }}</span>
-                      }
-                    </dd>
-                  </div>
-                  <div class="wizard__fact">
-                    <dt class="text-label text-secondary">{{ 'servers.wizard.check.status' | t }}</dt>
-                    <dd>{{ 'servers.status.' + result.last_check_status | t }}</dd>
-                  </div>
-                  @if (result.last_health; as health) {
-                    <div class="wizard__fact">
-                      <dt class="text-label text-secondary">{{ 'servers.wizard.check.health' | t }}</dt>
-                      <dd>{{ 'servers.wizard.health.' + health.status | t }}</dd>
+                @if (keyRefused()) {
+                  <app-notice severity="info">{{ 'servers.wizard.check.addKey' | t: { path: authorizedKeysPath() } }}</app-notice>
+                  @if (publicKey(); as key) {
+                    <div class="wizard__actions">
+                      <app-copy-button [text]="key" [label]="'servers.wizard.signIn.copyKey' | t" />
+                      <button matButton type="button" [disabled]="readingKey()" [attr.aria-busy]="readingKey()" (click)="rereadPublicKey()">
+                        {{ 'servers.wizard.signIn.reread' | t }}
+                      </button>
                     </div>
                   }
-                </dl>
-                @if (notInstalled()) {
-                  <app-notice severity="danger">
-                    {{ 'servers.wizard.check.notFound' | t: { python: checkedPython() } }}
-                    @if (dbsError(); as reason) {
-                      <span class="wizard__reason"><bdi class="wizard__code" dir="ltr">{{ reason }}</bdi></span>
-                    }
-                  </app-notice>
-                  @if (suggestion(); as found) {
-                    <app-notice severity="info">
-                      {{ 'servers.wizard.check.suggestion' | t: { version: found.dbs_version, python: suggestedPython() } }}
-                    </app-notice>
+                  @if (keyError(); as keyFailure) {
+                    <app-notice severity="danger">{{ keyFailure | errorText }}</app-notice>
                   }
-                  <div class="wizard__actions">
-                    @if (suggestion()) {
-                      <button
-                        matButton="filled"
-                        type="button"
-                        [disabled]="checking() || savingProject()"
-                        [attr.aria-busy]="checking() || savingProject()"
-                        (click)="useSuggestedPython()"
-                      >
-                        @if (checking() || savingProject()) {
-                          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-                        }
-                        {{ 'servers.wizard.check.usePython' | t }}
-                      </button>
-                    }
-                    <button matButton="outlined" type="button" (click)="chooseProjectAgain()">
-                      {{ 'servers.wizard.check.chooseAgain' | t }}
-                    </button>
-                  </div>
-                } @else if (incompatible()) {
-                  <app-notice severity="danger">{{ 'servers.wizard.check.incompatible' | t }}</app-notice>
-                } @else if (remoteTooOld()) {
-                  <app-notice severity="warning">{{ 'servers.wizard.check.old' | t }}</app-notice>
-                } @else {
-                  <app-notice severity="success">{{ 'servers.wizard.check.ok' | t }}</app-notice>
                 }
+              }
+              @if (checked(); as result) {
+                @if (reported()) {
+                  <app-engines-report [report]="result.last_check_report" />
+                }
+                <app-notice severity="success">{{ 'servers.wizard.check.ok' | t }}</app-notice>
               }
             </div>
           </mat-step>
 
-          <mat-step [label]="'servers.wizard.steps.passphrase' | t" [completed]="stepDone('passphrase')" [optional]="true">
+          <mat-step [label]="'servers.wizard.steps.done' | t" [completed]="false">
             <div class="wizard__step">
-              <p class="text-secondary">{{ 'servers.wizard.passphrase.intro' | t }}</p>
-              <app-notice severity="warning">{{ 'servers.wizard.passphrase.neverChange' | t }}</app-notice>
-              <div>
-                <button
-                  matButton="outlined"
-                  type="button"
-                  [disabled]="capturing() || captured()"
-                  [attr.aria-busy]="capturing()"
-                  (click)="capturePassphrase()"
-                >
-                  @if (capturing()) {
-                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-                  }
-                  {{ 'servers.wizard.passphrase.capture' | t }}
-                </button>
-              </div>
-              @if (captureError(); as failure) {
-                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-              }
-              @if (captured()) {
-                <app-notice severity="success">{{ 'servers.wizard.passphrase.captured' | t }}</app-notice>
-              }
-            </div>
-          </mat-step>
-
-          <mat-step [label]="'servers.wizard.steps.backup' | t" [completed]="backupJob()?.status === 'succeeded'">
-            <div class="wizard__step">
-              <p class="text-secondary">{{ 'servers.wizard.backup.intro' | t }}</p>
-              <div>
-                <button
-                  matButton="filled"
-                  type="button"
-                  [disabled]="backingUp()"
-                  [attr.aria-busy]="backingUp()"
-                  (click)="takeBackup()"
-                >
-                  @if (backingUp()) {
-                    <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
-                  }
-                  {{ (backingUp() ? 'servers.wizard.backup.running' : 'servers.wizard.backup.take') | t }}
-                </button>
-              </div>
-              @if (backupError(); as failure) {
-                <app-notice severity="danger">{{ failure | errorText }}</app-notice>
-              }
-              @if (backupJob(); as job) {
-                @if (job.status === 'succeeded') {
-                  <app-notice severity="success">{{ 'servers.wizard.backup.done' | t }}</app-notice>
-                } @else {
-                  <app-notice severity="danger">{{ job.error_code | errorText }}</app-notice>
-                }
-              }
               @if (server(); as current) {
+                <app-notice severity="success">{{ 'servers.wizard.done.ready' | t }}</app-notice>
+                <p class="text-secondary">{{ 'servers.wizard.done.next' | t }}</p>
                 <div class="wizard__actions">
-                  <a matButton="outlined" [routerLink]="['/servers', current.id]">{{ 'servers.wizard.backup.openServer' | t }}</a>
-                  <a matButton="outlined" [routerLink]="['/servers', current.id, 'backups']">
-                    {{ 'servers.wizard.backup.openBackups' | t }}
+                  <a *appCan="'applications.manage'" matButton="filled" [routerLink]="['/servers', current.id, 'applications', 'new']">
+                    <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
+                    {{ 'servers.wizard.done.addApplication' | t }}
                   </a>
+                  <a matButton="outlined" [routerLink]="['/servers', current.id]">{{ 'servers.wizard.done.openServer' | t }}</a>
                 </div>
               }
             </div>
@@ -729,14 +287,14 @@
 
         @if (step() < steps.length - 1) {
           <div class="wizard__nav">
-            @if (step() > 0 && !(created() && step() <= 3)) {
+            @if (step() > 0 && !(created() && step() <= firstAfterCreation)) {
               <button matButton type="button" (click)="back()">{{ 'actions.back' | t }}</button>
             }
             <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
               @if (busy()) {
                 <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
               }
-              {{ (step() === 2 && !created() ? 'servers.form.submit' : 'actions.next') | t }}
+              {{ (step() === signInStep && !created() ? 'servers.wizard.signIn.submit' : 'actions.next') | t }}
             </button>
           </div>
         }

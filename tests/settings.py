@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     "tests.complexapp",
     "tests.softdeleteapp",
     "tests.restoreapp",
+    "tests.largeapp",
 ]
 
 MIDDLEWARE = [
@@ -100,3 +101,5 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 DBS_SCHEDULER = "off"
+
+DBS_JOB_PROCESS = False

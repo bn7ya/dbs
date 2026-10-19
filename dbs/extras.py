@@ -5,11 +5,11 @@ import importlib.util
 
 DISTRIBUTION = "django-dbs"
 
-EXTRAS = {
-    "guard": ("sklearn",),
-    "manager": ("rest_framework", "waitress", "paramiko", "keyring"),
-    "ssh": ("paramiko",),
-}
+MANAGER_MODULES = ("rest_framework", "waitress", "paramiko", "keyring")
+
+BUNDLED = ("numpy", "sklearn", *MANAGER_MODULES)
+
+RETIRED_EXTRAS = ("guard", "manager", "ssh", "all")
 
 
 def importable(module: str) -> bool:
@@ -19,12 +19,8 @@ def importable(module: str) -> bool:
         return False
 
 
-def missing(extra: str) -> list:
-    return [module for module in EXTRAS[extra] if not importable(module)]
-
-
-def available(extra: str) -> bool:
-    return not missing(extra)
+def missing(modules=BUNDLED) -> list:
+    return [module for module in modules if not importable(module)]
 
 
 def import_failure(module: str) -> str | None:
@@ -35,29 +31,16 @@ def import_failure(module: str) -> str | None:
     return None
 
 
-def import_error(extra: str) -> str | None:
-    for module in EXTRAS[extra]:
-        failure = import_failure(module)
-        if failure is not None:
-            return failure
-    return None
+def requirement(version: str | None = None) -> str:
+    return f"{DISTRIBUTION}=={version}" if version else DISTRIBUTION
 
 
-def installed() -> list:
-    return [extra for extra in EXTRAS if available(extra)]
+def reinstall_command(version: str | None = None) -> str:
+    return f'pip install --force-reinstall "{requirement(version)}"'
 
 
-def requirement(extras=(), version: str | None = None) -> str:
-    named = f"{DISTRIBUTION}[{','.join(extras)}]" if extras else DISTRIBUTION
-    return f"{named}=={version}" if version else named
-
-
-def install_command(extra: str) -> str:
-    return f'pip install "{requirement([extra])}"'
-
-
-def manager_missing_message(modules) -> str:
+def incomplete_message(modules) -> str:
     return (
-        f"the DBS manager needs {', '.join(modules)}, which this environment lacks; "
-        f"install them with {install_command('manager')}"
+        f"this django-dbs installation cannot import {', '.join(modules)}; "
+        f"repair it with {reinstall_command()}"
     )

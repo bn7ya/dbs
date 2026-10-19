@@ -1,6 +1,7 @@
 {
   "backups": {
     "title": "Backups",
+    "applicationOnServer": "{name} on {server}",
     "kind": {
       "dbs": "django-dbs",
       "archive": "Folders",
@@ -10,12 +11,15 @@
     },
     "plans": {
       "title": "Plans",
-      "body": "A plan runs django-dbs, archives folders or collects existing files on the server. It keeps the newest backups.",
+      "body": "A plan runs django-dbs, archives folders or collects existing files of this application on a schedule, and keeps the newest backups.",
       "add": "Add plan",
-      "disabled": "Disabled",
+      "on": "On",
+      "paused": "Paused",
       "keepHere": "Here: {count}",
       "keepRemote": "On the server: {count}",
       "folders": "Folders: {count}",
+      "localTime": "Your time: {time}",
+      "more": "More actions for {name}",
       "lastStatus": {
         "none": "Not run yet",
         "succeeded": "Succeeded",
@@ -23,7 +27,7 @@
       },
       "list": {
         "plan": "Plan",
-        "schedule": "Schedule",
+        "schedule": "How often",
         "kept": "Kept",
         "lastRun": "Last run",
         "nextRun": "Next run",
@@ -34,8 +38,22 @@
         "label": "Run {name} now",
         "working": "Running…"
       },
-      "edit": {
-        "label": "Edit {name}"
+      "pause": {
+        "action": "Pause",
+        "done": "Plan paused. It runs only from Run now until it is resumed."
+      },
+      "resume": {
+        "action": "Resume",
+        "done": "Plan resumed. It runs at its next time after now; runs missed while it was paused are not made up."
+      },
+      "reschedule": {
+        "action": "Reschedule",
+        "title": "Reschedule the plan",
+        "body": "Choose when {name} runs next. Later runs follow from that moment.",
+        "hint": "In {zone}, within a year.",
+        "submit": "Reschedule",
+        "working": "Rescheduling…",
+        "done": "Plan rescheduled."
       },
       "delete": {
         "confirmTitle": "Delete {name}?",
@@ -46,7 +64,7 @@
       "saved": "Plan saved.",
       "empty": {
         "title": "No plans yet",
-        "body": "A plan backs up this server on a schedule and keeps the newest backups.",
+        "body": "A plan backs up this application on a schedule and keeps the newest backups.",
         "action": "Create a django-dbs plan",
         "folders": "Back up folders",
         "collect": "Collect existing files"
@@ -56,7 +74,7 @@
         "editTitle": "Edit plan",
         "kind": "Backup type",
         "kindHint": {
-          "dbs": "django-dbs backs up the project's data and the files its models point at. The server's backup passphrase encrypts each backup.",
+          "dbs": "django-dbs backs up the project's data and the files its models point at. The application's backup passphrase encrypts each backup.",
           "archive": "The plan packs the folders into one archive, kept here encrypted. django-dbs backups already include the files their models point at.",
           "collect": "The plan collects new files that match the pattern from one folder. Each is kept here encrypted, and the server's copy stays as it is."
         },
@@ -70,13 +88,19 @@
         "patternHint": "The * stands for any text, so *.sql.gz matches every .sql.gz file in the folder.",
         "name": "Name",
         "schedule": "Schedule",
-        "scheduleHint": "The first scheduled run is one interval after saving.",
+        "scheduleHint": "A manual plan runs only from Run now.",
+        "firstRun": "First run",
+        "firstRunHint": "Optional. Without it, the first run is one interval after saving.",
+        "nextRun": "Next run",
+        "nextRunHint": "Leave it empty to keep the plan's times. A new moment moves them: later runs follow from it.",
+        "timeZone": "Time zone",
+        "timeZoneHint": "Daily and weekly plans keep their local time when the clocks change for daylight saving time.",
         "keep": "Keep here",
         "keepHint": "Up to 5 of this plan's newest backups stay here. Older ones are deleted after each run.",
         "keepRemote": "Keep on the server",
         "keepRemoteHint": "0 removes the server's copy once it is fetched.",
-        "enabled": "Enabled",
-        "enabledHint": "A disabled plan runs only from Run now.",
+        "enabled": "Run on the schedule",
+        "enabledHint": "Off pauses the plan: it runs only from Run now.",
         "submit": "Add plan",
         "passwordHint": "Choosing the folders and files this plan copies from the server needs your password.",
         "passwordHintFewer": "Keeping fewer backups deletes the oldest ones on the next run, so it needs your password.",
@@ -92,6 +116,25 @@
       "daily": "Daily",
       "weekly": "Weekly"
     },
+    "moment": {
+      "day": "Date",
+      "time": "Time",
+      "chooseTime": "Choose a time",
+      "times": "Times",
+      "calendar": {
+        "label": "Calendar",
+        "open": "Open the calendar",
+        "close": "Close the calendar",
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month",
+        "previousYear": "Previous year",
+        "nextYear": "Next year",
+        "previousYears": "Earlier years",
+        "nextYears": "Later years",
+        "chooseDate": "Choose a date",
+        "chooseMonthAndYear": "Choose a month and year"
+      }
+    },
     "collect": {
       "collected": "Collected: {count}.",
       "skipped": "Skipped: {count}.",
@@ -99,10 +142,11 @@
     },
     "take": {
       "action": "Back up now",
-      "body": "A one-off backup belongs to no plan. The manager keeps the five newest.",
+      "body": "A one-off backup belongs to no plan. The manager keeps the five newest. Plans are on the Schedule tab.",
       "working": "Backing up…",
       "running": "A backup is running. It continues if you leave this page.",
       "done": "Backup finished.",
+      "resumed": "Backup finished. The connection broke on the way, and the backup resumed where it stopped.",
       "keptOnServer": "The connection broke before the backup arrived. The server keeps it, and the manager collects it at the next connection.",
       "warning": {
         "files_changed": "Backup finished. Some files changed while they were archived."
@@ -117,6 +161,8 @@
     },
     "list": {
       "name": "Name",
+      "application": "Application",
+      "server": "Server",
       "taken": "Taken",
       "plan": "Plan",
       "size": "Size",
@@ -157,12 +203,13 @@
       "action": "Restore",
       "label": "Restore {name}",
       "title": "Restore backup",
-      "body": "Restoring loads this backup into the server's database and files. A rehearsal runs the whole restore, then rolls it back.",
+      "body": "Restoring loads this backup into the application's database and files. A rehearsal runs the whole restore, then rolls it back.",
       "backup": "Backup",
+      "application": "Application",
       "server": "Server",
       "target": "Restore onto",
-      "sameServer": "This server",
-      "targetHint": "To restore onto another server, choose it here.",
+      "sameApplication": "This application",
+      "targetHint": "To restore onto another application, choose it here.",
       "mode": "How",
       "modes": {
         "merge": "Merge",
@@ -173,8 +220,8 @@
         "replace": "The backed-up tables are cleared first. Records added since this backup are lost."
       },
       "passwordHint": "Restoring needs your password. A rehearsal does not.",
-      "serverName": "Server name",
-      "serverNameHint": "Type {name} to restore.",
+      "applicationName": "Application name",
+      "applicationNameHint": "Type {name} to restore.",
       "rehearse": "Rehearse",
       "rehearsing": "Rehearsing…",
       "submit": "Restore",
@@ -200,18 +247,47 @@
     },
     "empty": {
       "title": "No backups yet",
-      "body": "django-dbs backups need django-dbs on the server. The connection check on Overview shows whether it is installed."
+      "body": "django-dbs backups need django-dbs in the application. The check on Overview shows whether it is installed."
+    },
+    "all": {
+      "title": "Backups",
+      "subtitle": "Every application's backups, and the space they take in the manager.",
+      "files": "Every backup",
+      "filesBody": "Newest first. Each backup belongs to the application it was taken from.",
+      "filter": "Application",
+      "everyApplication": "Every application",
+      "empty": "Backups appear here once an application has one.",
+      "noMatch": {
+        "title": "No backups for this application",
+        "body": "Choose another application, or show every application's backups.",
+        "action": "Show every application"
+      }
+    },
+    "storage": {
+      "title": "Storage",
+      "body": "The space the backups kept in the manager take, in all and for each application.",
+      "total": "In all",
+      "free": "Free on its disk",
+      "freeOf": "{free} of {total}",
+      "size": "Space used",
+      "label": "Storage by application",
+      "pages": "Storage pages",
+      "low": "The disk that holds the manager's backups is nearly full. Free some space before the next backup needs it."
     }
   },
   "errors": {
     "invalid_interval": "Choose a schedule from the list.",
+    "invalid_time_zone": "Choose a time zone from the list, such as Europe/Berlin.",
+    "invalid_moment": "Choose a moment after now and within a year.",
+    "manual_plan": "This plan runs only from Run now. Give it a schedule first.",
     "keep_range": "Enter a number from 1 to 5.",
     "keep_remote_range": "Enter a number from 0 to 5.",
     "paths_required": "Add at least one folder.",
     "paths_not_allowed": "A django-dbs plan takes no folders.",
     "one_folder_required": "Enter one folder.",
     "invalid_pattern": "Use a pattern with no / in it.",
-    "name_mismatch": "Type the server's name exactly as shown.",
-    "not_restorable": "Only a django-dbs backup can be restored."
+    "name_mismatch": "Type the application's name exactly as shown.",
+    "not_restorable": "Only a django-dbs backup can be restored.",
+    "backup_lost_on_server": "The connection broke while the backup was arriving, and the server did not finish it. Nothing was kept. Try again."
   }
 }

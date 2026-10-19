@@ -19,7 +19,7 @@ export interface Listing extends Page<Entry> {
 }
 
 export interface ListingQuery {
-  readonly server: string;
+  readonly application: string;
   readonly path: string | null;
   readonly page: number;
   readonly page_size: number;

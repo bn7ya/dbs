@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import Any, Union
+from typing import Any, TextIO, Union
 
 Column = tuple[str, Union[str, Callable[[Mapping[str, Any]], Any]]]
 
@@ -10,11 +11,15 @@ EMPTY = "-"
 
 
 class Output:
-    def __init__(self, as_json: bool = False) -> None:
+    def __init__(self, as_json: bool = False, stream: TextIO | None = None) -> None:
         self.as_json = as_json
+        self.stream = stream
+
+    def line(self, message: str = "", *, end: str = "\n") -> None:
+        print(message, end=end, file=self.stream or sys.stdout, flush=True)
 
     def json(self, data: Any) -> None:
-        print(json.dumps(data, indent=2, default=str, ensure_ascii=False))
+        self.line(json.dumps(data, indent=2, default=str, ensure_ascii=False))
 
     def table(
         self,
@@ -28,7 +33,7 @@ class Output:
             self.json(rows if data is None else data)
             return
         if not rows:
-            print(empty)
+            self.line(empty)
             return
         cells = [[text(value_of(row, key)) for _, key in columns] for row in rows]
         headers = [header for header, _ in columns]
@@ -36,9 +41,9 @@ class Output:
             max(len(header), *(len(line[index]) for line in cells))
             for index, header in enumerate(headers)
         ]
-        print(_line(headers, widths))
-        for line in cells:
-            print(_line(line, widths))
+        self.line(_line(headers, widths))
+        for cell_line in cells:
+            self.line(_line(cell_line, widths))
 
     def fields(self, data: Mapping[str, Any], names: Iterable[str]) -> None:
         if self.as_json:
@@ -47,13 +52,13 @@ class Output:
         shown = [name for name in names if name in data]
         width = max((len(label(name)) for name in shown), default=0)
         for name in shown:
-            print(f"{label(name):<{width}}  {text(data[name])}")
+            self.line(f"{label(name):<{width}}  {text(data[name])}")
 
     def say(self, message: str, data: Any = None) -> None:
         if self.as_json:
             self.json({"message": message} if data is None else data)
         else:
-            print(message)
+            self.line(message)
 
 
 def value_of(row: Mapping[str, Any], key: Any) -> Any:

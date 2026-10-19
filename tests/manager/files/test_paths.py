@@ -131,7 +131,7 @@ def test_a_path_in_no_root_is_outside(typed):
     )
 
 
-def test_a_server_with_no_roots_has_nothing_to_locate():
+def test_an_application_with_no_roots_has_nothing_to_locate():
     with pytest.raises(NoAllowedFolders) as refused:
         locate("/srv/app/media", [])
 

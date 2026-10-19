@@ -1,57 +1,49 @@
-import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
-import { MatButton, MatIconButton } from '@angular/material/button';
+import { Router } from '@angular/router';
+import { MatButton } from '@angular/material/button';
 import { MatCard, MatCardContent } from '@angular/material/card';
-import { MatFormField, MatLabel, MatSuffix } from '@angular/material/form-field';
+import { MatFormField, MatLabel } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 
+import { Can } from '@core/auth/directives/can';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
-import { Can } from '@core/auth/directives/can';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
+import { CopyButton } from '@shared/copy-button/copy-button';
 import { Dialogs } from '@shared/dialogs/dialogs';
+import { isolated } from '@shared/isolated/isolated';
 import { Notice } from '@shared/notice/notice';
 import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
 import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
 import { Toaster } from '@shared/toaster/toaster';
 import type { ToastSeverity } from '@shared/toaster/toaster.types';
 import { CheckStatusTag } from '../../components/check-status-tag/check-status-tag';
+import { EnginesReport } from '../../components/engines-report/engines-report';
 import { HostKeyFacts } from '../../components/host-key-facts/host-key-facts';
 import { HostKeyReview } from '../../components/host-key-review/host-key-review';
 import { ServerForm } from '../../components/server-form/server-form';
 import type { ServerFormData } from '../../components/server-form/server-form.types';
 import type { Server } from '../../data/servers.types';
 import { ServersStore } from '../../state/servers.store';
-import type { CheckReportView, Presence, PresenceLook, ReportRow, SettingRow } from './server-overview.types';
-
-const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
-  found: { icon: 'fa-solid fa-circle-check', muted: false },
-  missing: { icon: 'fa-solid fa-circle-xmark', muted: false },
-  notSet: { icon: 'fa-solid fa-circle-minus', muted: true },
-  notChecked: { icon: 'fa-solid fa-circle-question', muted: true },
-  running: { icon: 'fa-solid fa-circle-check', muted: false },
-  stopped: { icon: 'fa-solid fa-circle-xmark', muted: false },
-};
+import type { SettingRow } from './server-overview.types';
 
 @Component({
   selector: 'app-server-overview-page',
   imports: [
     Can,
-    RouterLink,
     MatButton,
-    MatIconButton,
     MatCard,
     MatCardContent,
     MatFormField,
     MatLabel,
-    MatSuffix,
     MatInput,
-    Notice,
     AppDatePipe,
     CheckStatusTag,
+    CopyButton,
+    EnginesReport,
     HostKeyFacts,
+    Notice,
     ErrorTextPipe,
     TranslatePipe,
   ],
@@ -64,7 +56,6 @@ export class ServerOverviewPage {
   private readonly store = inject(ServersStore);
   private readonly dialogs = inject(Dialogs);
   private readonly toaster = inject(Toaster);
-  private readonly clipboard = inject(DOCUMENT).defaultView?.navigator.clipboard;
   private readonly locale = inject(LocaleStore);
   private readonly router = inject(Router);
 
@@ -72,38 +63,16 @@ export class ServerOverviewPage {
   readonly checking = this.store.checking;
   readonly checkFailure = this.store.checkFailure;
   readonly hostKeyChanged = this.store.hostKeyChanged;
-  readonly passphrase = this.store.passphrase;
+  readonly publicKey = this.store.publicKey;
+  readonly readingKey = this.store.readingKey;
+  readonly keyError = this.store.keyError;
+  readonly twins = this.store.twins;
+  readonly merging = this.store.merging;
   readonly deleting = this.store.deleting;
 
-  readonly report = computed<CheckReportView | null>(() => {
-    const server = this.server();
-    if (!server || (server.last_check_status !== 'ok' && server.last_check_status !== 'problem')) {
-      return null;
-    }
-    const report = server.last_check_report;
-    const compose = report.compose;
-    const composeRows: readonly ReportRow[] = compose
-      ? [
-          valueRow('servers.check.report.docker', compose.version, 'missing'),
-          { labelKey: 'servers.check.report.service', value: null, presence: compose.running ? 'running' : 'stopped' },
-        ]
-      : [];
-    const rows: readonly ReportRow[] = [
-      valueRow('servers.check.report.system', report.system, 'notChecked'),
-      ...composeRows,
-      valueRow('servers.check.report.dbsVersion', report.dbs_version, 'missing'),
-      presenceRow('servers.check.report.backupCommand', report.backup_command),
-      server.env_path
-        ? presenceRow('servers.check.report.envFile', report.env_file)
-        : { labelKey: 'servers.check.report.envFile', value: null, presence: 'notSet' },
-      presenceRow('servers.check.report.remoteBackupDir', report.remote_backup_dir),
-      presenceRow(
-        'servers.check.report.timeout',
-        server.runtime === 'compose' ? server.timeout_in_container : server.timeout_on_host,
-      ),
-    ];
-    const roots = server.file_roots.map((path) => ({ path, presence: presenceOf(report.roots?.[path]) }));
-    return { rows, roots, dockerSaid: compose?.error ?? '' };
+  readonly reported = computed(() => {
+    const status = this.server()?.last_check_status;
+    return status === 'ok' || status === 'problem';
   });
 
   readonly settings = computed<readonly SettingRow[]>(() => {
@@ -111,12 +80,14 @@ export class ServerOverviewPage {
     return server ? settingRows(server) : [];
   });
 
-  constructor() {
-    inject(DestroyRef).onDestroy(() => this.store.hidePassphrase());
-  }
+  readonly authorizedKeys = computed(() => isolated(`~${this.server()?.username ?? ''}/.ssh/authorized_keys`));
 
-  look(presence: Presence): PresenceLook {
-    return PRESENCE_LOOKS[presence];
+  constructor() {
+    this.store.watchTwins(true);
+    inject(DestroyRef).onDestroy(() => {
+      this.store.watchTwins(false);
+      this.store.hidePublicKey();
+    });
   }
 
   async check(): Promise<void> {
@@ -131,7 +102,7 @@ export class ServerOverviewPage {
       return;
     }
     const saved = await this.dialogs
-      .open<Server, ServerFormData>(ServerForm, { titleKey: 'servers.form.editTitle', data: { server }, size: 'lg' })
+      .open<Server, ServerFormData>(ServerForm, { titleKey: 'servers.form.editTitle', data: { server }, size: 'md' })
       .whenClosed();
     if (saved) {
       this.notify('success', 'servers.settings.updated');
@@ -147,32 +118,33 @@ export class ServerOverviewPage {
     }
   }
 
-  async togglePassphrase(): Promise<void> {
-    if (this.passphrase()) {
-      this.store.hidePassphrase();
+  async togglePublicKey(): Promise<void> {
+    if (this.publicKey()) {
+      this.store.hidePublicKey();
+      return;
+    }
+    await this.store.readPublicKey();
+  }
+
+  async merge(into: Server): Promise<void> {
+    const server = this.server();
+    if (!server) {
       return;
     }
     const data: PasswordPromptData = {
-      titleKey: 'servers.passphrase.prompt.title',
-      bodyKey: 'servers.passphrase.prompt.body',
-      submitKey: 'servers.passphrase.show',
-      submit: (password) => this.store.revealPassphrase(password),
-      error: this.store.revealError,
+      titleKey: 'servers.merge.title',
+      bodyKey: 'servers.merge.prompt',
+      bodyValues: { name: isolated(server.name), into: isolated(into.name) },
+      submitKey: 'servers.merge.action',
+      submit: (password) => this.store.merge(into.id, password),
+      error: this.store.mergeError,
     };
-    await this.dialogs
+    const merged = await this.dialogs
       .open<boolean, PasswordPromptData>(PasswordPrompt, { titleKey: data.titleKey, data, size: 'sm' })
       .whenClosed();
-  }
-
-  async copy(passphrase: string): Promise<void> {
-    try {
-      if (!this.clipboard) {
-        throw new Error('No clipboard');
-      }
-      await this.clipboard.writeText(passphrase);
-      this.notify('success', 'servers.passphrase.copied');
-    } catch {
-      this.notify('warning', 'servers.passphrase.copyUnavailable');
+    if (merged) {
+      this.notify('success', 'servers.merge.done');
+      await this.router.navigate(['/servers', into.id]);
     }
   }
 
@@ -184,8 +156,7 @@ export class ServerOverviewPage {
     const data: PasswordPromptData = {
       titleKey: 'servers.delete.title',
       bodyKey: 'servers.delete.prompt',
-      // FSI and PDI keep the name in its own direction inside a sentence in either language.
-      bodyValues: { name: `\u2068${server.name}\u2069` },
+      bodyValues: { name: isolated(server.name) },
       submitKey: 'servers.delete.action',
       destructive: true,
       submit: (password) => this.store.remove(password),
@@ -205,25 +176,6 @@ export class ServerOverviewPage {
   }
 }
 
-function presenceOf(value: boolean | null | undefined): Presence {
-  if (value === true) {
-    return 'found';
-  }
-  return value === false ? 'missing' : 'notChecked';
-}
-
-function presenceRow(labelKey: string, value: boolean | null | undefined): ReportRow {
-  return { labelKey, value: null, presence: presenceOf(value) };
-}
-
-function valueRow(labelKey: string, value: string | null | undefined, absent: Presence): ReportRow {
-  return value ? { labelKey, value, presence: 'found' } : { labelKey, value: null, presence: absent };
-}
-
-function codeRow(labelKey: string, code: string): SettingRow {
-  return code ? { labelKey, code } : { labelKey, textKey: 'servers.settings.notSet' };
-}
-
 function savedRow(labelKey: string, saved: boolean): SettingRow {
   return { labelKey, textKey: saved ? 'servers.settings.saved' : 'servers.settings.notSaved' };
 }
@@ -236,25 +188,11 @@ function settingRows(server: Server): readonly SettingRow[] {
           savedRow('servers.settings.keyPassphrase', server.has_key_passphrase),
         ]
       : [savedRow('servers.settings.password', server.has_password)];
-  const compose =
-    server.runtime === 'compose'
-      ? [
-          codeRow('servers.settings.composeService', server.compose_service),
-          server.compose_files.length > 0
-            ? codeRow('servers.settings.composeFiles', server.compose_files.join(' '))
-            : { labelKey: 'servers.settings.composeFiles', textKey: 'servers.settings.composeDefault' },
-        ]
-      : [];
   return [
+    { labelKey: 'servers.settings.host', code: server.host },
+    { labelKey: 'servers.settings.port', code: String(server.port) },
+    { labelKey: 'servers.settings.username', code: server.username },
     { labelKey: 'servers.settings.authMethod', textKey: `servers.authMethod.${server.auth_method}` },
     ...secrets,
-    { labelKey: 'servers.settings.runtime', textKey: `servers.runtime.${server.runtime}` },
-    ...compose,
-    codeRow('servers.settings.projectDir', server.project_dir),
-    codeRow('servers.settings.pythonPath', server.python_path),
-    codeRow('servers.settings.managePath', server.manage_path),
-    codeRow('servers.settings.settingsModule', server.settings_module),
-    codeRow('servers.settings.remoteBackupDir', server.remote_backup_dir),
-    codeRow('servers.settings.envPath', server.env_path),
   ];
 }

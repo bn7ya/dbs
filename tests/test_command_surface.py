@@ -1,4 +1,4 @@
-"""The manage.py dbs umbrella, its django-dbs alias and the original command names."""
+"""The manage.py dbs umbrella, its equal names django_dbs and django-dbs, and the original command names."""
 
 from io import StringIO
 
@@ -20,8 +20,12 @@ def test_the_registry_carries_every_name():
         assert commands[name] == "dbs", name
 
 
-def test_the_hyphenated_alias_loads_the_underscore_module():
-    assert load_command_class("dbs", "django-dbs").__module__.endswith("django_dbs")
+def test_the_hyphenated_name_is_a_real_command_module():
+    assert load_command_class("dbs", "django-dbs").__module__.endswith("django-dbs")
+
+
+def test_the_old_alias_for_upgrade_is_gone():
+    assert "dbs-upgrade" not in get_commands()
 
 
 def test_bare_dbs_prints_an_overview():
@@ -36,13 +40,15 @@ def test_bare_dbs_prints_an_overview():
         assert f"manage.py dbs {name}" in printed
 
 
-def test_django_dbs_works_and_points_at_the_shorter_name():
+@pytest.mark.parametrize("name", ["django_dbs", "django-dbs"])
+def test_every_name_prints_the_same_overview_without_a_tip(name):
     out = StringIO()
 
-    call_command("django-dbs", stdout=out)
+    call_command(name, stdout=out)
 
-    assert 'also available as "manage.py dbs"' in out.getvalue()
     assert "manage.py dbs backup" in out.getvalue()
+    assert "Tip" not in out.getvalue()
+    assert "old name" not in out.getvalue()
 
 
 def test_every_subcommand_is_a_real_command():

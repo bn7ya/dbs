@@ -6,7 +6,7 @@ from dbs.manager.envfiles.models import EnvVersion
 
 
 class EnvVersionSerializer(serializers.ModelSerializer):
-    server = serializers.UUIDField(source="server_id", read_only=True)
+    application = serializers.UUIDField(source="application_id", read_only=True)
     keys = serializers.ListField(
         source="key_names",
         child=serializers.CharField(),
@@ -22,7 +22,7 @@ class EnvVersionSerializer(serializers.ModelSerializer):
         model = EnvVersion
         fields = [
             "id",
-            "server",
+            "application",
             "path",
             "size",
             "keys",
@@ -33,7 +33,7 @@ class EnvVersionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
         extra_kwargs = {
             "path": {
-                "help_text": "Where the file was on the server: its `env_path` then."
+                "help_text": "Where the file was: the application's `env_path` then."
             },
             "size": {"help_text": "Bytes."},
             "source": {

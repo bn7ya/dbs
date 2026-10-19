@@ -6,9 +6,10 @@ from dbs.manager.backups.serializers import (
     BackupPlanSerializer,
     PlanCreateSerializer,
     PlanUpdateSerializer,
+    RescheduleSerializer,
 )
 from dbs.manager.backups.services import BackupPlanService
-from dbs.manager.servers.services import ServerService
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.adapters import jobs, references
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.adapters.forms import validated
@@ -35,26 +36,36 @@ SHOWN_FIELDS = (
     "keep",
     "keep_remote",
     "enabled",
+    "anchor_at",
+    "time_zone",
     "next_run_at",
     "last_run_at",
     "last_status",
     "last_error_code",
 )
-FIELDS = ("paths", "pattern", "interval_minutes", "keep", "keep_remote")
+FIELDS = (
+    "paths",
+    "pattern",
+    "interval_minutes",
+    "keep",
+    "keep_remote",
+    "anchor_at",
+    "time_zone",
+)
 
 
 def list_plans(session: TerminalSession) -> int:
     service = BackupPlanService(session.user)
-    if session.args.server:
-        chosen = [references.server(session.user, session.args.server)]
+    if session.args.application:
+        chosen = [references.application(session.user, session.args.application)]
     else:
-        chosen = list(ServerService(session.user).list().order_by("name"))
+        chosen = list(ApplicationService(session.user).list())
     rows = [
-        {**row, "server_name": server.name}
-        for server in chosen
-        for row in BackupPlanSerializer(service.list(server.pk), many=True).data
+        {**row, "application_name": application.name}
+        for application in chosen
+        for row in BackupPlanSerializer(service.list(application.pk), many=True).data
     ]
-    columns = (("SERVER", "server_name"), *LIST_COLUMNS)
+    columns = (("APPLICATION", "application_name"), *LIST_COLUMNS)
     session.out.table(rows, columns, empty="No plans yet.")
     return 0
 
@@ -67,9 +78,9 @@ def show(session: TerminalSession) -> int:
 
 def add(session: TerminalSession) -> int:
     args = session.args
-    server = references.server(session.user, args.server)
+    application = references.application(session.user, args.application)
     body = {
-        "server": server.pk,
+        "application": application.pk,
         "name": args.name,
         "kind": args.kind,
         "enabled": not args.disabled,
@@ -116,11 +127,38 @@ def run(session: TerminalSession) -> int:
     service = BackupPlanService(session.user)
     plan = service.get(_plan_id(session))
     if not session.out.as_json:
-        print(f"Running {plan.name}...", flush=True)
+        session.out.line(f"Running {plan.name}...")
     with reported(session):
         job = service.run(plan.pk)
     entry = jobs.finished(session.user, job)
     return session.outcome(entry, f"Ran the plan {plan.name}.")
+
+
+def reschedule(session: TerminalSession) -> int:
+    plan_id = _plan_id(session)
+    data = validated(RescheduleSerializer, {"next_run_at": session.args.next_run_at})
+    plan = BackupPlanService(session.user).reschedule(plan_id, data["next_run_at"])
+    session.out.say(
+        f"The plan {plan.name} runs next at {plan.next_run_at.isoformat()}.",
+        BackupPlanSerializer(plan).data,
+    )
+    return 0
+
+
+def pause(session: TerminalSession) -> int:
+    plan = BackupPlanService(session.user).pause(_plan_id(session))
+    session.out.say(f"Paused the plan {plan.name}.", BackupPlanSerializer(plan).data)
+    return 0
+
+
+def resume(session: TerminalSession) -> int:
+    plan = BackupPlanService(session.user).resume(_plan_id(session))
+    session.out.say(
+        f"Resumed the plan {plan.name}; it runs next at "
+        f"{plan.next_run_at.isoformat()}.",
+        BackupPlanSerializer(plan).data,
+    )
+    return 0
 
 
 def _plan_id(session: TerminalSession) -> Any:

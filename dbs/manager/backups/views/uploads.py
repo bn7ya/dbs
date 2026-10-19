@@ -27,7 +27,7 @@ class UploadView(APIView):
         payload = UploadSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         backup = BackupService(request.user).upload(
-            payload.validated_data["server"], payload.validated_data["file"]
+            payload.validated_data["application"], payload.validated_data["file"]
         )
         return Response(
             BackupFileSerializer(backup).data, status=status.HTTP_201_CREATED

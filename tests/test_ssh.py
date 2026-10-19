@@ -73,12 +73,11 @@ def test_from_dict_rejects_unknown_keys():
     assert "known_host" in str(excinfo.value)
 
 
-def test_user_and_key_file_aliases():
-    parsed = SSHTarget.from_dict(
-        {"host": "h", "user": "deploy", "key_file": "/keys/id_ed25519"}
-    )
-    assert parsed.username == "deploy"
-    assert parsed.key_filename == "/keys/id_ed25519"
+@pytest.mark.parametrize("old_key", ["user", "key_file"])
+def test_the_old_key_names_are_refused(old_key):
+    with pytest.raises(ConfigurationError) as excinfo:
+        SSHTarget.from_dict({"host": "h", "username": "u", old_key: "x"})
+    assert old_key in str(excinfo.value)
 
 
 def test_home_relative_paths_are_expanded():
@@ -86,7 +85,7 @@ def test_home_relative_paths_are_expanded():
         {
             "host": "h",
             "username": "u",
-            "key_file": "~/keys/prod.pem",
+            "key_filename": "~/keys/prod.pem",
             "known_hosts": "~/.ssh/known_hosts",
         }
     )
@@ -661,7 +660,7 @@ def test_push_uses_a_partial_name_of_its_own_and_sweeps_stale_ones(fake_ssh, mon
     (partial,) = set(written)
     assert is_partial_name(partial) and partial.startswith(f".{name}.part-")
     assert sorted(os.listdir(fake_ssh.remote_path(REMOTE_DIR))) == sorted(
-        [name, fresh, "notes.part"]
+        [name, fresh, legacy, "notes.part"]
     )
 
 
@@ -726,6 +725,84 @@ def test_a_sink_that_cannot_write_stops_the_stream_and_closes_the_channel(fake_s
     assert fake_ssh.executions[0].channel_closed is True
 
 
+def test_a_feed_sends_its_first_line_then_the_source_and_keeps_both_outputs(fake_ssh):
+    payload = os.urandom(600 * 1024)
+    streaming(fake_ssh, (0, "received\n", "a warning\n"))
+
+    with open_session(target()) as session:
+        result = session.feed("receive", io.BytesIO(payload), stdin_line="secret")
+
+    assert (result.exit_status, result.stdout, result.stderr) == (
+        0,
+        "received\n",
+        "a warning\n",
+    )
+    assert fake_ssh.executions[0].stdin == "secret\n"
+    assert bytes(fake_ssh.executions[0].sent) == payload
+    assert fake_ssh.executions[0].stdin_closed is True
+    assert fake_ssh.commands[0]["get_pty"] is False
+
+
+def test_a_feed_that_ends_without_an_exit_status_was_interrupted(fake_ssh):
+    streaming(fake_ssh, (-1, "", ""))
+
+    with open_session(target()) as session:
+        with pytest.raises(StreamInterrupted):
+            session.feed("receive", io.BytesIO(b"payload"))
+
+    assert fake_ssh.executions[0].channel_closed is True
+
+
+def test_a_feed_whose_connection_drops_while_sending_is_interrupted(
+    fake_ssh, monkeypatch
+):
+    from tests.fake_ssh import FakeChannel, SSHException
+
+    streaming(fake_ssh, (0, "", ""))
+
+    def dropped(self, data):
+        raise SSHException("Socket is closed")
+
+    monkeypatch.setattr(FakeChannel, "sendall", dropped)
+
+    with open_session(target()) as session:
+        with pytest.raises(StreamInterrupted, match="lost"):
+            session.feed("receive", io.BytesIO(b"payload"))
+
+    assert fake_ssh.executions[0].channel_closed is True
+
+
+def test_a_terminal_asks_for_a_pty_of_its_size_and_runs_a_login_shell(fake_ssh):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target()) as session:
+        channel = session.open_terminal(cols=132, rows=40)
+
+    assert channel.pty == ("xterm-256color", 132, 40)
+    assert channel.shell is True and channel.command is None
+
+
+def test_a_terminal_can_run_one_command_instead_of_a_shell(fake_ssh):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target()) as session:
+        channel = session.open_terminal("docker exec -it web sh", term="xterm")
+
+    assert channel.pty == ("xterm", 80, 24)
+    assert channel.shell is False and channel.command == "docker exec -it web sh"
+
+
+def test_a_terminal_on_a_dropped_connection_reports_it_lost(fake_ssh):
+    from dbs.exceptions import ConnectionLost
+
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target()) as session:
+        fake_ssh.dropped = True
+        with pytest.raises(ConnectionLost):
+            session.open_terminal()
+
+
 def test_a_connection_that_drops_while_reading_is_interrupted(fake_ssh, monkeypatch):
     from tests.fake_ssh import FakeChannel, SSHException
 
@@ -740,3 +817,75 @@ def test_a_connection_that_drops_while_reading_is_interrupted(fake_ssh, monkeypa
         with pytest.raises(StreamInterrupted, match="lost"):
             session.stream("dbs backup --stream", io.BytesIO())
 
+
+
+def stalling(fake_ssh, *, head, rest, quiet, stderr="", every=0.0):
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    def handle(command, session):
+        session.quiet_for = quiet
+        session.after_quiet_bytes = rest
+        session.stderr_every = every
+        return 0, head, stderr
+
+    fake_ssh.on_exec(handle)
+
+
+def test_a_stream_with_nothing_arriving_for_the_idle_limit_is_interrupted(fake_ssh):
+    stalling(fake_ssh, head=b"first", rest=b"never", quiet=5.0)
+    sink = io.BytesIO()
+
+    with open_session(target()) as session:
+        with pytest.raises(StreamInterrupted, match="Nothing arrived for 0.2s"):
+            session.stream("dbs backup --stream", sink, idle_timeout=0.2)
+
+    assert sink.getvalue() == b"first"
+    assert fake_ssh.executions[0].channel_closed is True
+
+
+def test_a_quiet_stdout_that_resumes_within_the_idle_limit_is_kept(fake_ssh):
+    stalling(fake_ssh, head=b"first", rest=b"-second", quiet=0.15)
+    sink = io.BytesIO()
+
+    with open_session(target()) as session:
+        result = session.stream("dbs backup --stream", sink, idle_timeout=1.0)
+
+    assert result.exit_status == 0
+    assert sink.getvalue() == b"first-second"
+
+
+def test_progress_on_stderr_keeps_a_quiet_stream_alive_and_is_seen_line_by_line(
+    fake_ssh,
+):
+    beats = "".join(f'{{"progress": {{"bytes": {n}}}}}\n' for n in range(8))
+    stalling(
+        fake_ssh, head=b"first", rest=b"-second", quiet=0.6, stderr=beats, every=0.1
+    )
+    sink = io.BytesIO()
+    lines = []
+
+    with open_session(target()) as session:
+        result = session.stream(
+            "dbs backup --stream",
+            sink,
+            idle_timeout=0.3,
+            on_stderr_line=lines.append,
+        )
+
+    assert result.exit_status == 0
+    assert sink.getvalue() == b"first-second"
+    assert lines[:2] == ['{"progress": {"bytes": 0}}', '{"progress": {"bytes": 1}}']
+
+
+def test_a_failing_stderr_handler_never_stops_the_stream(fake_ssh):
+    streaming(fake_ssh, (0, b"payload", "one\ntwo\n"))
+    sink = io.BytesIO()
+
+    def broken(line):
+        raise ValueError(line)
+
+    with open_session(target()) as session:
+        result = session.stream("dbs backup --stream", sink, on_stderr_line=broken)
+
+    assert result.exit_status == 0 and result.stderr == "one\ntwo\n"
+    assert sink.getvalue() == b"payload"

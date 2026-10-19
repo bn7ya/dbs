@@ -1,0 +1,70 @@
+<dl class="report__facts">
+  @for (row of rows(); track row.labelKey) {
+    <div class="report__fact">
+      <dt class="text-label text-secondary">{{ row.labelKey | t }}</dt>
+      <dd>
+        @if (row.value; as value) {
+          <bdi class="report__code" dir="ltr">{{ value }}</bdi>
+        } @else {
+          <span class="report__presence" [class.text-muted]="look(row.presence).muted">
+            <i [class]="look(row.presence).icon" aria-hidden="true"></i>
+            {{ 'applications.check.' + row.presence | t }}
+          </span>
+        }
+      </dd>
+    </div>
+  }
+</dl>
+
+@switch (verdict()) {
+  @case ('ready') {
+    <app-notice severity="success">{{ 'applications.check.ready' | t }}</app-notice>
+  }
+  @case ('incompatible') {
+    <app-notice severity="danger">{{ 'applications.check.incompatible' | t }}</app-notice>
+  }
+  @case ('notInstalled') {
+    <app-notice severity="danger">
+      {{ 'applications.check.notFound' | t: { python: python() } }}
+      @if (dbsError(); as reason) {
+        <span class="report__reason"><bdi class="report__code" dir="ltr">{{ reason }}</bdi></span>
+      }
+    </app-notice>
+  }
+}
+
+@if (suggestion(); as found) {
+  <div class="report__suggestion">
+    <app-notice severity="info">{{ 'applications.check.suggestion' | t: found }}</app-notice>
+    <ng-content select="[reportAction]" />
+  </div>
+}
+
+@if (engineSaid(); as said) {
+  <app-notice severity="warning">
+    {{ 'applications.check.engineSaid' | t }} <bdi class="report__code" dir="ltr">{{ said }}</bdi>
+  </app-notice>
+}
+
+@if (panelSchedules()) {
+  <app-notice severity="warning">{{ 'applications.check.panelSchedule' | t }}</app-notice>
+}
+
+@if (roots().length > 0) {
+  <section class="report__roots">
+    <h3>{{ 'applications.check.report.roots' | t }}</h3>
+    <dl class="report__facts">
+      @for (root of roots(); track root.path) {
+        <div class="report__fact">
+          <dt><bdi class="report__code" dir="ltr">{{ root.path }}</bdi></dt>
+          <dd>
+            <span class="report__presence" [class.text-muted]="look(root.presence).muted">
+              <i [class]="look(root.presence).icon" aria-hidden="true"></i>
+              {{ 'applications.check.' + root.presence | t }}
+            </span>
+          </dd>
+        </div>
+      }
+    </dl>
+  </section>
+}

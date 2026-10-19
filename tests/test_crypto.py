@@ -4,7 +4,8 @@ import os
 
 import pytest
 
-from dbs.crypto import decrypt_payload, encrypt_payload
+from dbs.crypto import decrypt_payload
+from tests.format1 import encrypt_payload
 from dbs.crypto.kdf import KDFParams, derive_key
 from dbs.exceptions import InvalidPassphrase
 

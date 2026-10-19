@@ -5,7 +5,7 @@ from django.core.files.base import ContentFile
 from django.core.management import call_command
 
 from dbs.engine import create_backup, restore_backup
-from dbs.engine.restore import read_payload
+from tests.payloads import read_payload
 from dbs.registry import BackupRegistry
 from tests.conftest import FAST_KDF
 from tests.testapp.dbs import BookBackup

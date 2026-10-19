@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import math
+import os
 import posixpath
 import re
 import secrets
@@ -77,16 +78,24 @@ FLUSHED = re.compile(r"Flushed (\d+) existing rows")
 WOULD_FLUSH = re.compile(r"Flush would first delete (\d+) existing rows")
 HEALED = "Corruption detected and repaired"
 UNKNOWN_OPTION = "unrecognized arguments"
+COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
+COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
+PROGRESS_OPTION = "unrecognized arguments: --progress-seconds"
 RESTORE_FILE_PREFIX = ".dbs-restore-"
 RESTORE_FILE_MODE = 0o600
+NEW_FILE_MODE = 0o600
 REMOTE_DIRECTORY_MODE = 0o700
 PARTIAL_FILE_MODE = 0o600
 TRANSFER_WINDOW = 4 * 1024 * 1024
 NAME_MAX_BYTES = 255
 PARTIAL_NAME_BYTES = NAME_MAX_BYTES - len(".") - len(".part-") - 16
 DOCKER = "docker"
+PODMAN = "podman"
+ENGINES = (DOCKER, PODMAN)
+ENGINE_VERSION_FORMATS = {DOCKER: "{{.Server.Version}}", PODMAN: "{{.Version}}"}
 CONTAINER_TMP = "/tmp"
-CONTAINER_ROOT = "0"
+TOO_LARGE_STATUS = 3
+NOT_A_FILE_STATUS = 4
 LIST_FILES = (
     "import json, os, sys; folder = sys.argv[1]; "
     "entries = os.scandir(folder) if os.path.isdir(folder) else (); "
@@ -94,6 +103,82 @@ LIST_FILES = (
     "int(entry.stat(follow_symlinks=False).st_mtime)] for entry in entries "
     "if entry.is_file(follow_symlinks=False)]))"
 )
+READ_SMALL = """
+import base64, os, stat, sys
+path, limit = sys.argv[1], int(sys.argv[2])
+try:
+    found = os.stat(path)
+except OSError:
+    sys.exit(4)
+if not stat.S_ISREG(found.st_mode):
+    sys.exit(4)
+if found.st_size > limit:
+    sys.exit(3)
+with open(path, "rb") as handle:
+    data = handle.read(limit + 1)
+if len(data) > limit:
+    sys.exit(3)
+sys.stdout.write(base64.b64encode(data).decode())
+"""
+RECEIVE_FILE = """
+import os, sys
+path, size = sys.argv[1], int(sys.argv[2])
+mode = int(sys.argv[3], 8) if len(sys.argv) > 3 else 0o600
+partial = sys.argv[4] if len(sys.argv) > 4 else ""
+target = partial or path
+descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try:
+    left = size
+    with os.fdopen(descriptor, "wb") as handle:
+        while left:
+            chunk = sys.stdin.buffer.read(min(left, 1 << 20))
+            if not chunk:
+                break
+            handle.write(chunk)
+            left -= len(chunk)
+        handle.flush()
+        os.fsync(handle.fileno())
+    if left:
+        sys.exit(5)
+    os.chmod(target, mode)
+    if partial:
+        os.replace(partial, path)
+except BaseException:
+    try:
+        os.unlink(target)
+    except OSError:
+        pass
+    raise
+"""
+MODE_OF = """
+import os, stat, sys
+try:
+    print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode)))
+except OSError:
+    print("")
+"""
+SWEEP_STALE = """
+import os, re, sys, time
+pattern = re.compile(r"^(\\..+\\.part-[0-9a-f]{16}|\\.dbs-restore-[0-9a-f]{16}\\.dbs)$")
+removed = 0
+for folder in sys.argv[1:]:
+    try:
+        entries = list(os.scandir(folder))
+    except OSError:
+        continue
+    for entry in entries:
+        try:
+            if (
+                pattern.match(entry.name)
+                and entry.is_file(follow_symlinks=False)
+                and time.time() - entry.stat(follow_symlinks=False).st_mtime > 3600
+            ):
+                os.unlink(entry.path)
+                removed += 1
+        except OSError:
+            pass
+print(removed)
+"""
 TIMEOUT = "timeout"
 TIMEOUT_PROBE = (TIMEOUT, "-k", "1", "5", "true")
 TIMED_OUT_STATUSES = frozenset({124, 128 + 9})
@@ -118,13 +203,26 @@ class Credentials:
 
 
 @dataclass(frozen=True)
-class ComposeService:
-    service: str
+class ContainerTarget:
+    engine: str = DOCKER
+    service: str = ""
     files: tuple[str, ...] = ()
+    project: str = ""
+    container: str = ""
+    workdir: str = ""
+
+    @property
+    def in_compose(self) -> bool:
+        return bool(self.service)
+
+    @property
+    def name(self) -> str:
+        return self.service or self.container
 
     def argv(self, *arguments: str) -> list[str]:
         files = [part for path in self.files for part in ("-f", path)]
-        return [DOCKER, "compose", *files, *arguments]
+        project = ["-p", self.project] if self.project else []
+        return [self.engine, "compose", *files, *project, *arguments]
 
     def exec_argv(
         self,
@@ -132,15 +230,49 @@ class ComposeService:
         *,
         settings_module: str | None = None,
         user: str | None = None,
+        stdin: bool = False,
     ) -> list[str]:
-        options = ["-T"]
+        options = ["-T"] if self.in_compose else (["-i"] if stdin else [])
         options += ["-u", user] if user else []
+        options += ["-w", self.workdir] if self.workdir else []
         options += (
             ["-e", f"DJANGO_SETTINGS_MODULE={settings_module}"]
             if settings_module
             else []
         )
-        return self.argv("exec", *options, self.service, *command)
+        if self.in_compose:
+            return self.argv("exec", *options, self.service, *command)
+        return [self.engine, "exec", *options, self.container, *command]
+
+    def version_argv(self) -> list[str]:
+        if self.in_compose:
+            return [self.engine, "compose", "version", "--short"]
+        return [self.engine, "version", "--format", ENGINE_VERSION_FORMATS[self.engine]]
+
+    def running_argv(self) -> list[str]:
+        if not self.in_compose:
+            return [self.engine, "inspect", "--format", "{{.State.Running}}", self.container]
+        project = (
+            ["--filter", f"label={COMPOSE_PROJECT_LABEL}={self.project}"]
+            if self.project
+            else []
+        )
+        return [
+            self.engine,
+            "ps",
+            *project,
+            "--filter",
+            f"label={COMPOSE_SERVICE_LABEL}={self.service}",
+            "--filter",
+            "status=running",
+            "--format",
+            "{{.Names}}",
+        ]
+
+    def running_in(self, output: str) -> bool:
+        if self.in_compose:
+            return bool(output.strip())
+        return output.strip().splitlines()[-1:] == ["true"]
 
 
 @dataclass(frozen=True)
@@ -149,7 +281,7 @@ class DbsProfile:
     manage: str
     project_dir: str | None = None
     settings_module: str | None = None
-    compose: ComposeService | None = None
+    container: ContainerTarget | None = None
 
 
 @dataclass(frozen=True)
@@ -286,11 +418,11 @@ class RemoteHost:
         return result
 
     def has_timeout(self, profile: DbsProfile | None = None) -> bool:
-        if profile is None or profile.compose is None:
+        if profile is None or profile.container is None:
             probe = list(TIMEOUT_PROBE)
             cwd = None
         else:
-            probe = profile.compose.exec_argv(TIMEOUT_PROBE)
+            probe = profile.container.exec_argv(TIMEOUT_PROBE)
             cwd = profile.project_dir
         try:
             return bool(self.run(probe, cwd=cwd, limited=True).ok)
@@ -309,7 +441,7 @@ class RemoteHost:
     ) -> RemoteResult:
         command = [python or profile.python, *arguments]
         settings_module = profile.settings_module if with_settings else None
-        if profile.compose is None:
+        if profile.container is None:
             return self.run(
                 command,
                 cwd=profile.project_dir,
@@ -322,9 +454,10 @@ class RemoteHost:
         seconds = timeout or settings.SSH_COMMAND_TIMEOUT
         inside = self.timeout_in_container
         return self.run(
-            profile.compose.exec_argv(
+            profile.container.exec_argv(
                 bounded(command, seconds) if inside else command,
                 settings_module=settings_module,
+                stdin=stdin_line is not None,
             ),
             cwd=profile.project_dir,
             stdin_line=stdin_line,
@@ -354,14 +487,22 @@ class RemoteHost:
         *,
         timeout: float | None = None,
     ) -> RemoteResult:
-        if profile.compose is None:
-            raise ValueError("This project does not run in Docker Compose.")
+        if profile.container is None or not profile.container.in_compose:
+            raise ValueError("This application does not run in a Compose service.")
         return self.run(
-            profile.compose.argv(*arguments), cwd=profile.project_dir, timeout=timeout
+            profile.container.argv(*arguments), cwd=profile.project_dir, timeout=timeout
         )
 
-    def compose_version(self) -> RemoteResult:
-        return self.run([DOCKER, "compose", "version", "--short"])
+    def run_engine(
+        self,
+        profile: DbsProfile,
+        argv: Sequence[str],
+        *,
+        timeout: float | None = None,
+    ) -> RemoteResult:
+        if profile.container is None:
+            raise ValueError("This application does not run in a container.")
+        return self.run(argv, cwd=profile.project_dir, timeout=timeout)
 
     def run_in_container(
         self,
@@ -371,12 +512,12 @@ class RemoteHost:
         user: str | None = None,
         timeout: float | None = None,
     ) -> RemoteResult:
-        if profile.compose is None:
-            raise ValueError("This project does not run in Docker Compose.")
+        if profile.container is None:
+            raise ValueError("This application does not run in a container.")
         seconds = timeout or settings.SSH_COMMAND_TIMEOUT
         inside = self.timeout_in_container
         return self.run(
-            profile.compose.exec_argv(
+            profile.container.exec_argv(
                 bounded(command, seconds) if inside else command, user=user
             ),
             cwd=profile.project_dir,
@@ -395,6 +536,8 @@ class RemoteHost:
         timeout: float | None = None,
         progress: Callable[[int], None] | None = None,
         limited: bool = False,
+        idle_timeout: float | None = None,
+        on_stderr_line: Callable[[str], None] | None = None,
     ) -> RemoteResult:
         seconds = timeout or settings.BACKUP_EXEC_TIMEOUT
         if self.timeout_on_host and not limited:
@@ -408,6 +551,8 @@ class RemoteHost:
                 stdin_line=stdin_line,
                 timeout=_waited(seconds, limited),
                 progress=progress,
+                idle_timeout=idle_timeout,
+                on_stderr_line=on_stderr_line,
             )
         except StreamInterrupted as exc:
             raise StreamBroken(output=_tail(str(exc), secret)) from exc
@@ -418,7 +563,7 @@ class RemoteHost:
         return result
 
     def backup_folder(self, profile: DbsProfile, folder: str) -> str:
-        if profile.compose is None:
+        if profile.container is None:
             return folder
         found = self.run_manage(profile, ["dbs_connection", "--json"])
         details = _json_of(found.stdout) if found.ok else None
@@ -432,22 +577,28 @@ class RemoteHost:
     ) -> list[ServerBackup]:
         if not folder:
             return []
-        listed = (
-            self._listed_on_host(folder)
-            if profile.compose is None
-            else self._listed_in_container(profile, folder)
-        )
         found = [
-            ServerBackup(name, posixpath.join(folder, name), size, mtime)
-            for name, size, mtime in listed
-            if is_backup_name(name, prefix)
+            backup
+            for backup in self.folder_files(profile, folder)
+            if is_backup_name(backup.name, prefix)
         ]
         return sorted(
             found, key=lambda backup: (parse_backup_moment(backup.name), backup.name)
         )
 
+    def folder_files(self, profile: DbsProfile, folder: str) -> list[ServerBackup]:
+        listed = (
+            self._listed_on_host(folder)
+            if profile.container is None
+            else self._listed_in_container(profile, folder)
+        )
+        return [
+            ServerBackup(name, posixpath.join(folder, name), size, mtime)
+            for name, size, mtime in listed
+        ]
+
     def backup_sha256(self, profile: DbsProfile, path: str) -> str:
-        if profile.compose is None:
+        if profile.container is None:
             return self._sha256(path, settings.BACKUP_EXEC_TIMEOUT)
         result = self.run_in_container(
             profile, ["sha256sum", "--", path], timeout=settings.BACKUP_EXEC_TIMEOUT
@@ -460,22 +611,26 @@ class RemoteHost:
         path: str,
         sink: Writable,
         progress: Callable[[int], None] | None = None,
+        *,
+        offset: int = 0,
     ) -> None:
-        if profile.compose is None:
-            received = 0
-            with self.stream_file(path) as chunks:
+        if offset < 0:
+            raise ValueError(f"Not an offset: {offset!r}")
+        if profile.container is None:
+            received = offset
+            with self.stream_file(path, start=offset) as chunks:
                 for chunk in chunks:
                     sink.write(chunk)
                     received += len(chunk)
                     if progress is not None:
                         progress(received)
             return
-        seconds = settings.BACKUP_EXEC_TIMEOUT
+        seconds = settings.BACKUP_TOTAL_TIMEOUT
         inside = self.timeout_in_container
-        command = ["cat", "--", path]
+        command = ["tail", "-c", f"+{offset + 1}", "--", path] if offset else ["cat", "--", path]
         try:
             result = self.stream(
-                profile.compose.exec_argv(
+                profile.container.exec_argv(
                     bounded(command, seconds) if inside else command
                 ),
                 sink,
@@ -483,6 +638,7 @@ class RemoteHost:
                 timeout=seconds,
                 progress=progress,
                 limited=inside,
+                idle_timeout=settings.BACKUP_IDLE_TIMEOUT,
             )
         except StreamBroken as exc:
             raise RemoteCommandFailed(output=exc.output) from exc
@@ -499,13 +655,21 @@ class RemoteHost:
         folder: str,
         sink: Writable,
         progress: Callable[[int], None] | None = None,
+        progress_seconds: int = 0,
+        on_started: Callable[[dict[str, str]], None] | None = None,
     ) -> StreamedBackup:
         arguments = ["dbs_backup", "--stream", "--prefix", prefix, "--passphrase-stdin"]
         arguments += ["--output-dir", folder] if folder else []
+        arguments += ["--progress-seconds", str(progress_seconds)] if progress_seconds else []
         command = [profile.python, profile.manage, *arguments]
-        seconds = settings.BACKUP_EXEC_TIMEOUT
-        inside = profile.compose is not None and self.timeout_in_container
-        if profile.compose is None:
+        seconds = settings.BACKUP_TOTAL_TIMEOUT
+        idle = (
+            settings.BACKUP_IDLE_TIMEOUT
+            if progress_seconds
+            else settings.BACKUP_QUIET_TIMEOUT
+        )
+        inside = profile.container is not None and self.timeout_in_container
+        if profile.container is None:
             argv = command
             env = (
                 {"DJANGO_SETTINGS_MODULE": profile.settings_module}
@@ -513,9 +677,10 @@ class RemoteHost:
                 else None
             )
         else:
-            argv = profile.compose.exec_argv(
+            argv = profile.container.exec_argv(
                 bounded(command, seconds) if inside else command,
                 settings_module=profile.settings_module,
+                stdin=True,
             )
             env = None
         result = self.stream(
@@ -527,11 +692,22 @@ class RemoteHost:
             timeout=seconds,
             progress=progress,
             limited=inside,
+            idle_timeout=idle,
+            on_stderr_line=None if on_started is None else _started(prefix, on_started),
         )
         output = _tail(result.stderr, passphrase)
         if not result.ok:
+            if progress_seconds and PROGRESS_OPTION in result.stderr:
+                return self.stream_dbs_backup(
+                    profile,
+                    passphrase=passphrase,
+                    prefix=prefix,
+                    folder=folder,
+                    sink=sink,
+                    progress=progress,
+                )
             if UNKNOWN_OPTION in result.stderr:
-                raise DbsTooOld(versions.STREAM_FROM, output=output)
+                raise DbsTooOld(versions.MINIMUM_REMOTE, output=output)
             raise RemoteCommandFailed(output=output)
         summary = _stream_summary(result.stderr, prefix)
         if summary is None:
@@ -547,7 +723,7 @@ class RemoteHost:
         )
 
     def remove_backup(self, profile: DbsProfile, path: str) -> None:
-        if profile.compose is None:
+        if profile.container is None:
             self.remove(path)
             return
         result = self.run_in_container(profile, ["rm", "-f", "--", path])
@@ -592,22 +768,12 @@ class RemoteHost:
             (row[0], row[1], _listed_time(row[2])) for row in rows if _is_listed(row)
         ]
 
-    def _remove_in_container(
-        self, profile: DbsProfile, path: str, *, user: str | None = None
-    ) -> None:
-        with suppress(RemoteCommandFailed):
-            self.run_in_container(profile, ["rm", "-f", path], user=user)
-
-    def _hand_to_container_user(self, profile: DbsProfile, path: str) -> None:
-        owner = self.run_in_container(profile, ["id", "-u"])
-        uid = owner.stdout.strip().splitlines()[-1:] if owner.ok else []
-        if not uid or not uid[0].isdigit():
-            raise RestoreFailed(output=_tail(owner.stderr or owner.stdout))
-        handed = self.run_in_container(
-            profile, ["chown", uid[0], path], user=CONTAINER_ROOT
-        )
-        if not handed.ok:
-            raise RestoreFailed(output=_tail(handed.stderr or handed.stdout))
+    def _remove_in_container(self, profile: DbsProfile, path: str) -> str:
+        try:
+            removed = self.run_in_container(profile, ["rm", "-f", "--", path])
+        except RemoteCommandFailed:
+            return path
+        return "" if removed.ok else path
 
     @sensitive_variables("passphrase")
     def restore_dbs_backup(
@@ -621,18 +787,17 @@ class RemoteHost:
         dry_run: bool,
     ) -> RestoreReport:
         name = f"{RESTORE_FILE_PREFIX}{secrets.token_hex(8)}.dbs"
-        path = posixpath.join(remote_dir, name)
-        self._make_dirs(remote_dir)
-        self.write_new(source, remote_dir, name, mode=RESTORE_FILE_MODE)
-        inside = (
-            path if profile.compose is None else posixpath.join(CONTAINER_TMP, name)
-        )
-        arguments = ["dbs_restore", inside, "--passphrase-stdin"]
+        if profile.container is None:
+            path = posixpath.join(remote_dir, name)
+            self._make_dirs(remote_dir)
+            self.write_new(source, remote_dir, name, mode=RESTORE_FILE_MODE)
+        else:
+            path = posixpath.join(CONTAINER_TMP, name)
+            self._receive_in_container(profile, source, path)
+        arguments = ["dbs_restore", path, "--passphrase-stdin"]
         arguments += ["--flush"] if flush else []
         arguments += ["--dry-run"] if dry_run else []
         try:
-            if profile.compose is not None:
-                self._copy_into_container(profile, path, inside)
             result = self.run_manage(
                 profile,
                 arguments,
@@ -640,28 +805,127 @@ class RemoteHost:
                 timeout=settings.BACKUP_EXEC_TIMEOUT,
             )
         finally:
-            if profile.compose is not None:
-                self._remove_in_container(profile, inside, user=CONTAINER_ROOT)
-            copy_left = self._removed_or_left(path)
+            copy_left = (
+                self._removed_or_left(path)
+                if profile.container is None
+                else self._remove_in_container(profile, path)
+            )
         if not result.ok:
             output = _tail(f"{result.stdout}\n{result.stderr}", passphrase)
             if UNKNOWN_OPTION in result.stderr:
-                raise DbsTooOld(versions.COMPATIBLE_FROM, output=output)
+                raise DbsTooOld(versions.MINIMUM_REMOTE, output=output)
             raise RestoreFailed(output=output)
         return _restore_report(
             result.stdout, flush=flush, dry_run=dry_run, copy_left=copy_left
         )
 
-    def _copy_into_container(self, profile: DbsProfile, path: str, inside: str) -> None:
-        compose = cast(ComposeService, profile.compose)
-        copied = self.run_compose(
+    def _receive_in_container(
+        self, profile: DbsProfile, source: BinaryIO, path: str
+    ) -> None:
+        received = self.feed_python(
             profile,
-            ["cp", path, f"{compose.service}:{inside}"],
+            ["-c", RECEIVE_FILE, path, str(_remaining(source))],
+            source,
             timeout=settings.BACKUP_EXEC_TIMEOUT,
         )
-        if not copied.ok:
-            raise RestoreFailed(output=_tail(copied.stderr or copied.stdout))
-        self._hand_to_container_user(profile, inside)
+        if not received.ok:
+            raise RestoreFailed(output=_tail(received.stderr or received.stdout))
+
+    def read_in_container(self, profile: DbsProfile, path: str, max_bytes: int) -> bytes:
+        result = self.run_python(
+            profile, ["-c", READ_SMALL, path, str(max_bytes)], with_settings=False
+        )
+        if result.exit_status == TOO_LARGE_STATUS:
+            raise FileTooLarge()
+        if result.exit_status == NOT_A_FILE_STATUS:
+            raise RemoteNotFound()
+        if not result.ok:
+            raise RemoteCommandFailed(output=_tail(result.stderr))
+        try:
+            return base64.b64decode(result.stdout.strip(), validate=True)
+        except ValueError as exc:
+            raise RemoteCommandFailed() from exc
+
+    @sensitive_variables("data")
+    def replace_in_container(self, profile: DbsProfile, path: str, data: bytes) -> None:
+        folder, name = posixpath.split(path)
+        if not folder.startswith("/") or name in {"", ".", ".."}:
+            raise ValueError(f"Not an absolute file path: {path!r}")
+        current = self.run_python(
+            profile, ["-c", MODE_OF, path], with_settings=False
+        )
+        mode = current.stdout.strip() if current.ok else ""
+        written = self.feed_python(
+            profile,
+            [
+                "-c",
+                RECEIVE_FILE,
+                path,
+                str(len(data)),
+                mode or oct(NEW_FILE_MODE),
+                posixpath.join(folder, _partial_name(name)),
+            ],
+            BytesIO(data),
+        )
+        if not written.ok:
+            raise RemoteCommandFailed(output=_tail(written.stderr or written.stdout))
+
+    def sweep_in_container(self, profile: DbsProfile, *folders: str) -> int:
+        try:
+            result = self.run_python(
+                profile, ["-c", SWEEP_STALE, *folders], with_settings=False
+            )
+        except RemoteCommandFailed:
+            return 0
+        lines = result.stdout.strip().splitlines() if result.ok else []
+        return int(lines[-1]) if lines and lines[-1].isdigit() else 0
+
+    def feed_python(
+        self,
+        profile: DbsProfile,
+        arguments: Sequence[str],
+        source: BinaryIO,
+        *,
+        timeout: float | None = None,
+    ) -> RemoteResult:
+        if profile.container is None:
+            raise ValueError("This application does not run in a container.")
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        inside = self.timeout_in_container
+        command = [profile.python, *arguments]
+        return self.feed(
+            profile.container.exec_argv(
+                bounded(command, seconds) if inside else command, stdin=True
+            ),
+            source,
+            cwd=profile.project_dir,
+            timeout=seconds,
+            limited=inside,
+        )
+
+    def feed(
+        self,
+        argv: Sequence[str],
+        source: BinaryIO,
+        *,
+        cwd: str | None = None,
+        env: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+        limited: bool = False,
+    ) -> RemoteResult:
+        seconds = timeout or settings.SSH_COMMAND_TIMEOUT
+        if self.timeout_on_host and not limited:
+            argv, limited = bounded(argv, seconds), True
+        script = build_script(argv, cwd=cwd, env=env)
+        try:
+            result = self.session.feed(
+                script, source, timeout=_waited(seconds, limited)
+            )
+        except DBSError as exc:
+            raise RemoteCommandFailed(output=_tail(str(exc))) from exc
+        if limited and result.exit_status in TIMED_OUT_STATUSES:
+            raise RemoteCommandTimedOut(output=_tail(result.stderr))
+        return result
 
     def archive(
         self, paths: Sequence[str], remote_dir: str, name: str, timeout: float
@@ -721,6 +985,9 @@ class RemoteHost:
         )
         return sorted(files, key=lambda file: file.name)
 
+    def home_folder(self, name: str) -> str:
+        return posixpath.join(self.realpath("."), name)
+
     def realpath(self, path: str) -> str:
         sftp = self.sftp
         try:
@@ -766,7 +1033,7 @@ class RemoteHost:
 
     @contextmanager
     def stream_file(
-        self, path: str, limit: int | None = None
+        self, path: str, limit: int | None = None, *, start: int = 0
     ) -> Iterator[Iterator[bytes]]:
         sftp = self.sftp
         try:
@@ -774,7 +1041,7 @@ class RemoteHost:
         except SFTP_ERRORS as exc:
             raise _translated(exc, path) from exc
         try:
-            yield _windows(handle, limit)
+            yield _windows(handle, limit, start)
         finally:
             with suppress(*TRANSPORT_ERRORS):
                 handle.close()
@@ -982,19 +1249,54 @@ def _is_listed(row: object) -> bool:
     )
 
 
+def _started(
+    prefix: str, on_started: Callable[[dict[str, str]], None]
+) -> Callable[[str], None]:
+    told = []
+
+    def heard(line: str) -> None:
+        if told:
+            return
+        found = _json_of(line)
+        reported = found.get("progress") if isinstance(found, dict) else None
+        if not isinstance(reported, dict):
+            return
+        name, partial = reported.get("name"), reported.get("partial")
+        if not (
+            isinstance(name, str)
+            and isinstance(partial, str)
+            and "/" not in name
+            and "/" not in partial
+            and is_backup_name(name, prefix)
+            and is_partial_name(partial)
+        ):
+            return
+        told.append(name)
+        on_started({"name": name, "partial": partial})
+
+    return heard
+
+
 def _stream_summary(stderr: str, prefix: str) -> dict | None:
-    lines = [line for line in stderr.splitlines() if line.strip()]
-    summary = _json_of(lines[-1]) if lines else None
-    if not isinstance(summary, dict):
-        return None
+    for line in reversed(stderr.splitlines()):
+        summary = _json_of(line) if line.lstrip().startswith("{") else None
+        if isinstance(summary, dict) and "progress" not in summary:
+            return summary if _is_summary(summary, prefix) else None
+    return None
+
+
+def _is_summary(summary: dict, prefix: str) -> bool:
     name, size, digest = summary.get("name"), summary.get("size"), summary.get("sha256")
-    if not isinstance(name, str) or "/" in name or not is_backup_name(name, prefix):
-        return None
-    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
-        return None
-    if not isinstance(digest, str) or not SHA256_HEX.fullmatch(digest):
-        return None
-    return summary
+    return (
+        isinstance(name, str)
+        and "/" not in name
+        and is_backup_name(name, prefix)
+        and isinstance(size, int)
+        and not isinstance(size, bool)
+        and size >= 0
+        and isinstance(digest, str)
+        and SHA256_HEX.fullmatch(digest) is not None
+    )
 
 
 def _restore_report(
@@ -1051,13 +1353,20 @@ def _kind(mode: int | None) -> EntryKind:
     return EntryKind.OTHER
 
 
+def _remaining(source: BinaryIO) -> int:
+    position = source.tell()
+    end = source.seek(0, os.SEEK_END)
+    source.seek(position)
+    return end - position
+
+
 def _partial_name(name: str) -> str:
     kept = name.encode()[:PARTIAL_NAME_BYTES].decode(errors="ignore")
     return f".{kept}.part-{secrets.token_hex(8)}"
 
 
-def _windows(handle: SFTPFile, limit: int | None) -> Iterator[bytes]:
-    offset = 0
+def _windows(handle: SFTPFile, limit: int | None, start: int = 0) -> Iterator[bytes]:
+    offset = start
     while limit is None or offset < limit:
         size = (
             TRANSFER_WINDOW if limit is None else min(TRANSFER_WINDOW, limit - offset)

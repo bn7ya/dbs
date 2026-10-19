@@ -1,0 +1,48 @@
+[
+    {
+        "AutoRemove": false,
+        "Command": [
+            "gunicorn",
+            "wiki.wsgi"
+        ],
+        "CreatedAt": "4 days ago",
+        "CIDFile": "",
+        "Exited": false,
+        "ExitedAt": -62135596800,
+        "ExitCode": 0,
+        "Id": "69226291e5838fb03fcdb0b009c8f58ad2ee0885939f4d48eb540eb65c051060",
+        "Image": "localhost/wiki_web:latest",
+        "ImageID": "3e2ec1403050d6b666251d39c15296d87273db246331881ea1f8b9389a69df72",
+        "IsInfra": false,
+        "Labels": {
+            "io.podman.compose.config-hash": "12a435ec8454c6d1c90a1d92812b09af11bee711fbe524d56a8f26ea7c5ccee8",
+            "io.podman.compose.project": "wiki",
+            "io.podman.compose.version": "1.2.0",
+            "io.podman.compose.project.working_dir": "${HOST}/srv/wiki",
+            "io.podman.compose.project.config_files": "${HOST}/srv/wiki/podman-compose.yml",
+            "io.podman.compose.service": "web",
+            "io.podman.compose.container-number": "1",
+            "PODMAN_SYSTEMD_UNIT": "podman-compose@wiki.service"
+        },
+        "Mounts": [
+            "/usr/src/app/uploads"
+        ],
+        "Names": [
+            "wiki-web-1"
+        ],
+        "Namespaces": {},
+        "Networks": [
+            "wiki_default"
+        ],
+        "Pid": 3117,
+        "Pod": "",
+        "PodName": "",
+        "Ports": null,
+        "Restarts": 0,
+        "Size": null,
+        "StartedAt": 1728662568,
+        "State": "running",
+        "Status": "Up 4 days",
+        "Created": 1728662567
+    }
+]

@@ -3,22 +3,23 @@ from __future__ import annotations
 import datetime
 import errno
 import hashlib
+import json
 import os
 import re
 import secrets
 import stat
+import threading
 import time
 from dataclasses import dataclass
 
 from .exceptions import DBSError
-from .naming import backup_filename, is_backup_name
+from .naming import backup_filename
 
 CHUNK_SIZE = 1024 * 1024
 FILE_MODE = 0o600
 DIRECTORY_MODE = 0o700
 PARTIAL_TOKEN_BYTES = 8
 PARTIAL_STALE_SECONDS = 3600
-LEGACY_PARTIAL_SUFFIX = ".part"
 MAX_ORDINAL = 999
 NO_HARD_LINKS = {errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOSYS, errno.EXDEV}
 
@@ -30,11 +31,7 @@ def partial_name(name: str) -> str:
 
 
 def is_partial_name(name: str) -> bool:
-    if _PARTIAL_NAME.match(name):
-        return True
-    return name.endswith(LEGACY_PARTIAL_SUFFIX) and is_backup_name(
-        name[: -len(LEGACY_PARTIAL_SUFFIX)]
-    )
+    return bool(_PARTIAL_NAME.match(name))
 
 
 def is_stale(modified: float, now: float | None = None) -> bool:
@@ -188,3 +185,39 @@ class TeeSink:
             self.stream.write(data)
         except (OSError, ValueError):
             self.stream_lost = True
+
+
+class Progress:
+    def __init__(self, sink: TeeSink, seconds: int, report):
+        self.sink = sink
+        self.seconds = seconds
+        self.report = report
+        self._stopped = threading.Event()
+        self._thread = None
+
+    def __enter__(self) -> "Progress":
+        if self.seconds <= 0:
+            return self
+        self.report(
+            json.dumps(
+                {
+                    "progress": {
+                        "name": backup_filename(self.sink.prefix, self.sink.moment),
+                        "partial": os.path.basename(self.sink.partial),
+                        "moment": self.sink.moment.isoformat(),
+                    }
+                }
+            )
+        )
+        self._thread = threading.Thread(target=self._beat, name="dbs-stream-progress", daemon=True)
+        self._thread.start()
+        return self
+
+    def _beat(self) -> None:
+        while not self._stopped.wait(self.seconds):
+            self.report(json.dumps({"progress": {"bytes": self.sink.size}}))
+
+    def __exit__(self, *exc_info) -> None:
+        self._stopped.set()
+        if self._thread is not None:
+            self._thread.join()

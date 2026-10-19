@@ -1,0 +1,16 @@
+:host {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1) var(--app-space-2);
+  align-items: baseline;
+  min-inline-size: 0;
+}
+
+.where__icon {
+  color: var(--app-color-on-surface-variant);
+}
+
+.where__detail {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}

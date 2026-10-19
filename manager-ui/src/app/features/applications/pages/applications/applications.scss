@@ -1,0 +1,37 @@
+@use "layout" as *;
+
+.applications {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+}
+
+.applications__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.applications__title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.applications__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.applications__search {
+  max-inline-size: $card-max;
+}
+
+.applications__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}

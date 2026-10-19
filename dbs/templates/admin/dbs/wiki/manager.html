@@ -2,74 +2,84 @@
 
 {% block wiki %}
 <h1>The DBS manager</h1>
-<p>The DBS manager is a separate application in the same package. Install it with its
-extra and run it on your own machine:</p>
-<pre><code>pip install "django-dbs[manager]"
+<p>The DBS manager is a separate application in the same package. Run it on your own
+machine:</p>
+<pre><code>pip install django-dbs
 django_dbs run</code></pre>
-<p>If the shell says <code>django_dbs</code> is not recognized, pip put the script in a
-folder that is not on your <code>PATH</code>. Run <code>python -m dbs.manager run</code>
-instead, or install with <code>pipx install "django-dbs[manager]"</code>.</p>
-<p>It opens in your browser and looks after many servers over SSH: it pulls their backups,
-keeps their <code>.env</code> versions and folder archives, and moves a project onto a new
-server, with a way back if the move stops.</p>
-<h2>How it takes this server's backups</h2>
-<p>This server pushes nothing. Each time the manager backs it up, it first collects the
-backups it left waiting here, then runs <code>manage.py dbs backup --stream</code> and
-receives the new backup as it is written. A copy stays in <code>DBS_BACKUP_DIR</code>, so a
-backup whose connection breaks is collected the next time the manager connects. Once the
-manager has checked its own copy, it removes the copies it left here, keeping as many as the
-plan says (none by default). This server keeps at most five streamed backups per name.</p>
+<p><code>django-dbs</code> and <code>dbs</code> are the same command. If the shell says it is
+not recognized, pip put the script in a folder that is not on your <code>PATH</code>. Run
+<code>python -m dbs.manager run</code> instead, or install with
+<code>pipx install django-dbs</code>.</p>
+<p>It opens in your browser and looks after many servers over SSH. A <em>server</em> is a
+machine it signs in to; an <em>application</em> is one Django project on it, run on the
+server itself, in a Compose service or in a container, under Docker or Podman. For each
+application it pulls the backups, keeps them on its own machine, schedules them, keeps the
+<code>.env</code> versions and folder archives, deploys in place or moves the project onto
+another server, and restores, with a console and a terminal in the browser.</p>
+<h2>How it takes this project's backups</h2>
+<p>This server pushes nothing. Each time the manager backs this project up, it first collects
+the backups it left waiting here, then runs <code>manage.py dbs backup --stream</code> and
+receives the new backup as it is written. A copy stays in <code>DBS_BACKUP_DIR</code>; when
+the connection breaks, the manager reconnects, waits for this server to finish, and pulls
+only the rest. Once the manager has checked its own copy, it removes the copies it left here,
+keeping as many as the plan says (none by default). This server keeps at most five streamed
+backups per name. If this panel's own schedule is on as well, the manager's check warns that
+both are taking backups.</p>
 <h2>The passphrase</h2>
-<p>The manager stores this server's backup passphrase, sealed, read from the server while it
+<p>The manager stores this project's backup passphrase, sealed, read from the project while it
 is added and before its first backup. <strong>It must never change</strong>: the backups
 taken with it would no longer open.</p>
 <h2>Accounts</h2>
 <p>The master account manages the other accounts, each an admin, an operator or a viewer,
 each allowed less than the one before. Every sign-in takes the password and a code from an
-authenticator app, set up at the first sign-in, and passwords expire after 30 days. From a
-shell: <code>django_dbs createuser NAME --role operator</code>,
+authenticator app, set up at the first sign-in, and passwords expire after 30 days. Adding an
+application, changing what it runs, opening a terminal and every real restore or deploy ask
+for the password again. From a shell: <code>django_dbs createuser NAME --role operator</code>,
 <code>django_dbs account list|role|disable|enable|reset-2fa</code> and
 <code>django_dbs password NAME</code>.</p>
 <h2>From a terminal</h2>
 <p>Everything the manager's interface does is also a command, on the same data and the same
 audit trail:</p>
 <pre><code>django_dbs server add web --host app.example.com --user deploy --ssh-password
-django_dbs backup take --all
-django_dbs backup list --server web</code></pre>
-<p><code>server add</code> shows the host key fingerprint to confirm, finds this project and
-the Python that has django-dbs, and checks the server. Actions the interface protects with
-your password ask for it in the terminal too. <code>django_dbs AREA VERB --help</code> lists
-the rest: <code>server</code>, <code>backup</code>, <code>plan</code>,
-<code>activity</code>, <code>env</code>, <code>files</code> and <code>redeploy</code>.</p>
+django_dbs app add shop --server web --folder /srv/shop
+django_dbs backup take --all</code></pre>
+<p><code>server add</code> shows the host key fingerprint to confirm, signs in and checks the
+server and its container engines. <code>app add</code> finds the project in the folder, on the
+server or in a container, with its Python, <code>manage.py</code>, backup folder and
+<code>.env</code>, then checks it. <code>django_dbs AREA VERB --help</code> lists the rest:
+<code>server</code>, <code>app</code>, <code>backup</code>, <code>plan</code>,
+<code>activity</code>, <code>env</code>, <code>files</code> and <code>redeploy</code>. The
+<em>Console</em> page runs the same commands in the browser as the signed-in account.</p>
 <h2>With Claude</h2>
-<p><code>django_dbs mcp</code> lets Claude add servers, take and verify backups, set up plans
-and rehearse restores and moves (<code>claude mcp add dbs -- django_dbs mcp</code>). Before
-it adds a server, you confirm the host key yourself, in the manager or with
-<code>django_dbs server confirm-host-key ID</code>. It never reveals a secret, never takes
-your account password, and cannot restore or move for real, make a plan keep fewer backups,
-or remove or delete anything.</p>
+<p><code>django_dbs mcp</code> lets Claude add servers and applications, take and verify
+backups, set up plans and rehearse restores, deploys and moves
+(<code>claude mcp add dbs -- django_dbs mcp</code>). Before it adds a server, you confirm the
+host key yourself, in the manager or with <code>django_dbs server confirm-host-key ID</code>.
+It adds an application only as discovery found it, never reveals a secret, never takes your
+account password, never reaches the console or the terminal, and cannot restore, deploy or
+move for real, make a plan keep fewer backups, or remove or delete anything.</p>
 <h2>Letting it reach this project</h2>
 <ol>
-  <li>Open <a href="{% url 'admin:dbs_connection' %}">Connection</a> and press
-      <em>Copy</em>.</li>
-  <li>In the manager, choose <em>Add a server</em> and paste the snippet, or run
-      <code>django_dbs server add</code>. Without one, the
-      manager searches the server for the project once it can sign in, and
-      <em>Browse the server</em> lets you pick its folder from the server's own folders.</li>
-  <li>Confirm the host key fingerprint matches the one shown on the Connection page.</li>
-  <li>Add the key the manager shows to <code>~/.ssh/authorized_keys</code> for the user
-      that owns this project.</li>
-  <li>Store the passphrase before the first backup.</li>
+  <li>In the manager, add this machine as a server: its SSH address and a user that owns the
+      project. Confirm the host key fingerprint matches the one on the
+      <a href="{% url 'admin:dbs_connection' %}">Connection</a> page.</li>
+  <li>Add the key the manager shows to <code>~/.ssh/authorized_keys</code> for that user.</li>
+  <li>Add an application and give it the project's folder on the server: the folder with
+      <code>manage.py</code>, or the one that holds the compose file. <em>Browse the
+      server</em> lets you pick it.</li>
+  <li>Store the passphrase before the first backup, then take a test backup.</li>
 </ol>
-<p>The manager takes backups with <code>dbs backup --stream</code>, so this project needs
-django-dbs 0.7 or later and <code>DBS_BACKUP_DIR</code>.</p>
-<p>If this project runs in a Docker Compose service, choose <em>In a Docker Compose
-service</em> under <em>Where the project runs</em> and name the service, or pass
-<code>--runtime compose --compose-service backend</code> to <code>server add</code>. The
-manager then runs every <code>manage.py</code> command inside that service with
-<code>docker compose exec</code>, from the project folder. The SSH user must be able to run
-<code>docker compose</code> and the service must be running, with django-dbs installed in
-its image and <code>DBS_BACKUP_DIR</code> set.</p>
+<p>The manager needs django-dbs 0.7 or later here, 0.8 to resume a transfer that broke, and
+<code>DBS_BACKUP_DIR</code>.</p>
+<h2>In Docker or Podman</h2>
+<p>When this project runs in a container, the manager finds it from the folder on the server:
+the Compose project whose working folder that is, or the container that mounts it. It runs
+every <code>manage.py</code> command inside the container through the engine, maps the paths
+it reads here to the server through the container's mounts, streams a restore into the
+container over standard input, and sweeps its leftovers there. Keep
+<code>DBS_BACKUP_DIR</code> on a mounted folder so the copy outlives the container. The SSH
+user must be allowed to run the engine (the <code>docker</code> group, or rootless Podman as
+that user); the manager never uses <code>sudo</code>.</p>
 <p>This project never contacts the manager and keeps nothing about it. A backup the manager
 asks for is written to <code>DBS_BACKUP_DIR</code> and recorded in the
 <a href="{% url 'admin:dbs_auditevent_changelist' %}">audit trail</a> like any other

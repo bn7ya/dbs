@@ -1,0 +1,21 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+:host:empty {
+  display: none;
+}
+
+.backup-notices__deleted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.backup-notices__code {
+  font-family: var(--app-font-mono);
+  overflow-wrap: anywhere;
+}

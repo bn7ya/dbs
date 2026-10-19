@@ -1,0 +1,169 @@
+<div class="table-scroll">
+  <table mat-table [dataSource]="rows()" [attr.aria-label]="label()" [attr.aria-busy]="loading()">
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.name' | t }}</th>
+      <td mat-cell *matCellDef="let row">
+        <div class="backup-table__stack">
+          <bdi class="backup-table__code" dir="ltr">{{ row.name }}</bdi>
+          <app-status-tag severity="neutral" [label]="'backups.kind.' + row.kind | t" />
+        </div>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="application">
+      <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.application' | t }}</th>
+      <td mat-cell *matCellDef="let row">
+        <a class="backup-table__owner" [routerLink]="['/applications', row.application]">
+          <bdi dir="auto">{{ row.application_name }}</bdi>
+        </a>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="server">
+      <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.server' | t }}</th>
+      <td mat-cell *matCellDef="let row">
+        <a class="backup-table__owner" [routerLink]="['/servers', row.server]">
+          <bdi dir="auto">{{ row.server_name }}</bdi>
+        </a>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="taken">
+      <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.taken' | t }}</th>
+      <td mat-cell *matCellDef="let row">
+        <div class="backup-table__stack">
+          <time [attr.datetime]="row.created_at">{{ row.created_at | appDate }}</time>
+          @if (takenBy(row); as takenBy) {
+            <span class="text-sm text-secondary">{{ takenBy }}</span>
+          }
+        </div>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="plan">
+      <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.plan' | t }}</th>
+      <td mat-cell *matCellDef="let row">
+        @if (row.plan_name; as planName) {
+          <bdi dir="auto">{{ planName }}</bdi>
+        } @else {
+          <span class="text-sm text-muted">{{ 'backups.list.oneOff' | t }}</span>
+        }
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="size">
+      <th mat-header-cell *matHeaderCellDef scope="col" class="backup-table__end">{{ 'backups.list.size' | t }}</th>
+      <td mat-cell *matCellDef="let row" class="backup-table__end">
+        <bdi class="backup-table__size">{{ row.size | fileSize }}</bdi>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="check">
+      <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.check' | t }}</th>
+      <td mat-cell *matCellDef="let row">
+        <div class="backup-table__stack">
+          <app-status-tag
+            [severity]="look(row.validation).severity"
+            [icon]="look(row.validation).icon"
+            [label]="validationKey(row) | t"
+          />
+          @if (row.validated_at; as validatedAt) {
+            <time class="text-sm text-secondary" [attr.datetime]="validatedAt">{{ validatedAt | appDate }}</time>
+          }
+          @if (row.failure) {
+            <span class="text-sm text-secondary">{{ 'backups.validation.quarantinedBody' | t }}</span>
+            <bdi class="text-sm backup-table__code" dir="ltr">{{ row.failure }}</bdi>
+          }
+        </div>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef scope="col">{{ 'backups.list.actions' | t }}</th>
+      <td mat-cell *matCellDef="let row">
+        <div class="backup-table__actions">
+          <ng-container *appCan="'backups.download'">
+            @if (sealed(row)) {
+              <button
+                matButton
+                type="button"
+                [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
+                (click)="download(row)"
+              >
+                {{ 'backups.download.action' | t }}
+              </button>
+            } @else {
+              <a
+                matButton
+                [href]="downloadUrl(row)"
+                [attr.download]="row.name"
+                [attr.aria-label]="'backups.download.label' | t: { name: row.name }"
+              >
+                {{ 'backups.download.action' | t }}
+              </a>
+            }
+          </ng-container>
+          <button
+            matButton
+            type="button"
+            [disabled]="isVerifying(row)"
+            [attr.aria-busy]="isVerifying(row)"
+            [attr.aria-label]="'backups.verify.label' | t: { name: row.name }"
+            *appCan="'backups.verify'"
+            (click)="verify(row)"
+          >
+            @if (isVerifying(row)) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ 'backups.verify.action' | t }}
+          </button>
+          @if (canRestore(row)) {
+            <button
+              matButton
+              type="button"
+              [disabled]="restoring(row) !== null"
+              [attr.aria-busy]="restoring(row) !== null"
+              [attr.aria-label]="'backups.restore.label' | t: { name: row.name }"
+              *appCan="'backups.rehearse'"
+              (click)="restore(row)"
+            >
+              @if (restoring(row) !== null) {
+                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ restoreKey(row) | t }}
+            </button>
+          }
+          <button
+            matButton
+            class="app-danger"
+            type="button"
+            [disabled]="isDeleting(row)"
+            [attr.aria-busy]="isDeleting(row)"
+            [attr.aria-label]="'backups.delete.label' | t: { name: row.name }"
+            *appCan="'backups.delete'"
+            (click)="remove(row)"
+          >
+            @if (isDeleting(row)) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ 'actions.delete' | t }}
+          </button>
+        </div>
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+    <tr mat-row *matRowDef="let row; columns: columns()"></tr>
+  </table>
+</div>
+@if (paginated()) {
+  <nav [attr.aria-label]="'backups.list.pages' | t">
+    <mat-paginator
+      [length]="count()"
+      [pageIndex]="page()"
+      [pageSize]="pageSize()"
+      [pageSizeOptions]="pageSizes"
+      (page)="onPaged($event)"
+    />
+  </nav>
+}

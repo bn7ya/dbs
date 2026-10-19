@@ -55,7 +55,7 @@ def test_an_expired_password_leaves_only_the_change_and_signing_out(client, sara
     assert error(refused)["code"] == "password_change_required"
     assert me.status_code == 200 and me.json()["password_change_required"] is True
     assert client.get("/api/dashboard/").status_code == 403
-    assert client.post("/api/backups/take/", {"server": "x"}).status_code == 403
+    assert client.post("/api/backups/take/", {"application": "x"}).status_code == 403
     assert client.get("/").status_code == 200
     assert client.post("/api/auth/logout/").status_code == 204
 

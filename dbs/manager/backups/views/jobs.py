@@ -22,7 +22,7 @@ class TakeView(APIView):
     def post(self, request: Request) -> Response:
         payload = TakeSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
-        job = BackupService(request.user).take(payload.validated_data["server"])
+        job = BackupService(request.user).take(payload.validated_data["application"])
         return Response(JobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
 
 

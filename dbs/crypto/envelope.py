@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from ..exceptions import InvalidPassphrase
-from .kdf import KDFParams, SALT_LENGTH, derive_key
+from .kdf import KDFParams, derive_key
 
 NONCE_LENGTH = 12
 
@@ -54,37 +53,6 @@ class EnvelopeMaterial:
             dek_nonce=_unb64(data["dek_nonce"]),
             data_nonce=_unb64(data["data_nonce"]),
         )
-
-
-def generate_dek() -> bytes:
-    return AESGCM.generate_key(bit_length=256)
-
-
-def encrypt_payload(
-    plaintext: bytes,
-    passphrase: str | bytes,
-    *,
-    kdf_params: KDFParams | None = None,
-) -> tuple[bytes, EnvelopeMaterial]:
-    params = kdf_params or KDFParams()
-    salt = os.urandom(SALT_LENGTH)
-    kek = derive_key(_as_bytes(passphrase), salt, params)
-
-    dek = generate_dek()
-    data_nonce = os.urandom(NONCE_LENGTH)
-    ciphertext = AESGCM(dek).encrypt(data_nonce, plaintext, _DATA_AAD)
-
-    dek_nonce = os.urandom(NONCE_LENGTH)
-    wrapped_dek = AESGCM(kek).encrypt(dek_nonce, dek, _DEK_AAD)
-
-    material = EnvelopeMaterial(
-        salt=salt,
-        kdf_params=params,
-        wrapped_dek=wrapped_dek,
-        dek_nonce=dek_nonce,
-        data_nonce=data_nonce,
-    )
-    return ciphertext, material
 
 
 def decrypt_payload(

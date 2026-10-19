@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import errno
 import hashlib
 import json
 import logging
@@ -22,6 +23,17 @@ FINISHED = (SUCCEEDED, FAILED)
 UNFINISHED = (QUEUED, RUNNING)
 INTERRUPTED = "interrupted"
 UNEXPECTED = "unexpected"
+DISK_FULL = "disk_full"
+PERMISSION_DENIED = "permission_denied"
+READ_ONLY = "read_only"
+DATABASE_FAILED = "database_failed"
+OS_ERROR_CODES = {
+    errno.ENOSPC: DISK_FULL,
+    errno.EDQUOT: DISK_FULL,
+    errno.EACCES: PERMISSION_DENIED,
+    errno.EPERM: PERMISSION_DENIED,
+    errno.EROFS: READ_ONLY,
+}
 USERNAME_KEY = "actor_username"
 
 ACTION_MAX = 64
@@ -120,8 +132,15 @@ def error_code_for(exc):
         return code
     if isinstance(exc, DBSError):
         return type(exc).__name__
-    if isinstance(exc.__cause__, DBSError):
-        return error_code_for(exc.__cause__)
+    if isinstance(exc, OSError) and exc.errno in OS_ERROR_CODES:
+        return OS_ERROR_CODES[exc.errno]
+    if isinstance(exc, DatabaseError):
+        return DATABASE_FAILED
+    cause = exc.__cause__
+    if isinstance(cause, DBSError) or (
+        isinstance(cause, OSError) and cause.errno in OS_ERROR_CODES
+    ):
+        return error_code_for(cause)
     if isinstance(exc, CommandError):
         return type(exc).__name__
     if isinstance(exc, (KeyboardInterrupt, SystemExit)):

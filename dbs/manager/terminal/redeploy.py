@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.adapters import jobs, references
 from dbs.manager.adapters.forms import validated
-from dbs.manager.redeploy.serializers import RedeploySerializer, RevertSerializer
+from dbs.manager.applications.models import Application
+from dbs.manager.applications.serializers import ApplicationSerializer
+from dbs.manager.applications.services import ApplicationService
+from dbs.manager.redeploy.deploy import DEPLOY
+from dbs.manager.redeploy.serializers import (
+    DeploySerializer,
+    DeployStepsSerializer,
+    RedeploySerializer,
+    RevertSerializer,
+)
 from dbs.manager.redeploy.services import RUN, RedeployService
-from dbs.manager.servers.models import Server
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.terminal.progress import reported
 from dbs.manager.terminal.session import TerminalSession
@@ -15,11 +25,11 @@ from dbs.manager.terminal.session import TerminalSession
 
 def start(session: TerminalSession) -> int:
     args = session.args
-    source = references.server(session.user, args.source)
-    target = references.server(session.user, args.target)
+    source = references.application(session.user, args.source)
+    target = references.application(session.user, args.target)
     body: dict[str, Any] = {
-        "source_server": source.pk,
-        "target_server": target.pk,
+        "source_application": source.pk,
+        "target_application": target.pk,
         "flush": args.flush,
         "rehearsal": not args.real,
     }
@@ -47,9 +57,9 @@ def revert(session: TerminalSession) -> int:
     args = session.args
     move = references.number(args.move, "move")
     found = ActivityService(session.user).get(move)
-    if found.action != RUN:
-        raise CommandFailed(f"{move} is not a move.")
-    target = references.server(session.user, found.subject)
+    if found.action not in (RUN, DEPLOY):
+        raise CommandFailed(f"{move} is not a move or a deploy.")
+    target = references.application(session.user, found.subject)
     body: dict[str, Any] = {"rehearsal": not args.real, **_confirmed(session, target)}
     data = validated(RevertSerializer, body)
     _say(session, f"Putting {target.name} back as it was before move {move}...")
@@ -62,13 +72,64 @@ def revert(session: TerminalSession) -> int:
     return session.outcome(entry, f"{done} {target.name}.")
 
 
-def _confirmed(session: TerminalSession, target: Server) -> dict[str, str]:
+def deploy(session: TerminalSession) -> int:
+    args = session.args
+    target = references.application(session.user, args.application)
+    body: dict[str, Any] = {"rehearsal": not args.real, **_confirmed(session, target)}
+    data = validated(DeploySerializer, body)
+    _say(session, f"Deploying {target.name}...")
+    with reported(session):
+        entry = jobs.finished(
+            session.user, RedeployService(session.user).deploy(target.pk, **data)
+        )
+    _steps(session, entry)
+    if not jobs.succeeded(entry) and (entry.data or {}).get("revertable"):
+        _say(
+            session,
+            f"{target.name}'s data can be put back from its safety backup: "
+            f"django_dbs redeploy revert {entry.pk} --real",
+        )
+    done = "Deployed" if args.real else "Rehearsed deploying"
+    return session.outcome(entry, f"{done} {target.name}.")
+
+
+def deploy_steps(session: TerminalSession) -> int:
+    args = session.args
+    application = references.application(session.user, args.application)
+    if getattr(args, "steps_file", None):
+        try:
+            steps = json.loads(Path(args.steps_file).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise CommandFailed(f"cannot read {args.steps_file}: {exc}") from exc
+        data = validated(DeployStepsSerializer, {"steps": steps})
+        application = ApplicationService(session.user).set_deploy_steps(
+            application.pk, data["steps"], account_password=session.password()
+        )
+    rows = [
+        {
+            "number": index,
+            "kind": step["kind"],
+            "options": json.dumps(step.get("options") or {}, sort_keys=True),
+            "minutes": step["timeout_minutes"],
+        }
+        for index, step in enumerate(application.deploy_steps, start=1)
+    ]
+    session.out.table(
+        rows,
+        (("#", "number"), ("STEP", "kind"), ("OPTIONS", "options"), ("MINUTES", "minutes")),
+        empty=f"{application.name} has no deploy steps yet.",
+        data=ApplicationSerializer(application).data["deploy_steps"],
+    )
+    return 0
+
+
+def _confirmed(session: TerminalSession, target: Application) -> dict[str, str]:
     args = session.args
     if not args.real:
         return {}
     if not args.confirm_name:
         session.confirm(
-            f"Type the target server's name ({target.name}) to go ahead:",
+            f"Type the target application's name ({target.name}) to go ahead:",
             expected=target.name,
         )
     return {
@@ -87,4 +148,4 @@ def _steps(session: TerminalSession, entry: Any) -> None:
 
 def _say(session: TerminalSession, message: str) -> None:
     if not session.out.as_json:
-        print(message, flush=True)
+        session.out.line(message)

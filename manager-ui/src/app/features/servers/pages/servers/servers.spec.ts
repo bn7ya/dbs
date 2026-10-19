@@ -1,7 +1,9 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting, type TestRequest } from '@angular/common/http/testing';
 import { ApplicationRef } from '@angular/core';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed } from '@angular/core/testing';
+import { MatTableHarness } from '@angular/material/table/testing';
 import { provideRouter, withComponentInputBinding, type Routes } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
@@ -81,6 +83,41 @@ describe('ServersPage', () => {
     TestBed.resetTestingModule();
     localStorage.clear();
     vi.restoreAllMocks();
+  });
+
+  it('shows each server with its address, its engines and how many applications it runs', async () => {
+    await showWith([]);
+
+    const table = await TestbedHarnessEnvironment.loader(harness.fixture).getHarness(MatTableHarness);
+    const columns = await table.getCellTextByColumnName();
+    expect(columns['name'].text).toEqual(['Production web']);
+    expect(columns['address'].text).toEqual(['deploy@web-1.example.com:22']);
+    expect(columns['engines'].text).toEqual(['Docker 27.3.1']);
+    expect(columns['applications'].text).toEqual(['2']);
+    const count = element().querySelector(`a[href="/servers/${SUMMARY.id}/applications"]`);
+    expect(count?.getAttribute('aria-label')).toBe('Applications on Production web: 2');
+  });
+
+  it('says when a checked server has no container engine, and when it was never checked', async () => {
+    harness = await RouterTestingHarness.create();
+    const navigating = harness.navigateByUrl('/servers', ServersPage);
+    (await vi.waitFor(() => http.expectOne('/api/auth/me/'))).flush(IDENTITY);
+    await navigating;
+    TestBed.tick();
+    hostKeysRequest().flush(pageOf([]));
+    http
+      .expectOne((request) => request.url === '/api/servers/')
+      .flush(
+        pageOf([
+          { ...SUMMARY, engines: {} },
+          { ...SUMMARY, id: 'new', name: 'New', engines: {}, last_checked_at: null },
+        ]),
+      );
+    await settle();
+    harness.detectChanges();
+
+    const table = await TestbedHarnessEnvironment.loader(harness.fixture).getHarness(MatTableHarness);
+    expect((await table.getCellTextByColumnName())['engines'].text).toEqual(['None', 'Not checked']);
   });
 
   it('shows no card while no host key awaits a person', async () => {

@@ -1,0 +1,72 @@
+<dl class="engines__facts">
+  <div class="engines__fact">
+    <dt class="text-label text-secondary">{{ 'servers.engines.system' | t }}</dt>
+    <dd>
+      @if (system(); as value) {
+        <bdi class="engines__code" dir="ltr">{{ value }}</bdi>
+      } @else {
+        <span class="text-muted">{{ 'servers.engines.notChecked' | t }}</span>
+      }
+    </dd>
+  </div>
+
+  @for (view of engines(); track view.engine) {
+    <div class="engines__fact">
+      <dt class="text-label text-secondary">{{ 'servers.engines.' + view.engine | t }}</dt>
+      <dd class="engines__value">
+        <span class="engines__state" [class.text-muted]="look(view.state).muted">
+          <i [class]="look(view.state).icon" aria-hidden="true"></i>
+          @if (view.state === 'ready' && view.version) {
+            <bdi class="engines__code" dir="ltr">{{ view.version }}</bdi>
+          } @else {
+            {{ 'servers.engines.state.' + view.state | t }}
+          }
+        </span>
+        @if (view.state === 'ready') {
+          <span class="text-sm text-secondary">
+            @if (view.compose; as compose) {
+              {{ 'servers.engines.compose' | t }} <bdi class="engines__code" dir="ltr">{{ compose }}</bdi>
+            } @else {
+              {{ 'servers.engines.noCompose' | t }}
+            }
+          </span>
+        }
+        @if (view.said; as said) {
+          <span class="text-sm text-secondary">
+            {{ 'servers.engines.said' | t }} <bdi class="engines__code" dir="ltr">{{ said }}</bdi>
+          </span>
+        }
+      </dd>
+    </div>
+  }
+
+  <div class="engines__fact">
+    <dt class="text-label text-secondary">{{ 'servers.engines.timeout' | t }}</dt>
+    <dd>
+      @switch (timeout()) {
+        @case (true) {
+          <span class="engines__state">
+            <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+            {{ 'servers.engines.found' | t }}
+          </span>
+        }
+        @case (false) {
+          <span class="engines__state">
+            <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>
+            {{ 'servers.engines.missing' | t }}
+          </span>
+        }
+        @default {
+          <span class="engines__state text-muted">
+            <i class="fa-solid fa-circle-question" aria-hidden="true"></i>
+            {{ 'servers.engines.notChecked' | t }}
+          </span>
+        }
+      }
+    </dd>
+  </div>
+</dl>
+
+@if (denied()) {
+  <app-notice severity="warning">{{ 'servers.engines.deniedHelp' | t }}</app-notice>
+}

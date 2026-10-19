@@ -11,8 +11,8 @@ class EnvVersion(BaseModel):
         PUSHED = "pushed", "Pushed"
         SCHEDULED = "scheduled", "Scheduled"
 
-    server = models.ForeignKey(
-        "dbs_manager.Server",
+    application = models.ForeignKey(
+        "dbs_manager.Application",
         on_delete=models.PROTECT,
         related_name="+",
         db_index=False,
@@ -27,7 +27,8 @@ class EnvVersion(BaseModel):
     class Meta(BaseModel.Meta):
         indexes = [
             models.Index(
-                fields=["server", "-created_at"], name="dbs_manager_env_server_idx"
+                fields=["application", "-created_at"],
+                name="dbs_manager_env_app_idx",
             ),
         ]
 

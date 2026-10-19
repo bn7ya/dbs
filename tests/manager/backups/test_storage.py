@@ -23,32 +23,34 @@ def permissive_umask():
     os.umask(before)
 
 
-def test_a_servers_directory_is_private_whatever_the_umask(storage, permissive_umask):
-    server_id = uuid4()
+def test_an_applications_directory_is_private_whatever_the_umask(
+    storage, permissive_umask
+):
+    application_id = uuid4()
 
-    directory = BackupStorage().directory(server_id)
+    directory = BackupStorage().directory(application_id)
 
-    assert directory == storage / str(server_id)
+    assert directory == storage / str(application_id)
     assert mode(directory) == 0o700
     assert mode(storage) == 0o700
-    assert BackupStorage().directory(server_id) == directory
+    assert BackupStorage().directory(application_id) == directory
 
 
 def test_a_received_file_is_private_described_and_installed_under_its_name(
     storage, permissive_umask
 ):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
 
-    with files.receiving(server_id) as incoming:
+    with files.receiving(application_id) as incoming:
         incoming.write(b"backup ")
         incoming.write(b"bytes")
         assert incoming.path.name.endswith(".part")
         assert mode(incoming.path) == 0o600
-        kept = files.install(incoming, server_id, "web-1-20261001-120000Z.dbs")
+        kept = files.install(incoming, application_id, "web-1-20261001-120000Z.dbs")
 
-    stored = storage / str(server_id) / "web-1-20261001-120000Z.dbs"
-    assert kept.relative_path == f"{server_id}/{stored.name}"
+    stored = storage / str(application_id) / "web-1-20261001-120000Z.dbs"
+    assert kept.relative_path == f"{application_id}/{stored.name}"
     assert kept.size == len(b"backup bytes")
     assert kept.sha256 == hashlib.sha256(b"backup bytes").hexdigest()
     assert stored.read_bytes() == b"backup bytes"
@@ -57,35 +59,35 @@ def test_a_received_file_is_private_described_and_installed_under_its_name(
 
 
 def test_an_installed_file_never_replaces_one_already_there(storage):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
-    taken = files.directory(server_id) / "web-1-20261001-120000Z.dbs"
+    taken = files.directory(application_id) / "web-1-20261001-120000Z.dbs"
     taken.write_bytes(b"the good backup")
 
-    with files.receiving(server_id) as incoming:
+    with files.receiving(application_id) as incoming:
         incoming.write(b"a newer arrival")
-        kept = files.install(incoming, server_id, taken.name)
+        kept = files.install(incoming, application_id, taken.name)
 
-    assert kept.relative_path == f"{server_id}/web-1-20261001-120000Z-2.dbs"
+    assert kept.relative_path == f"{application_id}/web-1-20261001-120000Z-2.dbs"
     assert taken.read_bytes() == b"the good backup"
 
 
 def test_a_file_that_is_not_installed_leaves_nothing_behind(storage):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
 
     with pytest.raises(RuntimeError):
-        with files.receiving(server_id) as incoming:
+        with files.receiving(application_id) as incoming:
             incoming.write(b"half")
             raise RuntimeError("the connection went away")
 
-    assert os.listdir(files.directory(server_id)) == []
+    assert os.listdir(files.directory(application_id)) == []
 
 
 def test_only_partial_files_left_for_an_hour_are_swept(storage):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
-    directory = files.directory(server_id)
+    directory = files.directory(application_id)
     old = (datetime.now(dt_timezone.utc) - timedelta(hours=2)).timestamp()
     stale = directory / ".incoming-0123456789abcdef.part"
     sealed = directory / "media.tar.gz.sealed.part"
@@ -96,7 +98,7 @@ def test_only_partial_files_left_for_an_hour_are_swept(storage):
     for path in (stale, sealed, backup):
         os.utime(path, (old, old))
 
-    removed = files.sweep_partials(server_id)
+    removed = files.sweep_partials(application_id)
 
     assert removed == sorted([stale.name, sealed.name])
     assert sorted(os.listdir(directory)) == sorted([fresh.name, backup.name])
@@ -130,30 +132,30 @@ def test_a_path_that_leaves_the_root_is_refused(storage, relative):
 
 
 def test_a_sealed_file_takes_its_name_or_the_first_numbered_one_free(storage):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
-    directory = files.directory(server_id)
+    directory = files.directory(application_id)
 
-    first = files.unused_sealed_path(server_id, "db.sql.gz")
+    first = files.unused_sealed_path(application_id, "db.sql.gz")
     (directory / "db.sql.gz.sealed").write_bytes(b"x")
-    second = files.unused_sealed_path(server_id, "db.sql.gz")
+    second = files.unused_sealed_path(application_id, "db.sql.gz")
     (directory / "db.sql.gz-2.sealed").write_bytes(b"x")
-    third = files.unused_sealed_path(server_id, "db.sql.gz")
+    third = files.unused_sealed_path(application_id, "db.sql.gz")
 
-    assert first == f"{server_id}/db.sql.gz.sealed"
-    assert second == f"{server_id}/db.sql.gz-2.sealed"
-    assert third == f"{server_id}/db.sql.gz-3.sealed"
+    assert first == f"{application_id}/db.sql.gz.sealed"
+    assert second == f"{application_id}/db.sql.gz-2.sealed"
+    assert third == f"{application_id}/db.sql.gz-3.sealed"
 
 
 @pytest.mark.parametrize(
     "name", ["x" * 255, "x" + "نسخة" * 63], ids=["latin", "arabic"]
 )
 def test_a_name_too_long_for_this_disk_is_cut_where_a_character_ends(storage, name):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
-    files.directory(server_id)
+    files.directory(application_id)
 
-    relative = files.unused_sealed_path(server_id, name)
+    relative = files.unused_sealed_path(application_id, name)
 
     with files.writing(relative) as target:
         target.write(b"sealed")
@@ -164,16 +166,16 @@ def test_a_name_too_long_for_this_disk_is_cut_where_a_character_ends(storage, na
 
 
 def test_a_name_being_written_is_not_free_and_a_second_writer_is_refused(storage):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
-    files.directory(server_id)
-    relative = files.unused_sealed_path(server_id, "db.sql.gz")
+    files.directory(application_id)
+    relative = files.unused_sealed_path(application_id, "db.sql.gz")
 
     with files.writing(relative) as target:
         target.write(b"first")
         assert (
-            files.unused_sealed_path(server_id, "db.sql.gz")
-            == f"{server_id}/db.sql.gz-2.sealed"
+            files.unused_sealed_path(application_id, "db.sql.gz")
+            == f"{application_id}/db.sql.gz-2.sealed"
         )
         with pytest.raises(FileExistsError), files.writing(relative):
             pass
@@ -187,13 +189,13 @@ def test_a_name_being_written_is_not_free_and_a_second_writer_is_refused(storage
 
 
 def test_a_write_that_fails_leaves_neither_the_file_nor_its_part(storage):
-    server_id = uuid4()
+    application_id = uuid4()
     files = BackupStorage()
-    directory = files.directory(server_id)
+    directory = files.directory(application_id)
 
     with (
         pytest.raises(RuntimeError),
-        files.writing(f"{server_id}/db.sql.gz.sealed") as target,
+        files.writing(f"{application_id}/db.sql.gz.sealed") as target,
     ):
         target.write(b"half")
         raise RuntimeError

@@ -15,6 +15,9 @@ from dbs import audit
 from dbs.manager.accounts.exceptions import InvalidPassword, TooManyAttempts
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.models import Application
+from dbs.manager.applications.paths import host_path
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.common import tickets
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.common.paths import absolute_path
@@ -27,7 +30,7 @@ from dbs.manager.servers.exceptions import (
     RemoteNotFound,
     RemotePermissionDenied,
 )
-from dbs.manager.servers.services import ServerConnectionService, ServerService
+from dbs.manager.servers.services import ServerConnectionService
 from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
@@ -35,7 +38,6 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
 
     from dbs.manager.servers.gateways import RemoteEntry, RemoteHost
-    from dbs.manager.servers.models import Server
 
 FILE = "file"
 FOLDER = "folder"
@@ -107,15 +109,15 @@ class _Guard:
 class FileService:
     def __init__(self, user: User | AnonymousUser | None) -> None:
         self.user: User | AnonymousUser | None = user
-        self.servers = ServerService(user)
+        self.applications = ApplicationService(user)
         self.connections = ServerConnectionService(user)
         self.activity = ActivityService(user)
 
-    def list(self, server_id: UUID, path: str | None = None) -> Folder:
-        server = self.servers.get(server_id)
-        roots = paths.allowed_roots(server.file_roots)
+    def list(self, application_id: UUID, path: str | None = None) -> Folder:
+        application = self.applications.get(application_id)
+        roots = paths.allowed_roots(_host_roots(application))
         located = paths.locate(path or next(iter(roots), ""), roots)
-        with self.connections.open(server) as remote:
+        with self.connections.open(application) as remote:
             entries = remote.listdir(_Guard(remote, roots).followed(located.path))
         shown = [
             replace(entry, path=posixpath.join(located.path, entry.name))
@@ -132,29 +134,29 @@ class FileService:
     @requires(Capability.FILES_DOWNLOAD)
     def download(
         self,
-        server_id: UUID,
+        application_id: UUID,
         path: str,
         account_password: str = "",
         ticket: str = "",
     ) -> Download:
-        server = self.servers.get(server_id)
-        if _names_env(server, posixpath.normpath(path)) and not (
+        application = self.applications.get(application_id)
+        if _names_env(application, posixpath.normpath(path)) and not (
             account_password or ticket
         ):
             _require_password()
         with ExitStack() as stack:
             with self.activity.track(
-                Action.DOWNLOAD, server=server, target=_shown(path)
+                Action.DOWNLOAD, subject=application, target=_shown(path)
             ) as entry:
-                roots = paths.allowed_roots(server.file_roots)
+                roots = paths.allowed_roots(_host_roots(application))
                 located = paths.locate(path, roots)
-                remote = stack.enter_context(self.connections.open(server))
+                remote = stack.enter_context(self.connections.open(application))
                 real = _Guard(remote, roots).followed(located.path)
                 found = remote.lstat(real)
                 if found.kind != FILE:
                     raise NotAFile()
-                if _holds_env(server, remote, located.path, real):
-                    subject = _download_subject(server, located.path)
+                if _holds_env(application, remote, located.path, real):
+                    subject = _download_subject(application, located.path)
                     if not (ticket and tickets.redeem(ticket, self.user, subject)):
                         _require_password(account_password)
                         AccountService(self.user).confirm_password(account_password)
@@ -167,12 +169,12 @@ class FileService:
 
     @requires(Capability.FILES_DOWNLOAD)
     def download_ticket(
-        self, server_id: UUID, path: str, account_password: str = ""
+        self, application_id: UUID, path: str, account_password: str = ""
     ) -> str:
-        server = self.servers.get(server_id)
-        located = paths.locate(path, paths.allowed_roots(server.file_roots))
+        application = self.applications.get(application_id)
+        located = paths.locate(path, paths.allowed_roots(_host_roots(application)))
         if not account_password:
-            if _names_env(server, located.path):
+            if _names_env(application, located.path):
                 _require_password()
             return ""
         try:
@@ -180,16 +182,16 @@ class FileService:
         except (InvalidPassword, TooManyAttempts) as exc:
             self.activity.record(
                 Action.DOWNLOAD,
-                server=server,
+                subject=application,
                 target=_shown(located.path),
                 status=audit.FAILED,
                 error_code=error_code_of(exc),
             )
             raise
-        return tickets.issue(self.user, _download_subject(server, located.path))
+        return tickets.issue(self.user, _download_subject(application, located.path))
 
     @requires(Capability.FILES_CHANGE)
-    def upload(self, server_id: UUID, folder: str, upload: UploadedFile) -> RemoteEntry:
+    def upload(self, application_id: UUID, folder: str, upload: UploadedFile) -> RemoteEntry:
         try:
             name = upload_name(upload.name or "", paths.NAME_MAX_BYTES, utf8_length)
             if name is None:
@@ -198,14 +200,14 @@ class FileService:
                 )
             if cast(int, upload.size) > settings.FILES_UPLOAD_MAX_BYTES:
                 raise UploadTooLarge()
-            server = self.servers.get(server_id)
+            application = self.applications.get(application_id)
             target = _shown(posixpath.join(folder, name))
             with self.activity.track(
-                Action.UPLOAD, server=server, target=target
+                Action.UPLOAD, subject=application, target=target
             ) as entry:
-                roots = paths.allowed_roots(server.file_roots)
+                roots = paths.allowed_roots(_host_roots(application))
                 located = paths.locate(folder, roots)
-                with self.connections.open(server) as remote:
+                with self.connections.open(application) as remote:
                     real = _Guard(remote, roots).followed(located.path)
                     created = remote.write_new(upload, real, name)
                 entry.detail = {"size": created.size}
@@ -214,32 +216,32 @@ class FileService:
         return replace(created, path=posixpath.join(located.path, name))
 
     @requires(Capability.FILES_CHANGE)
-    def create_folder(self, server_id: UUID, folder: str, name: str) -> RemoteEntry:
+    def create_folder(self, application_id: UUID, folder: str, name: str) -> RemoteEntry:
         if paths.entry_name(name) is None:
             raise ValidationError(
                 {"name": [ErrorDetail(INVALID_NAME, code="invalid_name")]}
             )
-        server = self.servers.get(server_id)
+        application = self.applications.get(application_id)
         target = _shown(posixpath.join(folder, name))
-        with self.activity.track(Action.CREATE_FOLDER, server=server, target=target):
-            roots = paths.allowed_roots(server.file_roots)
+        with self.activity.track(Action.CREATE_FOLDER, subject=application, target=target):
+            roots = paths.allowed_roots(_host_roots(application))
             located = paths.locate(folder, roots)
-            with self.connections.open(server) as remote:
+            with self.connections.open(application) as remote:
                 real = _Guard(remote, roots).followed(located.path)
                 created = remote.make_folder(posixpath.join(real, name))
         return replace(created, path=posixpath.join(located.path, name))
 
     @requires(Capability.FILES_CHANGE)
-    def delete(self, server_id: UUID, path: str) -> None:
-        server = self.servers.get(server_id)
+    def delete(self, application_id: UUID, path: str) -> None:
+        application = self.applications.get(application_id)
         with self.activity.track(
-            Action.DELETE, server=server, target=_shown(path)
+            Action.DELETE, subject=application, target=_shown(path)
         ) as entry:
-            roots = paths.allowed_roots(server.file_roots)
+            roots = paths.allowed_roots(_host_roots(application))
             located = paths.locate(path, roots)
             if located.path in roots:
                 raise CannotDeleteRoot()
-            with self.connections.open(server) as remote:
+            with self.connections.open(application) as remote:
                 guard = _Guard(remote, roots)
                 itself = guard.itself(located)
                 if itself in guard.real_roots:
@@ -252,22 +254,37 @@ class FileService:
             entry.detail = {"kind": str(found.kind)}
 
 
-def _names_env(server: Server, path: str) -> bool:
+def _host_roots(application: Application) -> list[str]:
+    found = (host_path(application, root) for root in application.file_roots)
+    return [root for root in found if root is not None]
+
+
+def _env_on_host(application: Application) -> str:
+    if not application.env_path:
+        return ""
+    return host_path(application, application.env_path) or ""
+
+
+def _names_env(application: Application, path: str) -> bool:
     name = posixpath.basename(path)
+    env = _env_on_host(application)
     return (
         name == ENV_NAME
         or name.startswith(f"{ENV_NAME}.")
-        or (bool(server.env_path) and path == server.env_path)
+        or (bool(env) and path == env)
     )
 
 
-def _holds_env(server: Server, remote: RemoteHost, path: str, real: str) -> bool:
-    if _names_env(server, path) or _names_env(server, real):
+def _holds_env(
+    application: Application, remote: RemoteHost, path: str, real: str
+) -> bool:
+    if _names_env(application, path) or _names_env(application, real):
         return True
-    if not server.env_path:
+    env = _env_on_host(application)
+    if not env:
         return False
     try:
-        return remote.realpath(server.env_path) == real
+        return remote.realpath(env) == real
     except (RemoteNotFound, RemotePermissionDenied, RemoteCommandFailed):
         return False
 
@@ -279,8 +296,8 @@ def _require_password(account_password: str = "") -> None:
         )
 
 
-def _download_subject(server: Server, path: str) -> str:
-    return f"files:{server.pk}:{path}"
+def _download_subject(application: Application, path: str) -> str:
+    return f"files:{application.pk}:{path}"
 
 
 def _listing_order(entry: RemoteEntry) -> tuple[bool, str, str]:

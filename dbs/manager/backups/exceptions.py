@@ -7,14 +7,14 @@ from rest_framework.exceptions import APIException, NotFound
 class BackupRunning(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "backup_running"
-    default_detail = "A backup or restore of this server is already queued or running."
+    default_detail = "A backup or restore of this application is already queued or running."
 
 
 class ServerSettling(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "server_settling"
     default_detail = (
-        "A command that ran out of time may still be stopping on this server. "
+        "A command that ran out of time may still be stopping for this application. "
         "Try again in a minute."
     )
 
@@ -35,6 +35,15 @@ class ArchiveMismatch(APIException):
     default_code = "archive_mismatch"
     default_detail = (
         "The archive that arrived is not the one the server made, so it was not kept."
+    )
+
+
+class BackupLostOnServer(APIException):
+    status_code = status.HTTP_502_BAD_GATEWAY
+    default_code = "backup_lost_on_server"
+    default_detail = (
+        "The connection broke while the backup was arriving, and the server did not "
+        "finish it."
     )
 
 

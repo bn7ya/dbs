@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-dbs"
-version = "0.7.0"
+version = "0.8.0"
 description = "Redundant, self-healing, encrypted single-file backup for Django projects."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -40,20 +40,19 @@ dependencies = [
     "argon2-cffi>=21.3,<26",
     "reedsolo>=1.7,<2",
     "numpy>=1.21,<3",
-]
-
-[project.optional-dependencies]
-guard = ["scikit-learn>=1.4.2,<2"]
-ssh = ["paramiko>=3.2,<6"]
-manager = [
+    "scikit-learn>=1.4.2,<2",
     "djangorestframework>=3.15,<4",
     "waitress>=3,<4",
     "paramiko>=3.2,<6",
     "keyring>=24,<26",
 ]
-all = ["django-dbs[guard,manager,ssh]"]
+
+[project.optional-dependencies]
+guard = []
+manager = []
+ssh = []
+all = []
 dev = [
-    "django-dbs[all]",
     "pytest>=7,<10",
     "pytest-django>=4,<5",
     "pytest-cov>=4,<8",
@@ -62,7 +61,9 @@ dev = [
 ]
 
 [project.scripts]
+django-dbs = "dbs.manager.cli:main"
 django_dbs = "dbs.manager.cli:main"
+dbs = "dbs.manager.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/bn7ya/dbs"

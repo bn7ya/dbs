@@ -1,11 +1,9 @@
 from .server_actions import (
     BrowseView,
     CheckView,
-    DiscoverView,
     FingerprintView,
     HostKeyView,
-    PassphraseCaptureView,
-    PassphraseView,
+    MergeView,
     PublicKeyView,
 )
 from .host_keys import (
@@ -18,14 +16,12 @@ from .servers import ServerDetailView, ServerListView
 __all__ = [
     "BrowseView",
     "CheckView",
-    "DiscoverView",
     "FingerprintView",
     "HostKeyConfirmationListView",
     "HostKeyConfirmView",
     "HostKeyRejectView",
     "HostKeyView",
-    "PassphraseCaptureView",
-    "PassphraseView",
+    "MergeView",
     "PublicKeyView",
     "ServerDetailView",
     "ServerListView",

@@ -12,40 +12,33 @@ import { JobWatcher } from '@core/jobs/job-watcher';
 import type { Job } from '@core/jobs/job.types';
 import { Toaster } from '@shared/toaster/toaster';
 import type { ToastMessage } from '@shared/toaster/toaster.types';
-import type { BackupFile, BackupPlan, PlanSettings, UnfinishedJob } from '../data/backups.types';
+import type { BackupFile, UnfinishedJob } from '../data/backups.types';
 import en from '../i18n/en.json';
 import ar from '../i18n/ar.json';
 import {
+  APPLICATIONS,
+  APPLICATION_ID,
   ARCHIVE_FILE,
-  ARCHIVE_PLAN,
+  BLOG_FILE,
   COLLECTED_FILE,
-  COLLECT_PLAN,
+  DASHBOARD,
   FILE,
   JOB_ID,
-  MANUAL_PLAN,
+  OTHER_APPLICATION_ID,
+  OTHER_SERVER_ID,
   PLAN,
   SERVER_ID,
   UPLOADED_FILE,
   VERIFIED,
   jobOf,
   pageOf,
+  unfinished,
 } from '../testing/backups.fixtures';
 import type { Opening } from '../testing/backups.fixtures.types';
 import { BackupsStore } from './backups.store';
 
-const OTHER_SERVER = '0f3c2b9e-1111-4c4f-9a43-7b1d2f0c0002';
 const OTHER_JOB = 10;
 const THIRD_JOB = 11;
-
-const SETTINGS: PlanSettings = {
-  name: 'django-dbs',
-  interval_minutes: 1440,
-  keep: 5,
-  keep_remote: 1,
-  enabled: true,
-  paths: [],
-  pattern: '',
-};
 
 // Stands in for the poller: the spec says when a job moves and when it ends.
 class FakeJobWatcher {
@@ -75,35 +68,39 @@ describe('BackupsStore', () => {
   let toasts: MockInstance<(message: ToastMessage) => void>;
 
   const listRequest = (): TestRequest => http.expectOne((request) => request.url === '/api/backups/');
-  const plansRequest = (): TestRequest => http.expectOne((request) => request.url === '/api/backups/plans/');
   const jobsRequest = (status: string): TestRequest =>
     http.expectOne((request) => request.url === '/api/activity/' && request.params.get('status') === status);
+  const applicationsRequest = (): TestRequest => http.expectOne((request) => request.url === '/api/applications/');
+  const storageRequest = (): TestRequest => http.expectOne('/api/dashboard/');
 
   const settle = (): Promise<void> => TestBed.inject(ApplicationRef).whenStable();
 
-  const answerPlansAndJobs = ({ plans = [PLAN], running = [], queued = [] }: Opening = {}): void => {
-    plansRequest().flush(pageOf(plans));
+  const answerJobs = ({ running = [], queued = [] }: Opening = {}): void => {
     jobsRequest('running').flush(pageOf(running));
     jobsRequest('queued').flush(pageOf(queued));
   };
 
-  const openWith = async (opening: Opening = {}, server = SERVER_ID): Promise<void> => {
-    store.open(server);
+  const openWith = async (opening: Opening = {}, application = APPLICATION_ID): Promise<void> => {
+    store.openApplication(application);
     TestBed.tick();
     listRequest().flush(pageOf(opening.files ?? [FILE]));
-    answerPlansAndJobs(opening);
+    answerJobs(opening);
+    await settle();
+  };
+
+  const openEveryWith = async (opening: Opening = {}): Promise<void> => {
+    store.openEvery();
+    TestBed.tick();
+    listRequest().flush(pageOf(opening.files ?? [FILE, BLOG_FILE]));
+    applicationsRequest().flush(pageOf(APPLICATIONS));
+    storageRequest().flush(DASHBOARD);
+    answerJobs(opening);
     await settle();
   };
 
   const answerReload = async (results: readonly BackupFile[] = [FILE]): Promise<void> => {
     TestBed.tick();
     listRequest().flush(pageOf(results));
-    await settle();
-  };
-
-  const answerPlansReload = async (results: readonly BackupPlan[] = [PLAN]): Promise<void> => {
-    TestBed.tick();
-    plansRequest().flush(pageOf(results));
     await settle();
   };
 
@@ -135,28 +132,26 @@ describe('BackupsStore', () => {
     vi.restoreAllMocks();
   });
 
-  describe('the files', () => {
+  describe("one application's files", () => {
     it('loads nothing until the page opens it', () => {
       TestBed.tick();
 
       http.expectNone(() => true);
       expect(store.files()).toEqual([]);
-      expect(store.plans()).toEqual([]);
       expect(store.pending()).toBe(false);
-      expect(store.plansPending()).toBe(false);
     });
 
-    it("lists the server's files a page at a time", async () => {
-      store.open(SERVER_ID);
+    it("lists the application's files a page at a time", async () => {
+      store.openApplication(APPLICATION_ID);
       TestBed.tick();
       expect(store.pending()).toBe(true);
 
       const request = listRequest();
-      expect(request.request.params.get('server')).toBe(SERVER_ID);
+      expect(request.request.params.get('application')).toBe(APPLICATION_ID);
       expect(request.request.params.get('page')).toBe('1');
       expect(request.request.params.get('page_size')).toBe('20');
       request.flush(pageOf([FILE, VERIFIED], 41));
-      answerPlansAndJobs();
+      answerJobs();
       await settle();
 
       expect(store.files()).toEqual([FILE, VERIFIED]);
@@ -174,34 +169,31 @@ describe('BackupsStore', () => {
       expect(store.files()).toEqual([VERIFIED]);
     });
 
-    it("never shows one server's files or plans on another's tab", async () => {
+    it("never shows one application's files on another's tab", async () => {
       await openWith();
 
-      store.open(OTHER_SERVER);
+      store.openApplication(OTHER_APPLICATION_ID);
       TestBed.tick();
       const request = listRequest();
-      expect(request.request.params.get('server')).toBe(OTHER_SERVER);
+      expect(request.request.params.get('application')).toBe(OTHER_APPLICATION_ID);
       expect(request.request.params.get('page')).toBe('1');
       expect(store.files()).toEqual([]);
-      expect(store.plans()).toEqual([]);
       expect(store.pending()).toBe(true);
-      expect(store.plansPending()).toBe(true);
 
       request.flush(pageOf([], 0));
-      answerPlansAndJobs({ plans: [] });
+      answerJobs();
       await settle();
       expect(store.empty()).toBe(true);
-      expect(store.plansEmpty()).toBe(true);
     });
 
     it('holds the failure as an ApiError and retries on reload', async () => {
-      store.open(SERVER_ID);
+      store.openApplication(APPLICATION_ID);
       TestBed.tick();
       listRequest().flush(
         { error: { code: 'unknown', message: 'Server prose' } },
         { status: 500, statusText: 'Server Error' },
       );
-      answerPlansAndJobs();
+      answerJobs();
       await settle();
       expect(store.error()?.code).toBe('unknown');
 
@@ -218,344 +210,116 @@ describe('BackupsStore', () => {
       TestBed.tick();
 
       expect(store.files()).toEqual([]);
-      expect(store.plans()).toEqual([]);
     });
   });
 
-  describe('the plans', () => {
-    it("lists the server's plans", async () => {
-      store.open(SERVER_ID);
+  describe("every application's files", () => {
+    it('lists them without naming an application, with the applications to filter by and the storage', async () => {
+      store.openEvery();
       TestBed.tick();
-      listRequest().flush(pageOf([FILE]));
-      const request = plansRequest();
-      expect(request.request.params.get('server')).toBe(SERVER_ID);
+
+      const request = listRequest();
+      expect(request.request.params.has('application')).toBe(false);
+      request.flush(pageOf([FILE, BLOG_FILE]));
+      applicationsRequest().flush(pageOf(APPLICATIONS));
+      storageRequest().flush(DASHBOARD);
+      expect(jobsRequest('running').request.params.has('application')).toBe(false);
+      jobsRequest('queued').flush(pageOf([]));
+      await settle();
+
+      expect(store.files()).toEqual([FILE, BLOG_FILE]);
+      expect(store.applications()).toEqual(APPLICATIONS);
+      expect(store.storage()).toEqual({
+        total: 5_400_000,
+        disk: { total: 100_000_000_000, free: 62_000_000_000, low: false },
+        applications: [
+          { id: OTHER_APPLICATION_ID, name: 'blog', server: OTHER_SERVER_ID, serverName: 'staging-web', bytes: 4_000_000 },
+          { id: APPLICATION_ID, name: 'shop', server: SERVER_ID, serverName: 'production-web', bytes: 1_400_000 },
+        ],
+      });
+    });
+
+    it('filters by one application from the first page, without the rows of every one', async () => {
+      await openEveryWith();
+      store.goToPage(1, 20);
+      TestBed.tick();
+      listRequest().flush(pageOf([FILE], 41));
+      await settle();
+
+      store.filterBy(OTHER_APPLICATION_ID);
+      TestBed.tick();
+      const request = listRequest();
+      expect(request.request.params.get('application')).toBe(OTHER_APPLICATION_ID);
       expect(request.request.params.get('page')).toBe('1');
-      expect(request.request.params.get('page_size')).toBe('20');
-      request.flush(pageOf([PLAN, MANUAL_PLAN], 21));
-      answerPlansAndJobsExceptPlans();
+      expect(store.files()).toEqual([]);
+      expect(store.application()).toBe(OTHER_APPLICATION_ID);
+      request.flush(pageOf([BLOG_FILE]));
       await settle();
+      expect(store.files()).toEqual([BLOG_FILE]);
 
-      expect(store.plans()).toEqual([PLAN, MANUAL_PLAN]);
-      expect(store.planCount()).toBe(21);
-      expect(store.plansEmpty()).toBe(false);
-
-      store.goToPlanPage(1);
+      store.filterBy(null);
       TestBed.tick();
-      const next = plansRequest();
-      expect(next.request.params.get('page')).toBe('2');
-      expect(store.plans()).toEqual([PLAN, MANUAL_PLAN]);
-      next.flush(pageOf([MANUAL_PLAN], 21));
-      await settle();
-      expect(store.plans()).toEqual([MANUAL_PLAN]);
+      expect(listRequest().request.params.has('application')).toBe(false);
     });
 
-    it('holds a failure to list them, and retries', async () => {
-      store.open(SERVER_ID);
+    it("takes no filter on one application's tab", async () => {
+      await openWith();
+
+      store.filterBy(OTHER_APPLICATION_ID);
+      TestBed.tick();
+
+      http.expectNone((request) => request.url === '/api/backups/');
+      expect(store.application()).toBe(APPLICATION_ID);
+    });
+
+    it('holds a failure to read the storage, and retries', async () => {
+      store.openEvery();
       TestBed.tick();
       listRequest().flush(pageOf([FILE]));
-      plansRequest().flush(
-        { error: { code: 'unknown', message: 'Server prose' } },
-        { status: 500, statusText: 'Server Error' },
-      );
-      answerPlansAndJobsExceptPlans();
+      applicationsRequest().flush(pageOf(APPLICATIONS));
+      storageRequest().flush({ error: { code: 'unknown', message: 'Server prose' } }, { status: 500, statusText: 'Error' });
+      answerJobs();
       await settle();
-      expect(store.plansError()?.code).toBe('unknown');
-      expect(store.files()).toEqual([FILE]);
+      expect(store.storageError()?.code).toBe('unknown');
+      expect(store.storage()).toBeNull();
 
-      store.reloadPlans();
-      await answerPlansReload();
-      expect(store.plansError()).toBeNull();
-      expect(store.plans()).toEqual([PLAN]);
-    });
-
-    it('adds a django-dbs plan to the server on screen, then reloads the plans and says so', async () => {
-      await openWith({ plans: [] });
-
-      const creating = store.createPlan('dbs', SETTINGS);
-      expect(store.savingPlan()).toBe(true);
-      const request = http.expectOne((each) => each.url === '/api/backups/plans/' && each.method === 'POST');
-      expect(request.request.body).toEqual({ ...SETTINGS, server: SERVER_ID, kind: 'dbs' });
-      request.flush(PLAN, { status: 201, statusText: 'Created' });
-
-      await expect(creating).resolves.toEqual(PLAN);
-      expect(store.savingPlan()).toBe(false);
-      expect(lastToast()).toEqual({ severity: 'success', summary: 'Plan added.', detail: `⁨${PLAN.name}⁩` });
-      await answerPlansReload([PLAN]);
-      expect(store.plans()).toEqual([PLAN]);
-    });
-
-    it('adds a plan that archives folders, with its kind and its folders', async () => {
-      await openWith({ plans: [] });
-
-      const settings = { ...SETTINGS, name: 'Media', paths: ARCHIVE_PLAN.paths };
-      const creating = store.createPlan('archive', settings);
-      const request = http.expectOne((each) => each.url === '/api/backups/plans/' && each.method === 'POST');
-      expect(request.request.body).toEqual({ ...settings, server: SERVER_ID, kind: 'archive' });
-      request.flush(ARCHIVE_PLAN, { status: 201, statusText: 'Created' });
-
-      await expect(creating).resolves.toEqual(ARCHIVE_PLAN);
-      expect(lastToast()).toEqual({ severity: 'success', summary: 'Plan added.', detail: `⁨${ARCHIVE_PLAN.name}⁩` });
-      await answerPlansReload([ARCHIVE_PLAN]);
-    });
-
-    it('adds a plan that collects existing files, with its folder and its pattern', async () => {
-      await openWith({ plans: [] });
-
-      const settings = { ...SETTINGS, name: 'Database dumps', keep_remote: 0, paths: COLLECT_PLAN.paths, pattern: '*.sql.gz' };
-      const creating = store.createPlan('collect', settings);
-      const request = http.expectOne((each) => each.url === '/api/backups/plans/' && each.method === 'POST');
-      expect(request.request.body).toEqual({ ...settings, server: SERVER_ID, kind: 'collect' });
-      request.flush(COLLECT_PLAN, { status: 201, statusText: 'Created' });
-
-      await expect(creating).resolves.toEqual(COLLECT_PLAN);
-      await answerPlansReload([COLLECT_PLAN]);
-    });
-
-    it('holds what the backend refused, field by field, until the form opens again', async () => {
-      await openWith({ plans: [PLAN] });
-
-      const creating = store.createPlan('dbs', SETTINGS);
-      http
-        .expectOne((each) => each.url === '/api/backups/plans/' && each.method === 'POST')
-        .flush(
-          { error: { code: 'invalid', message: 'Server prose', fields: { name: ['name_taken'] } } },
-          { status: 400, statusText: 'Bad Request' },
-        );
-
-      await expect(creating).resolves.toBeNull();
-      expect(store.planSaveError()?.fields).toEqual({ name: ['name_taken'] });
-      expect(toasts).not.toHaveBeenCalled();
-
-      store.resetPlanForm();
-      expect(store.planSaveError()).toBeNull();
-    });
-
-    it("saves a plan's settings", async () => {
-      await openWith();
-
-      const changed = { ...SETTINGS, keep: 4 };
-      const updating = store.updatePlan(PLAN, changed);
-      const request = http.expectOne(`/api/backups/plans/${PLAN.id}/`);
-      expect(request.request.method).toBe('PATCH');
-      expect(request.request.body).toEqual(changed);
-      request.flush({ ...PLAN, keep: 4 });
-
-      await expect(updating).resolves.toEqual({ ...PLAN, keep: 4 });
-      expect(lastToast()).toEqual({ severity: 'success', summary: 'Plan saved.', detail: `⁨${PLAN.name}⁩` });
-      await answerPlansReload([{ ...PLAN, keep: 4 }]);
-    });
-
-    it('deletes a plan, then reloads the plans and says so', async () => {
-      await openWith({ plans: [PLAN, MANUAL_PLAN] });
-
-      const removing = store.removePlan(PLAN);
-      expect(store.deletingPlans().has(PLAN.id)).toBe(true);
-      http.expectOne(`/api/backups/plans/${PLAN.id}/`).flush(null, { status: 204, statusText: 'No Content' });
-
-      await expect(removing).resolves.toBe(true);
-      expect(store.deletingPlans().has(PLAN.id)).toBe(false);
-      expect(lastToast()).toEqual({ severity: 'success', summary: 'Plan deleted.', detail: `⁨${PLAN.name}⁩` });
-      await answerPlansReload([MANUAL_PLAN]);
-      expect(store.plans()).toEqual([MANUAL_PLAN]);
-    });
-
-    it('says why a plan could not be deleted, and keeps it', async () => {
-      await openWith();
-
-      const removing = store.removePlan(PLAN);
-      http
-        .expectOne(`/api/backups/plans/${PLAN.id}/`)
-        .flush({ error: { code: 'not_found', message: 'Server prose' } }, { status: 404, statusText: 'Not Found' });
-
-      await expect(removing).resolves.toBe(false);
-      expect(lastToast()).toEqual({ severity: 'danger', summary: 'This no longer exists.' });
-      expect(store.plans()).toEqual([PLAN]);
-    });
-  });
-
-  describe('running a plan', () => {
-    it('marks the plan busy, then reloads the plans and the files and names the plan', async () => {
-      await openWith({ plans: [PLAN, MANUAL_PLAN] });
-
-      store.run(PLAN);
-      expect(store.isRunning(PLAN)).toBe(true);
-      expect(store.isRunning(MANUAL_PLAN)).toBe(false);
-      expect(store.backingUp()).toBe(true);
-      expect(store.taking()).toBe(false);
-      const request = http.expectOne(`/api/backups/plans/${PLAN.id}/run/`);
-      expect(request.request.method).toBe('POST');
-      request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
-
-      jobs.report(jobOf('backup.run', { status: 'running', finished_at: null }));
-      expect(store.isRunning(PLAN)).toBe(true);
-
-      jobs.report(jobOf('backup.run'));
-      expect(store.isRunning(PLAN)).toBe(false);
-      expect(store.backingUp()).toBe(false);
-      expect(lastToast()).toEqual({ severity: 'success', summary: 'Backup finished.', detail: `⁨${PLAN.name}⁩` });
+      store.reloadStorage();
       TestBed.tick();
-      plansRequest().flush(pageOf([PLAN, MANUAL_PLAN]));
-      listRequest().flush(pageOf([VERIFIED, FILE]));
+      storageRequest().flush(DASHBOARD);
       await settle();
-      expect(store.files()).toEqual([VERIFIED, FILE]);
+      expect(store.storageError()).toBeNull();
+      expect(store.storage()?.total).toBe(5_400_000);
     });
 
-    it('warns, naming the plan, when files changed while its archive was made', async () => {
-      await openWith({ files: [FILE], plans: [ARCHIVE_PLAN] });
+    it('reads the storage again once a backup is deleted', async () => {
+      await openEveryWith();
 
-      store.run(ARCHIVE_PLAN);
-      http.expectOne(`/api/backups/plans/${ARCHIVE_PLAN.id}/run/`).flush({ activity: JOB_ID });
-      jobs.report(jobOf('backup.run', { detail: { plan: ARCHIVE_PLAN.id, warning: 'files_changed' } }));
-
-      expect(store.isRunning(ARCHIVE_PLAN)).toBe(false);
-      expect(lastToast()).toEqual({
-        severity: 'warning',
-        summary: 'Backup finished. Some files changed while they were archived.',
-        detail: `⁨${ARCHIVE_PLAN.name}⁩`,
-      });
+      const removing = store.remove(BLOG_FILE, 'hunter2');
+      http.expectOne(`/api/backups/${BLOG_FILE.id}/`).flush(null, { status: 204, statusText: 'No Content' });
+      await removing;
       TestBed.tick();
-      plansRequest().flush(pageOf([ARCHIVE_PLAN]));
-      await answerReload([ARCHIVE_FILE, FILE]);
-      expect(store.files()).toEqual([ARCHIVE_FILE, FILE]);
+      listRequest().flush(pageOf([FILE]));
+      storageRequest().flush({ ...DASHBOARD, storage_bytes: 1_400_000 });
+      await settle();
+
+      expect(store.storage()?.total).toBe(1_400_000);
+      expect(store.deleted()).toEqual(BLOG_FILE);
     });
 
-    it("says why an archive was not kept, by its code", async () => {
-      await openWith({ plans: [ARCHIVE_PLAN] });
-      store.run(ARCHIVE_PLAN);
-      http.expectOne(`/api/backups/plans/${ARCHIVE_PLAN.id}/run/`).flush({ activity: JOB_ID });
-
-      jobs.report(jobOf('backup.run', { status: 'failed', error_code: 'archive_mismatch' }));
-
-      expect(lastToast()).toEqual({
-        severity: 'danger',
-        summary: 'The archive fetched here does not match the one on the server. Nothing was kept.',
-        detail: `⁨${ARCHIVE_PLAN.name}⁩`,
-      });
-      TestBed.tick();
-      plansRequest().flush(pageOf([{ ...ARCHIVE_PLAN, last_status: 'failed', last_error_code: 'archive_mismatch' }]));
-      await answerReload();
-    });
-
-    describe('a collection', () => {
-      const collect = async (detail: Record<string, unknown>): Promise<void> => {
-        await openWith({ files: [FILE], plans: [COLLECT_PLAN] });
-        store.run(COLLECT_PLAN);
-        http.expectOne(`/api/backups/plans/${COLLECT_PLAN.id}/run/`).flush({ activity: JOB_ID });
-        jobs.report(jobOf('backup.run', { detail: { plan: COLLECT_PLAN.id, ...detail } }));
-        expect(store.isRunning(COLLECT_PLAN)).toBe(false);
-      };
-
-      const answerReloads = async (): Promise<void> => {
-        TestBed.tick();
-        plansRequest().flush(pageOf([COLLECT_PLAN]));
-        await answerReload([COLLECTED_FILE, FILE]);
-      };
-
-      it('says how many files it collected and how many it skipped, naming the plan', async () => {
-        await collect({ collected: 2, skipped: 3, size: 4_096 });
-
-        expect(lastToast()).toEqual({
-          severity: 'success',
-          summary: 'Collected: 2. Skipped: 3.',
-          detail: `⁨${COLLECT_PLAN.name}⁩`,
-        });
-        await answerReloads();
-        expect(store.files()).toEqual([COLLECTED_FILE, FILE]);
+    it('follows the unfinished jobs of every application, each under its own application', async () => {
+      await openEveryWith({
+        running: [unfinished('backup.verify', { application: OTHER_APPLICATION_ID, target: BLOG_FILE.name })],
+        queued: [unfinished('backup.restore', { id: OTHER_JOB, detail: { rehearse: true } })],
       });
 
-      it('leaves out the skipped files when there were none', async () => {
-        await collect({ collected: 1, skipped: 0, size: 2_048 });
+      expect(jobs.watched).toEqual([JOB_ID, OTHER_JOB]);
+      expect(store.isVerifying(BLOG_FILE)).toBe(true);
+      expect(store.isVerifying(FILE)).toBe(false);
+      expect(store.restoring(FILE)).toBe('rehearse');
 
-        expect(lastToast()?.summary).toBe('Collected: 1.');
-        await answerReloads();
-      });
-
-      it('finishes calmly when there was nothing new', async () => {
-        await collect({ collected: 0, skipped: 3, size: 0 });
-
-        expect(lastToast()).toEqual({
-          severity: 'success',
-          summary: 'Nothing new to collect.',
-          detail: `⁨${COLLECT_PLAN.name}⁩`,
-        });
-        await answerReloads();
-      });
-
-      it('says, in Arabic too, how many it collected without a count before a noun', async () => {
-        TestBed.inject(LocaleStore).setLocale('ar');
-        await collect({ collected: 2, skipped: 3, size: 4_096 });
-
-        expect(lastToast()?.summary).toBe('عدد الملفات التي تم جمعها: 2. عدد الملفات التي تم تخطيها: 3.');
-        await answerReloads();
-      });
-
-      it('says when its folder is not on the server, or cannot be read', async () => {
-        await openWith({ plans: [COLLECT_PLAN] });
-        store.run(COLLECT_PLAN);
-        http.expectOne(`/api/backups/plans/${COLLECT_PLAN.id}/run/`).flush({ activity: JOB_ID });
-
-        jobs.report(jobOf('backup.run', { status: 'failed', error_code: 'remote_not_found' }));
-        expect(lastToast()).toEqual({
-          severity: 'danger',
-          summary: 'The folder or file does not exist on the server.',
-          detail: `⁨${COLLECT_PLAN.name}⁩`,
-        });
-        await answerReloads();
-
-        store.run(COLLECT_PLAN);
-        http.expectOne(`/api/backups/plans/${COLLECT_PLAN.id}/run/`).flush({ activity: OTHER_JOB });
-        jobs.report(jobOf('backup.run', { id: OTHER_JOB, status: 'failed', error_code: 'remote_permission_denied' }));
-        expect(lastToast()?.summary).toBe('Access to the folder or file was denied on the server.');
-        await answerReloads();
-      });
-    });
-
-    it('runs a plan once at a time', async () => {
-      await openWith();
-
-      store.run(PLAN);
-      store.run(PLAN);
-
-      http.expectOne(`/api/backups/plans/${PLAN.id}/run/`).flush({ activity: JOB_ID });
-      expect(jobs.watched).toEqual([JOB_ID]);
-      jobs.report(jobOf('backup.run'));
-      TestBed.tick();
-      plansRequest().flush(pageOf([PLAN]));
-      await answerReload();
-    });
-
-    it('says why the run failed, by its code, and which plan it was', async () => {
-      await openWith();
-      store.run(PLAN);
-      http.expectOne(`/api/backups/plans/${PLAN.id}/run/`).flush({ activity: JOB_ID });
-
-      jobs.report(jobOf('backup.run', { status: 'failed', error_code: 'ssh_unreachable' }));
-
-      expect(lastToast()).toEqual({
-        severity: 'danger',
-        summary: 'The server did not answer over SSH.',
-        detail: `⁨${PLAN.name}⁩`,
-      });
-      TestBed.tick();
-      plansRequest().flush(pageOf([{ ...PLAN, last_status: 'failed', last_error_code: 'ssh_unreachable' }]));
-      await answerReload();
-      expect(store.plans()[0].last_status).toBe('failed');
-    });
-
-    it('says a backup is already running when the backend refuses another', async () => {
-      await openWith();
-      store.run(PLAN);
-      http
-        .expectOne(`/api/backups/plans/${PLAN.id}/run/`)
-        .flush({ error: { code: 'backup_running', message: 'Server prose' } }, { status: 409, statusText: 'Conflict' });
-
-      expect(store.isRunning(PLAN)).toBe(false);
-      expect(jobs.watched).toEqual([]);
-      expect(lastToast()).toEqual({
-        severity: 'danger',
-        summary: 'A backup or restore of this server is already running.',
-        detail: `⁨${PLAN.name}⁩`,
-      });
+      jobs.report(jobOf('backup.verify', { detail: { validation: 'verified' } }));
+      expect(lastToast()).toEqual({ severity: 'success', summary: 'Check passed.', detail: `⁨${BLOG_FILE.name}⁩` });
+      await answerReload([FILE, BLOG_FILE]);
     });
   });
 
@@ -568,7 +332,7 @@ describe('BackupsStore', () => {
       expect(store.backingUp()).toBe(true);
       const request = http.expectOne('/api/backups/take/');
       expect(request.request.method).toBe('POST');
-      expect(request.request.body).toEqual({ server: SERVER_ID });
+      expect(request.request.body).toEqual({ application: APPLICATION_ID });
       request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
 
       jobs.report(jobOf('backup.take', { status: 'running', finished_at: null }));
@@ -597,7 +361,36 @@ describe('BackupsStore', () => {
       await answerReload([]);
     });
 
-    it("shows whether a running job's connection is alive, on its own server only", async () => {
+    it('says a backup resumed after its connection broke', async () => {
+      await openWith({ files: [] });
+
+      store.take();
+      http.expectOne('/api/backups/take/').flush({ activity: JOB_ID });
+      jobs.report(jobOf('backup.take', { detail: { backup: FILE.id, resumed: true, pulled: 0, released: 1 } }));
+
+      expect(lastToast()).toEqual({
+        severity: 'success',
+        summary: 'Backup finished. The connection broke on the way, and the backup resumed where it stopped.',
+      });
+      await answerReload();
+    });
+
+    it('says a backup the server lost while it arrived was not kept', async () => {
+      await openWith();
+
+      store.take();
+      http.expectOne('/api/backups/take/').flush({ activity: JOB_ID });
+      jobs.report(jobOf('backup.take', { status: 'failed', error_code: 'backup_lost_on_server' }));
+
+      expect(lastToast()).toEqual({
+        severity: 'danger',
+        summary:
+          'The connection broke while the backup was arriving, and the server did not finish it. Nothing was kept. Try again.',
+      });
+      await answerReload();
+    });
+
+    it("shows whether a running job's connection is alive, on its own application only", async () => {
       await openWith({ files: [] });
       store.take();
       http.expectOne('/api/backups/take/').flush({ activity: JOB_ID });
@@ -607,7 +400,7 @@ describe('BackupsStore', () => {
       jobs.report(jobOf('backup.take', { status: 'running', finished_at: null, connection }));
       expect(store.liveConnection()).toEqual(connection);
 
-      await openWith({ files: [], plans: [] }, OTHER_SERVER);
+      await openWith({ files: [] }, OTHER_APPLICATION_ID);
       expect(store.liveConnection()).toBeNull();
       await openWith();
 
@@ -616,13 +409,13 @@ describe('BackupsStore', () => {
       await answerReload();
     });
 
-    it('takes one backup of a server at a time, and shows it only on that server', async () => {
+    it('takes one backup of an application at a time, and shows it only on that application', async () => {
       await openWith();
       store.take();
       store.take();
       http.expectOne('/api/backups/take/').flush({ activity: JOB_ID });
 
-      await openWith({ files: [], plans: [] }, OTHER_SERVER);
+      await openWith({ files: [] }, OTHER_APPLICATION_ID);
       expect(store.taking()).toBe(false);
       expect(store.backingUp()).toBe(false);
 
@@ -654,7 +447,16 @@ describe('BackupsStore', () => {
 
       expect(store.taking()).toBe(false);
       expect(jobs.followed.size).toBe(0);
-      expect(lastToast()).toEqual({ severity: 'danger', summary: 'A backup or restore of this server is already running.' });
+      expect(lastToast()?.severity).toBe('danger');
+    });
+
+    it('takes nothing on the page of every backup', async () => {
+      await openEveryWith();
+
+      store.take();
+
+      http.expectNone('/api/backups/take/');
+      expect(store.taking()).toBe(false);
     });
   });
 
@@ -671,7 +473,7 @@ describe('BackupsStore', () => {
       expect(store.upload()?.name).toBe(UPLOADED_FILE.name);
       expect(store.uploadProgress()).toBe(0);
       const request = uploadRequest();
-      expect((request.request.body as FormData).get('server')).toBe(SERVER_ID);
+      expect((request.request.body as FormData).get('application')).toBe(APPLICATION_ID);
 
       request.event({ type: HttpEventType.UploadProgress, loaded: 1, total: 3 });
       expect(store.uploadProgress()).toBe(33);
@@ -685,11 +487,7 @@ describe('BackupsStore', () => {
       request.flush(UPLOADED_FILE, { status: 201, statusText: 'Created' });
       expect(store.uploading()).toBe(false);
       expect(store.upload()).toBeNull();
-      expect(lastToast()).toEqual({
-        severity: 'success',
-        summary: 'Backup uploaded.',
-        detail: `⁨${UPLOADED_FILE.name}⁩`,
-      });
+      expect(lastToast()).toEqual({ severity: 'success', summary: 'Backup uploaded.', detail: `⁨${UPLOADED_FILE.name}⁩` });
       await answerReload([UPLOADED_FILE]);
       expect(store.files()).toEqual([UPLOADED_FILE]);
     });
@@ -711,13 +509,13 @@ describe('BackupsStore', () => {
       await answerReload();
     });
 
-    it('uploads one file to a server at a time, and shows it only on that server', async () => {
+    it('uploads one file to an application at a time, and shows it only on that application', async () => {
       await openWith();
       store.uploadFile(chosen());
       store.uploadFile(chosen());
       const request = uploadRequest();
 
-      await openWith({ files: [], plans: [] }, OTHER_SERVER);
+      await openWith({ files: [] }, OTHER_APPLICATION_ID);
       expect(store.uploading()).toBe(false);
       store.cancelUpload();
       expect(request.cancelled).toBe(false);
@@ -777,11 +575,7 @@ describe('BackupsStore', () => {
       jobs.report(jobOf('backup.verify', { detail: { validation: 'verified' } }));
 
       expect(store.isVerifying(FILE)).toBe(false);
-      expect(lastToast()).toEqual({
-        severity: 'success',
-        summary: 'Check passed.',
-        detail: `⁨${FILE.name}⁩`,
-      });
+      expect(lastToast()).toEqual({ severity: 'success', summary: 'Check passed.', detail: `⁨${FILE.name}⁩` });
       await answerReload([{ ...FILE, validation: 'verified' }]);
       expect(store.files()[0].validation).toBe('verified');
     });
@@ -815,7 +609,7 @@ describe('BackupsStore', () => {
       mode: 'replace',
       rehearse: false,
       account_password: 'secret',
-      server_name: 'production-web',
+      application_name: 'shop',
     } as const;
 
     const restored = (detail: Record<string, unknown>): Job =>
@@ -900,7 +694,7 @@ describe('BackupsStore', () => {
       expect(store.restoring(FILE)).toBeNull();
       expect(lastToast()).toEqual({
         severity: 'danger',
-        summary: 'django-dbs on the server is too old for this. Upgrade it to the version this manager runs.',
+        summary: 'django-dbs in this application is too old for this. Upgrade it to the version this manager runs.',
         detail: `⁨${FILE.name}⁩`,
       });
     });
@@ -923,51 +717,32 @@ describe('BackupsStore', () => {
 
       store.resetRestoreForm();
       expect(store.restoreError()).toBeNull();
+      TestBed.tick();
+      applicationsRequest().flush(pageOf(APPLICATIONS));
+      await settle();
+      expect(store.applications()).toEqual(APPLICATIONS);
     });
   });
 
   describe('jobs already running when the page opens', () => {
-    const run: UnfinishedJob = {
-      id: JOB_ID,
-      action: 'backup.run',
-      status: 'running',
-      target: PLAN.name,
-      detail: { plan: PLAN.id },
-    };
-    const take: UnfinishedJob = {
-      id: OTHER_JOB,
-      action: 'backup.take',
-      status: 'queued',
-      target: 'Production web',
-      detail: {},
-    };
-    const check: UnfinishedJob = {
-      id: THIRD_JOB,
-      action: 'backup.verify',
-      status: 'queued',
-      target: FILE.name,
-      detail: {},
-    };
+    const run = unfinished('backup.run', { target: PLAN.name, detail: { plan: PLAN.id } });
+    const take = unfinished('backup.take', { id: OTHER_JOB, status: 'queued', target: 'shop' });
+    const check = unfinished('backup.verify', { id: THIRD_JOB, status: 'queued' });
 
-    it('follows every backup and check of the server, with their busy state and their toasts', async () => {
+    it("follows every backup and check of the application, with their busy state and their toasts", async () => {
       await openWith({
         files: [FILE],
-        plans: [PLAN, MANUAL_PLAN],
         running: [run],
-        queued: [take, check, { id: 99, action: 'server.check', status: 'queued', target: 'Production web', detail: {} }],
+        queued: [take, check, unfinished('application.check', { id: 99, status: 'queued', target: 'shop' })],
       });
 
       expect(jobs.watched).toEqual([JOB_ID, OTHER_JOB, THIRD_JOB]);
-      expect(store.isRunning(PLAN)).toBe(true);
-      expect(store.isRunning(MANUAL_PLAN)).toBe(false);
+      expect(store.backingUp()).toBe(true);
       expect(store.taking()).toBe(true);
       expect(store.isVerifying(FILE)).toBe(true);
 
       jobs.report(jobOf('backup.run'));
-      expect(store.isRunning(PLAN)).toBe(false);
       expect(lastToast()).toEqual({ severity: 'success', summary: 'Backup finished.', detail: `⁨${PLAN.name}⁩` });
-      TestBed.tick();
-      plansRequest().flush(pageOf([PLAN, MANUAL_PLAN]));
       await answerReload();
 
       jobs.report(jobOf('backup.verify', { id: THIRD_JOB, detail: { validation: 'verified' } }));
@@ -977,26 +752,19 @@ describe('BackupsStore', () => {
 
       jobs.report(jobOf('backup.take', { id: OTHER_JOB, status: 'failed', error_code: 'interrupted' }));
       expect(store.taking()).toBe(false);
+      expect(store.backingUp()).toBe(false);
       expect(lastToast()).toEqual({ severity: 'danger', summary: 'The job stopped before it finished.' });
       await answerReload();
     });
 
     it('follows a restore picked up on open, rehearsal or not', async () => {
-      const restore: UnfinishedJob = {
-        id: JOB_ID,
-        action: 'backup.restore',
-        status: 'running',
-        target: FILE.name,
-        detail: { backup: FILE.id, mode: 'replace', rehearse: false },
-      };
+      const restore = unfinished('backup.restore', { detail: { backup: FILE.id, mode: 'replace', rehearse: false } });
       await openWith({ files: [FILE], running: [restore] });
 
       expect(store.restoring(FILE)).toBe('restore');
 
       jobs.report(
-        jobOf('backup.restore', {
-          detail: { ...restore.detail, records: 5, files: 1, flushed: 2, healed: false },
-        }),
+        jobOf('backup.restore', { detail: { ...restore.detail, records: 5, files: 1, flushed: 2, healed: false } }),
       );
       expect(store.restoring(FILE)).toBeNull();
       expect(lastToast()).toEqual({
@@ -1006,25 +774,15 @@ describe('BackupsStore', () => {
       });
     });
 
-    it("finds a run's plan by id, so a plan renamed since is still the one marked busy", async () => {
-      const renamed: BackupPlan = { ...PLAN, name: 'Nightly' };
-      await openWith({ plans: [renamed, MANUAL_PLAN], running: [run] });
+    it('marks the source file of a restore onto another application', async () => {
+      const onto: UnfinishedJob = unfinished('backup.restore', {
+        application: OTHER_APPLICATION_ID,
+        detail: { rehearse: true, source_application: APPLICATION_ID, target_application: OTHER_APPLICATION_ID },
+      });
+      await openEveryWith({ running: [onto] });
 
-      expect(store.isRunning(renamed)).toBe(true);
-      expect(store.isRunning({ ...MANUAL_PLAN, name: PLAN.name })).toBe(false);
-
-      jobs.report(jobOf('backup.run'));
-      expect(store.isRunning(renamed)).toBe(false);
-      TestBed.tick();
-      plansRequest().flush(pageOf([renamed, MANUAL_PLAN]));
-      await answerReload();
-    });
-
-    it('leaves a run alone when its entry names no plan', async () => {
-      await openWith({ running: [{ ...run, detail: {} }] });
-
-      expect(jobs.watched).toEqual([]);
-      expect(store.backingUp()).toBe(false);
+      expect(store.restoring(FILE)).toBe('rehearse');
+      expect(store.restoring({ ...FILE, application: OTHER_APPLICATION_ID })).toBeNull();
     });
 
     it('follows a job once, however often it is found', async () => {
@@ -1044,10 +802,9 @@ describe('BackupsStore', () => {
     });
 
     it('leaves the page as it is when the jobs cannot be read', async () => {
-      store.open(SERVER_ID);
+      store.openApplication(APPLICATION_ID);
       TestBed.tick();
       listRequest().flush(pageOf([FILE]));
-      plansRequest().flush(pageOf([PLAN]));
       jobsRequest('running').flush(
         { error: { code: 'unknown', message: 'Server prose' } },
         { status: 500, statusText: 'Server Error' },
@@ -1058,12 +815,11 @@ describe('BackupsStore', () => {
       expect(jobs.watched).toEqual([]);
       expect(toasts).not.toHaveBeenCalled();
       expect(store.files()).toEqual([FILE]);
-      expect(store.plans()).toEqual([PLAN]);
     });
   });
 
   describe('deleting a backup', () => {
-    it('deletes it, reloads the list, and offers Undo on the server it was on', async () => {
+    it('deletes it, reloads the list, and offers Undo on the application it was on', async () => {
       await openWith({ files: [FILE, VERIFIED] });
 
       const removing = store.remove(FILE, 'hunter2');
@@ -1130,16 +886,11 @@ describe('BackupsStore', () => {
     await expect(refusing).resolves.toBeNull();
     expect(store.downloadError()?.code).toBe('invalid_password');
 
-    const linking = store.downloadLink(ARCHIVE_FILE, 'hunter2');
+    const linking = store.downloadLink(COLLECTED_FILE, 'hunter2');
     expect(store.downloadError()).toBeNull();
-    const request = http.expectOne(`/api/backups/${ARCHIVE_FILE.id}/download/`);
+    const request = http.expectOne(`/api/backups/${COLLECTED_FILE.id}/download/`);
     expect(request.request.body).toEqual({ account_password: 'hunter2' });
     request.flush({ url: '/api/backups/a/download/?ticket=t1' });
     await expect(linking).resolves.toBe('/api/backups/a/download/?ticket=t1');
   });
-
-  function answerPlansAndJobsExceptPlans(): void {
-    jobsRequest('running').flush(pageOf([]));
-    jobsRequest('queued').flush(pageOf([]));
-  }
 });

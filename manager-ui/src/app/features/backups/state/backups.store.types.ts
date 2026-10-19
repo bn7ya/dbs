@@ -3,8 +3,13 @@ import type { CollectResult } from '../data/backups.types';
 
 export type CollectCounts = Pick<CollectResult, 'collected' | 'skipped'>;
 
+export interface BackupScope {
+  readonly every: boolean;
+  readonly application: string | null;
+}
+
 export interface JobTarget {
-  readonly server: string;
+  readonly application: string;
   readonly name: string;
 }
 
@@ -13,21 +18,35 @@ export interface RestoreTarget extends JobTarget {
 }
 
 export interface Upload {
-  readonly server: string;
+  readonly application: string;
   readonly name: string;
   readonly sent: number;
   readonly total: number;
 }
 
-export interface PlanRun {
-  readonly server: string;
-  readonly plan: string;
-  readonly name: string;
-}
-
 export type RestoreProgress = 'rehearse' | 'restore';
 
 export interface LiveJob {
-  readonly server: string;
+  readonly application: string;
   readonly job: Job;
+}
+
+export interface StoredApplication {
+  readonly id: string;
+  readonly name: string;
+  readonly server: string;
+  readonly serverName: string;
+  readonly bytes: number;
+}
+
+export interface StorageDisk {
+  readonly total: number;
+  readonly free: number;
+  readonly low: boolean;
+}
+
+export interface Storage {
+  readonly total: number;
+  readonly disk: StorageDisk | null;
+  readonly applications: readonly StoredApplication[];
 }

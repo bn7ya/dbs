@@ -1,3 +1,4 @@
+import importlib
 import re
 
 import pytest
@@ -6,14 +7,27 @@ from dbs import extras
 from tests.test_version import read_pyproject
 
 MODULES = {
+    "numpy": "numpy",
     "scikit-learn": "sklearn",
     "paramiko": "paramiko",
     "djangorestframework": "rest_framework",
     "waitress": "waitress",
     "keyring": "keyring",
 }
-LIBRARY_ONLY = {"django", "cryptography", "argon2-cffi", "reedsolo", "numpy"}
+EVERYTHING = {
+    "django",
+    "cryptography",
+    "argon2-cffi",
+    "reedsolo",
+    "numpy",
+    "scikit-learn",
+    "djangorestframework",
+    "waitress",
+    "paramiko",
+    "keyring",
+}
 REQUIREMENT = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(\[[^\]]*\])?(?P<spec>[^;]*)(;(?P<marker>.*))?$")
+COMMAND_NAMES = ("django-dbs", "django_dbs", "dbs")
 
 
 def parsed(requirement):
@@ -32,38 +46,30 @@ def every_requirement():
         yield from requirements
 
 
-def test_a_django_project_installs_the_backup_library_alone():
+def test_one_install_brings_everything_dbs_uses():
     names = {parsed(requirement)[0] for requirement in project()["dependencies"]}
 
-    assert {"django", "cryptography", "argon2-cffi", "reedsolo"} <= names
-    assert names <= LIBRARY_ONLY
+    assert names == EVERYTHING
 
 
-def test_each_part_of_dbs_has_its_extra():
+def test_the_old_extra_names_install_nothing_more():
     optional = project()["optional-dependencies"]
 
-    assert set(optional) == {"guard", "ssh", "manager", "all", "dev"}
-    assert optional["all"] == ["django-dbs[guard,manager,ssh]"]
-    assert "django-dbs[all]" in optional["dev"]
+    assert set(optional) == {*extras.RETIRED_EXTRAS, "dev"}
+    for name in extras.RETIRED_EXTRAS:
+        assert optional[name] == [], name
+    assert not any(parsed(item)[0] == "django-dbs" for item in optional["dev"])
 
 
-@pytest.mark.parametrize("extra", sorted(extras.EXTRAS))
-def test_the_modules_dbs_checks_match_each_extra(extra):
-    declared = project()["optional-dependencies"][extra]
-    required = {
-        MODULES[name]
-        for name, _, marker in map(parsed, declared)
-        if marker is None
-    }
+def test_the_modules_dbs_checks_match_its_dependencies():
+    declared = {parsed(requirement)[0] for requirement in project()["dependencies"]}
 
-    assert required == set(extras.EXTRAS[extra])
+    assert {MODULES[name] for name in declared if name in MODULES} == set(extras.BUNDLED)
 
 
 @pytest.mark.parametrize("requirement", sorted(set(every_requirement())))
 def test_every_dependency_is_bounded_on_both_sides(requirement):
     name, spec, _ = parsed(requirement)
-    if name == "django-dbs":
-        return
 
     assert ">=" in spec, requirement
     assert "<" in spec.replace("<=", ""), requirement
@@ -76,3 +82,12 @@ def test_the_classifiers_name_every_django_the_bounds_allow():
         assert f"Framework :: Django :: {version}" in classifiers
     for version in ("3.9", "3.10", "3.11", "3.12", "3.13"):
         assert f"Programming Language :: Python :: {version}" in classifiers
+
+
+@pytest.mark.parametrize("name", COMMAND_NAMES)
+def test_every_command_name_starts_the_manager_cli(name):
+    target = project()["scripts"][name]
+    module, _, function = target.partition(":")
+
+    assert target == "dbs.manager.cli:main"
+    assert callable(getattr(importlib.import_module(module), function))

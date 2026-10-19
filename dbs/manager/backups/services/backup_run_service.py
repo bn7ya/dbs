@@ -34,9 +34,11 @@ from dbs.manager.backups.services.dbs_runs import DbsOutcome, DbsRun, moment_of
 from dbs.manager.backups.services.plan_runs import last_run, run_detail
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.common.uploads import upload_name
+from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import StreamBroken, failure_facts
-from dbs.manager.servers.models import Server
-from dbs.manager.servers.services import ServerConnectionService, ServerService
+from dbs.manager.applications.models import Application
+from dbs.manager.applications.services import ApplicationService
+from dbs.manager.servers.services import ServerConnectionService
 from dbs.manager.vault import VaultError, open_stream, seal_stream
 from dbs.models import AuditEvent
 
@@ -57,12 +59,12 @@ FALLBACK_COLLECTED_NAME = "collected-file"
 Detail = dict[str, Any]
 
 
-def take_prefix(server: Server) -> str:
-    return slugify(server.name) or FALLBACK_PREFIX
+def take_prefix(application: Application) -> str:
+    return slugify(application.name) or FALLBACK_PREFIX
 
 
-def plan_prefix(server: Server, plan: BackupPlan) -> str:
-    return f"{take_prefix(server)}-{slugify(plan.name) or f'plan-{plan.pk.hex[:8]}'}"
+def plan_prefix(application: Application, plan: BackupPlan) -> str:
+    return f"{take_prefix(application)}-{slugify(plan.name) or f'plan-{plan.pk.hex[:8]}'}"
 
 
 def collected_name(listed: str) -> str:
@@ -117,9 +119,9 @@ class BackupRunService:
         finally:
             self.locks.release(UUID(job.subject), job.pk)
 
-    def back_up(self, job: AuditEvent, server: Server, *, keep_remote: int) -> BackupFile:
+    def back_up(self, job: AuditEvent, application: Application, *, keep_remote: int) -> BackupFile:
         outcome = self._back_up(
-            job, server, prefix=take_prefix(server), keep_remote=keep_remote, plan=None
+            job, application, prefix=take_prefix(application), keep_remote=keep_remote, plan=None
         )
         if outcome.kept_on_server:
             raise StreamBroken()
@@ -140,39 +142,39 @@ class BackupRunService:
             self.jobs.succeed(job.pk, detail)
 
     def _take(self, job: AuditEvent) -> Detail:
-        server_id: UUID = UUID(job.subject)
-        if not self.locks.hold(server_id, job.pk):
+        application_id: UUID = UUID(job.subject)
+        if not self.locks.hold(application_id, job.pk):
             raise BackupRunning()
-        server = ServerService(job.actor).get(server_id)
+        application = ApplicationService(job.actor).get(application_id)
         outcome = self._back_up(
-            job, server, prefix=take_prefix(server), keep_remote=TAKE_KEEP_REMOTE, plan=None
+            job, application, prefix=take_prefix(application), keep_remote=TAKE_KEEP_REMOTE, plan=None
         )
-        self._retain_dbs(job, server, None, TAKE_KEEP, outcome)
+        self._retain_dbs(job, application, None, TAKE_KEEP, outcome)
         return self._reported(job, outcome)
 
     def _run_plan(self, job: AuditEvent, plan_id: UUID) -> Detail:
-        server_id: UUID = UUID(job.subject)
-        if not self.locks.hold(server_id, job.pk):
+        application_id: UUID = UUID(job.subject)
+        if not self.locks.hold(application_id, job.pk):
             raise BackupRunning()
         plan = self.plans.find(plan_id)
         if plan is None:
             raise NotFound()
-        server = ServerService(job.actor).get(server_id)
+        application = ApplicationService(job.actor).get(application_id)
         if plan.kind == BackupPlan.Kind.COLLECT:
-            outcome = self._collect(job, server, plan)
+            outcome = self._collect(job, application, plan)
         elif plan.kind == BackupPlan.Kind.ARCHIVE:
-            file, warning = self._archive(job, server, plan)
+            file, warning = self._archive(job, application, plan)
             outcome = {"backup": str(file.pk), "size": file.size}
             outcome |= {"warning": warning} if warning else {}
         else:
             backed_up = self._back_up(
                 job,
-                server,
-                prefix=plan_prefix(server, plan),
+                application,
+                prefix=plan_prefix(application, plan),
                 keep_remote=min(plan.keep_remote, KEEP_MAX),
                 plan=plan,
             )
-            self._retain_dbs(job, server, plan, min(plan.keep, KEEP_MAX), backed_up)
+            self._retain_dbs(job, application, plan, min(plan.keep, KEEP_MAX), backed_up)
             return {**run_detail(plan), **self._reported(job, backed_up)}
         self._retain(job, plan)
         return {**run_detail(plan), **outcome}
@@ -180,27 +182,32 @@ class BackupRunService:
     def _back_up(
         self,
         job: AuditEvent,
-        server: Server,
+        application: Application,
         *,
         prefix: str,
         keep_remote: int,
         plan: BackupPlan | None,
     ) -> DbsOutcome:
         connections = ServerConnectionService(job.actor)
-        profile = connections.dbs_profile(server)
-        passphrase = connections.backup_passphrase(server)
-        self.storage.directory(server.pk)
-        with connections.open(server) as remote:
-            return DbsRun(
-                job,
-                server,
-                plan,
-                remote=remote,
-                profile=profile,
-                passphrase=passphrase,
-                prefix=prefix,
-                keep_remote=keep_remote,
-            ).run()
+        profile = connections.dbs_profile(application)
+        passphrase = connections.backup_passphrase(application)
+        self.storage.directory(application.pk)
+        reported = (application.last_check_report or {}).get("dbs_version")
+        return DbsRun(
+            job,
+            application,
+            plan,
+            connect=lambda: connections.open(application),
+            profile=profile,
+            passphrase=passphrase,
+            prefix=prefix,
+            keep_remote=keep_remote,
+            progress_seconds=(
+                settings.BACKUP_PROGRESS_SECONDS
+                if versions.at_least(reported, versions.PROGRESS_FROM)
+                else 0
+            ),
+        ).run()
 
     def _reported(self, job: AuditEvent, outcome: DbsOutcome) -> Detail:
         detail: Detail = {"pulled": len(outcome.pulled)}
@@ -216,19 +223,22 @@ class BackupRunService:
             "backup": str(streamed.pk),
             "size": streamed.size,
             **detail,
+            **({"resumed": True} if outcome.resumed else {}),
             "released": len(outcome.released),
         }
 
     def _archive(
-        self, job: AuditEvent, server: Server, plan: BackupPlan
+        self, job: AuditEvent, application: Application, plan: BackupPlan
     ) -> tuple[BackupFile, str]:
-        prefix = plan_prefix(server, plan)
-        self.storage.directory(server.pk)
-        name = self._unused_archive_name(server, prefix)
-        stored_path = self.storage.sealed_path(server.pk, name)
-        with ServerConnectionService(job.actor).open(server) as remote:
+        prefix = plan_prefix(application, plan)
+        self.storage.directory(application.pk)
+        name = self._unused_archive_name(application, prefix)
+        stored_path = self.storage.sealed_path(application.pk, name)
+        connections = ServerConnectionService(job.actor)
+        with connections.open(application) as remote:
+            folder = connections.staging_folder(application, remote)
             archive = remote.archive(
-                plan.paths, server.remote_backup_dir, name, settings.BACKUP_EXEC_TIMEOUT
+                plan.paths, folder, name, settings.BACKUP_EXEC_TIMEOUT
             )
             with (
                 remote.open_file(archive.remote_path) as source,
@@ -238,15 +248,13 @@ class BackupRunService:
                 if sealed.sha256 != archive.sha256:
                     raise ArchiveMismatch()
             try:
-                remote.prune(
-                    server.remote_backup_dir, archive_pattern(prefix), plan.keep_remote
-                )
+                remote.prune(folder, archive_pattern(prefix), plan.keep_remote)
             except BaseException:
                 self.storage.remove(stored_path)
                 raise
         file = self._record(
             job,
-            server,
+            application,
             plan,
             kind=BackupFile.Kind.ARCHIVE,
             name=name,
@@ -258,10 +266,10 @@ class BackupRunService:
         )
         return file, archive.warning
 
-    def _collect(self, job: AuditEvent, server: Server, plan: BackupPlan) -> Detail:
-        self.storage.directory(server.pk)
+    def _collect(self, job: AuditEvent, application: Application, plan: BackupPlan) -> Detail:
+        self.storage.directory(application.pk)
         collected = skipped = size = 0
-        with ServerConnectionService(job.actor).open(server) as remote:
+        with ServerConnectionService(job.actor).open(application) as remote:
             matching = [
                 found
                 for found in remote.list_files(plan.paths[0])
@@ -276,7 +284,7 @@ class BackupRunService:
                 if (found.path, found.size, found.mtime) in seen:
                     file = None
                 else:
-                    file = self._collect_file(job, server, plan, remote, found)
+                    file = self._collect_file(job, application, plan, remote, found)
                 if file is None:
                     skipped += 1
                     continue
@@ -287,13 +295,13 @@ class BackupRunService:
     def _collect_file(
         self,
         job: AuditEvent,
-        server: Server,
+        application: Application,
         plan: BackupPlan,
         remote: RemoteHost,
         found: RemoteFile,
     ) -> BackupFile | None:
         name = collected_name(found.name)
-        stored_path = self.storage.unused_sealed_path(server.pk, name)
+        stored_path = self.storage.unused_sealed_path(application.pk, name)
         with (
             remote.open_file(found.path) as source,
             self.storage.writing(stored_path) as target,
@@ -304,7 +312,7 @@ class BackupRunService:
             return None
         return self._record(
             job,
-            server,
+            application,
             plan,
             kind=BackupFile.Kind.COLLECTED,
             name=name,
@@ -317,7 +325,7 @@ class BackupRunService:
             remote_mtime=found.mtime,
         )
 
-    def _unused_archive_name(self, server: Server, prefix: str) -> str:
+    def _unused_archive_name(self, application: Application, prefix: str) -> str:
         stamp = timezone.now().strftime(ARCHIVE_STAMP)
         candidates = (
             f"{prefix}-{stamp}Z{'' if ordinal == 1 else f'-{ordinal}'}{ARCHIVE_SUFFIX}"
@@ -326,13 +334,13 @@ class BackupRunService:
         return next(
             name
             for name in candidates
-            if not self.storage.exists(self.storage.sealed_path(server.pk, name))
+            if not self.storage.exists(self.storage.sealed_path(application.pk, name))
         )
 
     def _record(
         self,
         job: AuditEvent,
-        server: Server,
+        application: Application,
         plan: BackupPlan | None,
         *,
         storage_path: str,
@@ -341,7 +349,7 @@ class BackupRunService:
         try:
             return self.files.create(
                 created_by=job.actor,
-                server=server,
+                application=application,
                 plan=plan,
                 storage_path=storage_path,
                 validation=BackupFile.Validation.STRUCTURE_OK,
@@ -354,12 +362,12 @@ class BackupRunService:
 
     def _retain(self, job: AuditEvent, plan: BackupPlan) -> None:
         stale = list(self.files.alive_for_plan(plan.pk)[min(plan.keep, KEEP_MAX) :])
-        self._expire(job, plan.server, plan, stale)
+        self._expire(job, plan.application, plan, stale)
 
     def _retain_dbs(
         self,
         job: AuditEvent,
-        server: Server,
+        application: Application,
         plan: BackupPlan | None,
         keep: int,
         outcome: DbsOutcome,
@@ -367,19 +375,19 @@ class BackupRunService:
         plan_id = plan and plan.pk
         arrived = outcome.streamed and outcome.streamed.pk
         good = sorted(
-            self.files.good_backups(server.pk, plan_id),
+            self.files.good_backups(application.pk, plan_id),
             key=lambda file: (file.pk == arrived, moment_of(file)),
             reverse=True,
         )
         quarantined = sorted(
-            self.files.quarantined(server.pk, plan_id), key=moment_of, reverse=True
+            self.files.quarantined(application.pk, plan_id), key=moment_of, reverse=True
         )
-        self._expire(job, server, plan, [*good[max(keep, 1) :], *quarantined[KEEP_MAX:]])
+        self._expire(job, application, plan, [*good[max(keep, 1) :], *quarantined[KEEP_MAX:]])
 
     def _expire(
         self,
         job: AuditEvent,
-        server: Server,
+        application: Application,
         plan: BackupPlan | None,
         stale: list[BackupFile],
     ) -> None:
@@ -393,30 +401,30 @@ class BackupRunService:
                 self.files.soft_delete(file)
             ActivityService(job.actor).record(
                 Action.RETENTION,
-                server=server,
-                target=server.name if plan is None else plan.name,
+                subject=application,
+                target=application.name if plan is None else plan.name,
                 detail=detail,
             )
 
     def _restore(self, job: AuditEvent, file_id: UUID) -> Detail:
-        server_id: UUID = UUID(job.subject)
-        if not self.locks.hold(server_id, job.pk):
+        application_id: UUID = UUID(job.subject)
+        if not self.locks.hold(application_id, job.pk):
             raise BackupRunning()
         file = self.files.find_including_deleted(file_id)
         if file is None or file.removed_at is not None:
             raise BackupMissing()
-        server = ServerService(job.actor).get(server_id)
+        application = ApplicationService(job.actor).get(application_id)
         connections = ServerConnectionService(job.actor)
         try:
             handle = self.storage.open_read(file.storage_path)
         except FileNotFoundError as exc:
             raise BackupMissing() from exc
-        with handle, connections.open(server) as remote:
+        with handle, connections.open(application) as remote:
             report = remote.restore_dbs_backup(
                 handle,
-                profile=connections.dbs_profile(server),
-                passphrase=connections.backup_passphrase(file.server),
-                remote_dir=server.remote_backup_dir,
+                profile=connections.dbs_profile(application),
+                passphrase=connections.backup_passphrase(file.application),
+                remote_dir=connections.staging_folder(application, remote),
                 flush=job.data["mode"] == RestoreMode.REPLACE,
                 dry_run=job.data["rehearse"],
             )
@@ -447,7 +455,7 @@ class BackupRunService:
         return {"validation": validation}
 
     def _decrypts(self, job: AuditEvent, file: BackupFile) -> bool:
-        passphrase = ServerConnectionService(job.actor).backup_passphrase(file.server)
+        passphrase = ServerConnectionService(job.actor).backup_passphrase(file.application)
         try:
             with self.storage.open_read(file.storage_path) as handle:
                 result = validate_backup(handle, passphrase)

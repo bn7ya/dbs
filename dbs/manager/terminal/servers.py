@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from dbs.manager.adapters import references, servers
+from dbs.manager.adapters.checks import engines_label
+from dbs.manager.adapters.forms import validated
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
     AddedServerSerializer,
@@ -16,28 +19,12 @@ from dbs.manager.servers.serializers import (
 from dbs.manager.servers.serializers.browse import BrowseEntrySerializer
 from dbs.manager.servers.services import (
     BrowseService,
-    DiscoveryService,
     HostKeyConfirmationService,
     ServerService,
 )
-from dbs.manager.servers.services.discovery_service import discovered_settings
-from dbs.manager.adapters import references, servers
 from dbs.manager.terminal import CommandFailed
-from dbs.manager.adapters.forms import validated
 from dbs.manager.terminal.session import TerminalSession
 
-SETTING_FIELDS = (
-    "runtime",
-    "compose_service",
-    "compose_files",
-    "project_dir",
-    "python_path",
-    "manage_path",
-    "settings_module",
-    "remote_backup_dir",
-    "env_path",
-    "file_roots",
-)
 SHOWN_FIELDS = (
     "id",
     "name",
@@ -46,16 +33,7 @@ SHOWN_FIELDS = (
     "username",
     "auth_method",
     "host_key_fingerprint",
-    "runtime",
-    "compose_service",
-    "compose_files",
-    "project_dir",
-    "python_path",
-    "manage_path",
-    "settings_module",
-    "remote_backup_dir",
-    "env_path",
-    "file_roots",
+    "engines",
     "last_check_status",
     "last_check_error",
     "last_checked_at",
@@ -63,7 +41,6 @@ SHOWN_FIELDS = (
     "last_seen_at",
     "last_connection_error",
     "timeout_on_host",
-    "timeout_in_container",
 )
 LIST_COLUMNS = (
     ("NAME", "name"),
@@ -74,15 +51,16 @@ LIST_COLUMNS = (
             row["connection_state"], row["last_connection_error"]
         ),
     ),
+    ("ENGINES", lambda row: engines_label(row["engines"])),
+    ("APPLICATIONS", "application_count"),
     ("STATUS", "last_check_status"),
-    ("CHECKED", "last_checked_at"),
     ("ID", "id"),
 )
 CHECK_COLUMNS = (
     ("SERVER", "name"),
     ("CONNECTION", "connection"),
     ("STATUS", "status"),
-    ("DJANGO-DBS", "remote_version"),
+    ("ENGINES", "engines"),
     ("PROBLEM", "problem"),
 )
 BROWSE_COLUMNS = (
@@ -121,12 +99,9 @@ def add(session: TerminalSession) -> int:
         "username": args.username,
         "host_key": host_key,
         **_auth(session),
-        **_given_settings(args),
     }
     if args.generate_key:
         body["generate_key"] = True
-    if args.backup_passphrase:
-        body["backup_passphrase"] = session.secret("Backup passphrase")
     added = service.add(**validated(ServerCreateSerializer, body))
     server = added.server
     _say(session, f"Added {server.name}.")
@@ -137,15 +112,13 @@ def add(session: TerminalSession) -> int:
         if session.out.as_json:
             session.out.json(AddedServerSerializer(added).data)
         return 0
-    if not args.no_discover:
-        server = _discover_and_save(
-            session, server, args.project_dir, _given_settings(args)
-        )
-    rows, results = _checked(session, [server])
+    [checked] = servers.checked(session.user, [server])
     if session.out.as_json:
-        session.out.json({**AddedServerSerializer(added).data, "check": results[0]})
-    else:
-        session.out.table(rows, CHECK_COLUMNS, empty="")
+        session.out.json({**AddedServerSerializer(added).data, "check": checked.result})
+        return 0
+    session.out.table([_row(checked)], CHECK_COLUMNS, empty="")
+    _say(session, "Add its application with:")
+    _say(session, f"  django_dbs app add NAME --server {server.name} --folder FOLDER")
     return 0
 
 
@@ -159,13 +132,10 @@ def edit(session: TerminalSession) -> int:
             "host": args.host,
             "port": args.port,
             "username": args.username,
-            **_given_settings(args),
         }.items()
         if value is not None
     }
     body.update(_auth(session, required=False))
-    if args.backup_passphrase:
-        body["backup_passphrase"] = session.secret("Backup passphrase")
     if not body:
         raise CommandFailed("nothing to change; pass at least one option.")
     changes = validated(ServerUpdateSerializer, body, partial=True)
@@ -192,52 +162,29 @@ def remove(session: TerminalSession) -> int:
 
 def check(session: TerminalSession) -> int:
     chosen = references.servers(session.user, session.args.servers, session.args.all)
-    return _report_check(session, chosen)
+    done = servers.checked(session.user, chosen)
+    session.out.table(
+        [_row(item) for item in done],
+        CHECK_COLUMNS,
+        empty="",
+        data=[item.result for item in done],
+    )
+    return 0 if all(item.ok for item in done) else 1
 
 
-def discover(session: TerminalSession) -> int:
+def merge(session: TerminalSession) -> int:
     args = session.args
-    server = references.server(session.user, args.server)
-    discovery = DiscoveryService(session.user)
-    found = session.guarded(
-        lambda password: discovery.discover(
-            server.pk, project_dir=args.project or None, account_password=password
+    source = references.server(session.user, args.server)
+    target = references.server(session.user, args.into)
+    service = ServerService(session.user)
+    kept = session.guarded(
+        lambda password: service.merge(
+            source.pk, into=target.pk, account_password=password
         )
     )
-    if args.save:
-        changes = discovered_settings(found, chosen=bool(args.project))
-        service = ServerService(session.user)
-        if changes:
-            session.guarded(
-                lambda password: service.update(
-                    server.pk, account_password=password, **changes
-                )
-            )
-    if session.out.as_json:
-        session.out.json(found)
-        return 0
-    session.out.fields(
-        found,
-        (
-            "runtime",
-            "compose_service",
-            "project_dir",
-            "python_path",
-            "settings_module",
-            "env_path",
-            "dbs_version",
-        ),
+    session.out.say(
+        f"Joined {source.name} into {kept.name}.", ServerSerializer(kept).data
     )
-    candidates = found.get("candidates", {})
-    others = [
-        path
-        for path in candidates.get("project_dirs", [])
-        if path != found["project_dir"]
-    ]
-    if others:
-        print(f"other projects  {', '.join(others)}")
-    if args.save:
-        print(f"Saved these settings to {server.name}.")
     return 0
 
 
@@ -255,12 +202,12 @@ def browse(session: TerminalSession) -> int:
         "results": entries,
     }
     if not session.out.as_json:
-        print(folder.path + ("  (a Django project)" if folder.project else ""))
+        session.out.line(folder.path + ("  (a Django project)" if folder.project else ""))
     session.out.table(
         entries, BROWSE_COLUMNS, empty="This folder is empty.", data=listing
     )
     if folder.truncated and not session.out.as_json:
-        print("Only the first entries are shown.")
+        session.out.line("Only the first entries are shown.")
     return 0
 
 
@@ -287,10 +234,10 @@ def host_key(session: TerminalSession) -> int:
 def confirm_host_key(session: TerminalSession) -> int:
     confirmations = HostKeyConfirmationService(session.user)
     held = confirmations.to_decide(session.args.confirmation)
-    print(f"Claude asks to pin the host key {held.address} offers:")
-    print(f"  {held.key_type} {held.fingerprint}")
-    print("On the server, ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub prints the")
-    print("fingerprints to compare it with.")
+    session.out.line(f"Claude asks to pin the host key {held.address} offers:")
+    session.out.line(f"  {held.key_type} {held.fingerprint}")
+    session.out.line("On the server, ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub prints the")
+    session.out.line("fingerprints to compare it with.")
     if session.agrees("Is this the server's key? [y/N]"):
         decided = confirmations.confirm(held.id)
         session.out.say(
@@ -306,29 +253,13 @@ def confirm_host_key(session: TerminalSession) -> int:
     return 1
 
 
-def passphrase(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
-    shown = ServerService(session.user).reveal_passphrase(server.pk, session.password())
-    session.out.say(shown, {"passphrase": shown})
-    return 0
-
-
-def capture_passphrase(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
-    ServerService(session.user).capture_passphrase(server.pk)
-    session.out.say(
-        f"Read the backup passphrase from {server.name}.", {"captured": True}
-    )
-    return 0
-
-
 def _offered_key(
     session: TerminalSession, service: ServerService, host: str, port: int
 ) -> str:
     offered = service.fingerprint(host, port)
     shown = HostKeySerializer(offered).data
     if not session.out.as_json:
-        print(f"{host}:{port} offers {shown['key_type']} {shown['fingerprint']}")
+        session.out.line(f"{host}:{port} offers {shown['key_type']} {shown['fingerprint']}")
     session.confirm("Is this the server's key? [y/N]")
     return shown["line"]
 
@@ -368,56 +299,16 @@ def _read_key(path: str) -> str:
         raise CommandFailed(f"could not read {path}: {exc}") from exc
 
 
-def _given_settings(args: Any) -> dict[str, Any]:
+def _row(item: servers.CheckedServer) -> dict[str, Any]:
     return {
-        field: getattr(args, field)
-        for field in SETTING_FIELDS
-        if getattr(args, field, None) is not None
+        "name": item.name,
+        "connection": item.connection,
+        "status": item.status,
+        "engines": item.engines,
+        "problem": item.problem,
     }
-
-
-def _discover_and_save(
-    session: TerminalSession, server: Server, project: str | None, given: dict[str, Any]
-) -> Server:
-    settled = servers.settle(session.user, server, project, given)
-    if settled.error:
-        _say(session, f"Could not look around {server.name}: {settled.error}")
-    elif settled.found and settled.found["project_dir"]:
-        found = settled.found
-        service = found.get("compose_service")
-        where = f" (Docker Compose service {service})" if service else ""
-        _say(session, f"Found the project in {found['project_dir']}{where}.")
-    else:
-        _say(
-            session,
-            "Found no Django project; set one with: django_dbs server edit --project-dir",
-        )
-    return settled.server
-
-
-def _report_check(session: TerminalSession, chosen: list[Server]) -> int:
-    rows, results = _checked(session, chosen)
-    session.out.table(rows, CHECK_COLUMNS, empty="", data=results)
-    return 0 if all(row["status"] == Server.CheckStatus.OK for row in rows) else 1
-
-
-def _checked(
-    session: TerminalSession, chosen: list[Server]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    done = servers.checked(session.user, chosen)
-    rows = [
-        {
-            "name": item.name,
-            "connection": item.connection,
-            "status": item.status,
-            "remote_version": item.remote_version,
-            "problem": item.problem,
-        }
-        for item in done
-    ]
-    return rows, [item.result for item in done]
 
 
 def _say(session: TerminalSession, message: str) -> None:
     if not session.out.as_json:
-        print(message)
+        session.out.line(message)

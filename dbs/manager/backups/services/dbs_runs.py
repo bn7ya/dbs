@@ -2,29 +2,47 @@ from __future__ import annotations
 
 import posixpath
 import time
+from collections.abc import Callable
+from contextlib import AbstractContextManager, ExitStack, suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Any, cast
 
+from django.conf import settings
 from django.utils import timezone
 
 from dbs import validate_backup
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.models import Application
+from dbs.manager.backups.exceptions import BackupLostOnServer
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.storage import BackupStorage, Incoming, StoredFile
-from dbs.manager.servers.exceptions import RemoteNotFound, StreamBroken
-from dbs.manager.servers.gateways import DbsProfile, RemoteHost, ServerBackup
-from dbs.manager.servers.models import Server
+from dbs.manager.servers.exceptions import (
+    RemoteNotFound,
+    ServerConnectionLost,
+    SSHUnreachable,
+    StreamBroken,
+)
+from dbs.manager.servers.gateways import (
+    CONTAINER_TMP,
+    DbsProfile,
+    RemoteHost,
+    ServerBackup,
+)
 from dbs.models import AuditEvent
-from dbs.naming import parse_backup_moment
+from dbs.naming import is_backup_name, parse_backup_moment
 
 QUARANTINE_SUFFIX = ".quarantined"
 PROGRESS_EVERY_SECONDS = 1.0
 FAILURE_MAX_LENGTH: int = cast(int, BackupFile._meta.get_field("failure").max_length)
 COLLECTING = "collect"
 STREAMING = "stream"
+RESUMING = "resume"
+RECONNECT_WAITS = (5.0, 15.0, 45.0)
+FINISH_POLL_SECONDS = 10.0
+RECONNECT_ERRORS = (SSHUnreachable, ServerConnectionLost)
 SHORT_ARRIVAL = "{received} of {expected} bytes arrived."
 CHANGED_ARRIVAL = "The bytes that arrived are not the ones the server sent."
 
@@ -33,6 +51,7 @@ CHANGED_ARRIVAL = "The bytes that arrived are not the ones the server sent."
 class DbsOutcome:
     streamed: BackupFile | None = None
     kept_on_server: bool = False
+    resumed: bool = False
     pulled: list[BackupFile] = field(default_factory=list)
     released: list[str] = field(default_factory=list)
 
@@ -64,49 +83,80 @@ def moment_of(file: BackupFile) -> tuple[datetime, datetime]:
     return (named or file.created_at, file.created_at)
 
 
+class Link:
+    def __init__(self, connect: Callable[[], AbstractContextManager[RemoteHost]]) -> None:
+        self.connect = connect
+        self.held = ExitStack()
+
+    def open(self) -> RemoteHost:
+        self.close()
+        self.held = ExitStack()
+        return self.held.enter_context(self.connect())
+
+    def close(self) -> None:
+        with suppress(OSError, EOFError):
+            self.held.close()
+
+
 class DbsRun:
     def __init__(
         self,
         job: AuditEvent,
-        server: Server,
+        application: Application,
         plan: BackupPlan | None,
         *,
-        remote: RemoteHost,
+        connect: Callable[[], AbstractContextManager[RemoteHost]],
         profile: DbsProfile,
         passphrase: str,
         prefix: str,
         keep_remote: int,
+        progress_seconds: int = 0,
     ) -> None:
         self.job = job
-        self.server = server
+        self.application = application
         self.plan = plan
-        self.remote = remote
+        self.link = Link(connect)
         self.profile = profile
         self.passphrase = passphrase
         self.prefix = prefix
         self.keep_remote = keep_remote
+        self.progress_seconds = progress_seconds
         self.files = BackupFileRepository()
         self.storage = BackupStorage()
+        self.resumed = False
 
     def run(self) -> DbsOutcome:
+        try:
+            self.remote = self.link.open()
+            return self._run()
+        finally:
+            self.link.close()
+
+    def _run(self) -> DbsOutcome:
         outcome = DbsOutcome()
-        self.storage.sweep_partials(self.server.pk)
-        folder = self.remote.backup_folder(self.profile, self.server.remote_backup_dir)
-        if self.profile.compose is None and folder:
-            self.remote.sweep_partials(folder)
+        self.storage.sweep_partials(self.application.pk)
+        folder = self.remote.backup_folder(self.profile, self.application.remote_backup_dir)
+        if self.profile.container is None:
+            if folder:
+                self.remote.sweep_partials(folder)
+        else:
+            self.remote.sweep_in_container(
+                self.profile, *([folder] if folder else []), CONTAINER_TMP
+            )
         outcome.pulled = self._collect(folder)
         try:
             outcome.streamed = self._stream(folder)
         except StreamBroken:
             outcome.kept_on_server = True
             return outcome
+        outcome.resumed = self.resumed
         outcome.released = self._release(folder)
         return outcome
 
     def _collect(self, folder: str) -> list[BackupFile]:
         waiting = self.remote.waiting_backups(self.profile, folder, self.prefix)
         recorded: dict[str, list[BackupFile]] = {}
-        for file in self.files.recorded_at(self.server.pk, (b.path for b in waiting)):
+        for file in self.files.recorded_at(self.application.pk, (b.path for b in waiting)):
             recorded.setdefault(file.remote_path, []).append(file)
         pulled = []
         for found in waiting:
@@ -125,7 +175,7 @@ class DbsRun:
         return any(file.sha256 == digest for file in same_size)
 
     def _pull(self, found: ServerBackup) -> BackupFile | None:
-        with self.storage.receiving(self.server.pk) as incoming:
+        with self.storage.receiving(self.application.pk) as incoming:
             try:
                 self.remote.pull_backup(
                     self.profile, found.path, incoming, Progress(self.job, COLLECTING)
@@ -141,22 +191,106 @@ class DbsRun:
             )
 
     def _stream(self, folder: str) -> BackupFile:
-        with self.storage.receiving(self.server.pk) as incoming:
-            streamed = self.remote.stream_dbs_backup(
+        started: dict[str, str] = {}
+        with self.storage.receiving(self.application.pk) as incoming:
+            try:
+                streamed = self.remote.stream_dbs_backup(
+                    self.profile,
+                    passphrase=self.passphrase,
+                    prefix=self.prefix,
+                    folder=folder,
+                    sink=incoming,
+                    progress=Progress(self.job, STREAMING),
+                    progress_seconds=self.progress_seconds,
+                    on_started=started.update,
+                )
+            except StreamBroken:
+                if not (folder and started):
+                    raise
+                found = self._resume(folder, started, incoming)
+            else:
+                return self._register(
+                    incoming,
+                    name=streamed.name,
+                    remote_path=streamed.path,
+                    remote_size=streamed.size,
+                    expected_sha256=streamed.sha256,
+                )
+            self.resumed = True
+            digest = self.remote.backup_sha256(self.profile, found.path)
+            if incoming.size == found.size and incoming.sha256 == digest:
+                return self._register(
+                    incoming,
+                    name=found.name,
+                    remote_path=found.path,
+                    remote_size=found.size,
+                    remote_mtime=found.mtime,
+                    expected_sha256=digest,
+                )
+        pulled = self._pull(found)
+        if pulled is None:
+            raise BackupLostOnServer()
+        return pulled
+
+    def _resume(
+        self, folder: str, started: dict[str, str], incoming: Incoming
+    ) -> ServerBackup:
+        self.remote = self._reconnected()
+        found = self._finished(folder, started)
+        if incoming.size < found.size:
+            self.remote.pull_backup(
                 self.profile,
-                passphrase=self.passphrase,
-                prefix=self.prefix,
-                folder=folder,
-                sink=incoming,
-                progress=Progress(self.job, STREAMING),
-            )
-            return self._register(
+                found.path,
                 incoming,
-                name=streamed.name,
-                remote_path=streamed.path,
-                remote_size=streamed.size,
-                expected_sha256=streamed.sha256,
+                Progress(self.job, RESUMING),
+                offset=incoming.size,
             )
+        return found
+
+    def _reconnected(self) -> RemoteHost:
+        for wait in RECONNECT_WAITS:
+            time.sleep(wait)
+            try:
+                return self.link.open()
+            except RECONNECT_ERRORS:
+                continue
+        raise StreamBroken()
+
+    def _finished(self, folder: str, started: dict[str, str]) -> ServerBackup:
+        moment = parse_backup_moment(started["name"])
+        written, quiet_since = -1, time.monotonic()
+        while True:
+            listed = self.remote.folder_files(self.profile, folder)
+            partial = next(
+                (found for found in listed if found.name == started["partial"]), None
+            )
+            if partial is None:
+                return self._installed(listed, started["name"], moment)
+            if partial.size != written:
+                written, quiet_since = partial.size, time.monotonic()
+            elif time.monotonic() - quiet_since >= settings.BACKUP_IDLE_TIMEOUT:
+                raise StreamBroken()
+            time.sleep(FINISH_POLL_SECONDS)
+
+    def _installed(
+        self, listed: list[ServerBackup], name: str, moment: datetime | None
+    ) -> ServerBackup:
+        recorded = {
+            file.remote_path
+            for file in self.files.recorded_at(
+                self.application.pk, (found.path for found in listed)
+            )
+        }
+        candidates = [
+            found
+            for found in listed
+            if found.path not in recorded
+            and is_backup_name(found.name, self.prefix)
+            and parse_backup_moment(found.name) == moment
+        ]
+        if not candidates:
+            raise BackupLostOnServer()
+        return next((found for found in candidates if found.name == name), candidates[0])
 
     def _register(
         self,
@@ -171,7 +305,7 @@ class DbsRun:
         incoming.close()
         problem = self._problem(incoming, remote_size, expected_sha256)
         stored = self.storage.install(
-            incoming, self.server.pk, f"{name}{QUARANTINE_SUFFIX}" if problem else name
+            incoming, self.application.pk, f"{name}{QUARANTINE_SUFFIX}" if problem else name
         )
         validation = (
             BackupFile.Validation.FAILED if problem else BackupFile.Validation.VERIFIED
@@ -199,7 +333,7 @@ class DbsRun:
         try:
             return self.files.create(
                 created_by=self.job.actor,
-                server=self.server,
+                application=self.application,
                 plan=self.plan,
                 kind=BackupFile.Kind.DBS,
                 name=PurePosixPath(stored.relative_path).name,
@@ -215,7 +349,7 @@ class DbsRun:
 
     def _release(self, folder: str) -> list[str]:
         copies = sorted(
-            self.files.server_copies(self.server.pk, self.plan and self.plan.pk),
+            self.files.server_copies(self.application.pk, self.plan and self.plan.pk),
             key=moment_of,
             reverse=True,
         )[self.keep_remote :]

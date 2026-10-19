@@ -3,7 +3,6 @@
 import struct
 
 import pytest
-from django.test import RequestFactory
 
 from dbs.container import read_format_version
 from dbs.container.format import HEADER_SIZE
@@ -174,15 +173,3 @@ def test_format_2_streams_past_the_format_1_payload_limit(settings):
     out = restore_backup(container, PASS)
 
     assert out.records_loaded >= 1
-
-
-def test_admin_render_escapes_messages():
-    from dbs.contrib.admin import _render
-
-    request = RequestFactory().get("/dbs/restore/")
-    response = _render(
-        request, "Restore", "", message='{{ 7|add:"7" }}<script>alert(1)</script>'
-    )
-    assert b"&lt;script&gt;" in response.content
-    assert b"<script>alert" not in response.content
-    assert b"{{ 7|add:" in response.content

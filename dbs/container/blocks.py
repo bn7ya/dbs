@@ -11,8 +11,6 @@ DEFAULT_BLOCK_SIZE = 65536
 
 DEFAULT_NSYM = 16
 
-ENCODE_GROUP_BLOCKS = 16
-
 
 def _hash(data: bytes) -> str:
     return hashlib.blake2b(data, digest_size=16).hexdigest()
@@ -104,29 +102,6 @@ class RepairReport:
                 f"({', '.join(details)})"
             )
         return f"CLEAN: all {self.total_blocks} blocks verified, no repair needed"
-
-
-def encode_copy(
-    ciphertext: bytes,
-    block_size: int = DEFAULT_BLOCK_SIZE,
-    nsym: int = DEFAULT_NSYM,
-) -> tuple[bytes, BlockPlan]:
-    rs.check_nsym(nsym)
-    plan = BlockPlan(block_size=block_size, nsym=nsym, ciphertext_len=len(ciphertext))
-    parts: list[bytes] = []
-    group_span = block_size * ENCODE_GROUP_BLOCKS
-    for group_start in range(0, len(ciphertext), group_span):
-        group_end = min(group_start + group_span, len(ciphertext))
-        group = [
-            ciphertext[offset : offset + block_size]
-            for offset in range(group_start, group_end, block_size)
-        ]
-        for block, encoded in zip(group, rs.encode_many(group, nsym)):
-            parts.append(encoded)
-            plan.enc_lens.append(len(encoded))
-            plan.enc_hashes.append(_hash(encoded))
-            plan.data_hashes.append(_hash(block))
-    return b"".join(parts), plan
 
 
 def _decode_with_reedsolo(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:

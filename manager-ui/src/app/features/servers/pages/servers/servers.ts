@@ -21,8 +21,11 @@ import { Skeleton } from '@shared/skeleton/skeleton';
 import { Toaster } from '@shared/toaster/toaster';
 import { CheckStatusTag } from '../../components/check-status-tag/check-status-tag';
 import { HostKeyFacts } from '../../components/host-key-facts/host-key-facts';
-import type { HostKeyConfirmation, HostKeyDecision } from '../../data/servers.types';
+import type { ContainerEngine, HostKeyConfirmation, HostKeyDecision, ServerSummary } from '../../data/servers.types';
 import { SERVER_PAGE_SIZES, ServersStore } from '../../state/servers.store';
+import type { EngineFound } from './servers.types';
+
+const ENGINES: readonly ContainerEngine[] = ['docker', 'podman'];
 
 @Component({
   selector: 'app-servers-page',
@@ -72,7 +75,7 @@ export class ServersPage {
   readonly searching = this.store.searching;
   readonly skeletonLines = [1, 2, 3, 4, 5, 6];
 
-  readonly columns = ['name', 'address', 'connection', 'status', 'lastChecked'];
+  readonly columns = ['name', 'address', 'engines', 'applications', 'connection', 'status'];
 
   readonly pendingHostKeys = this.store.pendingHostKeys;
 
@@ -91,6 +94,16 @@ export class ServersPage {
 
   retry(): void {
     this.store.reloadList();
+  }
+
+  enginesOf(server: ServerSummary): readonly EngineFound[] {
+    return ENGINES.flatMap((engine) => {
+      const found = server.engines[engine];
+      if (!found?.installed) {
+        return [];
+      }
+      return [{ engine, version: found.usable ? found.version : null, usable: found.usable }];
+    });
   }
 
   addressOf(key: HostKeyConfirmation): string {

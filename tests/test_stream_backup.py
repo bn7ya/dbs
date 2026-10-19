@@ -184,7 +184,7 @@ def test_partial_names_are_recognised():
 
     assert made.startswith(".web-20261013-093000Z.dbs.part-")
     assert is_partial_name(made)
-    assert is_partial_name("web-20261013-093000Z.dbs.part")
+    assert not is_partial_name("web-20261013-093000Z.dbs.part")
     assert not is_partial_name("web-20261013-093000Z.dbs")
     assert not is_partial_name("notes.part")
     assert not is_partial_name(".notes.part-xyz")
@@ -204,8 +204,8 @@ def test_only_stale_partials_are_swept(tmp_path):
 
     removed = sweep_partials(str(tmp_path))
 
-    assert removed == sorted([stale.name, legacy.name])
-    assert names_in(tmp_path) == sorted([fresh.name, unrelated.name, backup.name])
+    assert removed == [stale.name]
+    assert names_in(tmp_path) == sorted([legacy.name, fresh.name, unrelated.name, backup.name])
 
 
 def test_sweeping_a_folder_that_is_not_there_removes_nothing(tmp_path):
@@ -451,6 +451,7 @@ def test_repeated_streams_whose_stdout_breaks_never_pile_up(tmp_path, monkeypatc
         (["--stream", "out.dbs"], "leave out the path"),
         (["out.dbs", "--prefix", "web"], "go with --stream"),
         (["--output-dir", "/tmp"], "go with --stream"),
+        (["out.dbs", "--progress-seconds", "5"], "go with --stream"),
         ([], "or use --stream"),
     ],
 )
@@ -472,12 +473,13 @@ def test_stdout_that_takes_no_bytes_is_refused(tmp_path):
 
 
 @pytest.mark.django_db
-def test_the_old_command_name_keeps_its_tip_off_the_stream(tmp_path):
+@pytest.mark.parametrize("name", ["django_dbs", "django-dbs"])
+def test_every_command_name_streams_the_same_backup(tmp_path, name):
     receiver = Receiver()
     stderr = io.StringIO()
 
     call_command(
-        "django_dbs",
+        name,
         "backup",
         "--stream",
         "--output-dir",
@@ -489,7 +491,7 @@ def test_the_old_command_name_keeps_its_tip_off_the_stream(tmp_path):
         stderr=stderr,
     )
 
-    assert "manage.py dbs" in stderr.getvalue()
+    assert "Tip" not in stderr.getvalue()
     summary = json.loads(stderr.getvalue().splitlines()[-1])
     assert (tmp_path / summary["name"]).read_bytes() == bytes(receiver.received)
 
@@ -528,3 +530,49 @@ def test_a_process_whose_stdout_is_closed_exits_cleanly(tmp_path):
     assert "Exception ignored" not in error
     [kept] = names_in(tmp_path)
     assert (tmp_path / kept).stat().st_size == 8 * 1024 * 1024
+
+
+@pytest.mark.django_db
+def test_progress_names_the_backup_first_and_the_summary_stays_last(tmp_path):
+    Author.objects.create(name="Ada")
+
+    lines = stream_command(tmp_path, Receiver(), output_dir=str(tmp_path), progress_seconds=60)
+
+    first = json.loads(lines[0])["progress"]
+    summary = json.loads(lines[-1])
+    assert first["name"] == summary["name"]
+    assert is_partial_name(first["partial"])
+    assert datetime.fromisoformat(first["moment"]).tzinfo is not None
+    assert "progress" not in summary
+
+
+def test_progress_reports_the_bytes_written_until_it_stops(tmp_path):
+    import threading
+
+    from dbs.tee import Progress
+
+    reported = []
+    beat = threading.Event()
+
+    def report(line):
+        reported.append(json.loads(line)["progress"])
+        if "bytes" in reported[-1]:
+            beat.set()
+
+    with TeeSink(Receiver(), str(tmp_path), "web", moment=MOMENT) as sink:
+        sink.write(b"x" * 1000)
+        with Progress(sink, 0.01, report):
+            assert beat.wait(10)
+        count = len(reported)
+        sink.finish()
+
+    assert reported[0]["name"] == backup_filename("web", MOMENT)
+    assert reported[-1]["bytes"] == 1000
+    assert len(reported) == count
+
+
+@pytest.mark.django_db
+def test_without_progress_seconds_nothing_extra_is_printed(tmp_path):
+    lines = stream_command(tmp_path, Receiver(), output_dir=str(tmp_path))
+
+    assert not any(line.startswith('{"progress"') for line in lines)

@@ -6,6 +6,7 @@ from .backup_plan import (
     PLAN_PATH_MAX_LENGTH,
     PLAN_PATHS_MAX,
     PLAN_PATTERN_MAX_LENGTH,
+    PLAN_TIME_ZONE_MAX_LENGTH,
     BackupPlan,
 )
 
@@ -16,6 +17,7 @@ __all__ = [
     "PLAN_PATHS_MAX",
     "PLAN_PATH_MAX_LENGTH",
     "PLAN_PATTERN_MAX_LENGTH",
+    "PLAN_TIME_ZONE_MAX_LENGTH",
     "BackupFile",
     "BackupPlan",
 ]

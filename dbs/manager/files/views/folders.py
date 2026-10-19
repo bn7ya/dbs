@@ -22,11 +22,11 @@ from dbs.manager.files.services import FileService
 class FolderView(GenericAPIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, server: UUID) -> Response:
+    def get(self, request: Request, application: UUID) -> Response:
         query = FolderQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
         folder = FileService(request.user).list(
-            server, query.validated_data.get("path")
+            application, query.validated_data.get("path")
         )
         entries: list[object] | None = self.paginate_queryset(folder.entries)
         page = self.get_paginated_response(entries).data
@@ -39,21 +39,21 @@ class FolderView(GenericAPIView):
         }
         return Response(FolderListingSerializer(listing).data)
 
-    def delete(self, request: Request, server: UUID) -> Response:
+    def delete(self, request: Request, application: UUID) -> Response:
         query = PathQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
-        FileService(request.user).delete(server, query.validated_data["path"])
+        FileService(request.user).delete(application, query.validated_data["path"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class FolderCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request: Request, server: UUID) -> Response:
+    def post(self, request: Request, application: UUID) -> Response:
         payload = FolderCreateSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         created = FileService(request.user).create_folder(
-            server, payload.validated_data["path"], payload.validated_data["name"]
+            application, payload.validated_data["path"], payload.validated_data["name"]
         )
         return Response(
             FileEntrySerializer(created).data, status=status.HTTP_201_CREATED

@@ -56,7 +56,7 @@
             icon="fa-solid fa-heart-pulse"
             [headingLevel]="2"
             [title]="'activity.empty.title' | t"
-            [description]="(scoped() ? 'activity.empty.serverBody' : 'activity.empty.body') | t"
+            [description]="emptyBody() | t"
           />
         }
       } @else {
@@ -102,11 +102,27 @@
               </td>
             </ng-container>
 
+            <ng-container matColumnDef="application">
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.application' | t }}</th>
+              <td mat-cell *matCellDef="let row">
+                @if (row.application; as application) {
+                  <a [routerLink]="['/applications', application]"><bdi dir="auto">{{ row.application_name || application }}</bdi></a>
+                } @else if (row.application_name; as name) {
+                  <span class="activity__deleted">
+                    <bdi dir="auto">{{ name }}</bdi>
+                    <span class="text-sm text-muted">{{ 'activity.list.applicationRemoved' | t }}</span>
+                  </span>
+                } @else {
+                  <span class="text-muted">{{ 'activity.list.none' | t }}</span>
+                }
+              </td>
+            </ng-container>
+
             <ng-container matColumnDef="server">
               <th mat-header-cell *matHeaderCellDef scope="col">{{ 'activity.list.server' | t }}</th>
               <td mat-cell *matCellDef="let row">
                 @if (row.server; as server) {
-                  <a [routerLink]="['/servers', server]" dir="auto">{{ row.server_name || server }}</a>
+                  <a [routerLink]="['/servers', server]"><bdi dir="auto">{{ row.server_name || server }}</bdi></a>
                 } @else if (row.server_name; as name) {
                   <span class="activity__deleted">
                     <bdi dir="auto">{{ name }}</bdi>

@@ -14,7 +14,7 @@ from dbs.manager.servers.exceptions import (
     StreamBroken,
 )
 from dbs.manager.servers.gateways import (
-    ComposeService,
+    ContainerTarget,
     Credentials,
     DbsProfile,
     RemoteHost,
@@ -34,7 +34,12 @@ COMPOSE = DbsProfile(
     python="python",
     manage="manage.py",
     project_dir=PROJECT_DIR,
-    compose=ComposeService(service="backend"),
+    container=ContainerTarget(service="backend"),
+)
+CONTAINER = DbsProfile(
+    python="python",
+    manage="manage.py",
+    container=ContainerTarget(engine="podman", container="shop-web-1"),
 )
 HOST = DbsProfile(python=PYTHON, manage="manage.py", project_dir=PROJECT_DIR)
 
@@ -85,6 +90,30 @@ def test_a_compose_command_is_stopped_inside_the_container():
         "exec",
         "-T",
         "backend",
+        "timeout",
+        "-k",
+        "30",
+        "600",
+        "python",
+        "manage.py",
+        "dbs_restore",
+        "/tmp/x.dbs",
+    ]
+
+
+def test_a_plain_container_command_is_stopped_inside_the_container():
+    session = Session()
+
+    RemoteHost(session, timeout_on_host=True, timeout_in_container=True).run_manage(
+        CONTAINER, ["dbs_restore", "/tmp/x.dbs"], stdin_line="secret", timeout=600
+    )
+
+    [(argv, _)] = session.runs
+    assert argv == [
+        "podman",
+        "exec",
+        "-i",
+        "shop-web-1",
         "timeout",
         "-k",
         "30",
@@ -150,11 +179,13 @@ def test_the_timeout_probe_runs_unbounded_on_the_host_and_in_the_container():
 
     assert remote.has_timeout() is True
     assert remote.has_timeout(COMPOSE) is True
+    assert remote.has_timeout(CONTAINER) is True
     assert remote.has_timeout(HOST) is True
 
     assert [argv for argv, _ in session.runs] == [
         ["timeout", "-k", "1", "5", "true"],
         ["docker", "compose", "exec", "-T", "backend", "timeout", "-k", "1", "5", "true"],
+        ["podman", "exec", "shop-web-1", "timeout", "-k", "1", "5", "true"],
         ["timeout", "-k", "1", "5", "true"],
     ]
 
@@ -197,7 +228,17 @@ class StreamingSession(Session):
         super().__init__(result=result, failure=failure)
         self.streams: list[tuple[list[str], float]] = []
 
-    def stream(self, script, sink, *, stdin_line=None, timeout=None, progress=None):
+    def stream(
+        self,
+        script,
+        sink,
+        *,
+        stdin_line=None,
+        timeout=None,
+        progress=None,
+        idle_timeout=None,
+        on_stderr_line=None,
+    ):
         self.streams.append((argv_of(script)[0], timeout))
         if self.failure is not None:
             raise self.failure
@@ -211,7 +252,7 @@ def streamed(session, profile=HOST, **limits):
 
 
 def test_a_streamed_backup_is_stopped_at_the_backup_deadline(settings):
-    settings.BACKUP_EXEC_TIMEOUT = 3600
+    settings.BACKUP_TOTAL_TIMEOUT = 3600
     session = StreamingSession(result=(124, "", "Terminated"))
 
     with pytest.raises(RemoteCommandTimedOut):
@@ -224,7 +265,7 @@ def test_a_streamed_backup_is_stopped_at_the_backup_deadline(settings):
 
 
 def test_a_streamed_compose_backup_is_stopped_inside_the_container(settings):
-    settings.BACKUP_EXEC_TIMEOUT = 3600
+    settings.BACKUP_TOTAL_TIMEOUT = 3600
     session = StreamingSession(result=(137, "", ""))
 
     with pytest.raises(RemoteCommandTimedOut):
@@ -236,7 +277,7 @@ def test_a_streamed_compose_backup_is_stopped_inside_the_container(settings):
 
 
 def test_a_streamed_backup_without_timeout_waits_the_backup_deadline(settings):
-    settings.BACKUP_EXEC_TIMEOUT = 3600
+    settings.BACKUP_TOTAL_TIMEOUT = 3600
     session = StreamingSession(result=(124, "", ""))
 
     with pytest.raises(RemoteCommandFailed) as failed:

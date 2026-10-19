@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
+import re
+import secrets
 
 from django.apps import apps
 from django.core import serializers
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist, ValidationError
 from django.core.management.color import no_style
-from django.core.serializers.json import Serializer as JSONSerializer
-from django.db import connections, transaction
+from django.core.serializers.json import DjangoJSONEncoder
+from django.core.serializers.python import Serializer as PythonSerializer
+from django.db import connections, models, transaction
 from django.db.models import AutoField, Model
 
 from .exceptions import BackupError, RestoreError
@@ -19,7 +24,24 @@ EXISTENCE_BATCH = 500
 
 RECORD_BATCH_ROWS = 500
 
+RECORD_BATCH_BYTES = 8 * 1024 * 1024
+
+FETCH_BYTES_TARGET = 16 * 1024 * 1024
+
+SPLICED_VALUE_BYTES = 1024 * 1024
+
 NATURAL_KEY_CACHE = 10000
+
+HEAVY_FIELDS = (models.BinaryField, models.TextField, models.JSONField)
+
+NEEDS_ESCAPING = re.compile(r'["\\\x00-\x1f]')
+
+
+class RawBytes:
+    __slots__ = ("value",)
+
+    def __init__(self, value):
+        self.value = value
 
 
 def has_natural_key(model) -> bool:
@@ -28,7 +50,7 @@ def has_natural_key(model) -> bool:
     )
 
 
-class AllRowsSerializer(JSONSerializer):
+class AllRowsSerializer(PythonSerializer):
     def __init__(self, carried=frozenset(), excluded=frozenset()):
         super().__init__()
         self.carried = carried
@@ -98,8 +120,20 @@ class AllRowsSerializer(JSONSerializer):
         return self.natural_keys[key]
 
     def handle_field(self, obj, field):
-        if field.name not in self.excluded:
-            super().handle_field(obj, field)
+        if field.name in self.excluded:
+            return
+        if isinstance(field, models.BinaryField):
+            raw = field.value_from_object(obj)
+            if raw is not None and len(raw) >= SPLICED_VALUE_BYTES:
+                self._current[field.name] = RawBytes(raw)
+                return
+        super().handle_field(obj, field)
+
+    def encoded(self, objects: list) -> list:
+        return [
+            encode_record(record)
+            for record in self.serialize(objects, use_natural_foreign_keys=False)
+        ]
 
     def handle_fk_field(self, obj, field):
         if field.name in self.excluded:
@@ -142,39 +176,175 @@ class AllRowsSerializer(JSONSerializer):
         ]
 
 
+def encode_record(record: dict) -> list:
+    fields = record["fields"]
+    spliced = {name: value for name, value in fields.items() if _spliced(value)}
+    if not spliced:
+        return [_dumps(record)]
+    tokens = {name: f"dbs-spliced-{secrets.token_hex(16)}" for name in spliced}
+    text = json.dumps(
+        {**record, "fields": {**fields, **tokens}}, cls=DjangoJSONEncoder, ensure_ascii=False
+    )
+    pieces = []
+    for name, value in spliced.items():
+        before, _, text = text.partition(json.dumps(tokens[name]))
+        pieces.append(before.encode("utf-8"))
+        pieces.extend(_json_string(value))
+    pieces.append(text.encode("utf-8"))
+    return pieces
+
+
+def _dumps(value) -> bytes:
+    return json.dumps(value, cls=DjangoJSONEncoder, ensure_ascii=False).encode("utf-8")
+
+
+def _spliced(value) -> bool:
+    return isinstance(value, RawBytes) or (
+        isinstance(value, str) and len(value) >= SPLICED_VALUE_BYTES
+    )
+
+
+def _json_string(value) -> list:
+    if isinstance(value, RawBytes):
+        return [b'"', base64.b64encode(value.value), b'"']
+    if NEEDS_ESCAPING.search(value) is None:
+        return [b'"', value.encode("utf-8"), b'"']
+    return [json.dumps(value, ensure_ascii=False).encode("utf-8")]
+
+
+def decode_large_binaries(records: list) -> None:
+    for record in records:
+        fields = record.get("fields")
+        if not isinstance(fields, dict):
+            continue
+        large = [
+            name
+            for name, value in fields.items()
+            if isinstance(value, str) and len(value) >= SPLICED_VALUE_BYTES
+        ]
+        if not large:
+            continue
+        try:
+            model = apps.get_model(record["model"])
+        except (KeyError, LookupError, ValueError):
+            continue
+        for name in large:
+            try:
+                field = model._meta.get_field(name)
+            except FieldDoesNotExist:
+                continue
+            if isinstance(field, models.BinaryField):
+                try:
+                    fields[name] = binascii.a2b_base64(fields[name])
+                except (binascii.Error, ValueError) as exc:
+                    raise RestoreError(
+                        f"{record['model']} {record.get('pk')!r} holds a {name} that is not "
+                        f"base64: {exc}"
+                    ) from exc
+
+
+def record_size(pieces: list) -> int:
+    return sum(len(piece) for piece in pieces)
+
+
+def framed_records(batch: list) -> list:
+    pieces: list = []
+    small: list = [b"["]
+    for index, record in enumerate(batch):
+        if index:
+            small.append(b",")
+        for piece in record:
+            if len(piece) < SPLICED_VALUE_BYTES:
+                small.append(piece)
+                continue
+            pieces.append(b"".join(small))
+            pieces.append(piece)
+            small = []
+    small.append(b"]")
+    pieces.append(b"".join(small))
+    return [piece for piece in pieces if piece]
+
+
+def has_heavy_fields(model) -> bool:
+    return any(isinstance(field, HEAVY_FIELDS) for field in model._meta.concrete_fields)
+
+
+def keyset_pageable(queryset) -> bool:
+    composite = getattr(models, "CompositePrimaryKey", None)
+    return not queryset.query.is_sliced and not (
+        composite is not None and isinstance(queryset.model._meta.pk, composite)
+    )
+
+
+class Pages:
+    def __init__(self, queryset, rows: int, *, adaptive: bool = True):
+        self.rows = rows
+        self.keyset = keyset_pageable(queryset)
+        self.queryset = queryset.order_by("pk") if not queryset.query.is_sliced else queryset
+        self.size = 1 if adaptive and has_heavy_fields(queryset.model) else rows
+
+    def measured(self, encoded_bytes: int, count: int) -> None:
+        mean = max(1, encoded_bytes // max(1, count))
+        self.size = max(1, min(self.rows, self.size * 2, FETCH_BYTES_TARGET // mean))
+
+    def __iter__(self):
+        if not self.keyset:
+            yield from self._iterated()
+            return
+        last = None
+        while True:
+            size = self.size
+            page = self.queryset if last is None else self.queryset.filter(pk__gt=last)
+            chunk = list(page[:size])
+            if not chunk:
+                return
+            yield chunk
+            if len(chunk) < size:
+                return
+            last = chunk[-1].pk
+
+    def _iterated(self):
+        chunk: list = []
+        for instance in self.queryset.iterator(chunk_size=self.rows):
+            chunk.append(instance)
+            if len(chunk) >= self.size:
+                yield chunk
+                chunk = []
+        if chunk:
+            yield chunk
+
+
 def serialize_batches(
     model, config, excluded: set[str], carried=frozenset(), using: str | None = None,
     *, rows: int = RECORD_BATCH_ROWS, limit: int | None = None,
+    budget: int = RECORD_BATCH_BYTES,
 ):
     queryset = config.get_queryset(model)
     if using is not None:
         queryset = queryset.using(using)
     serializer = AllRowsSerializer(carried, frozenset(excluded))
+    pages = Pages(queryset, rows)
+    ceiling = budget if limit is None else min(budget, limit)
     batch: list = []
-    for instance in queryset.order_by("pk").iterator(chunk_size=rows):
-        batch.append(instance)
-        if len(batch) >= rows:
-            yield from _serialized(serializer, batch, limit)
-            batch = []
+    size = 0
+    for chunk in pages:
+        serializer.prepare(chunk)
+        encoded = serializer.encoded(chunk)
+        pages.measured(sum(record_size(pieces) for pieces in encoded), len(chunk))
+        for instance, pieces in zip(chunk, encoded):
+            length = record_size(pieces)
+            if limit is not None and length + 2 > limit:
+                raise BackupError(
+                    f"{instance._meta.label_lower} {instance.pk!r} serializes to "
+                    f"{length + 2} bytes, above the {limit} byte limit for one row."
+                )
+            if batch and (size + length + len(batch) + 2 > ceiling or len(batch) >= rows):
+                yield framed_records(batch), len(batch)
+                batch, size = [], 0
+            batch.append(pieces)
+            size += length
     if batch:
-        yield from _serialized(serializer, batch, limit)
-
-
-def _serialized(serializer, batch: list, limit: int | None):
-    serializer.prepare(batch)
-    text = serializer.serialize(batch, use_natural_foreign_keys=False).encode("utf-8")
-    if limit is None or len(text) <= limit:
-        yield text, len(batch)
-        return
-    if len(batch) == 1:
-        instance = batch[0]
-        raise BackupError(
-            f"{instance._meta.label_lower} {instance.pk!r} serializes to {len(text)} bytes, "
-            f"above the {limit} byte limit for one row."
-        )
-    middle = len(batch) // 2
-    yield from _serialized(serializer, batch[:middle], limit)
-    yield from _serialized(serializer, batch[middle:], limit)
+        yield framed_records(batch), len(batch)
 
 
 def raise_sequences(connection, models) -> None:

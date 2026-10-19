@@ -4,7 +4,8 @@ import os
 
 import pytest
 
-from dbs.container import encode_copy, repair_copies, write_container, read_container
+from dbs.container import repair_copies, read_container
+from tests.format1 import encode_copy, write_container
 from dbs.container.blocks import DEFAULT_BLOCK_SIZE
 from dbs.container.format import (
     FLAG_ENCRYPTED,

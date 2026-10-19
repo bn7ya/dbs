@@ -1,27 +1,27 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
-from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.backups.models import PLAN_PATTERN_MAX_LENGTH, BackupPlan
 from dbs.manager.backups.repositories import BackupPlanRepository
 from dbs.manager.backups.services.actions import Action
 from dbs.manager.backups.services.backup_run_service import BackupRunService
 from dbs.manager.backups.services.job_queue import JobQueue
 from dbs.manager.backups.services.plan_runs import run_detail
+from dbs.manager.backups.timing import planned, within_reach, zone
 from dbs.manager.common.paths import absolute_path
 from dbs.manager.runner import get_runner
-from dbs.manager.servers.services import ServerService
 from dbs.manager.permissions import Capability, requires
 from dbs.models import AuditEvent
 
@@ -37,16 +37,19 @@ EDITABLE_FIELDS = (
     "keep",
     "keep_remote",
     "enabled",
+    "anchor_at",
+    "time_zone",
 )
-SCHEDULE_FIELDS = ("interval_minutes", "enabled")
+SCHEDULE_FIELDS = ("interval_minutes", "enabled", "anchor_at", "time_zone")
 READ_FIELDS = ("paths", "pattern")
 RETENTION_FIELDS = ("keep", "keep_remote")
 ENABLED_BY_DEFAULT = BackupPlan._meta.get_field("enabled").get_default()
+DEFAULT_TIME_ZONE = BackupPlan._meta.get_field("time_zone").get_default()
 DEFAULT_PATTERN = "*"
 
-NAME_TAKEN = "Another plan for this server already has this name."
+NAME_TAKEN = "Another plan for this application already has this name."
 SIMILAR_NAME_TAKEN = (
-    "Another plan for this server has a name that differs only in case or "
+    "Another plan for this application has a name that differs only in case or "
     "punctuation, so their backups would share file names on the server."
 )
 INVALID_INTERVAL = "Choose hourly, every 3, 6 or 12 hours, daily, weekly, or none."
@@ -56,6 +59,9 @@ ABSOLUTE_PATH_REQUIRED = (
 )
 PATHS_NOT_ALLOWED = "Only a plan that archives or collects from folders takes paths."
 ONE_FOLDER_REQUIRED = "Choose one folder to collect files from."
+INVALID_TIME_ZONE = "Choose a time zone by its name, such as Europe/Berlin."
+INVALID_MOMENT = "Choose a moment after now and within a year."
+MANUAL_PLAN = "This plan runs only when asked; give it an interval first."
 INVALID_PATTERN = "Use a file name pattern of 1 to 200 characters with no '/' in it, such as *.sql.gz."
 ACCOUNT_PASSWORD_REQUIRED = (
     "Enter your own password to choose what is read from the server."
@@ -65,12 +71,6 @@ RETENTION_PASSWORD_REQUIRED = (
 )
 
 Errors = dict[str, list[ErrorDetail]]
-
-
-def first_run(interval_minutes: int | None, enabled: bool) -> datetime | None:
-    if interval_minutes is None or not enabled:
-        return None
-    return timezone.now() + timedelta(minutes=interval_minutes)
 
 
 def _add(errors: Errors, field: str, message: str, code: str) -> None:
@@ -105,12 +105,12 @@ class BackupPlanService:
     def __init__(self, user: User | AnonymousUser | None) -> None:
         self.user: User | AnonymousUser | None = user
         self.plans = BackupPlanRepository()
-        self.servers = ServerService(user)
+        self.applications = ApplicationService(user)
         self.activity = ActivityService(user)
         self.jobs = JobQueue(user)
 
-    def list(self, server_id: UUID) -> QuerySet[BackupPlan]:
-        return self.plans.alive_for_server(server_id)
+    def list(self, application_id: UUID) -> QuerySet[BackupPlan]:
+        return self.plans.alive_for_application(application_id)
 
     def get(self, plan_id: UUID) -> BackupPlan:
         plan = self.plans.find(plan_id)
@@ -120,26 +120,31 @@ class BackupPlanService:
 
     @requires(Capability.PLANS_MANAGE)
     def create(
-        self, *, server: UUID, account_password: str = "", **data: Any
+        self, *, application: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
-        target = self.servers.get(server)
+        target = self.applications.get(application)
         data = self._validated(target.pk, data["kind"], data, plan=None)
         fields = {
             name: data[name] for name in ("kind", *EDITABLE_FIELDS) if name in data
         }
-        fields["next_run_at"] = first_run(
-            fields.get("interval_minutes"), fields.get("enabled", ENABLED_BY_DEFAULT)
+        fields |= planned(
+            fields.get("interval_minutes"),
+            fields.get("enabled", ENABLED_BY_DEFAULT),
+            fields.get("time_zone", DEFAULT_TIME_ZONE),
+            fields.get("anchor_at"),
         )
         guarded = fields["kind"] != BackupPlan.Kind.DBS
         _require_password(account_password, guarded)
         with self.activity.track(
-            Action.PLAN_CREATE, server=target, target=fields["name"]
+            Action.PLAN_CREATE, subject=target, target=fields["name"]
         ):
             if guarded:
                 AccountService(self.user).confirm_password(account_password)
             return self._saved(
                 lambda: self.plans.create(
-                    created_by=cast("User | None", self.user), server=target, **fields
+                    created_by=cast("User | None", self.user),
+                    application=target,
+                    **fields,
                 )
             )
 
@@ -148,16 +153,19 @@ class BackupPlanService:
         self, plan_id: UUID, account_password: str = "", **data: Any
     ) -> BackupPlan:
         plan = self.get(plan_id)
-        data = self._validated(plan.server_id, plan.kind, data, plan=plan)
+        data = self._validated(plan.application_id, plan.kind, data, plan=plan)
         changes = {
             name: data[name]
             for name in EDITABLE_FIELDS
             if name in data and getattr(plan, name) != data[name]
         }
         if any(name in changes for name in SCHEDULE_FIELDS):
-            changes["next_run_at"] = first_run(
+            kept = None if "interval_minutes" in changes else plan.anchor_at
+            changes |= planned(
                 changes.get("interval_minutes", plan.interval_minutes),
                 changes.get("enabled", plan.enabled),
+                changes.get("time_zone", plan.time_zone),
+                changes.get("anchor_at", kept),
             )
         changed = sorted(name for name in changes if name in EDITABLE_FIELDS)
         reads_elsewhere = any(name in changes for name in READ_FIELDS)
@@ -171,7 +179,7 @@ class BackupPlanService:
         )
         name = changes.get("name", plan.name)
         with self.activity.track(
-            Action.PLAN_UPDATE, server=plan.server, target=name
+            Action.PLAN_UPDATE, subject=plan.application, target=name
         ) as entry:
             entry.detail = {"fields": changed}
             if guarded:
@@ -187,16 +195,49 @@ class BackupPlanService:
         with transaction.atomic():
             self.plans.soft_delete(plan)
             self.activity.record(
-                Action.PLAN_DELETE, server=plan.server, target=plan.name
+                Action.PLAN_DELETE, subject=plan.application, target=plan.name
             )
+
+    @requires(Capability.PLANS_MANAGE)
+    def reschedule(self, plan_id: UUID, next_run_at: datetime) -> BackupPlan:
+        plan = self._scheduled(plan_id)
+        if not within_reach(next_run_at):
+            raise ValidationError(
+                {"next_run_at": [ErrorDetail(INVALID_MOMENT, code="invalid_moment")]}
+            )
+        timing = planned(plan.interval_minutes, plan.enabled, plan.time_zone, next_run_at)
+        with self.activity.track(
+            Action.PLAN_RESCHEDULE, subject=plan.application, target=plan.name
+        ) as entry:
+            entry.detail = {"next_run_at": next_run_at.isoformat()}
+            return self.plans.update(plan, **timing)
+
+    @requires(Capability.PLANS_MANAGE)
+    def pause(self, plan_id: UUID) -> BackupPlan:
+        plan = self._scheduled(plan_id)
+        with transaction.atomic():
+            self.activity.record(
+                Action.PLAN_PAUSE, subject=plan.application, target=plan.name
+            )
+            return self.plans.update(plan, enabled=False, next_run_at=None)
+
+    @requires(Capability.PLANS_MANAGE)
+    def resume(self, plan_id: UUID) -> BackupPlan:
+        plan = self._scheduled(plan_id)
+        timing = planned(plan.interval_minutes, True, plan.time_zone, plan.anchor_at)
+        with transaction.atomic():
+            self.activity.record(
+                Action.PLAN_RESUME, subject=plan.application, target=plan.name
+            )
+            return self.plans.update(plan, enabled=True, **timing)
 
     @requires(Capability.PLANS_RUN)
     def run(self, plan_id: UUID) -> AuditEvent:
         plan = self.get(plan_id)
-        server = self.servers.get(plan.server_id)
+        application = self.applications.get(plan.application_id)
         return self.jobs.queue_backup(
             Action.RUN,
-            server=server,
+            application=application,
             target=plan.name,
             detail=run_detail(plan),
             send=lambda job: get_runner().submit(
@@ -204,9 +245,17 @@ class BackupPlanService:
             ),
         )
 
+    def _scheduled(self, plan_id: UUID) -> BackupPlan:
+        plan = self.get(plan_id)
+        if plan.interval_minutes is None:
+            raise ValidationError(
+                {"interval_minutes": [ErrorDetail(MANUAL_PLAN, code="manual_plan")]}
+            )
+        return plan
+
     def _validated(
         self,
-        server_id: UUID,
+        application_id: UUID,
         kind: str,
         data: dict[str, Any],
         *,
@@ -215,10 +264,14 @@ class BackupPlanService:
         errors: Errors = {}
         excluding = None if plan is None else plan.pk
         if "name" in data:
-            self._check_name(server_id, data["name"], excluding, errors)
+            self._check_name(application_id, data["name"], excluding, errors)
         interval = data.get("interval_minutes")
         if interval is not None and interval not in INTERVALS:
             _add(errors, "interval_minutes", INVALID_INTERVAL, "invalid_interval")
+        if "time_zone" in data and zone(data["time_zone"]) is None:
+            _add(errors, "time_zone", INVALID_TIME_ZONE, "invalid_time_zone")
+        if data.get("anchor_at") is not None and not within_reach(data["anchor_at"]):
+            _add(errors, "anchor_at", INVALID_MOMENT, "invalid_moment")
         validated = dict(data)
         if kind == BackupPlan.Kind.DBS:
             if data.get("paths"):
@@ -250,13 +303,13 @@ class BackupPlanService:
         return validated
 
     def _check_name(
-        self, server_id: UUID, name: str, excluding: UUID | None, errors: Errors
+        self, application_id: UUID, name: str, excluding: UUID | None, errors: Errors
     ) -> None:
-        if self.plans.name_in_use(server_id, name, excluding=excluding):
+        if self.plans.name_in_use(application_id, name, excluding=excluding):
             _add(errors, "name", NAME_TAKEN, "name_taken")
             return
         slug = slugify(name)
-        others = self.plans.names_for_server(server_id, excluding=excluding)
+        others = self.plans.names_for_application(application_id, excluding=excluding)
         if slug and any(slugify(other) == slug for other in others):
             _add(errors, "name", SIMILAR_NAME_TAKEN, "name_taken")
 

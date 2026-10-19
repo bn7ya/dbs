@@ -13,15 +13,19 @@ from dbs.manager.accounts.services import (
     setup_service,
     sign_in_service,
 )
+from dbs.manager.applications.services import application_service, discovery_service
 from dbs.manager.backups.services import actions as backup_actions
 from dbs.manager.envfiles.services import env_file_service
 from dbs.manager.files.services import file_service
+from dbs.manager.redeploy import deploy as deploys
 from dbs.manager.redeploy import services as redeploy
+from dbs.manager.redeploy.catalogue import KINDS
 from dbs.manager.servers.services import (
-    discovery_service,
     host_key_confirmation_service,
     server_service,
 )
+from dbs.manager.console import service as console
+from dbs.manager.shell import service as shell
 
 ACTIVITY_UI = (
     Path(__file__).resolve().parents[3] / "manager-ui" / "src" / "app" / "features" / "activity"
@@ -31,6 +35,7 @@ ACTION_HOLDERS = (
     backup_actions.Action,
     file_service.Action,
     server_service.Action,
+    application_service.Action,
     host_key_confirmation_service.Action,
     account_management_service.Action,
     account_service.Action,
@@ -54,9 +59,16 @@ def recordable() -> set[str]:
         transfer.IMPORT,
         redeploy.RUN,
         redeploy.REVERT,
+        deploys.DEPLOY,
+        shell.OPEN,
+        console.RUN,
     }
     codes |= {f"redeploy.{step}" for step in redeploy.MOVE_STEPS}
     codes |= {f"{redeploy.REVERT}_{step}" for step in redeploy.REVERT_STEPS}
+    codes |= {
+        f"deploy.{step}"
+        for step in (*deploys.OPENING_STEPS, *KINDS, deploys.CLOSING_STEP)
+    }
     return codes
 
 

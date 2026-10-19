@@ -1,0 +1,94 @@
+<section class="terminal" [attr.aria-labelledby]="headingId">
+  <header class="terminal__header">
+    <h2 [id]="headingId">{{ 'terminal.title' | t }}</h2>
+    @if (whereLine(); as line) {
+      <p>{{ line.key | t: line.values }}</p>
+    }
+    <p class="text-secondary">{{ 'terminal.recorded' | t }}</p>
+    <p class="text-secondary">{{ 'terminal.limits' | t }}</p>
+  </header>
+
+  @if (whereError(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    <div>
+      <button matButton="outlined" type="button" (click)="retryWhere()">{{ 'actions.retry' | t }}</button>
+    </div>
+  }
+
+  @if (error(); as failure) {
+    <app-notice severity="danger" closable (closed)="dismissError()">{{ failure | errorText }}</app-notice>
+  }
+
+  @for (open of reattachable(); track open.id) {
+    <div class="terminal__still-open">
+      <app-notice severity="info">{{ 'terminal.stillOpen' | t }}</app-notice>
+      <div class="terminal__actions">
+        <button matButton="tonal" type="button" (click)="reattach(open)">{{ 'terminal.reattach' | t }}</button>
+        <button
+          matButton="outlined"
+          type="button"
+          [disabled]="discarding() === open.id"
+          [attr.aria-busy]="discarding() === open.id"
+          (click)="discard(open)"
+        >
+          @if (discarding() === open.id) {
+            <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+          }
+          {{ (discarding() === open.id ? 'terminal.discarding' : 'terminal.discard') | t }}
+        </button>
+      </div>
+    </div>
+  }
+
+  @if (endNotice(); as end) {
+    <app-notice [severity]="end.severity">
+      @if (end.line; as line) {
+        {{ line.key | t: line.values }}
+      } @else {
+        {{ end.error | errorText }}
+      }
+    </app-notice>
+  }
+
+  @if (reattached()) {
+    <app-notice severity="info">{{ 'terminal.reattached' | t }}</app-notice>
+  }
+
+  @if (skipped()) {
+    <app-notice severity="warning">{{ 'terminal.skipped' | t }}</app-notice>
+  }
+
+  <div class="terminal__actions">
+    @if (attached()) {
+      <app-status-tag severity="success" icon="fa-solid fa-terminal" [label]="'terminal.running' | t" />
+      <button matButton="outlined" type="button" [disabled]="closing()" [attr.aria-busy]="closing()" (click)="close()">
+        @if (closing()) {
+          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        }
+        {{ (closing() ? 'terminal.closing' : 'terminal.close') | t }}
+      </button>
+    } @else {
+      <button
+        matButton="filled"
+        type="button"
+        [disabled]="opening() || place() === null"
+        [attr.aria-busy]="opening()"
+        (click)="open()"
+      >
+        @if (opening()) {
+          <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+        }
+        {{ (opening() ? 'terminal.opening' : 'terminal.open') | t }}
+      </button>
+    }
+  </div>
+
+  <app-terminal-view
+    class="terminal__view"
+    [label]="viewLabel()"
+    [tooMuchOutput]="'terminal.view.tooMuchOutput' | t"
+    [interactive]="attached()"
+    (typed)="type($event)"
+    (resized)="resize($event)"
+  />
+</section>

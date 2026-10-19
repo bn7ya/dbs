@@ -54,14 +54,14 @@ describe('filesGuard', () => {
   });
 
   it('lets a signed-in user in', async () => {
-    const entering = enter('/servers/abc/files');
+    const entering = enter('/applications/abc/files');
     http.expectOne('/api/auth/me/').flush(IDENTITY);
 
     await expect(entering).resolves.toBe(true);
   });
 
   it('sends a signed-out visitor to sign in, with the way back to the folder they asked for', async () => {
-    const entering = enter('/servers/abc/files?path=%2Fsrv%2Fapp');
+    const entering = enter('/applications/abc/files?path=%2Fsrv%2Fapp');
     http
       .expectOne('/api/auth/me/')
       .flush({ error: { code: 'not_authenticated', message: 'Server prose' } }, { status: 403, statusText: 'Forbidden' });
@@ -70,7 +70,7 @@ describe('filesGuard', () => {
     const result = await entering;
     expect(result).toBeInstanceOf(UrlTree);
     expect(TestBed.inject(Router).serializeUrl(result as UrlTree)).toBe(
-      '/sign-in?next=%2Fservers%2Fabc%2Ffiles%3Fpath%3D%252Fsrv%252Fapp',
+      '/sign-in?next=%2Fapplications%2Fabc%2Ffiles%3Fpath%3D%252Fsrv%252Fapp',
     );
   });
 });

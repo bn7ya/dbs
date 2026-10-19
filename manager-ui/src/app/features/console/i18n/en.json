@@ -1,0 +1,43 @@
+{
+  "console": {
+    "title": "Console",
+    "subtitle": "Run django_dbs commands as your own account, with what your role allows. Jobs a command starts run on, and you can follow them here.",
+    "terminalOnly": "Commands that read files on the manager's computer, or ask for a secret other than your password, are not offered here. Run them in a terminal on that computer.",
+    "log": "Commands and their output",
+    "empty": "Nothing run yet. Type help, or a command such as server list.",
+    "command": "Command",
+    "hint": "Enter runs it. Up and Down go back through what you ran.",
+    "run": "Run",
+    "running": "Running…",
+    "help": "Help",
+    "clear": "Clear",
+    "state": {
+      "running": "Running",
+      "done": "Done, exit code {code}",
+      "failed": "Failed, exit code {code}",
+      "password": "Not run: needs your password",
+      "refused": "Not run"
+    },
+    "password": {
+      "title": "Run with your password",
+      "body": "This command acts for real, so it needs your password: {command}",
+      "submit": "Run it",
+      "again": "Enter your password"
+    },
+    "job": {
+      "label": "Activity {id}",
+      "starting": "Starting",
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "unreadable": "Status unavailable",
+      "follow": "Open the activity log"
+    }
+  },
+  "errors": {
+    "console_busy": "Your previous command is still running. Wait for it to finish.",
+    "unbalanced_quotes": "Close every quote in the command.",
+    "too_long": "Keep a command under 2,000 characters."
+  }
+}

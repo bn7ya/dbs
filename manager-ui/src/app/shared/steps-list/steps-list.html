@@ -1,0 +1,8 @@
+<ol class="steps-list" role="list">
+  @for (each of steps(); track each.key) {
+    <li class="steps-list__step">
+      <span>{{ each.label }}</span>
+      <app-status-tag [severity]="look(each.status).severity" [icon]="look(each.status).icon" [label]="each.statusLabel" />
+    </li>
+  }
+</ol>

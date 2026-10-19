@@ -2,7 +2,7 @@
 @use "@angular/cdk" as cdk;
 @use "tokens";
 
-@layer reset, base, material, app;
+@layer reset, base, vendor, material, app;
 
 @layer reset {
   @include meta.load-css("reset");
@@ -12,6 +12,10 @@
   @include cdk.a11y-visually-hidden();
   @include meta.load-css("base");
   @include meta.load-css("typography");
+}
+
+@layer vendor {
+  @include meta.load-css("@xterm/xterm/css/xterm");
 }
 
 @layer material {

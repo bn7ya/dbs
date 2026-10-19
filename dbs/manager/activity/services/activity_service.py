@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -15,15 +16,38 @@ from dbs.manager.activity import heartbeat, job_leases
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.middleware import current_ip
-from dbs.manager.servers.repositories import ServerRepository
 from dbs.models import AuditEvent, AuditStatus
 
 INVALID_STATUS = "Choose queued, running, succeeded or failed."
 STALE_AFTER_LIMIT = timedelta(hours=1)
+QUEUED_HERE: ContextVar[list[int] | None] = ContextVar(
+    "dbs_manager_queued_here", default=None
+)
 
 
-def subject_of(server: Any) -> str:
-    return "" if server is None else str(server.pk)
+@contextmanager
+def collecting_jobs() -> Iterator[list[int]]:
+    queued: list[int] = []
+    token = QUEUED_HERE.set(queued)
+    try:
+        yield queued
+    finally:
+        QUEUED_HERE.reset(token)
+
+
+def subject_of(subject: Any) -> str:
+    return "" if subject is None else str(subject.pk)
+
+
+def scope(server: Any = None, application: Any = None) -> list[str] | None:
+    from dbs.manager.applications.repositories import ApplicationRepository
+
+    if application is not None:
+        return [str(application)]
+    if server is None:
+        return None
+    applications = ApplicationRepository().all_including_deleted().filter(server_id=server)
+    return [str(server), *(str(pk) for pk in applications.values_list("pk", flat=True))]
 
 
 class Entry:
@@ -41,6 +65,7 @@ class ActivityService:
     def list(
         self,
         server: Any = None,
+        application: Any = None,
         action: str | None = None,
         status: str | None = None,
     ) -> QuerySet:
@@ -48,8 +73,9 @@ class ActivityService:
             raise ValidationError(
                 {"status": [ErrorDetail(INVALID_STATUS, code="invalid_status")]}
             )
-        subject = None if server is None else str(server)
-        return self.entries.filtered(subject=subject, action=action, status=status)
+        return self.entries.filtered(
+            subjects=scope(server, application), action=action, status=status
+        )
 
     def get(self, activity_id: int) -> AuditEvent:
         entry = self.entries.find_joined(activity_id)
@@ -57,16 +83,21 @@ class ActivityService:
             raise NotFound()
         return entry
 
-    def servers_for(self, entries: Any) -> dict[str, Any]:
-        return ServerRepository().by_subject(
-            {entry.subject for entry in entries if entry.subject}
-        )
+    def subjects_for(self, entries: Any) -> dict[str, Any]:
+        from dbs.manager.applications.repositories import ApplicationRepository
+        from dbs.manager.servers.repositories import ServerRepository
+
+        subjects = {entry.subject for entry in entries if entry.subject}
+        return {
+            **ServerRepository().by_subject(subjects),
+            **ApplicationRepository().by_subject(subjects),
+        }
 
     def record(
         self,
         action: str,
         *,
-        server: Any = None,
+        subject: Any = None,
         target: str = "",
         detail: dict[str, Any] | None = None,
         status: str = audit.SUCCEEDED,
@@ -80,12 +111,12 @@ class ActivityService:
             status=status,
             error_code=error_code,
             remote_addr=current_ip() or "",
-            subject=subject_of(server),
+            subject=subject_of(subject),
         )
 
     @contextmanager
     def track(
-        self, action: str, *, server: Any = None, target: str = ""
+        self, action: str, *, subject: Any = None, target: str = ""
     ) -> Iterator[Entry]:
         entry = Entry(
             audit.record(
@@ -94,7 +125,7 @@ class ActivityService:
                 target=target,
                 status=audit.RUNNING,
                 remote_addr=current_ip() or "",
-                subject=subject_of(server),
+                subject=subject_of(subject),
             )
         )
         try:
@@ -108,18 +139,22 @@ class ActivityService:
         self,
         action: str,
         *,
-        server: Any = None,
+        subject: Any = None,
         target: str = "",
         detail: dict[str, Any] | None = None,
     ) -> AuditEvent:
-        return audit.queue(
+        entry = audit.queue(
             action,
             actor=self.user,
             target=target,
             data=detail,
-            subject=subject_of(server),
+            subject=subject_of(subject),
             remote_addr=current_ip() or "",
         )
+        collected = QUEUED_HERE.get()
+        if collected is not None:
+            collected.append(entry.pk)
+        return entry
 
     def start(self, activity_id: int) -> AuditEvent | None:
         started = audit.start(activity_id)

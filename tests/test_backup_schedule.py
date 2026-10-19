@@ -1,5 +1,7 @@
 """The backup frequency set in the panel, and the scheduler that follows it."""
 
+import errno
+import os
 from datetime import timedelta
 from io import StringIO
 
@@ -7,7 +9,7 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
-from dbs import jobs, leases, schedule_runner
+from dbs import audit, jobs, leases, schedule_runner
 from dbs.forms import BackupScheduleForm
 from dbs.models import AuditEvent, BackupRecord, BackupSchedule
 from tests.testapp.models import Author
@@ -212,3 +214,33 @@ def test_a_project_still_setting_dbs_schedule_interval_keeps_its_loop(
     call_command("dbs_schedule", stdout=StringIO())
 
     assert loops == [12 * 3600]
+
+
+@pytest.mark.django_db
+def test_a_scheduled_backup_into_a_refused_folder_is_recorded_with_its_code(
+    tmp_path, monkeypatch
+):
+    def refuse(directory, stem):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), directory)
+
+    monkeypatch.setattr(schedule_runner, "reserve_backup_name", refuse)
+    plan = {
+        "output_dir": str(tmp_path),
+        "prefix": "nightly",
+        "keep": 5,
+        "database": "default",
+        "compress": True,
+        "verify": False,
+        "block_size": None,
+    }
+
+    with pytest.raises(PermissionError):
+        schedule_runner.run_cycle("refused-folder-pass", plan)
+
+    event = AuditEvent.objects.get(action=jobs.BACKUP)
+    assert (event.status, event.error_code, event.target_name) == (
+        audit.FAILED,
+        audit.PERMISSION_DENIED,
+        str(tmp_path),
+    )
+    assert list(tmp_path.iterdir()) == []

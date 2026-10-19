@@ -1,0 +1,17 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-block-size: calc(var(--app-space-10) * 4);
+  padding: var(--app-space-3);
+  background: var(--app-color-surface);
+  border: var(--app-border-width) solid var(--app-color-outline);
+  border-radius: var(--app-radius-md);
+}
+
+.terminal-view__frame {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text--1);
+  overflow: hidden;
+}

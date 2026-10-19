@@ -12,8 +12,12 @@ CONNECT = "dbs.manager.servers.services.connection_service.connect"
 
 def argv_of(script):
     body = shlex.split(script)[2]
-    lines = body.splitlines()
-    return shlex.split(lines[-1][len("exec ") :]), lines[:-1]
+    lines = body.split("\n")
+    start = next(
+        index for index, line in enumerate(lines) if line.startswith("exec ")
+    )
+    command = "\n".join(lines[start:])[len("exec ") :]
+    return shlex.split(command), lines[:start]
 
 
 class ScriptedSession(LocalSftpSession):
@@ -38,13 +42,32 @@ class ScriptedSession(LocalSftpSession):
         )
         return RemoteResult(*self._answer(argv, stdin_line))
 
-    def stream(self, script, sink, *, stdin_line=None, timeout=None, progress=None):
+    def stream(
+        self,
+        script,
+        sink,
+        *,
+        stdin_line=None,
+        timeout=None,
+        progress=None,
+        idle_timeout=None,
+        on_stderr_line=None,
+    ):
         argv, setup = argv_of(script)
         self.streams.append(
-            {"argv": argv, "setup": setup, "stdin": stdin_line, "timeout": timeout}
+            {
+                "argv": argv,
+                "setup": setup,
+                "stdin": stdin_line,
+                "timeout": timeout,
+                "idle": idle_timeout,
+            }
         )
         status, sent, stderr = self._answer(argv, stdin_line)
         sent = sent.encode() if isinstance(sent, str) else sent
+        if on_stderr_line is not None:
+            for line in stderr.splitlines():
+                on_stderr_line(line)
         sink.write(sent)
         if progress is not None:
             progress(len(sent))

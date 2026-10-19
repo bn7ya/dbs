@@ -1,0 +1,12 @@
+services:
+  web:
+    image: localhost/dbs-live-shop
+    pull_policy: never
+    network_mode: none
+    env_file: .env
+    volumes:
+      - ./backups:/var/backups/dbs
+      - data:/app/data
+
+volumes:
+  data: {}

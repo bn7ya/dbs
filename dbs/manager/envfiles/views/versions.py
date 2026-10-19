@@ -26,7 +26,7 @@ class EnvVersionListView(ListAPIView):
     def get_queryset(self) -> QuerySet[EnvVersion]:
         query = EnvFilterSerializer(data=self.request.query_params)
         query.is_valid(raise_exception=True)
-        return EnvFileService(self.request.user).list(query.validated_data["server"])
+        return EnvFileService(self.request.user).list(query.validated_data["application"])
 
 
 class EnvVersionDetailView(APIView):

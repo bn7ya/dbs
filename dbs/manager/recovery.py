@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService, sweep_stale_jobs
+from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.backups.locks import TakeLock
-from dbs.manager.servers.repositories import ServerRepository
 
 
 def recover() -> int:
@@ -18,6 +18,8 @@ def sweep() -> int:
 
 
 def release_abandoned_locks() -> int:
-    servers = ServerRepository().all_including_deleted().values_list("pk", flat=True)
+    applications = (
+        ApplicationRepository().all_including_deleted().values_list("pk", flat=True)
+    )
     unfinished = {str(entry) for entry in ActivityRepository().unfinished_ids()}
-    return len(TakeLock().release_abandoned(servers, unfinished))
+    return len(TakeLock().release_abandoned(applications, unfinished))

@@ -37,13 +37,13 @@ def host(monkeypatch, tmp_path):
     return found
 
 
-def plan_named(server, name):
-    return BackupPlan.objects.filter(server=server, name=name).first()
+def plan_named(application, name):
+    return BackupPlan.objects.filter(application=application, name=name).first()
 
 
 def updating(name, change):
-    def step(mcp, server):
-        plan = plan_named(server, name)
+    def step(mcp, application):
+        plan = plan_named(application, name)
         if plan is None:
             return None
         return mcp("update_plan", plan=str(plan.pk), **change(plan))
@@ -52,8 +52,8 @@ def updating(name, change):
 
 
 def running(name):
-    def step(mcp, server):
-        plan = plan_named(server, name)
+    def step(mcp, application):
+        plan = plan_named(application, name)
         if plan is None:
             return None
         return mcp("run_plan", plan=str(plan.pk))
@@ -62,14 +62,16 @@ def running(name):
 
 
 def adding(name, **fields):
-    def step(mcp, server):
-        return mcp("add_plan", server=server.name, name=name, kind="dbs", **fields)
+    def step(mcp, application):
+        return mcp(
+            "add_plan", application=application.name, name=name, kind="dbs", **fields
+        )
 
     return step
 
 
-def taking(mcp, server):
-    return mcp("take_backups", servers=[server.name])
+def taking(mcp, application):
+    return mcp("take_backups", applications=[application.name])
 
 
 STEPS = {
@@ -98,9 +100,9 @@ STEPS = {
 }
 
 
-def seeded(admin, server):
+def seeded(admin, application):
     plan = BackupPlanService(admin).create(
-        server=server.pk,
+        application=application.pk,
         name="nightly",
         kind="dbs",
         keep=SEEDED,
@@ -110,7 +112,7 @@ def seeded(admin, server):
     for ordinal in range(SEEDED):
         BackupFileRepository().create(
             created_by=admin,
-            server=server,
+            application=application,
             plan=plan,
             kind=BackupFile.Kind.DBS,
             name=f"seed-{ordinal}.dbs",
@@ -122,13 +124,15 @@ def seeded(admin, server):
     return plan
 
 
-def snapshot(server):
+def snapshot(application):
     files = Counter(
-        BackupFile.objects.filter(server=server).values_list("plan__name", flat=True)
+        BackupFile.objects.filter(application=application).values_list(
+            "plan__name", flat=True
+        )
     )
     plans = {
         plan.name: (plan.keep, plan.keep_remote, files[plan.name])
-        for plan in BackupPlan.objects.filter(server=server)
+        for plan in BackupPlan.objects.filter(application=application)
     }
     return frozenset({**plans, ONE_OFF: (0, 0, files[None])}.items())
 
@@ -143,23 +147,23 @@ def keeps_at_least(before, after):
 
 @pytest.mark.django_db
 def test_no_sequence_of_plan_tools_leaves_fewer_backups(
-    mcp, admin, host, make_server, django_capture_on_commit_callbacks
+    mcp, admin, host, make_application, django_capture_on_commit_callbacks
 ):
-    server = make_server(name="shop")
-    seeded(admin, server)
+    application = make_application(name="shop")
+    seeded(admin, application)
     explored = set()
     refusals = Counter()
 
     def explore(path, remaining):
-        state = snapshot(server)
+        state = snapshot(application)
         if remaining == 0 or (state, remaining) in explored:
             return
         explored.add((state, remaining))
         for name, step in STEPS.items():
             with transaction.atomic():
                 with django_capture_on_commit_callbacks(execute=True):
-                    called = step(mcp, server)
-                after = snapshot(server)
+                    called = step(mcp, application)
+                after = snapshot(application)
                 assert keeps_at_least(state, after), [*path, name]
                 if called is not None and not called.ok:
                     refusals[called.text] += 1
@@ -176,9 +180,11 @@ def test_no_sequence_of_plan_tools_leaves_fewer_backups(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_only_the_password_lets_a_plan_keep_fewer(mcp, api, admin, host, make_server):
-    server = make_server(name="shop")
-    plan = seeded(admin, server)
+def test_only_the_password_lets_a_plan_keep_fewer(
+    mcp, api, admin, host, make_application
+):
+    application = make_application(name="shop")
+    plan = seeded(admin, application)
 
     refused = mcp("update_plan", plan=str(plan.pk), keep=1)
     mcp("run_plan", plan=str(plan.pk))

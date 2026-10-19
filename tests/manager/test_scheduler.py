@@ -1,3 +1,4 @@
+import sys
 import time
 from datetime import timedelta
 
@@ -108,3 +109,38 @@ def test_a_failing_tick_does_not_stop_the_thread(monkeypatch, caplog):
 
     assert Scheduler().safe_tick() == []
     assert "boom" in caplog.text
+
+
+def test_every_tick_sweeps_this_processs_terminals_with_or_without_the_lease(
+    monkeypatch,
+):
+    swept = []
+    monkeypatch.setattr(scheduler, "tick", lambda: [])
+    monkeypatch.setattr(scheduler, "close_old_connections", lambda: None)
+    monkeypatch.setattr(scheduler, "LOCAL_TASKS", ("tests.manager.test_scheduler.sweep",))
+    monkeypatch.setattr(sys.modules[__name__], "sweep", lambda: swept.append(1))
+
+    Scheduler().safe_tick()
+
+    assert swept == [1]
+
+
+def test_a_failing_sweep_is_logged_and_the_scheduler_goes_on(monkeypatch, caplog):
+    def failing():
+        raise RuntimeError("sweep broke")
+
+    monkeypatch.setattr(scheduler, "tick", lambda: ["dispatch_due_plans"])
+    monkeypatch.setattr(scheduler, "close_old_connections", lambda: None)
+    monkeypatch.setattr(scheduler, "LOCAL_TASKS", ("tests.manager.test_scheduler.sweep",))
+    monkeypatch.setattr(sys.modules[__name__], "sweep", failing)
+
+    assert Scheduler().safe_tick() == ["dispatch_due_plans"]
+    assert "sweep broke" in caplog.text
+
+
+def test_terminals_are_swept_by_the_process_that_holds_them():
+    assert scheduler.LOCAL_TASKS == ("dbs.manager.shell.service.sweep_terminals",)
+
+
+def sweep():
+    return None

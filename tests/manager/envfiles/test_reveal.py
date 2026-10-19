@@ -15,9 +15,9 @@ def reveal(api, version_id, password: str = PASSWORD):
 
 @pytest.mark.django_db
 def test_the_right_password_shows_the_content_and_is_recorded(
-    admin, api, server, env_file, pull, logged
+    admin, api, application, env_file, pull, logged
 ):
-    version = pull(server)["version"]
+    version = pull(application)["version"]
 
     response = reveal(api, version["id"])
 
@@ -27,13 +27,13 @@ def test_the_right_password_shows_the_content_and_is_recorded(
     [entry] = logged("env.reveal")
     assert (
         entry.status,
-        entry.server,
+        entry.application,
         entry.target,
         entry.data,
         entry.actor,
     ) == (
         audit.SUCCEEDED,
-        server,
+        application,
         str(env_file),
         {"version": version["id"]},
         admin,
@@ -42,9 +42,9 @@ def test_the_right_password_shows_the_content_and_is_recorded(
 
 @pytest.mark.django_db
 def test_a_wrong_password_shows_nothing_and_is_recorded_as_failed(
-    api, server, pull, logged
+    api, application, pull, logged
 ):
-    version = pull(server)["version"]
+    version = pull(application)["version"]
 
     response = reveal(api, version["id"], "not-my-password")
 
@@ -60,8 +60,10 @@ def test_a_wrong_password_shows_nothing_and_is_recorded_as_failed(
 
 
 @pytest.mark.django_db
-def test_a_missing_password_is_a_form_error_and_not_recorded(api, server, pull, logged):
-    version = pull(server)["version"]
+def test_a_missing_password_is_a_form_error_and_not_recorded(
+    api, application, pull, logged
+):
+    version = pull(application)["version"]
 
     response = api.post(f"{LIST}{version['id']}/reveal/", {})
 
@@ -81,9 +83,9 @@ def test_an_unknown_version_is_not_found_whichever_password(api):
 
 @pytest.mark.django_db
 def test_bytes_that_are_not_utf8_show_as_replacement_characters(
-    api, server, env_file, pull
+    api, application, env_file, pull
 ):
     env_file.write_bytes(b"A=\xff\xfe\n")
-    version = pull(server)["version"]
+    version = pull(application)["version"]
 
     assert reveal(api, version["id"]).json() == {"content": "A=��\n"}

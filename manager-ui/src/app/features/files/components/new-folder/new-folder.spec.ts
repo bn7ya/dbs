@@ -11,7 +11,7 @@ import { Toaster } from '@shared/toaster/toaster';
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
 import { FilesStore } from '../../state/files.store';
-import { FOLDER, ROOT, SERVER_ID } from '../../testing/files.fixtures';
+import { FOLDER, ROOT, APPLICATION_ID } from '../../testing/files.fixtures';
 import { NewFolderDialog } from './new-folder';
 
 describe('NewFolderDialog', () => {
@@ -20,7 +20,7 @@ describe('NewFolderDialog', () => {
   let fixture: ComponentFixture<NewFolderDialog>;
   let dialog: NewFolderDialog;
 
-  const folders = `/api/files/${SERVER_ID}/folders/`;
+  const folders = `/api/files/${APPLICATION_ID}/folders/`;
 
   const rendered = (): HTMLElement => {
     fixture.detectChanges();
@@ -43,7 +43,7 @@ describe('NewFolderDialog', () => {
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });
-    TestBed.inject(FilesStore).server.set(SERVER_ID);
+    TestBed.inject(FilesStore).application.set(APPLICATION_ID);
     vi.spyOn(TestBed.inject(Toaster), 'add').mockReturnValue(undefined);
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(NewFolderDialog);

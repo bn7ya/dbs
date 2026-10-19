@@ -2,10 +2,24 @@ export interface ServerRecord {
   id: string;
   name: string;
   host_key_fingerprint: string;
+  last_check_status: string;
+}
+
+export interface ApplicationRecord {
+  id: string;
+  name: string;
+  server: { id: string; name: string };
+  kind: string;
+  engine: string;
+  compose_service: string;
   project_dir: string;
   python_path: string;
   remote_backup_dir: string;
+  file_roots: string[];
+  env_path: string;
+  has_backup_passphrase: boolean;
   last_check_status: string;
+  deploy_steps: unknown[];
 }
 
 export interface Page<T> {
@@ -27,6 +41,9 @@ export interface JobStarted {
 export interface PlanRecord {
   id: string;
   name: string;
+  enabled: boolean;
+  time_zone: string;
+  next_run_at: string | null;
 }
 
 export interface ActivityRecord {
@@ -36,4 +53,5 @@ export interface ActivityRecord {
   target: string;
   error_code: string;
   server_name: string | null;
+  application_name: string | null;
 }

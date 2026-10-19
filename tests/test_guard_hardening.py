@@ -194,7 +194,7 @@ def test_a_malformed_notification_address_is_reported(panel):
 def test_a_lockout_stops_requests_outside_the_admin_too(panel, root):
     Lockout.objects.create(user=root, reason="testing")
 
-    response = panel.get("/dbs/backup/")
+    response = panel.get("/elsewhere/")
 
     assert response.status_code == 302
     assert "login" in response["Location"]

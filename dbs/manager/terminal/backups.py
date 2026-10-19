@@ -11,7 +11,6 @@ from dbs.manager.backups.serializers import (
     RestoreSerializer,
 )
 from dbs.manager.backups.services import BackupService
-from dbs.manager.servers.services import ServerService
 from dbs.manager.adapters import backups, jobs, references
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.adapters.forms import validated
@@ -20,7 +19,7 @@ from dbs.manager.terminal.session import TerminalSession
 
 LIST_COLUMNS = (
     ("NAME", "name"),
-    ("SERVER", "server_name"),
+    ("APPLICATION", "application_name"),
     ("KIND", "kind"),
     ("SIZE", "size"),
     ("VALIDATION", "validation"),
@@ -28,7 +27,7 @@ LIST_COLUMNS = (
     ("ID", "id"),
 )
 TAKE_COLUMNS = (
-    ("SERVER", "server"),
+    ("APPLICATION", "application"),
     ("RESULT", "result"),
     ("BACKUP", "backup"),
     ("SIZE", "size"),
@@ -37,28 +36,30 @@ TAKE_COLUMNS = (
 
 def list_backups(session: TerminalSession) -> int:
     service = BackupService(session.user)
-    if session.args.server:
-        chosen = [references.server(session.user, session.args.server)]
-    else:
-        chosen = list(ServerService(session.user).list().order_by("name"))
-    rows = [
-        row
-        for server in chosen
-        for row in BackupFileSerializer(service.list(server.pk), many=True).data
-    ]
+    application = (
+        references.application(session.user, session.args.application)
+        if session.args.application
+        else None
+    )
+    found = service.list(None if application is None else application.pk)
+    rows = BackupFileSerializer(found, many=True).data
     session.out.table(rows, LIST_COLUMNS, empty="No backups yet.")
     return 0
 
 
 def take(session: TerminalSession) -> int:
-    chosen = references.servers(session.user, session.args.servers, session.args.all)
+    chosen = references.applications(
+        session.user, session.args.applications, session.args.all
+    )
     with reported(session):
         taken = backups.take(
-            session.user, chosen, starting=lambda server: _starting(session, server)
+            session.user,
+            chosen,
+            starting=lambda application: _starting(session, application),
         )
     rows = [
         {
-            "server": item.server,
+            "application": item.application,
             "result": item.result,
             "backup": item.backup,
             "size": item.size,
@@ -71,9 +72,9 @@ def take(session: TerminalSession) -> int:
     return 0 if all(item.ok for item in taken) else 1
 
 
-def _starting(session: TerminalSession, server: Any) -> None:
+def _starting(session: TerminalSession, application: Any) -> None:
     if not session.out.as_json:
-        print(f"Backing up {server.name}...", flush=True)
+        session.out.line(f"Backing up {application.name}...")
 
 
 def verify(session: TerminalSession) -> int:
@@ -87,12 +88,16 @@ def restore(session: TerminalSession) -> int:
     file_id = references.identifier(args.backup, "backup")
     service = BackupService(session.user)
     file = service.get(file_id)
-    target = references.server(session.user, args.to) if args.to else file.server
+    target = (
+        references.application(session.user, args.to) if args.to else file.application
+    )
     body: dict[str, Any] = {"mode": args.mode, "rehearse": not args.real}
-    if target.pk != file.server_id:
-        body["target_server"] = target.pk
+    if target.pk != file.application_id:
+        body["target_application"] = target.pk
     if args.real:
-        body["server_name"] = args.confirm_name or _typed_name(session, target.name)
+        body["application_name"] = args.confirm_name or _typed_name(
+            session, target.name
+        )
         body["account_password"] = session.password()
     with reported(session):
         job = service.restore(file_id, **validated(RestoreSerializer, body))
@@ -117,11 +122,12 @@ def download(session: TerminalSession) -> int:
 
 
 def upload(session: TerminalSession) -> int:
-    server = references.server(session.user, session.args.server)
+    application = references.application(session.user, session.args.application)
     local = local_file(session.args.file)
-    stored = BackupService(session.user).upload(server.pk, local)
+    stored = BackupService(session.user).upload(application.pk, local)
     session.out.say(
-        f"Kept {stored.name} for {server.name}.", BackupFileSerializer(stored).data
+        f"Kept {stored.name} for {application.name}.",
+        BackupFileSerializer(stored).data,
     )
     return 0
 
@@ -156,6 +162,6 @@ def local_file(path: str) -> UploadedFile:
 
 def _typed_name(session: TerminalSession, name: str) -> str:
     session.confirm(
-        f"Type the target server's name ({name}) to go ahead:", expected=name
+        f"Type the target application's name ({name}) to go ahead:", expected=name
     )
     return name

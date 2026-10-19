@@ -13,8 +13,8 @@ VERSION = uuid4()
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
-        ("get", LIST, {"server": str(uuid4())}),
-        ("post", f"{LIST}pull/", {"server": str(uuid4())}),
+        ("get", LIST, {"application": str(uuid4())}),
+        ("post", f"{LIST}pull/", {"application": str(uuid4())}),
         ("get", f"{LIST}{VERSION}/", None),
         ("get", f"{LIST}{VERSION}/compare/", {"to": str(uuid4())}),
         ("post", f"{LIST}{VERSION}/reveal/", {"password": "x"}),

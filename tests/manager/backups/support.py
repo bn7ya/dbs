@@ -26,6 +26,7 @@ from dbs.manager.servers.gateways import (
     StreamedBackup,
 )
 from dbs.naming import backup_filename, is_backup_name, parse_backup_moment
+from dbs.tee import partial_name
 from tests.manager.servers.support import BACKUP_DIR, dbs_backup
 
 SERVER_FILES = {
@@ -87,6 +88,9 @@ class BackupHost:
         breaks: bool = False,
         sent: bytes | None = None,
         reported: dict | None = None,
+        still_writing: int = 0,
+        never_finishes: bool = False,
+        discards: bool = False,
     ):
         if root is None:
             self.scratch = tempfile.TemporaryDirectory(prefix="backup-host-")
@@ -95,6 +99,12 @@ class BackupHost:
         self.breaks = breaks
         self.sent = sent
         self.reported = reported or {}
+        self.still_writing = still_writing
+        self.never_finishes = never_finishes
+        self.discards = discards
+        self.writing: tuple[Path, Path, bytes] | None = None
+        self.listings = 0
+        self.offsets: list[int] = []
         self.pulls: list[str] = []
         self.removed: list[str] = []
         self.digests: list[str] = []
@@ -136,18 +146,45 @@ class BackupHost:
         ]
         return sorted(found, key=lambda b: (parse_backup_moment(b.name), b.name))
 
+    def folder_files(self, profile: DbsProfile, folder: str) -> list[ServerBackup]:
+        self.listings += 1
+        if (
+            self.writing is not None
+            and not self.never_finishes
+            and self.listings > self.still_writing
+        ):
+            partial, final, content = self.writing
+            partial.unlink()
+            if not self.discards:
+                final.write_bytes(content)
+            self.writing = None
+        directory = self.on_server(folder)
+        return [
+            ServerBackup(
+                entry.name,
+                posixpath.join(folder, entry.name),
+                entry.stat().st_size,
+                datetime.fromtimestamp(int(entry.stat().st_mtime), dt_timezone.utc),
+            )
+            for entry in os.scandir(directory)
+            if entry.is_file()
+        ]
+
     def backup_sha256(self, profile: DbsProfile, path: str) -> str:
         self.digests.append(path)
         return hashlib.sha256(self.on_server(path).read_bytes()).hexdigest()
 
-    def pull_backup(self, profile: DbsProfile, path: str, sink, progress=None) -> None:
+    def pull_backup(
+        self, profile: DbsProfile, path: str, sink, progress=None, *, offset: int = 0
+    ) -> None:
         self.pulls.append(path)
+        self.offsets.append(offset)
         if not self.on_server(path).is_file():
             raise RemoteNotFound()
-        data = self.on_server(path).read_bytes()
+        data = self.on_server(path).read_bytes()[offset:]
         sink.write(data)
         if progress is not None:
-            progress(len(data))
+            progress(offset + len(data))
 
     def stream_dbs_backup(
         self,
@@ -158,6 +195,8 @@ class BackupHost:
         folder: str,
         sink,
         progress=None,
+        progress_seconds: int = 0,
+        on_started=None,
     ) -> StreamedBackup:
         self.takes.append(Take(profile, passphrase, prefix, folder))
         if self.failure is not None:
@@ -170,8 +209,16 @@ class BackupHost:
             for ordinal in range(1, 1000)
             if not (directory / backup_filename(prefix, ordinal=ordinal)).exists()
         )
-        (directory / name).write_bytes(content)
+        partial = partial_name(name)
+        if progress_seconds and on_started is not None:
+            on_started({"name": name, "partial": partial})
         sent = self.sent if self.sent is not None else content
+        if self.breaks and (self.still_writing or self.never_finishes or self.discards):
+            (directory / partial).write_bytes(content[: len(content) // 2])
+            self.writing = (directory / partial, directory / name, content)
+            sink.write(sent[: len(sent) // 2])
+            raise StreamBroken(output="The connection was lost.")
+        (directory / name).write_bytes(content)
         if self.breaks:
             sink.write(sent[: len(sent) // 2])
             raise StreamBroken(output="The connection was lost.")

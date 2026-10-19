@@ -3,9 +3,10 @@ import { HttpTestingController, provideHttpClientTesting, type TestRequest } fro
 import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
+import type { ServerSummary } from '../data/servers.types';
 import { HOST_KEY_CONFIRMATION, SERVER, SUMMARY, pageOf } from '../testing/servers.fixtures';
 import { ServersStore } from './servers.store';
 
@@ -250,48 +251,94 @@ describe('ServersStore', () => {
     });
   });
 
-  describe('the backup passphrase', () => {
-    it('holds the passphrase while shown and drops it on hide', async () => {
+  describe('the public key', () => {
+    it('reads the key the manager signs in with, and forgets it on hide', async () => {
       await showServer();
 
-      const revealing = store.revealPassphrase('secret');
-      const request = http.expectOne(`${DETAIL}passphrase/`);
-      expect(request.request.body).toEqual({ password: 'secret' });
-      request.flush({ passphrase: 'correct horse battery staple' });
+      const reading = store.readPublicKey();
+      expect(store.readingKey()).toBe(true);
+      http.expectOne(`${DETAIL}public-key/`).flush({ public_key: 'ssh-ed25519 AAAA dbs' });
 
-      await expect(revealing).resolves.toBe(true);
-      expect(store.passphrase()).toBe('correct horse battery staple');
+      await expect(reading).resolves.toBe(true);
+      expect(store.publicKey()).toBe('ssh-ed25519 AAAA dbs');
 
-      store.hidePassphrase();
-      expect(store.passphrase()).toBeNull();
+      store.hidePublicKey();
+      expect(store.publicKey()).toBeNull();
     });
 
-    it('drops it when another server is shown', async () => {
+    it('keeps why a password server has no key', async () => {
       await showServer();
-      const revealing = store.revealPassphrase('secret');
-      http.expectOne(`${DETAIL}passphrase/`).flush({ passphrase: 'correct horse battery staple' });
-      await revealing;
 
-      store.select('another');
+      const reading = store.readPublicKey();
+      http
+        .expectOne(`${DETAIL}public-key/`)
+        .flush({ error: { code: 'no_private_key', message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' });
+
+      await expect(reading).resolves.toBe(false);
+      expect(store.keyError()?.code).toBe('no_private_key');
+      expect(store.publicKey()).toBeNull();
+    });
+  });
+
+  describe('another record of the same machine', () => {
+    const twinsOf = async (others: readonly ServerSummary[]): Promise<void> => {
+      store.watchTwins(true);
+      store.select(SERVER.id);
       TestBed.tick();
-      http.expectOne('/api/servers/another/').flush({ ...SERVER, id: 'another' });
+      http.expectOne(DETAIL).flush(SERVER);
+      const search = await vi.waitFor(() => {
+        TestBed.tick();
+        return listRequest();
+      });
+      expect(search.request.params.get('search')).toBe(SERVER.host);
+      search.flush(pageOf(others));
+    };
+
+    it('reads each server at the same address and user, and keeps the ones with the same host key', async () => {
+      const same: ServerSummary = { ...SUMMARY, id: 'same', name: 'Web again' };
+      const otherKey: ServerSummary = { ...SUMMARY, id: 'other-key', name: 'Rebuilt web' };
+      const otherUser: ServerSummary = { ...SUMMARY, id: 'other-user', username: 'root' };
+      await twinsOf([SUMMARY, same, otherKey, otherUser]);
+
+      (await vi.waitFor(() => http.expectOne('/api/servers/same/'))).flush({ ...SERVER, id: 'same', name: 'Web again' });
+      http.expectOne('/api/servers/other-key/').flush({ ...SERVER, id: 'other-key', host_key: 'web-1 ssh-ed25519 BBBB' });
       await settle();
 
-      expect(store.passphrase()).toBeNull();
+      expect(store.twins().map((twin) => twin.id)).toEqual(['same']);
     });
 
-    it('keeps a wrong password as an error and shows nothing', async () => {
-      await showServer();
+    it('reads no server when none shares the address', async () => {
+      await twinsOf([SUMMARY, { ...SUMMARY, id: 'elsewhere', host: 'web-10.example.com' }]);
+      await settle();
 
-      const revealing = store.revealPassphrase('wrong');
-      http.expectOne(`${DETAIL}passphrase/`).flush(
-        { error: { code: 'invalid_password', message: 'Server prose' } },
-        { status: 400, statusText: 'Bad Request' },
-      );
+      expect(store.twins()).toEqual([]);
+    });
 
-      await expect(revealing).resolves.toBe(false);
-      expect(store.revealError()?.code).toBe('invalid_password');
-      expect(store.passphrase()).toBeNull();
+    it('merges into the other record with the password', async () => {
+      await twinsOf([]);
+      await settle();
+
+      const merging = store.merge('same', 'hunter2');
+      expect(store.merging()).toBe(true);
+      const request = http.expectOne(`${DETAIL}merge/`);
+      expect(request.request.body).toEqual({ into: 'same', account_password: 'hunter2' });
+      request.flush({ ...SERVER, id: 'same' });
+
+      await expect(merging).resolves.toBe(true);
+      expect(store.merging()).toBe(false);
+    });
+
+    it('keeps why a merge was refused', async () => {
+      await twinsOf([]);
+      await settle();
+
+      const merging = store.merge('same', 'hunter2');
+      http
+        .expectOne(`${DETAIL}merge/`)
+        .flush({ error: { code: 'servers_differ', message: 'Server prose' } }, { status: 400, statusText: 'Bad Request' });
+
+      await expect(merging).resolves.toBe(false);
+      expect(store.mergeError()?.code).toBe('servers_differ');
     });
   });
 

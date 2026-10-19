@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 
 class EnvFilterSerializer(serializers.Serializer):
-    server = serializers.UUIDField()
+    application = serializers.UUIDField()
 
 
 class EnvCompareQuerySerializer(serializers.Serializer):
@@ -12,7 +12,7 @@ class EnvCompareQuerySerializer(serializers.Serializer):
 
 
 class EnvPullSerializer(serializers.Serializer):
-    server = serializers.UUIDField()
+    application = serializers.UUIDField()
 
 
 class EnvPasswordSerializer(serializers.Serializer):

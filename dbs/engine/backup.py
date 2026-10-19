@@ -27,7 +27,7 @@ from ..files import SkippedFile, list_instance_files, list_root_files, read_chun
 from ..introspect import _label
 from ..io import create_new_file
 from ..registry import backup_registry
-from ..serialize import serialize_batches
+from ..serialize import Pages, serialize_batches
 from . import frames
 from .inputs import is_path, opened, stream_source
 from .pipeline import decoding, encoding
@@ -35,6 +35,10 @@ from .pipeline import decoding, encoding
 logger = logging.getLogger("dbs")
 
 NAMED_MISSING_FILES = 20
+
+LISTED_ROWS = 2000
+
+SNAPSHOT_VENDORS = ("postgresql", "mysql")
 
 
 @dataclass
@@ -277,7 +281,7 @@ def _stream_backup(
 
 def _produce(emit, selection, *, using: str, skipped: list, allow_missing_files: bool) -> dict:
     connection = connections[using]
-    pin_snapshot = connection.vendor == "postgresql" and not connection.in_atomic_block
+    pin_snapshot = connection.vendor in SNAPSHOT_VENDORS and not connection.in_atomic_block
     with transaction.atomic(using=using):
         if pin_snapshot:
             read_from_one_snapshot(connection)
@@ -330,8 +334,10 @@ def _listed_files(selection, using: str, skipped: list) -> list:
     for model, config in selection:
         file_field_types = introspect.file_fields(model, config)
         if file_field_types:
-            for instance in config.get_queryset(model).using(using).iterator():
-                sources.extend(list_instance_files(instance, file_field_types, skipped))
+            queryset = config.get_queryset(model).using(using).only(*file_field_types)
+            for chunk in Pages(queryset, LISTED_ROWS, adaptive=False):
+                for instance in chunk:
+                    sources.extend(list_instance_files(instance, file_field_types, skipped))
         for root in config.file_roots or []:
             if root not in seen_roots:
                 seen_roots.add(root)
@@ -371,10 +377,11 @@ def _emit_records(emit, selection, using: str) -> tuple[list, int]:
     for model, config in selection:
         excluded = introspect.excluded_fields(model, config)
         count = 0
-        for body, rows in serialize_batches(
+        for pieces, rows in serialize_batches(
             model, config, excluded, carried, using=using, limit=frames.MAX_FRAME_BYTES
         ):
-            emit(frames.frame(frames.RECORDS, body))
+            for piece in frames.frame_parts(frames.RECORDS, pieces):
+                emit(piece)
             count += rows
         stats_models.append({"model": _label(model), "count": count})
         total += count
@@ -401,6 +408,8 @@ def _missing_files_message(skipped: list[str]) -> str:
 def read_from_one_snapshot(connection) -> None:
     with connection.cursor() as cursor:
         cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        if connection.vendor == "mysql":
+            cursor.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
 
 
 def migration_state(connection) -> dict[str, str]:

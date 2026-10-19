@@ -21,6 +21,23 @@ Every setting is optional; DBS works with none of them set.
 | `DBS_SCHEDULE_INTERVAL` | Seeds the panel's first schedule; default for `dbs schedule` flags (default `24h`) |
 | `DBS_SCHEDULE_KEEP` | Seeds the panel's first schedule; default local retention, 1 to 5 (default 5) |
 
+## Panel jobs
+
+Panel backups, panel restores and scheduled backups run in a child process,
+`python -m dbs.job_process`, that reads its spec and passphrase from standard input.
+
+| Setting | Purpose |
+|---|---|
+| `DBS_JOB_PROCESS` | `False` runs jobs in a thread of the web process, with no time or memory limit. Default `True` |
+| `DBS_JOB_TIME_LIMIT` | How long a job may run before it is stopped and fails with `time_limit` (default `"6h"`) |
+| `DBS_JOB_MEMORY_LIMIT` | How much memory a job may use before it fails with `memory_limit`, as `512M` or `2G`; `0` for none (default `"2G"`) |
+| `DBS_JOB_NICE` | How much the child lowers its priority (default 10) |
+| `DBS_JOB_PYTHON` | The interpreter that runs the child, when the project's own is not the one DBS finds, as under uWSGI or mod_wsgi |
+| `DBS_JOB_BOOTSTRAP` | A dotted path to a callable that sets Django up in the child instead of `django.setup`, such as `configurations.setup` |
+
+A child that dies fails its job as `killed` and its leases are freed. `dbs upgrade` starts
+the interpreter and checks it can load the project; `dbs health` names it and the limits.
+
 ## Encryption
 
 | Setting | Purpose |
@@ -60,5 +77,7 @@ reports them; delete them. The DBS manager pulls off-site copies.
 The manager is not configured through Django settings. It reads environment variables:
 `DBS_MANAGER_HOME` (the data folder), `DBS_MANAGER_DATABASE_URL` (PostgreSQL or MySQL
 instead of SQLite), `DBS_MANAGER_KEY_STORE` (`keychain` or `file`, where the sealing key
-lives), `DBS_MANAGER_HOST` (the name browsed to behind a proxy) and
-`DBS_MANAGER_TRUSTED_PROXY` (the proxy ranges `--trusted-proxy` sets).
+lives), `DBS_MANAGER_HOST` (the name browsed to behind a proxy),
+`DBS_MANAGER_TRUSTED_PROXY` (the proxy ranges `--trusted-proxy` sets) and
+`DBS_MANAGER_TERMINAL` (`admins`, `master` or `off`: who may open a terminal, as
+`--terminal` sets it).

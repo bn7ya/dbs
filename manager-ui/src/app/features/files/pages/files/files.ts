@@ -7,9 +7,7 @@ import {
   computed,
   effect,
   inject,
-  signal,
   viewChild,
-  type Signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -28,6 +26,7 @@ import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { Can } from '@core/auth/directives/can';
+import { routeParam } from '@core/routing/route-param';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { Breadcrumb } from '@shared/breadcrumb/breadcrumb';
 import type { BreadcrumbItem } from '@shared/breadcrumb/breadcrumb.types';
@@ -36,6 +35,7 @@ import { Dialogs } from '@shared/dialogs/dialogs';
 import { Downloader } from '@shared/downloader/downloader';
 import { EmptyState } from '@shared/empty-state/empty-state';
 import { FileSizePipe } from '@shared/file-size/file-size.pipe';
+import { isolated } from '@shared/isolated/isolated';
 import { Notice } from '@shared/notice/notice';
 import { PasswordPrompt } from '@shared/password-prompt/password-prompt';
 import type { PasswordPromptData } from '@shared/password-prompt/password-prompt.types';
@@ -96,7 +96,7 @@ export class FilesPage {
   private readonly locale = inject(LocaleStore);
   private readonly downloader = inject(Downloader);
 
-  readonly serverId = serverIdOf(this.route);
+  readonly applicationId = routeParam(this.route, 'applicationId');
 
   readonly path = toSignal(this.route.queryParamMap.pipe(map((params) => params.get('path'))), {
     requireSync: true,
@@ -137,7 +137,7 @@ export class FilesPage {
     })),
   );
 
-  readonly overviewLink = computed(() => ['/servers', this.serverId() ?? '']);
+  readonly overviewLink = computed(() => ['/applications', this.applicationId() ?? '']);
 
   readonly paginated = computed(() => this.count() > FILE_PAGE_SIZES[0]);
 
@@ -150,9 +150,9 @@ export class FilesPage {
 
   constructor() {
     effect(() => {
-      const server = this.serverId();
-      if (server !== null) {
-        this.store.show(server, this.path());
+      const application = this.applicationId();
+      if (application !== null) {
+        this.store.show(application, this.path());
       }
     });
     inject(DestroyRef).onDestroy(() => this.store.close());
@@ -192,7 +192,7 @@ export class FilesPage {
     const data: PasswordPromptData = {
       titleKey: 'files.download.prompt.title',
       bodyKey: 'files.download.prompt.body',
-      bodyValues: { name: `⁨${entry.name}⁩` },
+      bodyValues: { name: isolated(entry.name) },
       submitKey: 'files.download.action',
       submit: async (password) => {
         const link = await this.store.downloadLink(entry, password);
@@ -273,14 +273,4 @@ export class FilesPage {
 // LRI ... PDI: the confirmation draws its message as plain text, with no dir of its own to set.
 function leftToRight(text: string): string {
   return `⁦${text}⁩`;
-}
-
-// Param inheritance stops at the server page, a route with its own component, so the param is read
-// from the route that declares it, as the backups and activity tabs do.
-function serverIdOf(route: ActivatedRoute): Signal<string | null> {
-  const owner = route.pathFromRoot.find((step) => step.snapshot.paramMap.has('serverId'));
-  if (!owner) {
-    return signal(null).asReadonly();
-  }
-  return toSignal(owner.paramMap.pipe(map((params) => params.get('serverId'))), { requireSync: true });
 }

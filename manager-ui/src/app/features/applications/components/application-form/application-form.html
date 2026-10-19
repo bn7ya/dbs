@@ -1,0 +1,53 @@
+<form class="dialog-form" novalidate (ngSubmit)="save()">
+  @if (formFailure(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <div class="application-form">
+    <mat-form-field>
+      <mat-label>{{ 'applications.form.name.label' | t }}</mat-label>
+      <input
+        matInput
+        name="name"
+        autocomplete="off"
+        required
+        [appFieldError]="errors().name | errorText"
+        [ngModel]="draft().name"
+        (ngModelChange)="update('name', $event)"
+      />
+      <mat-hint>{{ 'applications.form.name.hint' | t }}</mat-hint>
+      @if (errors().name | errorText; as message) {
+        <mat-error>{{ message }}</mat-error>
+      }
+    </mat-form-field>
+
+    <app-settings-fields
+      [draft]="draft()"
+      [errors]="errors()"
+      (changed)="changeDraft($event)"
+      (browse)="browse($event)"
+    />
+
+    @if (passwordShown()) {
+      <app-password-input
+        [label]="'password.label' | t"
+        [hint]="'applications.form.accountPassword.hint' | t"
+        [error]="passwordMissing() ? ('password.required' | t) : passwordRejected() ? ('invalid_password' | errorText) : ''"
+        name="account_password"
+        autocomplete="current-password"
+        [ngModel]="accountPassword()"
+        (ngModelChange)="setAccountPassword($event)"
+      />
+    }
+  </div>
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="close()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="saving()" [attr.aria-busy]="saving()">
+      @if (saving()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ 'actions.save' | t }}
+    </button>
+  </div>
+</form>

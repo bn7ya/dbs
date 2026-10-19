@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SSH_FS } from './config';
 
@@ -29,11 +29,6 @@ export function remoteExists(remotePath: string): boolean | null {
 export function listRemote(remotePath: string): string[] | null {
   if (!remoteReachable) return null;
   return readdirSync(local(remotePath)).sort();
-}
-
-export function remoteMtime(remotePath: string): number | null {
-  if (!remoteReachable) return null;
-  return statSync(local(remotePath)).mtimeMs;
 }
 
 export function folderSnapshot(remotePath: string): { restore(): string[] } {

@@ -11,25 +11,29 @@
       <dd><bdi class="restore-form__code" dir="ltr">{{ file.name }}</bdi></dd>
     </dl>
     <dl class="restore-form__fact">
+      <dt class="text-label text-secondary">{{ 'backups.restore.application' | t }}</dt>
+      <dd><bdi dir="auto">{{ file.application_name }}</bdi></dd>
+    </dl>
+    <dl class="restore-form__fact">
       <dt class="text-label text-secondary">{{ 'backups.restore.server' | t }}</dt>
       <dd><bdi dir="auto">{{ file.server_name }}</bdi></dd>
     </dl>
   </div>
 
-  @if (targetServers().length > 0) {
+  @if (targets().length > 0) {
     <mat-form-field>
       <mat-label>{{ 'backups.restore.target' | t }}</mat-label>
       <mat-select
-        name="target_server"
+        name="target_application"
         [canSelectNullableOptions]="true"
         [appFieldError]="targetError()"
-        [ngModel]="targetServer()"
+        [ngModel]="targetApplication()"
         [ngModelOptions]="{ standalone: true }"
-        (ngModelChange)="targetServer.set($event)"
+        (ngModelChange)="targetApplication.set($event)"
       >
-        <mat-option [value]="null">{{ 'backups.restore.sameServer' | t }}</mat-option>
-        @for (each of targetServers(); track each.id) {
-          <mat-option [value]="each.id"><bdi dir="auto">{{ each.name }}</bdi></mat-option>
+        <mat-option [value]="null">{{ 'backups.restore.sameApplication' | t }}</mat-option>
+        @for (each of targets(); track each.id) {
+          <mat-option [value]="each.id">{{ targetLabel(each) }}</mat-option>
         }
       </mat-select>
       <mat-hint>{{ 'backups.restore.targetHint' | t }}</mat-hint>
@@ -65,21 +69,20 @@
     (ngModelChange)="setAccountPassword($event)"
   />
 
-  <!-- FSI … PDI: the name keeps its own direction inside the hint in either language. -->
   <mat-form-field>
-    <mat-label>{{ 'backups.restore.serverName' | t }}</mat-label>
+    <mat-label>{{ 'backups.restore.applicationName' | t }}</mat-label>
     <input
       matInput
       [appFieldError]="nameErrorText()"
-      name="server_name"
+      name="application_name"
       dir="auto"
       autocomplete="off"
       autocapitalize="off"
       spellcheck="false"
-      [ngModel]="serverName()"
-      (ngModelChange)="setServerName($event)"
+      [ngModel]="applicationName()"
+      (ngModelChange)="setApplicationName($event)"
     />
-    <mat-hint>{{ 'backups.restore.serverNameHint' | t: { name: '⁨' + restoreOnto() + '⁩' } }}</mat-hint>
+    <mat-hint>{{ ontoHint() }}</mat-hint>
     @if (nameErrorText(); as message) {
       <mat-error>{{ message }}</mat-error>
     }

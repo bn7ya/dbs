@@ -33,7 +33,7 @@ class BackupListView(ListAPIView):
     def get_queryset(self) -> QuerySet[BackupFile]:
         query = BackupFilterSerializer(data=self.request.query_params)
         query.is_valid(raise_exception=True)
-        return BackupService(self.request.user).list(query.validated_data["server"])
+        return BackupService(self.request.user).list(query.validated_data.get("application"))
 
 
 class BackupDetailView(APIView):

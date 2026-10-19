@@ -5,9 +5,11 @@ import { apiErrorOf } from '@core/http/api-error';
 import type { Page } from '@core/http/api.types';
 import { ActivityApi } from '../data/activity.api';
 import type { ActivityEntry, ActivityQuery } from '../data/activity.types';
-import type { ActivityStatusFilter } from './activity.store.types';
+import type { ActivityScope, ActivityStatusFilter, ShownPageSource } from './activity.store.types';
 
 export const ACTIVITY_PAGE_SIZES: readonly number[] = [20, 50, 100];
+
+const EVERYTHING: ActivityScope = { kind: 'all' };
 
 @Injectable()
 export class ActivityStore {
@@ -15,12 +17,12 @@ export class ActivityStore {
 
   private readonly isOpen = signal(false);
 
-  readonly server = signal<string | null>(null);
+  readonly scope = signal<ActivityScope>(EVERYTHING);
   readonly status = signal<ActivityStatusFilter>('');
   readonly action = signal('');
 
   private readonly filters = computed(() => ({
-    server: this.server(),
+    scope: this.scope(),
     status: this.status(),
     action: this.action(),
   }));
@@ -32,9 +34,10 @@ export class ActivityStore {
     if (!this.isOpen()) {
       return undefined;
     }
-    const { server, status, action } = this.filters();
+    const { scope, status, action } = this.filters();
     return {
-      server: server ?? undefined,
+      server: scope.kind === 'server' ? scope.id : undefined,
+      application: scope.kind === 'application' ? scope.id : undefined,
       status: status || undefined,
       action: action || undefined,
       page: this.page() + 1,
@@ -48,10 +51,7 @@ export class ActivityStore {
   });
 
   // Keeps the last page up while the next one loads, so the table never blinks to a skeleton.
-  private readonly shownPage = linkedSignal<
-    { readonly open: boolean; readonly page: Page<ActivityEntry> | undefined },
-    Page<ActivityEntry> | undefined
-  >({
+  private readonly shownPage = linkedSignal<ShownPageSource, Page<ActivityEntry> | undefined>({
     source: () => ({
       open: this.query() !== undefined,
       page: this.listResource.hasValue() ? this.listResource.value() : undefined,
@@ -67,8 +67,8 @@ export class ActivityStore {
   readonly empty = computed(() => this.shownPage()?.count === 0);
   readonly filtered = computed(() => this.status() !== '' || this.action() !== '');
 
-  open(server: string | null): void {
-    this.server.set(server);
+  open(scope: ActivityScope): void {
+    this.scope.set(scope);
     this.status.set('');
     this.action.set('');
     this.page.set(0);

@@ -12,68 +12,93 @@ from dbs.manager import processes, recovery
 from dbs.manager.activity import job_leases
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.scheduler import TASKS
 from dbs.manager.servers import settling
-from dbs.manager.servers.models import Server
-from dbs.manager.servers.services import ServerService
-from tests.manager.servers.support import host_key_line, private_key_text
+from tests.manager.factories import make_application
 from tests.manager.support import backdated
 
 
 @pytest.fixture
-def server(admin):
-    return ServerService(admin).create(
-        name="web-1",
-        host="10.0.0.5",
-        username="deploy",
-        auth_method=Server.AuthMethod.KEY,
-        private_key=private_key_text(),
-        host_key=host_key_line(),
+def application(admin):
+    return make_application(admin, "web-1", "10.0.0.5")
+
+
+def queued_job(admin, application):
+    job = ActivityService(admin).queue(
+        "backup.take", subject=application, target=application.name
     )
-
-
-def queued_job(admin, server):
-    job = ActivityService(admin).queue("backup.take", server=server, target="web-1")
-    assert TakeLock().acquire(server.pk, job.pk)
+    assert TakeLock().acquire(application.pk, job.pk)
     return job
 
 
 @pytest.mark.django_db
-def test_starting_the_manager_frees_the_lock_of_a_job_it_interrupted(admin, server):
-    job = queued_job(admin, server)
+def test_starting_the_manager_frees_the_lock_of_a_job_it_interrupted(
+    admin, application
+):
+    job = queued_job(admin, application)
 
     released = recovery.recover()
 
     assert released == 1
     assert ActivityRepository().get(job.pk).error_code == audit.INTERRUPTED
-    assert TakeLock().acquire(server.pk, 99) is True
+    assert TakeLock().acquire(application.pk, 99) is True
 
 
 @pytest.mark.django_db
-def test_a_lock_whose_job_still_runs_is_kept(admin, server):
-    job = queued_job(admin, server)
+def test_a_lock_whose_job_still_runs_is_kept(admin, application):
+    job = queued_job(admin, application)
     ActivityService(None).start(job.pk)
 
     try:
         assert recovery.recover() == 0
-        assert TakeLock().holder(server.pk) == str(job.pk)
+        assert TakeLock().holder(application.pk) == str(job.pk)
     finally:
         ActivityService(None).succeed(job.pk)
 
 
 @pytest.mark.django_db
-def test_a_lock_left_by_a_finished_job_is_freed(admin, server):
-    job = queued_job(admin, server)
+def test_a_lock_left_by_a_finished_job_is_freed(admin, application):
+    job = queued_job(admin, application)
     audit.finish(job.pk)
 
     assert recovery.release_abandoned_locks() == 1
-    assert TakeLock().holder(server.pk) is None
+    assert TakeLock().holder(application.pk) is None
 
 
 @pytest.mark.django_db
-def test_the_sweep_frees_the_locks_of_jobs_it_finds_interrupted(admin, server, settings):
-    job = queued_job(admin, server)
+def test_each_application_on_a_server_holds_its_own_lock(admin, application):
+    neighbour = make_application(admin, "web-1-api", server=application.server)
+    running = queued_job(admin, application)
+    ActivityService(None).start(running.pk)
+    finished = queued_job(admin, neighbour)
+    audit.finish(finished.pk)
+
+    try:
+        assert recovery.release_abandoned_locks() == 1
+        assert TakeLock().holder(application.pk) == str(running.pk)
+        assert TakeLock().holder(neighbour.pk) is None
+        assert TakeLock().holder(application.server_id) is None
+    finally:
+        ActivityService(None).succeed(running.pk)
+
+
+@pytest.mark.django_db
+def test_a_lock_left_on_a_removed_application_is_freed(admin, application):
+    job = queued_job(admin, application)
+    audit.finish(job.pk)
+    ApplicationRepository().soft_delete(application)
+
+    assert recovery.release_abandoned_locks() == 1
+    assert TakeLock().holder(application.pk) is None
+
+
+@pytest.mark.django_db
+def test_the_sweep_frees_the_locks_of_jobs_it_finds_interrupted(
+    admin, application, settings
+):
+    job = queued_job(admin, application)
     backdated(
         job,
         created_at=timezone.now()
@@ -81,25 +106,25 @@ def test_the_sweep_frees_the_locks_of_jobs_it_finds_interrupted(admin, server, s
     )
 
     assert recovery.sweep() == 1
-    assert TakeLock().holder(server.pk) is None
+    assert TakeLock().holder(application.pk) is None
 
 
 @pytest.mark.django_db
-def test_freeing_locks_never_shortens_a_settling_window(admin, server):
+def test_freeing_locks_never_shortens_a_settling_window(admin, application):
     until = timezone.now() + timedelta(seconds=40)
-    settling.mark(server.pk, until)
+    settling.mark(application.pk, until)
 
     recovery.release_abandoned_locks()
 
-    assert settling.settling_until(server.pk) == until
-    assert TakeLock().acquire(server.pk, 1) is False
+    assert settling.settling_until(application.pk) == until
+    assert TakeLock().acquire(application.pk, 1) is False
 
 
 @pytest.mark.django_db
 def test_a_job_whose_process_died_is_interrupted_and_its_lock_freed(
-    admin, server, monkeypatch
+    admin, application, monkeypatch
 ):
-    job = queued_job(admin, server)
+    job = queued_job(admin, application)
     ActivityService(None).start(job.pk)
     name = f"{job_leases.PREFIX}{job.pk}"
     leases.release(name, leases.process_owner())
@@ -107,7 +132,7 @@ def test_a_job_whose_process_died_is_interrupted_and_its_lock_freed(
     monkeypatch.setattr(processes, "pid_running", lambda pid: False)
 
     assert recovery.recover() == 1
-    assert TakeLock().holder(server.pk) is None
+    assert TakeLock().holder(application.pk) is None
 
 
 def test_the_scheduler_probes_servers_and_sweeps_through_recovery():

@@ -1,6 +1,29 @@
 @if (server(); as current) {
   <div class="overview">
-    <mat-card appearance="outlined" class="overview__check">
+    @if (twins().length > 0) {
+      <mat-card *appCan="'servers.manage'" appearance="outlined" class="overview__wide">
+        <mat-card-content class="overview__card">
+          <app-notice severity="info">{{ 'servers.merge.notice' | t }}</app-notice>
+          <ul class="overview__list" role="list">
+            @for (twin of twins(); track twin.id) {
+              <li>
+                <button
+                  matButton="outlined"
+                  type="button"
+                  [disabled]="merging()"
+                  [attr.aria-busy]="merging()"
+                  (click)="merge(twin)"
+                >
+                  {{ 'servers.merge.into' | t }} <bdi dir="auto">{{ twin.name }}</bdi>
+                </button>
+              </li>
+            }
+          </ul>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <mat-card appearance="outlined" class="overview__wide">
       <mat-card-content class="overview__card">
         <div class="overview__heading">
           <h2>{{ 'servers.check.title' | t }}</h2>
@@ -28,54 +51,20 @@
           <app-notice severity="danger">{{ code | errorText }}</app-notice>
         }
 
-        @if (report(); as found) {
-          <dl class="overview__facts">
-            @for (row of found.rows; track row.labelKey) {
-              <div class="overview__fact">
-                <dt class="text-label text-secondary">{{ row.labelKey | t }}</dt>
-                <dd>
-                  @if (row.value; as value) {
-                    <bdi class="overview__code" dir="ltr">{{ value }}</bdi>
-                  } @else {
-                    <span class="overview__presence" [class.text-muted]="look(row.presence).muted">
-                      <i [class]="look(row.presence).icon" aria-hidden="true"></i>
-                      {{ 'servers.check.' + row.presence | t }}
-                    </span>
-                  }
-                </dd>
-              </div>
-            }
-          </dl>
-
-          @if (found.dockerSaid; as said) {
-            <app-notice severity="warning">
-              {{ 'servers.check.dockerSaid' | t }} <bdi class="overview__code" dir="ltr">{{ said }}</bdi>
-            </app-notice>
-          }
-
-          @if (found.roots.length > 0) {
-            <div class="overview__roots">
-              <h3>{{ 'servers.check.report.roots' | t }}</h3>
-              <dl class="overview__facts">
-                @for (root of found.roots; track root.path) {
-                  <div class="overview__fact">
-                    <dt><bdi class="overview__code" dir="ltr">{{ root.path }}</bdi></dt>
-                    <dd>
-                      <span class="overview__presence" [class.text-muted]="look(root.presence).muted">
-                        <i [class]="look(root.presence).icon" aria-hidden="true"></i>
-                        {{ 'servers.check.' + root.presence | t }}
-                      </span>
-                    </dd>
-                  </div>
-                }
-              </dl>
-            </div>
-          }
+        @if (reported()) {
+          <app-engines-report [report]="current.last_check_report" />
         }
 
         <div class="overview__actions overview__actions--spread">
           <p class="text-sm text-secondary">{{ 'servers.check.wait' | t }}</p>
-          <button *appCan="'servers.check'" matButton="filled" type="button" [disabled]="checking()" [attr.aria-busy]="checking()" (click)="check()">
+          <button
+            *appCan="'servers.check'"
+            matButton="filled"
+            type="button"
+            [disabled]="checking()"
+            [attr.aria-busy]="checking()"
+            (click)="check()"
+          >
             @if (checking()) {
               <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             }
@@ -97,25 +86,11 @@
                 @if (row.code) {
                   <bdi class="overview__code" dir="ltr">{{ row.code }}</bdi>
                 } @else if (row.textKey) {
-                  <span [class.text-muted]="row.textKey === 'servers.settings.notSet'">{{ row.textKey | t }}</span>
+                  <span>{{ row.textKey | t }}</span>
                 }
               </dd>
             </div>
           }
-          <div class="overview__fact">
-            <dt class="text-label text-secondary">{{ 'servers.settings.fileRoots' | t }}</dt>
-            <dd>
-              @if (current.file_roots.length > 0) {
-                <ul class="overview__list" role="list">
-                  @for (root of current.file_roots; track root) {
-                    <li><bdi class="overview__code" dir="ltr">{{ root }}</bdi></li>
-                  }
-                </ul>
-              } @else {
-                <span class="text-muted">{{ 'servers.settings.notSet' | t }}</span>
-              }
-            </dd>
-          </div>
         </dl>
 
         <div class="overview__actions">
@@ -141,51 +116,43 @@
       </mat-card-content>
     </mat-card>
 
-    <mat-card appearance="outlined">
-      <mat-card-content class="overview__card">
-        <div class="overview__intro">
-          <h2>{{ 'servers.passphrase.title' | t }}</h2>
-          <p class="text-sm text-secondary">{{ 'servers.passphrase.body' | t }}</p>
-        </div>
+    @if (current.auth_method === 'key') {
+      <mat-card appearance="outlined">
+        <mat-card-content class="overview__card">
+          <div class="overview__intro">
+            <h2>{{ 'servers.publicKey.title' | t }}</h2>
+            <p class="text-sm text-secondary">{{ 'servers.publicKey.body' | t: { path: authorizedKeys() } }}</p>
+          </div>
 
-        <app-notice severity="warning">{{ 'servers.passphrase.neverChange' | t }}</app-notice>
+          @if (keyError(); as failure) {
+            <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+          }
 
-        @if (passphrase(); as value) {
-          <mat-form-field class="overview__passphrase">
-            <mat-label>{{ 'servers.passphrase.label' | t }}</mat-label>
-            <input matInput readonly dir="ltr" autocomplete="off" spellcheck="false" [value]="value" />
+          @if (publicKey(); as key) {
+            <mat-form-field class="overview__wide-field">
+              <mat-label>{{ 'servers.publicKey.label' | t }}</mat-label>
+              <textarea matInput class="overview__code" readonly dir="ltr" rows="3" [value]="key"></textarea>
+            </mat-form-field>
+          }
+
+          <!-- One button that changes its word, so focus stays where it was. -->
+          <div class="overview__actions">
             <button
-              matIconButton
-              matIconSuffix
+              matButton="outlined"
               type="button"
-              [attr.aria-label]="'servers.passphrase.copy' | t"
-              (click)="copy(value)"
+              [disabled]="readingKey()"
+              [attr.aria-busy]="readingKey()"
+              (click)="togglePublicKey()"
             >
-              <i class="fa-solid fa-copy" aria-hidden="true"></i>
+              {{ (publicKey() ? 'servers.publicKey.hide' : 'servers.publicKey.show') | t }}
             </button>
-          </mat-form-field>
-        }
-
-        <!-- One button that changes its word: focus returns to it from the password prompt. -->
-        <div class="overview__actions">
-          <button *appCan="'servers.passphrase'" matButton="outlined" type="button" (click)="togglePassphrase()">
-            {{ (passphrase() ? 'servers.passphrase.hide' : 'servers.passphrase.show') | t }}
-          </button>
-        </div>
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card appearance="outlined">
-      <mat-card-content class="overview__card">
-        <div class="overview__intro">
-          <h2>{{ 'servers.move.title' | t }}</h2>
-          <p class="text-sm text-secondary">{{ 'servers.move.body' | t }}</p>
-        </div>
-        <div class="overview__actions">
-          <a *appCan="'redeploy.rehearse'" matButton="outlined" routerLink="move">{{ 'servers.move.action' | t }}</a>
-        </div>
-      </mat-card-content>
-    </mat-card>
+            @if (publicKey(); as key) {
+              <app-copy-button [text]="key" [label]="'servers.publicKey.copy' | t" />
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
 
     <mat-card appearance="outlined">
       <mat-card-content class="overview__card">
@@ -196,12 +163,12 @@
 
         <div class="overview__actions">
           <button
+            *appCan="'servers.manage'"
             matButton="outlined"
             class="app-danger"
             type="button"
             [disabled]="deleting()"
             [attr.aria-busy]="deleting()"
-            *appCan="'servers.manage'"
             (click)="remove()"
           >
             @if (deleting()) {

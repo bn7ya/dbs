@@ -23,15 +23,26 @@ from .conf import (
     INSTANCE_LEASE,
     LEASE_SECONDS,
     SETTINGS_MODULE,
+    TERMINAL_ENV,
     TRUSTED_PROXY_ENV,
     is_loopback,
 )
 
 PROG = "django_dbs"
+NAMES = ("django-dbs", "django_dbs", "dbs")
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
-SERVER_THREADS = 8
+SERVER_THREADS = 16
 ROLES = ("master", "admin", "operator", "viewer")
+TERMINAL_POLICIES = ("admins", "master", "off")
 ASSIGNABLE_ROLES = ("admin", "operator", "viewer")
+
+
+def prog() -> str:
+    invoked = os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else ""
+    for name in NAMES:
+        if invoked in (name, f"{name}.exe"):
+            return name
+    return PROG
 
 
 class VersionAction(argparse.Action):
@@ -47,7 +58,7 @@ class VersionAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         from dbs import __version__
 
-        print(f"{PROG} {__version__}")
+        print(f"{prog()} {__version__}")
         parser.exit()
 
 
@@ -75,7 +86,7 @@ def password_stdin_option(parser):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog=PROG, description="Run and maintain the standalone DBS manager."
+        prog=prog(), description="Run and maintain the standalone DBS manager."
     )
     parser.add_argument(
         "--version", action=VersionAction, help="Print the version and exit."
@@ -104,6 +115,12 @@ def build_parser():
         action="store_true",
         help="Listen beyond this computer over plain HTTP. Passwords and sessions then "
         "cross the network unencrypted.",
+    )
+    run.add_argument(
+        "--terminal",
+        choices=TERMINAL_POLICIES,
+        help="Who may open a shell on a server from the interface: admins (the "
+        f"default), only the master, or no one. Defaults to ${TERMINAL_ENV}.",
     )
     data_dir_option(run)
     database_option(run)
@@ -211,7 +228,7 @@ def build_parser():
     database_option(restore)
     restore.set_defaults(handler=command_import)
 
-    parsers.register(commands, location)
+    parsers.register(commands, parsers.Surface(extend=location))
     return parser
 
 
@@ -221,9 +238,9 @@ def location(parser):
 
 
 def main(argv=None):
-    absent = extras.missing("manager")
+    absent = extras.missing(extras.MANAGER_MODULES)
     if absent:
-        print(f"{PROG}: {extras.manager_missing_message(absent)}", file=sys.stderr)
+        print(f"{prog()}: {extras.incomplete_message(absent)}", file=sys.stderr)
         return 1
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -235,13 +252,13 @@ def main(argv=None):
             return command_terminal(args)
         return args.handler(args) or 0
     except CommandFailed as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
+        print(f"{prog()}: {exc}", file=sys.stderr)
         return 1
     except keystore.KeyStoreError as exc:
-        print(f"{PROG}: {exc}", file=sys.stderr)
+        print(f"{prog()}: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print(f"{PROG}: stopped.", file=sys.stderr)
+        print(f"{prog()}: stopped.", file=sys.stderr)
         return 130
 
 
@@ -280,6 +297,14 @@ def setup_django(data_dir, database_url=None, host=None, proxies=None):
     from django.core.management import call_command
 
     django.setup()
+    from .legacy import preserve_before_split
+
+    kept = preserve_before_split()
+    if kept is not None:
+        print(
+            f"Kept a copy of the database from before 0.8.0 at {kept}.",
+            file=sys.stderr,
+        )
     call_command("migrate", interactive=False, verbosity=0)
 
 
@@ -342,7 +367,7 @@ def command_createuser(args):
     if not first and args.role == "master":
         raise CommandFailed(
             "there is a master account already; hand it over with: "
-            f"{PROG} account role {args.name} master"
+            f"{prog()} account role {args.name} master"
         )
     password = read_password(args.password_stdin)
     try:
@@ -358,7 +383,7 @@ def command_createuser(args):
             f"Added {args.name} as {account.role}. It sets up two-factor sign-in and "
             "chooses its own password the first time it signs in."
         )
-    print(f"Sign in at the address {PROG} run prints.")
+    print(f"Sign in at the address {prog()} run prints.")
     return 0
 
 
@@ -510,7 +535,7 @@ def command_import(args):
     if aside is not None:
         print(
             f"The installation that was there is now {aside}. DBS never deletes it; "
-            f"open it with {PROG} run --data-dir {aside}."
+            f"open it with {prog()} run --data-dir {aside}."
         )
     return 0
 
@@ -713,6 +738,8 @@ def command_run(args):
         [os.environ.get(TRUSTED_PROXY_ENV, "")]
     )
     exposure(args.host, proxies, args.allow_insecure_http)
+    if args.terminal:
+        os.environ[TERMINAL_ENV] = args.terminal
     data_dir = resolve(args)
     setup_django(data_dir, args.database_url, args.host, proxies)
     from dbs import leases
@@ -720,6 +747,7 @@ def command_run(args):
     from .recovery import recover
     from .runner import get_runner
     from .scheduler import Scheduler
+    from .shell.service import stop_terminals
 
     owner = leases.process_owner()
     if not take_instance_lease(owner):
@@ -759,6 +787,7 @@ def command_run(args):
     finally:
         if server is not None:
             server.close()
+        stop_terminals()
         scheduler.stop()
         runner.shutdown(wait=False)
         leases.release(INSTANCE_LEASE, owner)

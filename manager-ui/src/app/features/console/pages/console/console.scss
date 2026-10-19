@@ -1,0 +1,105 @@
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.console__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.console__log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  block-size: 55dvh;
+  min-block-size: calc(var(--app-space-10) * 4);
+  padding: var(--app-space-4);
+  overflow-y: auto;
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text--1);
+  background: var(--app-color-surface);
+  border: var(--app-border-width) solid var(--app-color-outline);
+  border-radius: var(--app-radius-md);
+}
+
+.console__entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding-inline-start: var(--app-space-3);
+  border-inline-start: var(--app-focus-width) solid var(--app-color-outline);
+}
+
+.console__entry--failed {
+  border-inline-start-color: var(--app-color-danger);
+}
+
+.console__command {
+  display: flex;
+  gap: var(--app-space-2);
+  font-weight: var(--app-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.console__prompt {
+  color: var(--app-color-primary);
+}
+
+.console__output {
+  margin: 0;
+  font-family: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console__entry--failed .console__output {
+  color: var(--app-color-on-danger-container);
+}
+
+.console__status,
+.console__job {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  align-items: center;
+  font-family: var(--app-font-family);
+}
+
+.console__jobs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console__empty {
+  font-family: var(--app-font-family);
+  color: var(--app-color-on-surface-variant);
+}
+
+.console__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.console__field {
+  inline-size: 100%;
+}
+
+.console__program {
+  margin-inline-end: var(--app-space-2);
+  font-family: var(--app-font-mono);
+  color: var(--app-color-on-surface-variant);
+}
+
+.console__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+}

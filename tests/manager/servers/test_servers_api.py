@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-import pytest
+from datetime import timedelta
 
+import pytest
+from django.utils import timezone
+
+from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.activity.repositories import ActivityRepository
+from dbs.manager.applications.services import ApplicationService
 from dbs.manager.servers.repositories import ServerRepository
 from dbs.manager.servers.services import ServerConnectionService
+from tests.manager.factories import make_application, make_server
 from tests.manager.servers.support import (
     BACKUP_PASSPHRASE,
     KEY_PASSPHRASE,
@@ -17,6 +23,32 @@ from tests.manager.servers.support import (
 from tests.manager.support import needs_partial_unique_constraints
 
 LIST = "/api/servers/"
+SERVER_FIELDS = {
+    "id",
+    "name",
+    "host",
+    "port",
+    "username",
+    "auth_method",
+    "has_private_key",
+    "has_key_passphrase",
+    "has_password",
+    "host_key",
+    "host_key_type",
+    "host_key_fingerprint",
+    "application_count",
+    "engines",
+    "last_check_status",
+    "last_check_error",
+    "last_checked_at",
+    "last_check_report",
+    "timeout_on_host",
+    "connection_state",
+    "last_seen_at",
+    "last_connection_error",
+    "created_at",
+    "updated_at",
+}
 
 
 def detail(server_id) -> str:
@@ -31,7 +63,6 @@ def new_server(host_key: str, private_key: str, **overrides) -> dict:
         "auth_method": "key",
         "private_key": private_key,
         "key_passphrase": KEY_PASSPHRASE,
-        "backup_passphrase": BACKUP_PASSPHRASE,
         "host_key": host_key,
         **overrides,
     }
@@ -39,12 +70,7 @@ def new_server(host_key: str, private_key: str, **overrides) -> dict:
 
 def assert_no_secrets(response, private_key: str) -> None:
     body = response.content.decode()
-    for secret in (
-        body_line(private_key),
-        KEY_PASSPHRASE,
-        SSH_PASSWORD,
-        BACKUP_PASSPHRASE,
-    ):
+    for secret in (body_line(private_key), KEY_PASSPHRASE, SSH_PASSWORD):
         assert secret not in body
     assert "sealed" not in body
 
@@ -57,6 +83,7 @@ def test_adding_a_server_pins_the_host_key_and_returns_it_without_secrets(
 
     assert response.status_code == 201
     body = response.json()
+    assert set(body) == SERVER_FIELDS
     assert body["host_key"] == host_key
     assert body["host_key_type"] == "ssh-ed25519"
     assert body["host_key_fingerprint"].startswith("SHA256:")
@@ -69,20 +96,42 @@ def test_adding_a_server_pins_the_host_key_and_returns_it_without_secrets(
 
 
 @pytest.mark.django_db
-def test_a_server_left_to_its_defaults_gets_them_from_the_model(
+def test_a_server_left_to_its_defaults_answers_on_port_22_and_knows_no_engine_yet(
     api, host_key, private_key
 ):
-    payload = new_server(host_key, private_key)
-    del payload["backup_passphrase"]
-
-    body = api.post(LIST, payload).json()
+    body = api.post(LIST, new_server(host_key, private_key)).json()
 
     assert body["port"] == 22
-    assert body["python_path"] == "python3"
-    assert body["manage_path"] == "manage.py"
-    assert body["remote_backup_dir"] == "/var/backups/dbs"
-    assert body["file_roots"] == []
-    assert body["project_dir"] == ""
+    assert body["engines"] == {}
+    assert body["timeout_on_host"] is None
+    assert body["connection_state"] == "unknown"
+
+
+@pytest.mark.django_db
+def test_a_server_holds_only_how_to_reach_it_and_ignores_project_settings(
+    api, host_key, private_key
+):
+    response = api.post(
+        LIST,
+        new_server(
+            host_key,
+            private_key,
+            project_dir="/srv/app",
+            python_path="/srv/app/.venv/bin/python",
+            remote_backup_dir="/var/backups/dbs",
+            file_roots=["/srv/app/media"],
+            env_path="/srv/app/.env",
+            backup_passphrase=BACKUP_PASSPHRASE,
+        ),
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert set(response.json()) == SERVER_FIELDS
+    assert BACKUP_PASSPHRASE not in response.content.decode()
+    server = ServerRepository().get(response.json()["id"])
+    assert not hasattr(server, "project_dir")
+    assert ApplicationService(None).list().count() == 0
 
 
 @pytest.mark.django_db
@@ -118,48 +167,6 @@ def test_a_host_key_line_is_stored_without_its_comment(api, host_key, private_ke
     response = api.post(LIST, new_server(f"{host_key} root@web-1", private_key))
 
     assert response.json()["host_key"] == host_key
-
-
-@pytest.mark.django_db
-def test_every_path_must_be_absolute(api, host_key, private_key):
-    response = api.post(
-        LIST,
-        new_server(
-            host_key,
-            private_key,
-            project_dir="srv/app",
-            env_path="/srv/app/../.env",
-            remote_backup_dir="backups",
-            file_roots=["/srv/media", "media"],
-        ),
-    )
-
-    assert response.status_code == 400
-    assert response.json()["error"]["fields"] == {
-        "project_dir": ["absolute_path_required"],
-        "env_path": ["absolute_path_required"],
-        "remote_backup_dir": ["absolute_path_required"],
-        "file_roots": ["absolute_path_required"],
-    }
-
-
-@pytest.mark.django_db
-def test_paths_are_normalised_and_roots_deduplicated(api, host_key, private_key):
-    response = api.post(
-        LIST,
-        new_server(
-            host_key,
-            private_key,
-            project_dir="/srv//app/",
-            remote_backup_dir="/var/backups/./dbs/",
-            file_roots=["/srv/media", "/srv/media/", "//srv/static"],
-        ),
-    )
-
-    body = response.json()
-    assert body["project_dir"] == "/srv/app"
-    assert body["remote_backup_dir"] == "/var/backups/dbs"
-    assert body["file_roots"] == ["/srv/media", "/srv/static"]
 
 
 @pytest.mark.django_db
@@ -254,6 +261,9 @@ def test_the_list_is_paginated_searchable_and_free_of_secrets(
         "host",
         "port",
         "username",
+        "host_key_fingerprint",
+        "engines",
+        "application_count",
         "last_check_status",
         "last_checked_at",
         "connection_state",
@@ -266,11 +276,29 @@ def test_the_list_is_paginated_searchable_and_free_of_secrets(
 
 
 @pytest.mark.django_db
+def test_the_list_counts_the_applications_each_server_still_runs(
+    api, admin, configured_server
+):
+    make_application(admin, name="shop", server=configured_server)
+    removed = make_application(admin, name="blog", server=configured_server)
+    ApplicationService(admin).delete(removed.pk, account_password=PASSWORD)
+    make_server(admin, name="db-1", host="10.0.0.6")
+
+    rows = api.get(LIST).json()["results"]
+
+    assert [(row["name"], row["application_count"]) for row in rows] == [
+        ("db-1", 0),
+        ("web-1", 1),
+    ]
+
+
+@pytest.mark.django_db
 def test_the_detail_carries_no_secrets(api, configured_server, private_key):
     response = api.get(detail(configured_server.pk))
 
     assert response.status_code == 200
     assert response.json()["name"] == "web-1"
+    assert set(response.json()) == SERVER_FIELDS
     assert_no_secrets(response, private_key)
 
 
@@ -373,42 +401,12 @@ def test_an_update_cannot_change_the_host_key(api, configured_server, host_key):
 
 
 @pytest.mark.django_db
-def test_an_update_checks_paths_and_names(
-    api, configured_server, host_key, private_key
-):
+def test_an_update_checks_the_name(api, configured_server, host_key, private_key):
     api.post(LIST, new_server(host_key, private_key, name="db-1"))
 
-    response = api.patch(
-        detail(configured_server.pk), {"name": "db-1", "remote_backup_dir": "relative"}
-    )
+    response = api.patch(detail(configured_server.pk), {"name": "db-1"})
 
-    assert response.json()["error"]["fields"] == {
-        "remote_backup_dir": ["absolute_path_required"],
-        "name": ["name_taken"],
-    }
-
-
-@pytest.mark.django_db
-def test_an_update_may_replace_the_backup_passphrase(api, admin, configured_server):
-    api.patch(
-        detail(configured_server.pk),
-        {"backup_passphrase": "a-new-passphrase", "account_password": PASSWORD},
-    )
-
-    stored = ServerRepository().get(configured_server.pk)
-    assert (
-        ServerConnectionService(admin).backup_passphrase(stored) == "a-new-passphrase"
-    )
-
-
-@pytest.mark.django_db
-def test_an_optional_path_can_be_cleared(api, configured_server):
-    response = api.patch(
-        detail(configured_server.pk),
-        {"env_path": "", "project_dir": "", "account_password": PASSWORD},
-    )
-
-    assert (response.json()["env_path"], response.json()["project_dir"]) == ("", "")
+    assert response.json()["error"]["fields"] == {"name": ["name_taken"]}
 
 
 @pytest.mark.django_db
@@ -436,13 +434,6 @@ def server_as_sent(server) -> dict:
         "port": server.port,
         "username": server.username,
         "auth_method": server.auth_method,
-        "project_dir": server.project_dir,
-        "python_path": server.python_path,
-        "manage_path": server.manage_path,
-        "settings_module": server.settings_module,
-        "remote_backup_dir": server.remote_backup_dir,
-        "file_roots": server.file_roots,
-        "env_path": server.env_path,
     }
 
 
@@ -466,17 +457,9 @@ def test_a_rename_needs_no_password_even_sent_with_every_setting(
         {"host": "10.0.0.9"},
         {"port": 22},
         {"username": "root"},
-        {"project_dir": "/srv/other"},
-        {"python_path": "/usr/bin/python3"},
-        {"manage_path": "src/manage.py"},
-        {"settings_module": "config.settings.dev"},
-        {"remote_backup_dir": "/var/backups/other"},
-        {"file_roots": ["/etc"]},
-        {"env_path": "/srv/other/.env"},
         {"private_key": "-----BEGIN OPENSSH PRIVATE KEY-----"},
         {"key_passphrase": "another"},
         {"auth_method": "password", "password": "ssh-password"},
-        {"backup_passphrase": "another"},
     ],
 )
 def test_changing_anything_but_the_name_needs_the_users_password(
@@ -498,7 +481,7 @@ def test_a_wrong_password_changes_nothing_and_is_logged(api, configured_server):
 
     response = api.patch(
         detail(configured_server.pk),
-        {"env_path": "/srv/other/.env", "account_password": f"{PASSWORD}-typo"},
+        {"host": "10.0.0.9", "account_password": f"{PASSWORD}-typo"},
     )
 
     assert response.status_code == 400
@@ -506,26 +489,26 @@ def test_a_wrong_password_changes_nothing_and_is_logged(api, configured_server):
     assert api.get(detail(configured_server.pk)).json() == before
     [entry] = ActivityRepository().filtered(action="server.update")
     assert (entry.status, entry.error_code) == ("failed", "invalid_password")
-    assert entry.data == {"fields": ["env_path"]}
+    assert entry.data == {"fields": ["host"]}
 
 
 @pytest.mark.django_db
 def test_the_users_password_lets_the_change_through(api, configured_server):
     response = api.patch(
         detail(configured_server.pk),
-        {"env_path": "/srv/other/.env", "account_password": PASSWORD},
+        {"host": "10.0.0.9", "account_password": PASSWORD},
     )
 
     assert response.status_code == 200
-    assert response.json()["env_path"] == "/srv/other/.env"
+    assert response.json()["host"] == "10.0.0.9"
     [entry] = ActivityRepository().filtered(action="server.update")
-    assert (entry.status, entry.data) == ("succeeded", {"fields": ["env_path"]})
+    assert (entry.status, entry.data) == ("succeeded", {"fields": ["host"]})
 
 
 @pytest.mark.django_db
 def test_wrong_passwords_for_changes_are_limited(api, settings, configured_server):
     settings.AUTH_FAILURES_PER_USER = 2
-    change = {"env_path": "/srv/other/.env"}
+    change = {"host": "10.0.0.9"}
     for _ in range(2):
         api.patch(detail(configured_server.pk), change | {"account_password": "wrong"})
 
@@ -543,13 +526,55 @@ def test_a_wrong_field_is_reported_before_the_password_is_asked_for(
 ):
     response = api.patch(
         detail(configured_server.pk),
-        {"env_path": "relative", "account_password": "wrong"},
+        {"host": "-oProxyCommand=id", "account_password": "wrong"},
     )
 
-    assert response.json()["error"]["fields"] == {
-        "env_path": ["absolute_path_required"]
-    }
+    assert response.json()["error"]["fields"] == {"host": ["invalid"]}
     assert list(ActivityRepository().filtered(action="server.update")) == []
+
+
+@pytest.mark.django_db
+def test_a_server_added_in_the_last_hour_changes_without_the_password(
+    api, admin, host_key, private_key
+):
+    server = api.post(LIST, new_server(host_key, private_key)).json()
+
+    response = api.patch(detail(server["id"]), {"host": "10.0.0.9", "username": "root"})
+
+    assert response.status_code == 200
+    assert (response.json()["host"], response.json()["username"]) == (
+        "10.0.0.9",
+        "root",
+    )
+
+
+@pytest.mark.django_db
+def test_after_an_hour_or_for_someone_else_a_change_needs_the_password(api, admin):
+    older = make_server(admin, name="web-1", host="10.0.0.5")
+    ServerRepository().update(older, created_at=timezone.now() - timedelta(hours=2))
+    other = UserRepository().create(username="omar", password=PASSWORD)
+    theirs = make_server(other, name="web-2", host="10.0.0.6")
+
+    for server in (older, theirs):
+        response = api.patch(detail(server.pk), {"host": "10.0.0.9"}, format="json")
+        assert response.status_code == 400
+        assert response.json()["error"]["fields"] == {"account_password": ["required"]}
+
+
+@pytest.mark.django_db
+def test_a_wrong_password_is_refused_even_where_none_is_needed(
+    api, host_key, private_key
+):
+    server = api.post(LIST, new_server(host_key, private_key)).json()
+
+    response = api.patch(
+        detail(server["id"]),
+        {"host": "10.0.0.9", "account_password": "not-the-password"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_password"
+    assert ServerRepository().get(server["id"]).host == "web-1.example.com"
 
 
 @pytest.mark.django_db
@@ -574,6 +599,16 @@ def test_an_unknown_server_is_not_found(api):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("path", ["discover/", "passphrase/", "passphrase/capture/"])
+def test_a_server_offers_no_discovery_or_passphrase_of_its_own(
+    api, configured_server, path
+):
+    response = api.post(detail(configured_server.pk) + path, {}, format="json")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -585,9 +620,9 @@ def test_an_unknown_server_is_not_found(api):
         ("delete", "{id}/"),
         ("post", "{id}/check/"),
         ("post", "{id}/host-key/"),
-        ("post", "{id}/passphrase/"),
-        ("post", "{id}/discover/"),
+        ("get", "{id}/public-key/"),
         ("get", "{id}/browse/"),
+        ("post", "{id}/merge/"),
     ],
 )
 def test_every_endpoint_needs_a_session(anonymous, configured_server, method, path):

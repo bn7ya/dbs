@@ -2,19 +2,26 @@ export type ActivityStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 
 export const ACTIVITY_STATUSES: readonly ActivityStatus[] = ['queued', 'running', 'succeeded', 'failed'];
 
+// What the filter offers. The codes a 0.7 server recorded, now an application's, are left out:
+// their entries still read in words, and the filter does not offer one name twice.
 export const ACTIVITY_ACTIONS: readonly string[] = [
   'server.create',
   'server.update',
   'server.delete',
   'server.check',
   'server.repin',
-  'server.passphrase_reveal',
   'server.fingerprint',
   'server.host_key_confirm',
   'server.host_key_reject',
   'server.keypair',
-  'server.discover',
-  'server.passphrase_capture',
+  'server.merge',
+  'application.create',
+  'application.update',
+  'application.delete',
+  'application.check',
+  'application.passphrase_reveal',
+  'application.passphrase_capture',
+  'application.discover',
   'backup.take',
   'backup.run',
   'backup.verify',
@@ -28,6 +35,9 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'plan.create',
   'plan.update',
   'plan.delete',
+  'plan.reschedule',
+  'plan.pause',
+  'plan.resume',
   'files.download',
   'files.upload',
   'files.create_folder',
@@ -66,6 +76,23 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'auth.sign_in_failed',
   'auth.sign_out',
   'auth.recovery_code_used',
+  'shell.session',
+  'console.command',
+  'application.deploy_steps',
+  'redeploy.deploy',
+  'deploy.check',
+  'deploy.safety_backup',
+  'deploy.record_env',
+  'deploy.git_pull',
+  'deploy.compose_pull',
+  'deploy.compose_build',
+  'deploy.compose_up',
+  'deploy.restart',
+  'deploy.systemd_user_restart',
+  'deploy.pip_install',
+  'deploy.migrate',
+  'deploy.collectstatic',
+  'deploy.final_check',
 ];
 
 export interface ActivityEntry {
@@ -79,6 +106,8 @@ export interface ActivityEntry {
   readonly actor: string | null;
   readonly server: string | null;
   readonly server_name: string | null;
+  readonly application: string | null;
+  readonly application_name: string | null;
   readonly created_at: string;
   readonly started_at: string | null;
   readonly finished_at: string | null;
@@ -86,6 +115,7 @@ export interface ActivityEntry {
 
 export interface ActivityQuery {
   readonly server?: string;
+  readonly application?: string;
   readonly action?: string;
   readonly status?: ActivityStatus;
   readonly page: number;

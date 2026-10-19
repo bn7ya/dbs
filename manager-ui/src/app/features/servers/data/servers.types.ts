@@ -1,11 +1,20 @@
-import type { Page } from '@core/http/api.types';
 import type { ConnectionState } from '@shared/connection-dot/connection-dot.types';
 
 export type AuthMethod = 'key' | 'password';
 
 export type CheckStatus = 'unknown' | 'ok' | 'problem' | 'failed';
 
-export type Runtime = 'host' | 'compose';
+export type ContainerEngine = 'docker' | 'podman';
+
+export interface EngineReport {
+  readonly installed: boolean;
+  readonly usable: boolean;
+  readonly version: string | null;
+  readonly compose: string | null;
+  readonly error: string;
+}
+
+export type Engines = Readonly<Partial<Record<ContainerEngine, EngineReport>>>;
 
 export interface ServerSummary {
   readonly id: string;
@@ -13,6 +22,8 @@ export interface ServerSummary {
   readonly host: string;
   readonly port: number;
   readonly username: string;
+  readonly engines: Engines;
+  readonly application_count: number;
   readonly last_check_status: CheckStatus;
   readonly last_checked_at: string | null;
   readonly connection_state: ConnectionState;
@@ -20,55 +31,39 @@ export interface ServerSummary {
   readonly last_connection_error: string;
 }
 
-export interface PythonSuggestion {
-  readonly python_path: string;
-  readonly dbs_version: string;
-}
-
-export interface ComposeReport {
-  readonly version: string | null;
-  readonly error: string;
-  readonly running: boolean;
-}
-
-export interface CheckReport {
+export interface ServerCheckReport {
   readonly system?: string | null;
-  readonly compose?: ComposeReport;
-  readonly dbs_version?: string | null;
-  readonly dbs_error?: string;
-  readonly python_suggestion?: PythonSuggestion | null;
-  readonly backup_command?: boolean | null;
-  readonly env_file?: boolean | null;
-  readonly roots?: Readonly<Record<string, boolean>>;
-  readonly remote_backup_dir?: boolean;
+  readonly engines?: Engines;
+  readonly timeout?: boolean | null;
 }
 
-export interface Server extends ServerSummary {
+export interface Server {
+  readonly id: string;
+  readonly name: string;
+  readonly host: string;
+  readonly port: number;
+  readonly username: string;
   readonly auth_method: AuthMethod;
   readonly has_private_key: boolean;
   readonly has_key_passphrase: boolean;
   readonly has_password: boolean;
+  readonly host_key: string;
   readonly host_key_type: string;
   readonly host_key_fingerprint: string;
-  readonly runtime: Runtime;
-  readonly compose_service: string;
-  readonly compose_files: readonly string[];
-  readonly project_dir: string;
-  readonly python_path: string;
-  readonly manage_path: string;
-  readonly settings_module: string;
-  readonly remote_backup_dir: string;
-  readonly file_roots: readonly string[];
-  readonly env_path: string;
+  readonly engines: Engines;
+  readonly last_check_status: CheckStatus;
   readonly last_check_error: string;
-  readonly last_check_report: CheckReport;
+  readonly last_checked_at: string | null;
+  readonly last_check_report: ServerCheckReport;
   readonly timeout_on_host: boolean | null;
-  readonly timeout_in_container: boolean | null;
+  readonly connection_state: ConnectionState;
+  readonly last_seen_at: string | null;
+  readonly last_connection_error: string;
   readonly created_at: string;
   readonly updated_at: string;
 }
 
-export interface ServerSettings {
+export interface ServerConnection {
   readonly name: string;
   readonly host: string;
   readonly port: number;
@@ -77,21 +72,15 @@ export interface ServerSettings {
   readonly private_key?: string;
   readonly key_passphrase?: string;
   readonly password?: string;
-  readonly runtime: Runtime;
-  readonly compose_service: string;
-  readonly compose_files: readonly string[];
-  readonly project_dir: string;
-  readonly python_path: string;
-  readonly manage_path: string;
-  readonly settings_module: string;
-  readonly remote_backup_dir: string;
-  readonly file_roots: readonly string[];
-  readonly env_path: string;
 }
 
-export interface ServerCreate extends ServerSettings {
+export interface ServerCreate extends ServerConnection {
   readonly host_key: string;
   readonly generate_key?: boolean;
+}
+
+export interface ServerUpdate extends Partial<ServerConnection> {
+  readonly account_password?: string;
 }
 
 export interface CreatedServer extends Server {
@@ -103,51 +92,9 @@ export interface PublicKey {
   readonly public_key: string;
 }
 
-export type ProjectSettings = Pick<
-  ServerSettings,
-  | 'runtime'
-  | 'compose_service'
-  | 'compose_files'
-  | 'project_dir'
-  | 'python_path'
-  | 'manage_path'
-  | 'settings_module'
-  | 'remote_backup_dir'
-  | 'file_roots'
-  | 'env_path'
->;
-
-export interface Discovery extends ProjectSettings {
-  readonly dbs_version: string | null;
-  readonly is_project: boolean;
-  readonly candidates: {
-    readonly project_dirs: readonly string[];
-    readonly python_paths: readonly string[];
-    readonly compose_services: readonly string[];
-  };
-}
-
-export type HealthStatus = 'ok' | 'warn' | 'error';
-
-export interface HealthReport {
-  readonly status: HealthStatus;
-  readonly checks: readonly { readonly name: string; readonly status: HealthStatus; readonly message: string }[];
-}
-
-export interface CheckedServer extends Server {
-  readonly local_version: string;
-  readonly remote_version: string | null;
-  readonly installed: boolean;
-  readonly compatible: boolean;
-  readonly last_health: HealthReport | null;
-}
-
-export interface PassphraseCapture {
-  readonly captured: boolean;
-}
-
-export interface ServerUpdate extends Partial<ServerSettings> {
-  readonly account_password?: string;
+export interface ServerMerge {
+  readonly into: string;
+  readonly account_password: string;
 }
 
 export interface HostKeyTarget {
@@ -179,37 +126,8 @@ export interface HostKeyRepin {
   readonly password: string;
 }
 
-export interface BackupPassphrase {
-  readonly passphrase: string;
-}
-
 export interface ServerListQuery {
   readonly search: string;
-  readonly page: number;
-  readonly page_size: number;
-}
-
-export type RemoteEntryKind = 'file' | 'folder' | 'link' | 'other';
-
-export interface RemoteEntry {
-  readonly name: string;
-  readonly path: string;
-  readonly kind: RemoteEntryKind;
-  readonly size: number | null;
-  readonly modified: string | null;
-}
-
-export interface RemoteFolder extends Page<RemoteEntry> {
-  readonly path: string;
-  readonly parent: string | null;
-  readonly home: string;
-  readonly project: boolean;
-  readonly truncated: boolean;
-}
-
-export interface BrowseQuery {
-  readonly server: string;
-  readonly path: string | null;
   readonly page: number;
   readonly page_size: number;
 }

@@ -1,0 +1,198 @@
+@if (application(); as current) {
+  <div class="overview">
+    <mat-card appearance="outlined" class="overview__check">
+      <mat-card-content class="overview__card">
+        <div class="overview__heading">
+          <h2>{{ 'applications.check.title' | t }}</h2>
+          <app-check-tag [status]="current.last_check_status" />
+        </div>
+
+        <p class="text-sm text-secondary">
+          @if (current.last_checked_at; as checkedAt) {
+            {{ 'applications.check.lastChecked' | t }} {{ checkedAt | appDate }}
+          } @else {
+            {{ 'applications.check.never' | t }}
+          }
+        </p>
+
+        @if (checkFailure(); as code) {
+          <app-notice severity="danger">{{ code | errorText }}</app-notice>
+        }
+
+        @if (reported()) {
+          <app-check-report [application]="current" [versions]="versions()">
+            <button
+              *appCan="'applications.manage'"
+              reportAction
+              matButton="tonal"
+              type="button"
+              [disabled]="checking() || saving()"
+              [attr.aria-busy]="checking() || saving()"
+              (click)="useSuggestedPython()"
+            >
+              @if (checking() || saving()) {
+                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ 'applications.check.usePython' | t }}
+            </button>
+          </app-check-report>
+        }
+
+        <div class="overview__actions overview__actions--spread">
+          <p class="text-sm text-secondary">{{ 'applications.check.wait' | t }}</p>
+          <button
+            *appCan="'applications.check'"
+            matButton="filled"
+            type="button"
+            [disabled]="checking()"
+            [attr.aria-busy]="checking()"
+            (click)="check()"
+          >
+            @if (checking()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ 'applications.check.run' | t }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <h2>{{ 'applications.settings.title' | t }}</h2>
+
+        @if (envInContainer()) {
+          <app-notice severity="warning">{{ 'applications.settings.envInContainer' | t }}</app-notice>
+        }
+
+        <dl class="overview__facts">
+          @for (row of settings(); track row.labelKey) {
+            <div class="overview__fact">
+              <dt class="text-label text-secondary">{{ row.labelKey | t }}</dt>
+              <dd>
+                @if (row.code) {
+                  <bdi class="overview__code" dir="ltr">{{ row.code }}</bdi>
+                } @else if (row.textKey) {
+                  <span [class.text-muted]="row.textKey === 'applications.settings.notSet'">{{ row.textKey | t }}</span>
+                }
+              </dd>
+            </div>
+          }
+          <div class="overview__fact">
+            <dt class="text-label text-secondary">{{ 'applications.settings.fileRoots' | t }}</dt>
+            <dd>
+              @if (current.file_roots.length > 0) {
+                <ul class="overview__list" role="list">
+                  @for (root of current.file_roots; track root) {
+                    <li><bdi class="overview__code" dir="ltr">{{ root }}</bdi></li>
+                  }
+                </ul>
+              } @else {
+                <span class="text-muted">{{ 'applications.settings.notSet' | t }}</span>
+              }
+            </dd>
+          </div>
+          @if (current.mounts.length > 0) {
+            <div class="overview__fact">
+              <dt class="text-label text-secondary">{{ 'applications.mounts.title' | t }}</dt>
+              <dd>
+                <ul class="overview__list" role="list">
+                  @for (mount of current.mounts; track mount.destination) {
+                    <li class="overview__mount">
+                      <bdi class="overview__code" dir="ltr">{{ mount.source }}</bdi>
+                      <span class="text-sm text-secondary">{{ 'applications.mounts.at' | t }}</span>
+                      <bdi class="overview__code" dir="ltr">{{ mount.destination }}</bdi>
+                      @if (!mount.rw) {
+                        <span class="text-sm text-secondary">{{ 'applications.mounts.readOnly' | t }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              </dd>
+            </div>
+          }
+        </dl>
+
+        <div class="overview__actions">
+          <button *appCan="'applications.manage'" matButton="outlined" type="button" (click)="edit()">{{ 'actions.edit' | t }}</button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'applications.passphrase.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'applications.passphrase.body' | t }}</p>
+        </div>
+
+        @if (current.has_backup_passphrase) {
+          <app-notice severity="warning">{{ 'applications.passphrase.neverChange' | t }}</app-notice>
+
+          @if (passphrase(); as value) {
+            <mat-form-field class="overview__passphrase">
+              <mat-label>{{ 'applications.passphrase.label' | t }}</mat-label>
+              <input matInput readonly dir="ltr" autocomplete="off" spellcheck="false" [value]="value" />
+            </mat-form-field>
+          }
+
+          <!-- One button that changes its word: focus returns to it from the password prompt. -->
+          <div class="overview__actions">
+            <button *appCan="'applications.passphrase'" matButton="outlined" type="button" (click)="togglePassphrase()">
+              {{ (passphrase() ? 'applications.passphrase.hide' : 'applications.passphrase.show') | t }}
+            </button>
+            @if (passphrase(); as value) {
+              <app-copy-button [text]="value" [label]="'applications.passphrase.copy' | t" />
+            }
+          </div>
+        } @else {
+          <app-notice severity="warning">{{ 'applications.passphrase.readFirst' | t }}</app-notice>
+          @if (captureError(); as failure) {
+            <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+          }
+          <div class="overview__actions">
+            <button
+              *appCan="'applications.manage'"
+              matButton="outlined"
+              type="button"
+              [disabled]="capturing()"
+              [attr.aria-busy]="capturing()"
+              (click)="capturePassphrase()"
+            >
+              @if (capturing()) {
+                <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+              }
+              {{ 'applications.passphrase.capture' | t }}
+            </button>
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'applications.delete.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'applications.delete.body' | t }}</p>
+        </div>
+
+        <div class="overview__actions">
+          <button
+            *appCan="'applications.manage'"
+            matButton="outlined"
+            class="app-danger"
+            type="button"
+            [disabled]="deleting()"
+            [attr.aria-busy]="deleting()"
+            (click)="remove()"
+          >
+            @if (deleting()) {
+              <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            }
+            {{ 'applications.delete.action' | t }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+}

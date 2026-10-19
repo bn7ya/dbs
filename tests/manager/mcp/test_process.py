@@ -41,6 +41,7 @@ def test_django_dbs_mcp_speaks_json_rpc_on_stdout_alone(tmp_path):
             line(2, "tools/list"),
             line(3, "tools/call", name="list_servers", arguments={}),
             line(4, "tools/call", name="get_server", arguments={"server": "nope"}),
+            line(5, "tools/call", name="list_applications", arguments={}),
         ]
     )
 
@@ -48,11 +49,14 @@ def test_django_dbs_mcp_speaks_json_rpc_on_stdout_alone(tmp_path):
 
     assert ran.returncode == 0, ran.stderr
     replies = [json.loads(text) for text in ran.stdout.splitlines()]
-    assert [reply["id"] for reply in replies] == [1, 2, 3, 4]
+    assert [reply["id"] for reply in replies] == [1, 2, 3, 4, 5]
     assert replies[0]["result"]["serverInfo"]["name"] == "django-dbs"
-    assert "take_backups" in {tool["name"] for tool in replies[1]["result"]["tools"]}
+    assert {"take_backups", "discover_applications"} <= {
+        tool["name"] for tool in replies[1]["result"]["tools"]
+    }
     assert replies[2]["result"]["structuredContent"] == {"results": []}
     assert replies[3]["result"]["isError"] is True
+    assert replies[4]["result"]["structuredContent"] == {"results": []}
 
 
 def test_django_dbs_mcp_needs_an_account(tmp_path):

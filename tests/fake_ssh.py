@@ -4,7 +4,10 @@ import errno
 import io
 import os
 import posixpath
+import queue
+import socket
 import threading
+import time
 import types
 
 
@@ -95,8 +98,74 @@ class FakeTransport:
         self._registry.global_requests.append((kind, wait))
         return None
 
+    def open_session(self, timeout=None):
+        channel = FakeTerminalChannel(timeout)
+        self._registry.terminals.append(channel)
+        return channel
+
     def close(self):
         self.closed = True
+
+
+class FakeTerminalChannel:
+    """A pseudo-terminal channel whose output a test writes with emit() and ends with exit()."""
+
+    def __init__(self, open_timeout=None):
+        self.open_timeout = open_timeout
+        self.pty = None
+        self.shell = False
+        self.command = None
+        self.sent = bytearray()
+        self.sizes = []
+        self.timeout = None
+        self.closed = False
+        self.status = None
+        self.refuse_input = False
+        self._output = queue.Queue()
+
+    def get_pty(self, term="vt100", width=80, height=24):
+        self.pty = (term, width, height)
+
+    def invoke_shell(self):
+        self.shell = True
+
+    def exec_command(self, command):
+        self.command = command
+
+    def resize_pty(self, width=80, height=24):
+        self.sizes.append((width, height))
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+    def sendall(self, data):
+        if self.closed or self.refuse_input:
+            raise OSError("Socket is closed")
+        self.sent += data
+
+    def recv(self, size):
+        item = self._output.get()
+        if item is None:
+            self._output.put(None)
+            return b""
+        return item
+
+    def emit(self, data):
+        self._output.put(data)
+
+    def exit(self, status=0):
+        self.status = status
+        self._output.put(None)
+
+    def exit_status_ready(self):
+        return self.status is not None
+
+    def recv_exit_status(self):
+        return -1 if self.status is None else self.status
+
+    def close(self):
+        self.closed = True
+        self._output.put(None)
 
 
 class FakeSocket:
@@ -218,7 +287,13 @@ class FakeChannel:
         self._session.timeouts.append(timeout)
 
     def recv(self, size):
-        return self._session.take(1, size)
+        data = self._session.take(1, size)
+        if data:
+            return data
+        return self._session.after_quiet()
+
+    def sendall(self, data):
+        self._session.sent += data
 
     def close(self):
         self._session.channel_closed = True
@@ -248,6 +323,12 @@ class FakeStdout:
         self.channel = FakeChannel(session)
 
     def read(self, size=-1):
+        self._session.resolve()
+        if self._index == 2 and self._session.stderr_every:
+            line = self._session.next_line(2)
+            if line:
+                time.sleep(self._session.stderr_every)
+            return line
         return self._session.take(self._index, size)
 
 
@@ -257,9 +338,14 @@ class FakeExec:
         self._outcome = None
         self.command = command
         self.stdin = ""
+        self.sent = bytearray()
         self.stdin_closed = False
         self.channel_closed = False
         self.timeouts = []
+        self.quiet_for = 0.0
+        self.after_quiet_bytes = b""
+        self.stderr_every = 0.0
+        self._quiet_until = None
         self._offsets = {1: 0, 2: 0}
 
     def resolve(self):
@@ -274,6 +360,29 @@ class FakeExec:
         end = len(data) if size is None or size < 0 else min(len(data), start + size)
         self._offsets[index] = end
         return data[start:end]
+
+    def next_line(self, index):
+        produced = self.resolve()[index]
+        data = produced.encode() if isinstance(produced, str) else produced
+        start = self._offsets[index]
+        end = data.find(b"\n", start)
+        end = len(data) if end < 0 else end + 1
+        self._offsets[index] = end
+        return data[start:end]
+
+    def after_quiet(self):
+        if not self.quiet_for:
+            return b""
+        if self._quiet_until is None:
+            self._quiet_until = time.monotonic() + self.quiet_for
+        remaining = self._quiet_until - time.monotonic()
+        wait = self.timeouts[-1] if self.timeouts and self.timeouts[-1] else remaining
+        if wait < remaining:
+            time.sleep(wait)
+            raise socket.timeout()
+        time.sleep(max(remaining, 0))
+        self.quiet_for = 0.0
+        return self.after_quiet_bytes
 
     @property
     def exit_status(self):
@@ -364,6 +473,7 @@ class FakeParamiko:
         self.presented_key = None
         self.dropped = False
         self.global_requests = []
+        self.terminals = []
         self._handler = None
 
     def SSHClient(self):

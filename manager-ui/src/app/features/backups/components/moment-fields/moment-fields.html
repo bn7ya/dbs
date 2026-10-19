@@ -1,0 +1,46 @@
+<div class="moment-fields">
+  <mat-form-field>
+    <mat-label>{{ dayLabel() }}</mat-label>
+    <input
+      matInput
+      [matDatepicker]="dayPicker"
+      [min]="earliest"
+      [max]="latest"
+      [name]="name() + '_day'"
+      autocomplete="off"
+      [appFieldError]="dayError()"
+      [ngModel]="day()"
+      (ngModelChange)="day.set($event)"
+    />
+    <mat-datepicker-toggle matIconSuffix [for]="dayPicker">
+      <i matDatepickerToggleIcon class="fa-regular fa-calendar" aria-hidden="true"></i>
+    </mat-datepicker-toggle>
+    <mat-datepicker #dayPicker />
+    @if (hint()) {
+      <mat-hint>{{ hint() }}</mat-hint>
+    }
+    @if (dayError(); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field>
+    <mat-label>{{ timeLabel() }}</mat-label>
+    <input
+      matInput
+      [matTimepicker]="timePicker"
+      [name]="name() + '_time'"
+      autocomplete="off"
+      [appFieldError]="timeError()"
+      [ngModel]="time()"
+      (ngModelChange)="time.set($event)"
+    />
+    <mat-timepicker-toggle matIconSuffix [for]="timePicker" [aria-label]="'backups.moment.chooseTime' | t">
+      <i matTimepickerToggleIcon class="fa-regular fa-clock" aria-hidden="true"></i>
+    </mat-timepicker-toggle>
+    <mat-timepicker #timePicker [aria-label]="'backups.moment.times' | t" />
+    @if (timeError(); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+</div>

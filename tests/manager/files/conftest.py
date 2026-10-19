@@ -10,15 +10,10 @@ import pytest
 from rest_framework.test import APIClient
 
 from dbs.manager.accounts.repositories import UserRepository
+from dbs.manager.applications.models import Application
 from dbs.manager.servers.gateways import RemoteHost
-from dbs.manager.servers.models import Server
-from dbs.manager.servers.services import ServerService
-from tests.manager.servers.support import (
-    PASSWORD,
-    LocalSftpSession,
-    host_key_line,
-    private_key_text,
-)
+from tests.manager.factories import make_application
+from tests.manager.servers.support import PASSWORD, LocalSftpSession
 from tests.manager.support import logged_entries
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
@@ -97,17 +92,8 @@ def anonymous() -> APIClient:
 
 
 @pytest.fixture
-def server(admin, tree) -> Server:
-    return ServerService(admin).create(
-        name="web-1",
-        host="10.0.0.5",
-        port=2222,
-        username="deploy",
-        auth_method=Server.AuthMethod.KEY,
-        private_key=private_key_text(),
-        host_key=host_key_line(),
-        file_roots=tree.roots,
-    )
+def application(admin, tree) -> Application:
+    return make_application(admin, file_roots=tree.roots)
 
 
 @pytest.fixture

@@ -1,0 +1,55 @@
+{
+  "terminal": {
+    "title": "Terminal",
+    "where": {
+      "server": "A login shell on {name}, as {user}, the SSH user the manager signs in with.",
+      "host": "A login shell on the server that runs {name}, in {folder}.",
+      "home": "A login shell on the server that runs {name}, in the SSH user's home folder.",
+      "compose": "A shell inside {service}, the Compose service that runs {name}.",
+      "container": "A shell inside {container}, the container that runs {name}."
+    },
+    "recorded": "What you type and what the shell shows are never recorded. The activity log keeps where the terminal ran, how long it stayed open, how much passed each way and why it closed.",
+    "limits": "Every terminal asks for your password. It closes after 15 minutes without typing, a minute after this page stops reading it, or two hours in all.",
+    "open": "Open a terminal",
+    "opening": "Opening the terminal…",
+    "close": "Close the terminal",
+    "closing": "Closing the terminal…",
+    "running": "Terminal open",
+    "stillOpen": "A terminal you opened here is still running.",
+    "reattach": "Reattach",
+    "discard": "Close it",
+    "discarding": "Closing it…",
+    "reattached": "Reattached. Earlier output is not shown; press Enter for a fresh prompt.",
+    "skipped": "Some output arrived faster than this page could read it, and part of it was left out.",
+    "prompt": {
+      "title": "Open a terminal",
+      "body": "Enter your password to open a shell.",
+      "bodyNamed": "Enter your password to open a shell for {name}.",
+      "submit": "Open the terminal"
+    },
+    "view": {
+      "named": "Shell for {name}",
+      "unnamed": "Shell",
+      "tooMuchOutput": "Too much output to read aloud. Move through the lines to read them."
+    },
+    "ended": {
+      "exited": "The shell exited.",
+      "exitedWith": "The shell exited with status {status}.",
+      "closed": "You closed the terminal.",
+      "idle": "The terminal closed after 15 minutes without typing.",
+      "unpolled": "The terminal closed because this page stopped reading it for a minute.",
+      "lifetime": "The terminal closed after two hours, the longest one stays open.",
+      "revoked": "The terminal closed because your password, your role or the terminal setting changed.",
+      "signed_out": "The terminal closed because you signed out.",
+      "lost": "The connection to the server was lost, and the terminal closed.",
+      "stopped": "The manager stopped, and the terminal closed with it."
+    }
+  },
+  "errors": {
+    "terminal_off": "The terminal is switched off for this manager.",
+    "terminal_needs_account": "A terminal opens only for a person signed in to the manager.",
+    "too_many_terminals": "Too many terminals are open. Close one before opening another: two per account and four in all.",
+    "terminal_closed": "This terminal has closed.",
+    "terminal_not_found": "This terminal is no longer open."
+  }
+}

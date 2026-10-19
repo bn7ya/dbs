@@ -130,3 +130,21 @@ def test_an_empty_stdin_passphrase_is_refused(tmp_path, monkeypatch):
             "dbs_backup", str(tmp_path / "no.dbs"),
             passphrase_stdin=True, kdf_time=1, kdf_memory=8192, stdout=StringIO(),
         )
+
+
+@pytest.mark.django_db
+def test_validate_reads_the_passphrase_from_standard_input(tmp_path, monkeypatch):
+    backup_file = tmp_path / "piped.dbs"
+    call_command(
+        "dbs_backup", str(backup_file),
+        passphrase=PASS, kdf_time=1, kdf_memory=8192, stdout=StringIO(),
+    )
+
+    monkeypatch.setattr("sys.stdin", StringIO(f"{PASS}\n"))
+    out = StringIO()
+    call_command("dbs_validate", str(backup_file), passphrase_stdin=True, stdout=out)
+
+    assert "decrypt" in out.getvalue().lower()
+    monkeypatch.setattr("sys.stdin", StringIO("not-the-passphrase\n"))
+    with pytest.raises(CommandError):
+        call_command("dbs_validate", str(backup_file), passphrase_stdin=True, stdout=StringIO())

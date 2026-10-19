@@ -4,7 +4,16 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ARCHIVE_PLAN, FILE, JOB_ID, PLAN, SERVER_ID, UPLOADED_FILE, pageOf } from '../testing/backups.fixtures';
+import {
+  APPLICATIONS,
+  APPLICATION_ID,
+  DASHBOARD,
+  FILE,
+  JOB_ID,
+  UPLOADED_FILE,
+  pageOf,
+  unfinished,
+} from '../testing/backups.fixtures';
 import { BackupsApi } from './backups.api';
 import type { UploadEvent } from './backups.types';
 
@@ -25,20 +34,29 @@ describe('BackupsApi', () => {
     TestBed.resetTestingModule();
   });
 
-  it('lists one server a page at a time', async () => {
-    const listing = firstValueFrom(api.list({ server: SERVER_ID, page: 2, page_size: 20 }));
-    const request = http.expectOne(`/api/backups/?server=${SERVER_ID}&page=2&page_size=20`);
+  it('lists one application a page at a time', async () => {
+    const listing = firstValueFrom(api.list({ application: APPLICATION_ID, page: 2, page_size: 20 }));
+    const request = http.expectOne(`/api/backups/?page=2&page_size=20&application=${APPLICATION_ID}`);
     expect(request.request.method).toBe('GET');
     request.flush(pageOf([FILE]));
 
     await expect(listing).resolves.toEqual(pageOf([FILE]));
   });
 
-  it('starts a backup of the server and answers with its job', async () => {
-    const taking = firstValueFrom(api.take(SERVER_ID));
+  it("lists every application's files when it names none", async () => {
+    const listing = firstValueFrom(api.list({ application: null, page: 1, page_size: 50 }));
+    const request = http.expectOne('/api/backups/?page=1&page_size=50');
+    expect(request.request.params.has('application')).toBe(false);
+    request.flush(pageOf([FILE]));
+
+    await expect(listing).resolves.toEqual(pageOf([FILE]));
+  });
+
+  it('starts a backup of the application and answers with its job', async () => {
+    const taking = firstValueFrom(api.take(APPLICATION_ID));
     const request = http.expectOne('/api/backups/take/');
     expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({ server: SERVER_ID });
+    expect(request.request.body).toEqual({ application: APPLICATION_ID });
     request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
 
     await expect(taking).resolves.toEqual({ activity: JOB_ID });
@@ -53,8 +71,14 @@ describe('BackupsApi', () => {
     await expect(verifying).resolves.toEqual({ activity: JOB_ID });
   });
 
-  it('starts a restore of a file and answers with its job', async () => {
-    const body = { mode: 'replace', rehearse: false, account_password: 'secret', server_name: 'production-web' } as const;
+  it('starts a restore of a file, onto another application when asked, and answers with its job', async () => {
+    const body = {
+      mode: 'replace',
+      rehearse: false,
+      account_password: 'secret',
+      application_name: 'blog',
+      target_application: APPLICATIONS[1].id,
+    } as const;
     const restoring = firstValueFrom(api.restore(FILE.id, body));
     const request = http.expectOne(`/api/backups/${FILE.id}/restore/`);
     expect(request.request.method).toBe('POST');
@@ -82,15 +106,15 @@ describe('BackupsApi', () => {
   describe('uploading a file', () => {
     const file = (): File => new File(['backup bytes'], UPLOADED_FILE.name);
 
-    it('sends the server and the file as form data', () => {
-      api.upload(SERVER_ID, file()).subscribe();
+    it('sends the application and the file as form data', () => {
+      api.upload(APPLICATION_ID, file()).subscribe();
 
       const request = http.expectOne('/api/backups/upload/');
       expect(request.request.method).toBe('POST');
       expect(request.request.reportProgress).toBe(true);
       const body = request.request.body as FormData;
       expect(body).toBeInstanceOf(FormData);
-      expect(body.get('server')).toBe(SERVER_ID);
+      expect(body.get('application')).toBe(APPLICATION_ID);
       const sent = body.get('file') as File;
       expect(sent.name).toBe(UPLOADED_FILE.name);
       expect(sent.size).toBe('backup bytes'.length);
@@ -99,7 +123,7 @@ describe('BackupsApi', () => {
 
     it('reports the bytes sent as they go, then the file as stored', () => {
       const events: UploadEvent[] = [];
-      api.upload(SERVER_ID, file()).subscribe((event) => events.push(event));
+      api.upload(APPLICATION_ID, file()).subscribe((event) => events.push(event));
 
       const request = http.expectOne('/api/backups/upload/');
       request.event({ type: HttpEventType.Sent });
@@ -117,7 +141,7 @@ describe('BackupsApi', () => {
     });
 
     it('aborts the request when the upload is dropped', () => {
-      const uploading = api.upload(SERVER_ID, file()).subscribe();
+      const uploading = api.upload(APPLICATION_ID, file()).subscribe();
       const request = http.expectOne('/api/backups/upload/');
 
       uploading.unsubscribe();
@@ -141,109 +165,34 @@ describe('BackupsApi', () => {
     await expect(linking).resolves.toEqual({ url: `/api/backups/${FILE.id}/download/?ticket=t1` });
   });
 
-  describe('plans', () => {
-    it("lists one server's plans a page at a time", async () => {
-      const listing = firstValueFrom(api.plans({ server: SERVER_ID, page: 1, page_size: 20 }));
-      const request = http.expectOne(`/api/backups/plans/?server=${SERVER_ID}&page=1&page_size=20`);
-      expect(request.request.method).toBe('GET');
-      request.flush(pageOf([PLAN]));
+  it('reads the applications to choose from, as many as one page holds', async () => {
+    const reading = firstValueFrom(api.applications());
+    const request = http.expectOne('/api/applications/?page=1&page_size=200');
+    expect(request.request.method).toBe('GET');
+    request.flush(pageOf(APPLICATIONS));
 
-      await expect(listing).resolves.toEqual(pageOf([PLAN]));
-    });
-
-    it('adds a plan to a server', async () => {
-      const plan = {
-        server: SERVER_ID,
-        kind: 'dbs',
-        name: PLAN.name,
-        interval_minutes: 1440,
-        keep: 5,
-        keep_remote: 1,
-        enabled: true,
-        paths: [],
-        pattern: '',
-      } as const;
-      const creating = firstValueFrom(api.createPlan(plan));
-      const request = http.expectOne('/api/backups/plans/');
-      expect(request.request.method).toBe('POST');
-      expect(request.request.body).toEqual(plan);
-      request.flush(PLAN, { status: 201, statusText: 'Created' });
-
-      await expect(creating).resolves.toEqual(PLAN);
-    });
-
-    it('adds a plan that archives folders, with its folders', async () => {
-      const plan = {
-        server: SERVER_ID,
-        kind: 'archive',
-        name: ARCHIVE_PLAN.name,
-        interval_minutes: 10080,
-        keep: 5,
-        keep_remote: 1,
-        enabled: true,
-        paths: ['/srv/app/media', '/srv/app/uploads'],
-        pattern: '',
-      } as const;
-      const creating = firstValueFrom(api.createPlan(plan));
-      const request = http.expectOne('/api/backups/plans/');
-      expect(request.request.body).toEqual(plan);
-      request.flush(ARCHIVE_PLAN, { status: 201, statusText: 'Created' });
-
-      await expect(creating).resolves.toEqual(ARCHIVE_PLAN);
-    });
-
-    it("changes a plan's folders", async () => {
-      const updating = firstValueFrom(api.updatePlan(ARCHIVE_PLAN.id, { paths: ['/srv/app/media'] }));
-      const request = http.expectOne(`/api/backups/plans/${ARCHIVE_PLAN.id}/`);
-      expect(request.request.method).toBe('PATCH');
-      expect(request.request.body).toEqual({ paths: ['/srv/app/media'] });
-      request.flush({ ...ARCHIVE_PLAN, paths: ['/srv/app/media'] });
-
-      await expect(updating).resolves.toEqual({ ...ARCHIVE_PLAN, paths: ['/srv/app/media'] });
-    });
-
-    it('changes only what it is given', async () => {
-      const updating = firstValueFrom(api.updatePlan(PLAN.id, { keep: 4 }));
-      const request = http.expectOne(`/api/backups/plans/${PLAN.id}/`);
-      expect(request.request.method).toBe('PATCH');
-      expect(request.request.body).toEqual({ keep: 4 });
-      request.flush({ ...PLAN, keep: 4 });
-
-      await expect(updating).resolves.toEqual({ ...PLAN, keep: 4 });
-    });
-
-    it('deletes a plan', async () => {
-      const removing = firstValueFrom(api.removePlan(PLAN.id));
-      const request = http.expectOne(`/api/backups/plans/${PLAN.id}/`);
-      expect(request.request.method).toBe('DELETE');
-      request.flush(null, { status: 204, statusText: 'No Content' });
-
-      await expect(removing).resolves.toBeNull();
-    });
-
-    it('starts a run of a plan and answers with its job', async () => {
-      const running = firstValueFrom(api.runPlan(PLAN.id));
-      const request = http.expectOne(`/api/backups/plans/${PLAN.id}/run/`);
-      expect(request.request.method).toBe('POST');
-      request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
-
-      await expect(running).resolves.toEqual({ activity: JOB_ID });
-    });
+    await expect(reading).resolves.toEqual(pageOf(APPLICATIONS));
   });
 
-  it("reads a server's unfinished jobs in one status from the activity list", async () => {
-    const job = {
-      id: JOB_ID,
-      action: 'backup.run',
-      status: 'running',
-      target: PLAN.name,
-      detail: { plan: PLAN.id },
-    } as const;
-    const reading = firstValueFrom(api.unfinishedJobs(SERVER_ID, 'running'));
-    const request = http.expectOne(`/api/activity/?server=${SERVER_ID}&status=running&page=1&page_size=100`);
+  it("reads the manager's storage from the dashboard", async () => {
+    const reading = firstValueFrom(api.storage());
+    const request = http.expectOne('/api/dashboard/');
     expect(request.request.method).toBe('GET');
-    request.flush(pageOf([job]));
+    request.flush(DASHBOARD);
 
-    await expect(reading).resolves.toEqual(pageOf([job]));
+    await expect(reading).resolves.toEqual(DASHBOARD);
+  });
+
+  it("reads an application's unfinished jobs in one status, or every application's", async () => {
+    const job = unfinished('backup.take');
+    const one = firstValueFrom(api.unfinishedJobs(APPLICATION_ID, 'running'));
+    http
+      .expectOne(`/api/activity/?status=running&page=1&page_size=100&application=${APPLICATION_ID}`)
+      .flush(pageOf([job]));
+    await expect(one).resolves.toEqual(pageOf([job]));
+
+    const every = firstValueFrom(api.unfinishedJobs(null, 'queued'));
+    http.expectOne('/api/activity/?status=queued&page=1&page_size=100').flush(pageOf([job]));
+    await expect(every).resolves.toEqual(pageOf([job]));
   });
 });

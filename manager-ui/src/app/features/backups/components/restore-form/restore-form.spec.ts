@@ -13,10 +13,11 @@ import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { Toaster } from '@shared/toaster/toaster';
 import { JobWatcher } from '@core/jobs/job-watcher';
+import type { ApplicationChoice } from '../../data/backups.types';
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
 import { BackupsStore } from '../../state/backups.store';
-import { FILE, JOB_ID, SERVER_ID, STAGING, TARGET_SERVERS, pageOf } from '../../testing/backups.fixtures';
+import { APPLICATIONS, BLOG, FILE, JOB_ID, SHOP, pageOf } from '../../testing/backups.fixtures';
 import { RestoreForm } from './restore-form';
 
 const PASSWORD = 'correct-horse-battery-staple';
@@ -26,7 +27,7 @@ describe('RestoreForm', () => {
   let close: ReturnType<typeof vi.fn>;
   let fixture: ComponentFixture<RestoreForm>;
 
-  const open = async (targets = TARGET_SERVERS): Promise<RestoreForm> => {
+  const open = async (applications: readonly ApplicationChoice[] = APPLICATIONS): Promise<RestoreForm> => {
     close = vi.fn();
     localStorage.setItem('locale', 'en');
     TestBed.configureTestingModule({
@@ -43,16 +44,15 @@ describe('RestoreForm', () => {
       ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });
-    TestBed.inject(BackupsStore).server.set(SERVER_ID);
     vi.spyOn(TestBed.inject(Toaster), 'add').mockReturnValue(undefined);
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(RestoreForm);
     (
       await vi.waitFor(() => {
         TestBed.tick();
-        return http.expectOne((request) => request.url === '/api/servers/');
+        return http.expectOne((request) => request.url === '/api/applications/');
       })
-    ).flush(pageOf(targets));
+    ).flush(pageOf(applications));
     TestBed.tick();
     return fixture.componentInstance;
   };
@@ -71,11 +71,12 @@ describe('RestoreForm', () => {
     vi.restoreAllMocks();
   });
 
-  it('names the file and the server, and starts on merge', async () => {
+  it('names the file, its application and its server, and starts on merge', async () => {
     const form = await open();
     const text = rendered().textContent ?? '';
 
     expect(text).toContain(FILE.name);
+    expect(text).toContain(FILE.application_name);
     expect(text).toContain(FILE.server_name);
     expect(text).toContain('Records added since this backup stay.');
     expect(form.mode()).toBe('merge');
@@ -110,19 +111,20 @@ describe('RestoreForm', () => {
     const fields = rendered().querySelectorAll('mat-error');
     expect(Array.from(fields, (each) => each.textContent?.trim())).toEqual([
       'Enter your password.',
-      "Type the server's name exactly as shown.",
+      "Type the application's name exactly as shown.",
     ]);
 
-    form.setServerName(FILE.server_name.toUpperCase());
+    form.setApplicationName(FILE.application_name.toUpperCase());
     await form.restore();
     http.expectNone(`/api/backups/${FILE.id}/restore/`);
     expect(form.nameError()).toBe('name_mismatch');
   });
 
-  it('restores for real with the password and the name, spaces around it aside', async () => {
+  it("restores for real with the password and the application's name, spaces around it aside", async () => {
     const form = await open();
+    expect(rendered().textContent).toContain(`Type ⁨${FILE.application_name}⁩ to restore.`);
     form.setAccountPassword(PASSWORD);
-    form.setServerName(`  ${FILE.server_name} `);
+    form.setApplicationName(`  ${FILE.application_name} `);
 
     const restoring = form.restore();
     const request = restoreRequest();
@@ -130,7 +132,7 @@ describe('RestoreForm', () => {
       mode: 'merge',
       rehearse: false,
       account_password: PASSWORD,
-      server_name: FILE.server_name,
+      application_name: FILE.application_name,
     });
     request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
     await restoring;
@@ -141,7 +143,7 @@ describe('RestoreForm', () => {
   it('says a wrong password under its field, and stops once it is typed again', async () => {
     const form = await open();
     form.setAccountPassword('wrong');
-    form.setServerName(FILE.server_name);
+    form.setApplicationName(FILE.application_name);
 
     const restoring = form.restore();
     restoreRequest().flush(
@@ -159,50 +161,71 @@ describe('RestoreForm', () => {
     expect(form.passwordRejected()).toBe(false);
   });
 
-  it('offers every other server, and restores onto the one chosen with its name typed', async () => {
+  it("puts the backend's name refusal under the name, until it is typed again", async () => {
+    const form = await open();
+    form.setAccountPassword(PASSWORD);
+    form.setApplicationName(FILE.application_name);
+
+    const restoring = form.restore();
+    restoreRequest().flush(
+      { error: { code: 'invalid', message: 'Server prose', fields: { application_name: ['name_mismatch'] } } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    await restoring;
+
+    expect(form.nameError()).toBe('name_mismatch');
+    expect(form.formFailure()).toBeNull();
+    form.setApplicationName(FILE.application_name);
+    expect(form.nameError()).toBeNull();
+  });
+
+  it('offers every other application with its server, and restores onto the one chosen with its name typed', async () => {
     const form = await open();
     const select = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatSelectHarness);
     await select.open();
     const options = await select.getOptions();
-    expect(await Promise.all(options.map((option) => option.getText()))).toEqual(['This server', STAGING.name]);
+    expect(await Promise.all(options.map((option) => option.getText()))).toEqual([
+      'This application',
+      `⁨${BLOG.name}⁩ on ⁨${BLOG.server.name}⁩`,
+    ]);
     await options[1].click();
-    expect(form.targetServer()).toBe(STAGING.id);
-    expect(rendered().textContent).toContain(`Type \u2068${STAGING.name}\u2069 to restore.`);
+    expect(form.targetApplication()).toBe(BLOG.id);
+    expect(rendered().textContent).toContain(`Type ⁨${BLOG.name}⁩ to restore.`);
 
     form.setAccountPassword(PASSWORD);
-    form.setServerName(FILE.server_name);
+    form.setApplicationName(FILE.application_name);
     await form.restore();
     http.expectNone(`/api/backups/${FILE.id}/restore/`);
     expect(form.nameError()).toBe('name_mismatch');
 
-    form.setServerName(STAGING.name);
+    form.setApplicationName(BLOG.name);
     const restoring = form.restore();
     const request = restoreRequest();
     expect(request.request.body).toEqual({
       mode: 'merge',
       rehearse: false,
       account_password: PASSWORD,
-      server_name: STAGING.name,
-      target_server: STAGING.id,
+      application_name: BLOG.name,
+      target_application: BLOG.id,
     });
     request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
     await restoring;
     expect(close).toHaveBeenCalledWith(true);
   });
 
-  it('rehearses onto the other server too', async () => {
+  it('rehearses onto the other application too', async () => {
     const form = await open();
-    form.targetServer.set(STAGING.id);
+    form.targetApplication.set(BLOG.id);
 
     const rehearsing = form.rehearse();
     const request = restoreRequest();
-    expect(request.request.body).toEqual({ mode: 'merge', rehearse: true, target_server: STAGING.id });
+    expect(request.request.body).toEqual({ mode: 'merge', rehearse: true, target_application: BLOG.id });
     request.flush({ activity: JOB_ID }, { status: 202, statusText: 'Accepted' });
     await rehearsing;
   });
 
-  it('leaves the choice out when there is no other server', async () => {
-    await open([TARGET_SERVERS[0]]);
+  it('leaves the choice out when there is no other application', async () => {
+    await open([SHOP]);
     expect(rendered().querySelector('mat-select')).toBeNull();
   });
 
@@ -210,15 +233,10 @@ describe('RestoreForm', () => {
     const form = await open();
 
     const rehearsing = form.rehearse();
-    restoreRequest().flush(
-      { error: { code: 'backup_running', message: 'Server prose' } },
-      { status: 409, statusText: 'Conflict' },
-    );
+    restoreRequest().flush({ error: { code: 'not_restorable', message: 'Server prose' } }, { status: 409, statusText: 'Conflict' });
     await rehearsing;
 
-    expect(form.formFailure()?.code).toBe('backup_running');
-    expect(rendered().querySelector('app-notice')?.textContent).toContain(
-      'A backup or restore of this server is already running.',
-    );
+    expect(form.formFailure()?.code).toBe('not_restorable');
+    expect(rendered().querySelector('app-notice')?.textContent).toContain('Only a django-dbs backup can be restored.');
   });
 });

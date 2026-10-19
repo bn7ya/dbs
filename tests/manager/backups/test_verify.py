@@ -24,7 +24,9 @@ def stored(backup) -> BackupFile:
 
 
 @pytest.mark.django_db
-def test_a_backup_that_decrypts_is_verified(api, admin, server, run_jobs, taken, entry):
+def test_a_backup_that_decrypts_is_verified(
+    api, admin, application, run_jobs, taken, entry
+):
     backup = taken()
 
     with run_jobs():
@@ -36,7 +38,7 @@ def test_a_backup_that_decrypts_is_verified(api, admin, server, run_jobs, taken,
     assert job.status == audit.SUCCEEDED
     assert job.data == {"validation": "verified"}
     assert (job.subject, job.target_name, job.actor) == (
-        str(server.pk),
+        str(application.pk),
         backup.name,
         admin,
     )
@@ -63,7 +65,7 @@ def test_a_verify_answers_before_it_runs(api, taken, entry):
     ],
 )
 def test_a_backup_that_does_not_decrypt_is_a_result_not_an_error(
-    api, admin, server, run_jobs, taken, entry, storage, content
+    api, admin, application, run_jobs, taken, entry, storage, content
 ):
     backup = taken()
     (storage / backup.storage_path).write_bytes(content())
