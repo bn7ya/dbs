@@ -39,7 +39,7 @@ wheels="$directory/wheelhouse"
 container_name=e2e-shop
 
 as_account() {
-    su "$account" -s /bin/sh -c "cd '$1' && $2"
+    su "$account" -s /bin/sh -c "unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME; cd '$1' && $2"
 }
 
 rm -rf "$wheels"

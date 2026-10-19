@@ -39,7 +39,7 @@ KbdInteractiveAuthentication no
 UsePAM yes
 AllowUsers $account
 Subsystem sftp internal-sftp
-SetEnv XDG_RUNTIME_DIR=$runtime
+SetEnv XDG_RUNTIME_DIR=$runtime XDG_CONFIG_HOME=$home/.config XDG_DATA_HOME=$home/.local/share XDG_CACHE_HOME=$home/.cache XDG_STATE_HOME=$home/.local/state
 EOF
 
 mkdir -p /run/sshd

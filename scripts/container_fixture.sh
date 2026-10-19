@@ -34,7 +34,7 @@ runtime="/run/user/$(id -u "$account")"
 install -d -m 700 -o "$account" "$runtime"
 
 as_account() {
-    su "$account" -s /bin/sh -c "export XDG_RUNTIME_DIR='$runtime'; cd '$project' && $1"
+    su "$account" -s /bin/sh -c "unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME; export XDG_RUNTIME_DIR='$runtime'; cd '$project' && $1"
 }
 
 if [ -d "$project" ]; then
