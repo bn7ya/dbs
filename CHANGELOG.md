@@ -14,8 +14,8 @@ a Compose service or in a container, under Docker or Podman. It backs them up, s
 reschedules them, deploys them in place or moves them, keeps their backups on the manager's
 own machine and restores them, all without SSH or the Django admin, and offers a console and
 a terminal in the browser. Panel backups and restores leave the web process for a limited
-child process, large tables are read in pages, a 100 MB row costs about three times its size,
-and a stream whose connection broke resumes where it stopped. `pip install django-dbs`
+child process, large tables are read in pages, a 100 MB row takes DBS about three times its
+size, and a stream whose connection broke resumes where it stopped. `pip install django-dbs`
 installs everything, and the manager answers to `django-dbs`, `django_dbs` and `dbs`.
 
 ### Added
@@ -95,8 +95,8 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
 - **Large tables and large values.** Rows are read in pages keyed on the primary key, so
   MySQL no longer buffers a whole table; models with binary, text or JSON fields start with
   one-row pages and grow from the measured row size; values of 1 MiB or more are spliced
-  into the frame without copies. A 100 MB row costs about 3 times its size to back up and
-  restore, down from 5 to 6.5.
+  into the frame without copies. Backing up or restoring a 100 MB row takes DBS about 3
+  times its size, down from 5 to 6.5, on top of the copies the database driver makes itself.
 - **MySQL reads one snapshot.** A backup opens `REPEATABLE READ` with a consistent snapshot,
   so every page sees the same moment.
 - **The interface** is rebuilt around servers and applications, blue, light and minimal.

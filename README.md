@@ -170,8 +170,9 @@ large the project grows. A restore reads the file the same way.
 Rows are read in pages keyed on the primary key, at most 500 rows or 8 MiB a page, so no
 database driver holds a whole table in memory. A model with binary, text or JSON fields
 starts with one row a page and grows the page from the row size it measures, and a value of
-1 MiB or more goes into the backup without being copied again, so a 100 MB row costs about
-three times its size to back up and restore. One row may be up to 256 MiB.
+1 MiB or more goes into the backup without being copied again, so backing up or restoring a
+100 MB row takes DBS about three times its size, on top of the copies the database driver
+makes itself. One row may be up to 256 MiB.
 
 On PostgreSQL and MySQL a backup reads inside one `REPEATABLE READ` transaction, on MySQL
 started `WITH CONSISTENT SNAPSHOT`, so every page sees the same moment while the site keeps

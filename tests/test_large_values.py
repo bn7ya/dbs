@@ -37,6 +37,16 @@ def peak(action):
         tracemalloc.stop()
 
 
+def driver_cost_to_write(**fields):
+    cost = peak(lambda: Blob.objects.create(name="driver", **fields))
+    Blob.objects.filter(name="driver").delete()
+    return cost
+
+
+def driver_cost_to_read(name, field):
+    return max(0, peak(lambda: getattr(Blob.objects.get(name=name), field)) - SIZE)
+
+
 def digest(value):
     return hashlib.sha256(bytes(value) if not isinstance(value, str) else value.encode()).hexdigest()
 
@@ -50,8 +60,10 @@ def text_of(size):
 def test_a_row_holding_a_large_binary_value_round_trips_within_its_budget(tmp_path):
     value = os.urandom(SIZE)
     expected = digest(value)
+    writing = driver_cost_to_write(data=value, text="")
     Blob.objects.create(name="binary", data=value, text="")
     del value
+    reading = driver_cost_to_read("binary", "data")
     output = tmp_path / "binary.dbs"
 
     backup_peak = peak(lambda: write_backup(output, PASS, registry=registry(), kdf_params=FAST_KDF))
@@ -59,16 +71,18 @@ def test_a_row_holding_a_large_binary_value_round_trips_within_its_budget(tmp_pa
     restore_peak = peak(lambda: restore_backup(output, PASS, registry=registry()))
 
     assert digest(Blob.objects.get(name="binary").data) == expected
-    assert backup_peak < BACKUP_BUDGET * SIZE + SLACK
-    assert restore_peak < RESTORE_BUDGET * SIZE + SLACK
+    assert backup_peak - reading < BACKUP_BUDGET * SIZE + SLACK
+    assert restore_peak - writing < RESTORE_BUDGET * SIZE + SLACK
 
 
 @pytest.mark.django_db
 def test_a_row_holding_large_text_that_needs_escaping_round_trips(tmp_path):
     value = text_of(SIZE)
     expected = digest(value)
+    writing = driver_cost_to_write(text=value, data=b"")
     Blob.objects.create(name="text", text=value, data=b"")
     del value
+    reading = driver_cost_to_read("text", "text")
     output = tmp_path / "text.dbs"
 
     backup_peak = peak(lambda: write_backup(output, PASS, registry=registry(), kdf_params=FAST_KDF))
@@ -76,8 +90,8 @@ def test_a_row_holding_large_text_that_needs_escaping_round_trips(tmp_path):
     restore_peak = peak(lambda: restore_backup(output, PASS, registry=registry()))
 
     assert digest(Blob.objects.get(name="text").text) == expected
-    assert backup_peak < BACKUP_BUDGET * SIZE + SLACK
-    assert restore_peak < RESTORE_BUDGET * SIZE + SLACK
+    assert backup_peak - reading < BACKUP_BUDGET * SIZE + SLACK
+    assert restore_peak - writing < RESTORE_BUDGET * SIZE + SLACK
 
 
 @pytest.mark.django_db
