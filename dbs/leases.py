@@ -7,7 +7,7 @@ import threading
 import uuid
 from datetime import timedelta
 
-from django.db import DatabaseError, IntegrityError, connections, transaction
+from django.db import DatabaseError, connections
 from django.db.models import Q
 from django.utils import timezone
 
@@ -28,13 +28,7 @@ def acquire(name, owner, ttl_seconds):
     from .models import Lease
 
     now = timezone.now()
-    try:
-        with transaction.atomic():
-            Lease.objects.get_or_create(
-                name=name, defaults={"owner": "", "expires_at": now}
-            )
-    except IntegrityError:
-        pass
+    Lease.objects.get_or_create(name=name, defaults={"owner": "", "expires_at": now})
     taken = (
         Lease.objects.filter(name=name)
         .filter(Q(expires_at__lte=now) | Q(owner=owner))
