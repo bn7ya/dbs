@@ -116,6 +116,19 @@ class Job:
             self.close()
 
 
+def refused(action, exc, *, target, data, actor=None, remote_addr=""):
+    return audit.record(
+        action,
+        actor=actor,
+        target=target,
+        data=data,
+        status=audit.FAILED,
+        error_code=audit.error_code_for(exc),
+        detail=str(exc)[:DETAIL_MAX] or type(exc).__name__,
+        remote_addr=remote_addr,
+    )
+
+
 def recover(now=None):
     from .models import Lease
 
@@ -170,9 +183,20 @@ def start_backup(*, database, passphrase="", note="", actor=None, remote_addr=""
     runner = Runner().take()
     output = None
     try:
-        os.makedirs(directory, exist_ok=True)
         stem = backup_stem(backup_prefix_setting(), database)
-        name = reserve(directory, stem)
+        try:
+            os.makedirs(directory, exist_ok=True)
+            name = reserve(directory, stem)
+        except OSError as exc:
+            runner.release()
+            return refused(
+                BACKUP,
+                exc,
+                target=directory,
+                data=audit.with_actor({"database": database}, actor),
+                actor=actor,
+                remote_addr=remote_addr,
+            ).pk
         output = os.path.join(directory, name)
         job = Job.begin(
             BACKUP,

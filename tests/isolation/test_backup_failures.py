@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import os
 
@@ -73,6 +74,31 @@ def test_a_backup_folder_that_cannot_be_written_fails_with_its_code(
 
     assert (failed.status, failed.error_code) == (audit.FAILED, audit.PERMISSION_DENIED)
     assert kept(backup_dir) == {}
+    assert not leases_held().exists()
+
+
+@pytest.mark.parametrize(
+    ("error", "code"),
+    [
+        (errno.EACCES, audit.PERMISSION_DENIED),
+        (errno.ENOSPC, audit.DISK_FULL),
+        (errno.EROFS, audit.READ_ONLY),
+    ],
+)
+def test_a_backup_folder_that_refuses_the_name_fails_with_its_code_and_starts_nothing(
+    backup_dir, children, monkeypatch, error, code  # noqa: F811
+):
+    def refuse(directory, stem):
+        raise OSError(error, os.strerror(error), os.path.join(directory, stem))
+
+    monkeypatch.setattr(schedule_runner, "reserve_backup_name", refuse)
+
+    failed = finished(jobs.start_backup(database="default", passphrase=PASS))
+
+    assert (failed.status, failed.error_code) == (audit.FAILED, code)
+    assert failed.target_name == str(backup_dir)
+    assert kept(backup_dir) == {}
+    assert children == []
     assert not leases_held().exists()
 
 

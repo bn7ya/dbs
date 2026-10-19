@@ -107,9 +107,18 @@ def write_reserved(output, passphrase, *, verify=True, **options):
 
 
 def run_cycle(passphrase, plan, runner=None):
-    os.makedirs(plan["output_dir"], exist_ok=True)
     stem = backup_stem(plan["prefix"], plan["database"])
-    name = reserve(plan["output_dir"], stem)
+    try:
+        os.makedirs(plan["output_dir"], exist_ok=True)
+        name = reserve(plan["output_dir"], stem)
+    except OSError as exc:
+        jobs.refused(
+            jobs.BACKUP,
+            exc,
+            target=plan["output_dir"],
+            data={"database": plan["database"]},
+        )
+        raise
     output = os.path.join(plan["output_dir"], name)
     extra = {"block_size": plan["block_size"]} if plan.get("block_size") else {}
     try:
