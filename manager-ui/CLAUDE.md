@@ -37,6 +37,10 @@ built directory is gitignored. The Angular CLI needs Node 22.22.3+ or 24.15+.
 provides `APP_BASE_HREF` as `/`, so router URLs stay at `/`, `/servers`, `/setup`, `/sign-in/code`.
 API calls are absolute (`/api/...`) and unaffected by either.
 
+The initial bundle is about 820 kB (190 kB compressed): `main` and the chunks it imports
+statically, Angular and Material among them. The `initial` budget warns at 900 kB and fails at
+1 MB, so a change that adds to the first load shows in the build.
+
 ## Hard rules
 
 1. **One pattern: vertical slice.** One feature directory per page, flowing

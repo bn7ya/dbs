@@ -76,8 +76,8 @@ listed by the build's own `3rdpartylicenses.txt`, at the versions locked in
 
 | Package | Version | License |
 |---|---|---|
-| @angular/core, @angular/common, @angular/forms, @angular/router, @angular/platform-browser | 22.1.0 | MIT |
-| @angular/cdk, @angular/material | 22.2.2 | MIT |
+| @angular/core, @angular/common, @angular/forms, @angular/router, @angular/platform-browser | 22.2.3 | MIT |
+| @angular/cdk, @angular/material | 22.2.3 | MIT |
 | rxjs | 7.8.2 | Apache-2.0 |
 | tslib | 2.8.1 | 0BSD |
 | @fortawesome/fontawesome-free | 7.3.1 | CC-BY-4.0 AND OFL-1.1 AND MIT: icons under CC BY 4.0, fonts under the SIL OFL 1.1, code under MIT |
