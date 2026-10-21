@@ -34,7 +34,7 @@ jobs:
 
   sqlite:
     name: SQLite, Python ${{ matrix.python }}, Django ${{ matrix.django }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.python == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     permissions:
       contents: read
     strategy:
@@ -198,7 +198,7 @@ jobs:
 
   minimum:
     name: Lowest supported dependencies, Python 3.9
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
