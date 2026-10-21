@@ -122,6 +122,11 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
 - A move could restore a backup that failed verification; it now refuses with
   `backup_quarantined`.
 - `dbs validate` with a wrong passphrase ended in a traceback.
+- On SQLite with `"transaction_mode": "IMMEDIATE"`, as `SQLiteWrites` recommends, a backup
+  held the write lock for as long as it read, so every write from the site waited for it and
+  failed with "database is locked" once the backup outlasted the timeout. A backup now reads
+  in a deferred transaction, so in WAL mode the site keeps writing while it reads one
+  snapshot.
 
 ### Security
 

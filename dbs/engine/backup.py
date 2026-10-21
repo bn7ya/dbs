@@ -5,6 +5,7 @@ import hashlib
 import io
 import logging
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import django
@@ -282,7 +283,7 @@ def _stream_backup(
 def _produce(emit, selection, *, using: str, skipped: list, allow_missing_files: bool) -> dict:
     connection = connections[using]
     pin_snapshot = connection.vendor in SNAPSHOT_VENDORS and not connection.in_atomic_block
-    with transaction.atomic(using=using):
+    with reading_transaction(connection):
         if pin_snapshot:
             read_from_one_snapshot(connection)
         emit(frames.PAYLOAD_MAGIC)
@@ -403,6 +404,21 @@ def _missing_files_message(skipped: list[str]) -> str:
         f"{named}. Put them back, or pass allow_missing_files=True "
         "(--allow-missing-files) to back up without them."
     )
+
+
+@contextmanager
+def reading_transaction(connection):
+    connection.ensure_connection()
+    configured = getattr(connection, "transaction_mode", None)
+    takes_write_lock = connection.vendor == "sqlite" and configured in ("IMMEDIATE", "EXCLUSIVE")
+    if takes_write_lock:
+        connection.transaction_mode = "DEFERRED"
+    try:
+        with transaction.atomic(using=connection.alias):
+            yield
+    finally:
+        if takes_write_lock:
+            connection.transaction_mode = configured
 
 
 def read_from_one_snapshot(connection) -> None:

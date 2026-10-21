@@ -224,6 +224,9 @@ Every server needs django-dbs 0.7.0 or later; resumed transfers and progress nee
 - `dbs validate` with a wrong passphrase ended in a traceback; it now says so and exits 1, and
   takes `--passphrase-stdin`.
 - The manager's SQLite could fail a job with "database is locked" while another wrote.
+- On SQLite with `"transaction_mode": "IMMEDIATE"`, a backup held the write lock while it
+  read, so the site's writes waited for it and could fail with "database is locked". It now
+  reads in a deferred transaction, and in WAL mode the site keeps writing.
 
 ## Security
 
