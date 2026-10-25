@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
-from reedsolo import RSCodec, ReedSolomonError
+from reedsolo import RSCodec
 
 from . import rs
 
@@ -107,9 +107,7 @@ class RepairReport:
 def _decode_with_reedsolo(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes | None:
     try:
         decoded = rsc.decode(encoded)
-    except ReedSolomonError:
-        return None
-    except Exception:
+    except rs.UNDECODABLE:
         return None
     data = bytes(decoded[0]) if isinstance(decoded, tuple) else bytes(decoded)
     return data if _hash(data) == data_hash else None
@@ -118,9 +116,7 @@ def _decode_with_reedsolo(rsc: RSCodec, encoded: bytes, data_hash: str) -> bytes
 def _decode_codeword(rsc: RSCodec, codeword: bytes, erasures=None) -> bytes | None:
     try:
         decoded = rsc.decode(codeword, erase_pos=erasures) if erasures else rsc.decode(codeword)
-    except ReedSolomonError:
-        return None
-    except Exception:
+    except rs.UNDECODABLE:
         return None
     return bytes(decoded[0]) if isinstance(decoded, tuple) else bytes(decoded)
 

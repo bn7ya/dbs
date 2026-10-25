@@ -11,6 +11,7 @@ APP_DIRECTORY = "django-dbs"
 DIRECTORY_MODE = 0o700
 FILE_MODE = 0o600
 KEY_FILE = Path("keys") / "secret.key"
+KEYCHAIN_MARKER = Path("keys") / "in-keychain"
 DATABASE_FILE = "manager.sqlite3"
 LOG_FILE = "manager.log"
 INSTANCE_FILE = "manager.json"
@@ -99,6 +100,10 @@ def ensure_data_dir(data_dir):
 
 def key_path(data_dir):
     return Path(data_dir) / KEY_FILE
+
+
+def keychain_marker_path(data_dir):
+    return Path(data_dir) / KEYCHAIN_MARKER
 
 
 def new_key():

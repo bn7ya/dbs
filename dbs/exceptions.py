@@ -10,11 +10,23 @@ class HostKeyError(ConfigurationError):
     pass
 
 
+class AuthenticationFailed(ConfigurationError):
+    pass
+
+
+class HostUnreachable(DBSError):
+    pass
+
+
 class RemoteTimeout(DBSError):
     pass
 
 
 class ConnectionLost(DBSError):
+    pass
+
+
+class StreamInterrupted(DBSError):
     pass
 
 
@@ -48,3 +60,11 @@ class MissingSourceFiles(BackupError):
     def __init__(self, message, files):
         super().__init__(message)
         self.files = files
+
+
+class ScheduleError(DBSError):
+    pass
+
+
+class Busy(DBSError):
+    code = "busy"

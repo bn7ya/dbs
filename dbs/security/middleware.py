@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
+
 from django.contrib.auth import logout
 from django.contrib.auth.views import redirect_to_login
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.conf import settings
 from django.urls import NoReverseMatch, reverse
@@ -11,6 +14,8 @@ from django.utils import timezone
 from ..conf import setting
 from ..models import SecurityPolicy
 from . import guard, sessions, telemetry
+
+logger = logging.getLogger("dbs")
 
 SESSION_STARTED = "dbs_session_started"
 
@@ -33,6 +38,28 @@ FLAGGED = "DBS flagged this session, so it must sign in again before doing this.
 
 IDLE = "This session was idle for too long, so DBS ended it."
 
+LOCKED_OUT = "Your session was ended by the DBS guard."
+
+UNDECIDED = (
+    "DBS could not check this session, so the admin refuses changes and downloads until it "
+    "can. The reason is in the dbs log."
+)
+
+UNENDED = (
+    "DBS decided to end this session but could not; this request is refused. The reason is "
+    "in the dbs log."
+)
+
+RETRY_SECONDS = 60
+
+
+@dataclass
+class Inspection:
+    scope: str | None = None
+    restricted: bool = False
+    ending: bool = False
+    poller: bool = False
+
 
 class DBSSecurityMiddleware:
     def __init__(self, get_response):
@@ -43,16 +70,41 @@ class DBSSecurityMiddleware:
         if user is None or not user.is_authenticated or not user.is_superuser:
             return self.get_response(request)
 
-        if guard.is_locked_out(user):
-            return self._stop(request, "Your session was ended by the DBS guard.")
+        inspection = Inspection()
+        try:
+            stopped = self._inspect(request, inspection)
+        except Exception:
+            logger.exception(
+                "the DBS session guard could not check %s %s", request.method, request.path
+            )
+            stopped = self._undecided(request, inspection)
+        if stopped is not None:
+            return stopped
 
-        scope = self._scope(request)
-        if scope is None:
-            return self.get_response(request)
+        response = self.get_response(request)
+        if not inspection.poller:
+            return response
+        try:
+            return self._with_poller(response)
+        except Exception:
+            logger.exception("the DBS guard poller could not be added to %s", request.path)
+            return response
+
+    def _inspect(self, request, inspection):
+        inspection.scope = self._scope(request)
+        inspection.restricted = self._restricted(request)
+
+        if guard.is_locked_out(request.user):
+            inspection.ending = True
+            return self._stop(request, LOCKED_OUT)
+
+        if inspection.scope is None:
+            return None
 
         policy = SecurityPolicy.load()
         now = timezone.now().timestamp()
         if sessions.idle_expired(request, policy.idle_timeout_minutes, now):
+            inspection.ending = True
             return self._stop(request, IDLE)
 
         request.session.setdefault(SESSION_STARTED, timezone.now().isoformat())
@@ -60,32 +112,38 @@ class DBSSecurityMiddleware:
         if not guard_endpoint:
             sessions.mark_active(request, now)
 
-        if scope == "admin":
-            redirect_response = self._setup_redirect(request, policy)
-            if redirect_response is not None:
-                return redirect_response
+        redirect_response = self._setup_redirect(request, policy)
+        if redirect_response is not None:
+            return redirect_response
 
-        action = self._action(request, scope)
-        restricted = not guard_endpoint and self._restricted(request, action)
+        action = self._action(request, inspection.scope)
+        restricted = not guard_endpoint and inspection.restricted
         if restricted and sessions.must_reauthenticate(request):
+            inspection.ending = True
             return self._stop(request, FLAGGED)
 
         if guard_endpoint:
-            return self.get_response(request)
+            return None
 
         telemetry.purge_if_due()
         verdict = guard.evaluate(request, action=action, policy=policy)
+        inspection.ending = verdict.level == guard.BLOCK
         guard.apply(verdict, request)
         if verdict.level == guard.BLOCK:
             return self._stop(request, "; ".join(verdict.reasons))
         if restricted and sessions.must_reauthenticate(request):
+            inspection.ending = True
             return self._stop(request, FLAGGED)
         request.dbs_verdict = verdict
-        return self._with_poller(request, self.get_response(request), scope)
+        inspection.poller = bool(setting("DBS_GUARD_EVERYWHERE", False))
+        return None
 
-    def _with_poller(self, request, response, scope):
-        if scope != "admin" or not setting("DBS_GUARD_EVERYWHERE", False):
-            return response
+    def _undecided(self, request, inspection):
+        if inspection.ending or (inspection.scope is not None and inspection.restricted):
+            return refusal(request, ending=inspection.ending)
+        return None
+
+    def _with_poller(self, response):
         if getattr(response, "streaming", False) or response.status_code != 200:
             return response
         if "text/html" not in response.get("Content-Type", ""):
@@ -133,8 +191,10 @@ class DBSSecurityMiddleware:
                 return name
         return "view"
 
-    def _restricted(self, request, action) -> bool:
-        return request.method in UNSAFE_METHODS or action == "download"
+    def _restricted(self, request) -> bool:
+        return request.method in UNSAFE_METHODS or any(
+            fragment in request.path for fragment in EXPORT_FRAGMENTS
+        )
 
     def _setup_redirect(self, request, policy):
         if not setting("DBS_SETUP_WIZARD", True) or not request.user.is_staff:
@@ -151,14 +211,33 @@ class DBSSecurityMiddleware:
 
     def _stop(self, request, message):
         logout(request)
-        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.path.endswith(
-            "/guard/"
-        ):
+        if wants_json(request):
             return JsonResponse(
                 {"authorized": False, "action": "logout", "reasons": [message]},
                 status=401,
             )
         return redirect_to_login(request.get_full_path())
+
+
+def wants_json(request) -> bool:
+    return request.headers.get("x-requested-with") == "XMLHttpRequest" or (
+        request.path.endswith("/guard/")
+    )
+
+
+def refusal(request, *, ending):
+    message, status = (UNENDED, 403) if ending else (UNDECIDED, 503)
+    if wants_json(request):
+        return JsonResponse(
+            {
+                "authorized": False,
+                "action": "logout" if ending else "refused",
+                "reasons": [message],
+                "poll_after": RETRY_SECONDS,
+            },
+            status=status,
+        )
+    return HttpResponse(message, status=status, content_type="text/plain; charset=utf-8")
 
 
 def _account_paths():

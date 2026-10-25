@@ -147,7 +147,8 @@ def sweep_leftovers(
     now = time.time() if now is None else now
     try:
         entries = list(os.scandir(directory))
-    except OSError:
+    except OSError as exc:
+        logger.warning("could not look for leftover files in %s: %s", directory, exc)
         return []
     removed = []
     for entry in entries:

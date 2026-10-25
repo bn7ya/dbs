@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 from django.contrib.auth.signals import user_logged_in, user_login_failed
 from django.dispatch import receiver
 
 from .features import client_address
 from .sessions import clear_reauthentication
+
+logger = logging.getLogger("dbs")
 
 
 @receiver(user_login_failed)
@@ -13,12 +17,15 @@ def record_login_failure(sender, credentials=None, request=None, **kwargs):
         return
     from .. import audit
 
-    audit.record(
-        "auth.failed",
-        target=str((credentials or {}).get("username", "")),
-        remote_addr=client_address(request),
-        status=audit.FAILED,
-    )
+    try:
+        audit.safe_record(
+            "auth.failed",
+            target=str((credentials or {}).get("username", "")),
+            remote_addr=client_address(request),
+            status=audit.FAILED,
+        )
+    except Exception:
+        logger.exception("DBS could not record a failed sign-in")
 
 
 @receiver(user_logged_in)

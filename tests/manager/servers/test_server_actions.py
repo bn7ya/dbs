@@ -5,6 +5,8 @@ import pytest
 from dbs.manager.servers.exceptions import (
     HostKeyChanged,
     RemoteCommandFailed,
+    RemoteCommandTimedOut,
+    ServerConnectionLost,
     SSHAuthFailed,
     SSHUnreachable,
 )
@@ -282,16 +284,32 @@ def test_an_engine_without_compose_has_no_compose_version(
 
 
 @pytest.mark.django_db
-def test_an_engine_probe_the_connection_drops_is_reported_absent(
-    api, monkeypatch, configured_server
+@pytest.mark.parametrize(
+    ("probe", "error", "status", "code"),
+    [
+        (PODMAN_VERSION, ServerConnectionLost(), 502, "connection_lost"),
+        (DOCKER_COMPOSE, RemoteCommandTimedOut(), 504, "remote_command_timed_out"),
+        (UNAME, RemoteCommandFailed(), 502, "remote_command_failed"),
+        (TIMEOUT_PROBE, ServerConnectionLost(), 502, "connection_lost"),
+    ],
+)
+def test_a_probe_that_cannot_run_fails_the_check_and_keeps_what_was_known(
+    api, monkeypatch, configured_server, probe, error, status, code
 ):
-    remote = host({PODMAN_VERSION: RemoteCommandFailed()})
-    monkeypatch.setattr(CONNECT, connecting_to(remote))
+    monkeypatch.setattr(CONNECT, connecting_to(host()))
+    found = api.post(check(configured_server.pk)).json()["engines"]
+    monkeypatch.setattr(CONNECT, connecting_to(host({probe: error})))
 
-    body = api.post(check(configured_server.pk)).json()
+    response = api.post(check(configured_server.pk))
 
-    assert body["engines"]["podman"] == ABSENT
-    assert body["engines"]["docker"]["usable"] is True
+    assert response.status_code == status
+    assert response.json()["error"]["code"] == code
+    kept = ServerRepository().get(configured_server.pk)
+    assert (kept.last_check_status, kept.last_check_error) == (
+        Server.CheckStatus.FAILED,
+        code,
+    )
+    assert kept.engines == found
 
 
 @pytest.mark.django_db

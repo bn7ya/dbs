@@ -36,6 +36,9 @@ def validate_backup(data, passphrase: str | None = None) -> ValidationResult:
 
     Every block of both copies is checked; with ``passphrase`` the payload is
     also decrypted and read end to end. A format 2 backup is read as a stream.
+    Damage, a wrong passphrase or a file that is not a backup come back as
+    ``ok=False`` with the reason in ``messages``; only a file that cannot be
+    opened raises, with its ``OSError``.
     """
     with opened(data) as handle:
         try:

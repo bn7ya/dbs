@@ -15,7 +15,6 @@ from paramiko import SFTPAttributes
 
 from dbs import create_backup
 from dbs.crypto.kdf import KDFParams
-from dbs.manager.servers.exceptions import RemoteCommandFailed
 from dbs.manager.servers.gateways import EntryKind, RemoteEntry, RemoteHost
 from dbs.manager.servers.services.pythons import VERSION_PROBE as DBS_VERSION
 
@@ -118,9 +117,7 @@ class FakeRemote:
     has_timeout = RemoteHost.has_timeout
 
     def exists(self, path: str) -> bool:
-        if path in self.unreadable:
-            raise RemoteCommandFailed()
-        return path in self.paths
+        return path in self.paths and path not in self.unreadable
 
     def realpath(self, path: str) -> str:
         return HOME if path == "." else path

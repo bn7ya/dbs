@@ -82,8 +82,28 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
   several instances of one project, two hundred applications in one manager, Docker and
   rootless Podman Compose projects over OpenSSH, and an upgrade from 0.7.0.
 
+- **One list of exceptions.** `dbs.exceptions` holds everything DBS raises, each a
+  `DBSError`: `Busy`, `ScheduleError` and `StreamInterrupted` move there (their old import
+  paths still work), and `HostUnreachable` and `AuthenticationFailed` (a
+  `ConfigurationError`) name the two common SSH failures. The README lists each exception
+  and when it is raised, and what DBS does to your project when it fails.
+- `dbs.security.W004`: `manage.py check` names entries in `DBS_TRUSTED_PROXIES` or
+  `DBS_TRUSTED_NETWORKS` that the guard ignores.
+
 ### Changed
 
+- **A DBS failure never fails your project's request.** Pages outside the admin are
+  untouched by it. While the session guard cannot check a session, the admin stays
+  readable and refuses changes, downloads and exports with `503`, and a session the guard
+  decided to end is refused even when ending it failed. A failed sign-in that cannot be
+  recorded still just fails, in a savepoint of its own, and a scheduler thread that cannot
+  start leaves the request alone. Each of these is logged to `dbs`.
+- `write_backup` and `create_backup` refuse an empty passphrase with `ConfigurationError`,
+  which would let anyone open the backup; restore and validate still read one written so.
+- A server or application check whose connection drops, or whose probe times out, is
+  recorded as failed with the reason (`connection_lost`, `remote_command_timed_out`)
+  instead of reporting an engine, a file or django-dbs as missing; the server keeps the
+  engines the last check found.
 - **`pip install django-dbs` installs everything DBS uses**: scikit-learn for the guard,
   paramiko for SSH, and djangorestframework, waitress and keyring for the manager. The
   `guard`, `manager`, `ssh` and `all` extras remain as empty names for this release. The
@@ -122,6 +142,19 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
 - A move could restore a backup that failed verification; it now refuses with
   `backup_quarantined`.
 - `dbs validate` with a wrong passphrase ended in a traceback.
+- The manager could make a new sealing key, leaving every sealed secret unreadable, when its
+  key was in a system keychain that stopped answering or lost the entry, or when
+  `DBS_MANAGER_KEY_STORE=file` was set for a key the keychain holds. It now refuses to start
+  and says why.
+- Failures that went unreported now reach the `dbs` log: a panel backup or restore that
+  fails, a retention run that fails after a good panel backup (also recorded as a failed
+  `backup.prune`), a backup folder retention cannot list, leftovers that cannot be swept,
+  uploads and partial files that cannot be removed, a backup folder that cannot be synced to
+  disk, a schedule the database cannot read (a warning now), a scikit-learn that breaks on
+  import, a two-factor secret that cannot be opened, and a backup whose output cannot be
+  read back to verify.
+- An error inside Reed-Solomon decoding other than the decoder's own was reported as damage
+  beyond repair.
 
 ### Security
 

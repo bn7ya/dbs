@@ -1,6 +1,7 @@
 """SSH transport: target configuration, auth wiring, and session operations."""
 
 import io
+import logging
 import os
 import posixpath
 import time
@@ -877,15 +878,16 @@ def test_progress_on_stderr_keeps_a_quiet_stream_alive_and_is_seen_line_by_line(
     assert lines[:2] == ['{"progress": {"bytes": 0}}', '{"progress": {"bytes": 1}}']
 
 
-def test_a_failing_stderr_handler_never_stops_the_stream(fake_ssh):
+def test_a_failing_stderr_handler_never_stops_the_stream(fake_ssh, caplog):
     streaming(fake_ssh, (0, b"payload", "one\ntwo\n"))
     sink = io.BytesIO()
 
     def broken(line):
         raise ValueError(line)
 
-    with open_session(target()) as session:
+    with caplog.at_level(logging.ERROR, logger="dbs"), open_session(target()) as session:
         result = session.stream("dbs backup --stream", sink, on_stderr_line=broken)
 
     assert result.exit_status == 0 and result.stderr == "one\ntwo\n"
     assert sink.getvalue() == b"payload"
+    assert caplog.text.count("on_stderr_line failed") == 1

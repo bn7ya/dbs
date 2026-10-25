@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 from django.contrib import messages
@@ -23,6 +24,9 @@ from .models import (
 )
 from .security import geo, guard
 from .security.decorators import superuser_required
+from .security.middleware import refusal
+
+logger = logging.getLogger("dbs")
 
 DEFAULT_MAX_UPLOAD_BYTES = 1024 ** 3
 JOB_REFRESH_SECONDS = 3
@@ -116,8 +120,14 @@ def guard_check(request):
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    verdict = guard.evaluate(request, action="view", location=payload.get("location"))
-    guard.apply(verdict, request)
+    ending = False
+    try:
+        verdict = guard.evaluate(request, action="view", location=payload.get("location"))
+        ending = verdict.level == guard.BLOCK
+        guard.apply(verdict, request)
+    except Exception:
+        logger.exception("the DBS session guard could not check an open admin tab")
+        return refusal(request, ending=ending)
     return JsonResponse(
         {
             "authorized": verdict.level != guard.BLOCK,

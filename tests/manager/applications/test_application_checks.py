@@ -11,6 +11,8 @@ from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import (
     HostKeyChanged,
     RemoteCommandFailed,
+    RemoteCommandTimedOut,
+    ServerConnectionLost,
     SSHAuthFailed,
     SSHUnreachable,
 )
@@ -114,7 +116,7 @@ def test_something_configured_but_missing_is_a_problem(api, monkeypatch, applica
     remote.paths -= {ENV_PATH, MEDIA_ROOT}
     remote.answers = {
         **remote.answers,
-        (PYTHON, "-c", DBS_VERSION): RemoteCommandFailed(),
+        (PYTHON, "-c", DBS_VERSION): Result(127, "", f"sh: 1: {PYTHON}: not found"),
     }
     monkeypatch.setattr(CONNECT, connecting_to(remote))
 
@@ -136,7 +138,9 @@ def test_a_probe_that_fails_marks_only_its_own_item(api, monkeypatch, applicatio
             (PYTHON, "-c", DBS_VERSION): Result(
                 1, "", "ModuleNotFoundError: No module named 'dbs'"
             ),
-            (PYTHON, "manage.py", "dbs_backup", "--help"): RemoteCommandFailed(),
+            (PYTHON, "manage.py", "dbs_backup", "--help"): Result(
+                1, "", "Unknown command: 'dbs_backup'"
+            ),
         },
         paths={ENV_PATH, MEDIA_ROOT},
         unreadable=frozenset({BACKUP_DIR}),
@@ -157,6 +161,36 @@ def test_a_probe_that_fails_marks_only_its_own_item(api, monkeypatch, applicatio
         "remote_backup_dir": False,
         "panel_schedule": None,
     }
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("probe", "error", "code"),
+    [
+        (
+            (PYTHON, "manage.py", "dbs_backup", "--help"),
+            RemoteCommandFailed(),
+            "remote_command_failed",
+        ),
+        ((PYTHON, "-c", DBS_VERSION), ServerConnectionLost(), "connection_lost"),
+        (HEALTH_ARGV, RemoteCommandTimedOut(), "remote_command_timed_out"),
+    ],
+)
+def test_a_probe_that_cannot_run_fails_the_check_instead_of_reporting_a_problem(
+    api, monkeypatch, application, probe, error, code
+):
+    remote = remote_with(REMOTE_DBS_VERSION, json.dumps(HEALTH))
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+    api.post(check(application.pk))
+    remote.answers = {**remote.answers, probe: error}
+
+    response = api.post(check(application.pk))
+
+    assert response.json()["error"]["code"] == code
+    stored = ApplicationRepository().get(application.pk)
+    assert (stored.last_check_status, stored.last_check_error) == ("failed", code)
+    assert stored.last_check_report == {}
+    assert stored.last_health == HEALTH
 
 
 @pytest.mark.django_db

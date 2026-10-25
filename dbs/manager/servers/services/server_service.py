@@ -299,7 +299,7 @@ class ServerService:
             try:
                 with self.connections.open(server) as remote:
                     report = inspect_host(remote)
-            except CONNECTION_ERRORS as exc:
+            except (*CONNECTION_ERRORS, RemoteCommandFailed) as exc:
                 self._record(
                     server, Server.CheckStatus.FAILED, error_code_of(exc), {}, server.engines
                 )
@@ -409,10 +409,7 @@ def inspect_host(remote: RemoteHost) -> dict[str, Any]:
 
 
 def engine_report(remote: RemoteHost, engine: str) -> dict[str, Any]:
-    try:
-        found = remote.run(ENGINE_VERSIONS[engine])
-    except RemoteCommandFailed:
-        return dict(ABSENT)
+    found = remote.run(ENGINE_VERSIONS[engine])
     if found.exit_status == NOT_FOUND:
         return dict(ABSENT)
     if not found.ok:
@@ -438,10 +435,7 @@ def engine_report(remote: RemoteHost, engine: str) -> dict[str, Any]:
 def output_of(
     remote: RemoteHost, argv: list[str], *, cwd: str | None = None
 ) -> str | None:
-    try:
-        result = remote.run(argv, cwd=cwd)
-    except RemoteCommandFailed:
-        return None
+    result = remote.run(argv, cwd=cwd)
     lines: list[str] = result.stdout.strip().splitlines()
     if not result.ok or not lines:
         return None

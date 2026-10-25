@@ -12,16 +12,19 @@ import socket
 import threading
 import time
 from collections.abc import Callable
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from .. import extras
 from ..exceptions import (
+    AuthenticationFailed,
     ConfigurationError,
     ConnectionLost,
     DBSError,
     HostKeyError,
+    HostUnreachable,
     RemoteTimeout,
+    StreamInterrupted,
 )
 from ..naming import is_backup_name
 from ..tee import (
@@ -88,10 +91,6 @@ def _from_env(name: str | None) -> str | None:
 
 def _expand(path: str | None) -> str | None:
     return os.path.expanduser(path) if path else path
-
-
-class StreamInterrupted(DBSError):
-    pass
 
 
 @dataclass
@@ -348,7 +347,7 @@ def _connect(target: SSHTarget):
             "or key_passphrase_env."
         ) from exc
     except paramiko.AuthenticationException as exc:
-        raise ConfigurationError(
+        raise AuthenticationFailed(
             f"SSH authentication failed for {target.username}@{target.host}: {exc}"
         ) from exc
     except paramiko.SSHException as exc:
@@ -357,9 +356,9 @@ def _connect(target: SSHTarget):
                 f"Could not use the private key {target.key_filename}; check "
                 f"key_passphrase and that the key format is supported: {exc}"
             ) from exc
-        raise DBSError(f"SSH connection to {target.host} failed: {exc}") from exc
+        raise HostUnreachable(f"SSH connection to {target.host} failed: {exc}") from exc
     except (OSError, socket.error) as exc:
-        raise DBSError(f"Cannot reach {target.host}:{target.port}: {exc}") from exc
+        raise HostUnreachable(f"Cannot reach {target.host}:{target.port}: {exc}") from exc
     _keep_alive(client, target)
     return client
 
@@ -859,14 +858,14 @@ def fetch_host_key(host: str, port: int = 22, *, timeout: float = 10.0) -> HostK
     try:
         sock = socket.create_connection((host, port), timeout=timeout)
     except OSError as exc:
-        raise DBSError(f"Cannot reach {host}:{port}: {exc}") from exc
+        raise HostUnreachable(f"Cannot reach {host}:{port}: {exc}") from exc
     transport = paramiko.Transport(sock)
     transport.banner_timeout = timeout
     try:
         transport.start_client(timeout=timeout)
         key = transport.get_remote_server_key()
     except (paramiko.SSHException, OSError, EOFError) as exc:
-        raise DBSError(f"SSH handshake with {host}:{port} failed: {exc}") from exc
+        raise HostUnreachable(f"SSH handshake with {host}:{port} failed: {exc}") from exc
     finally:
         transport.close()
     return HostKey(key.get_name(), key.get_base64())
@@ -932,8 +931,10 @@ def check_connection(target: SSHTarget) -> dict:
 def _discard(path: str) -> None:
     try:
         os.remove(path)
-    except OSError:
-        pass
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        logger.warning("could not remove the partial download %s: %s", path, exc)
 
 
 def _private_local_file(path: str):
@@ -1063,6 +1064,7 @@ class _StderrTail:
         self._line = bytearray()
         self._on_line = on_line
         self._on_activity = on_activity
+        self._line_failed = False
         self.last_activity = time.monotonic()
         self._thread = threading.Thread(target=self._read, daemon=True)
 
@@ -1089,16 +1091,22 @@ class _StderrTail:
                 del self._kept[: max(len(self._kept) - self._limit, 0)]
                 if self._on_line is not None:
                     self._lines(chunk)
-        except Exception:
+        except _connection_gone():
             return
+        except Exception:
+            logger.exception("stopped reading a remote command's standard error")
 
     def _lines(self, chunk: bytes) -> None:
         self._line += chunk
         *complete, rest = bytes(self._line).split(b"\n")
         self._line = bytearray(rest[-STDERR_LINE_MAX:])
         for line in complete:
-            with suppress(Exception):
+            try:
                 self._on_line(line[:STDERR_LINE_MAX].decode("utf-8", "replace"))
+            except Exception:
+                if not self._line_failed:
+                    self._line_failed = True
+                    logger.exception("on_stderr_line failed; its later failures are not logged")
 
 
 def _ensure_remote_dir(sftp, remote_dir: str) -> None:

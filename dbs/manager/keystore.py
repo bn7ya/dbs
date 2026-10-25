@@ -91,11 +91,27 @@ def keychain() -> Keychain | None:
     return Keychain(backend) if working else None
 
 
+def held_in_keychain(data_dir) -> bool:
+    return paths.keychain_marker_path(data_dir).exists() and paths.stored_key(data_dir) is None
+
+
 def load(data_dir, environ=None) -> SealingKey:
     store = chosen(environ)
     if store == FILE:
+        if held_in_keychain(data_dir):
+            raise KeyStoreError(
+                f"${STORE_ENV}=file, but the sealing key for {data_dir} is in the system "
+                f"keychain and no key file exists. Unset {STORE_ENV} to use the keychain's "
+                "key. No new key was made: it would leave every sealed secret unreadable."
+            )
         return SealingKey(paths.read_key(data_dir), FILE)
     ring = keychain()
+    if ring is None and held_in_keychain(data_dir):
+        raise KeyStoreError(
+            f"the sealing key for {data_dir} is in the system keychain, and no keychain "
+            "answers on this computer now. Unlock or repair it and start again. No new key "
+            "was made: it would leave every sealed secret unreadable."
+        )
     if ring is not None:
         try:
             return _from_keychain(ring, data_dir)
@@ -118,9 +134,18 @@ def _from_keychain(ring: Keychain, data_dir) -> SealingKey:
     held = paths.stored_key(data_dir)
     if held is None:
         if stored:
+            _mark_keychain(data_dir)
             return SealingKey(stored, KEYCHAIN)
+        if paths.keychain_marker_path(data_dir).exists():
+            raise KeyStoreError(
+                f"the system keychain no longer holds the sealing key for {data_dir}. "
+                "Nothing was changed. Restore the keychain entry "
+                f"({SERVICE}: {name}) and start again. No new key was made: it would leave "
+                "every sealed secret unreadable."
+            )
         created = paths.new_key()
         ring.write(name, created)
+        _mark_keychain(data_dir)
         return SealingKey(created, KEYCHAIN)
     imported = paths.import_marker_path(data_dir).exists()
     if stored and stored != held and not imported:
@@ -132,17 +157,23 @@ def _from_keychain(ring: Keychain, data_dir) -> SealingKey:
         )
     if stored != held:
         ring.write(name, held)
+    _mark_keychain(data_dir)
     paths.key_path(data_dir).unlink()
     paths.clear_import_marker(data_dir)
     return SealingKey(held, KEYCHAIN)
+
+
+def _mark_keychain(data_dir) -> None:
+    marker = paths.keychain_marker_path(data_dir)
+    if not marker.exists():
+        paths.write_private(marker, "")
 
 
 def location(data_dir, environ=None) -> str:
     key_file = paths.key_path(data_dir)
     if key_file.exists() or chosen(environ) == FILE:
         return str(key_file)
-    ring = keychain()
-    if ring is None:
+    if keychain() is None and not held_in_keychain(data_dir):
         return str(key_file)
     return f"system keychain ({SERVICE}: {entry_name(data_dir)})"
 

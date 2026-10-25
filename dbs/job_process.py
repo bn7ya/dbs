@@ -253,8 +253,10 @@ def remove_partials(output: str) -> None:
     for partial in glob.glob(os.path.join(glob.escape(directory), f".{glob.escape(name)}.*.partial")):
         try:
             os.remove(partial)
-        except OSError:
+        except FileNotFoundError:
             continue
+        except OSError as exc:
+            logger.warning("could not remove the partial file %s: %s", partial, exc)
     discard_reservation(output)
 
 

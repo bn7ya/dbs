@@ -110,6 +110,46 @@ def test_a_keychain_that_fails_never_mints_a_new_key(home, ring, monkeypatch):
     assert not paths.key_path(home).exists()
 
 
+def test_a_keychain_that_stops_answering_never_gets_its_key_replaced(home, ring, monkeypatch):
+    monkeypatch.delenv(keystore.STORE_ENV, raising=False)
+    keystore.load(home, AUTO)
+
+    def broken():
+        raise RuntimeError("no session bus")
+
+    for stopped in (lambda: fail.Keyring(), broken):
+        monkeypatch.setattr(keyring, "get_keyring", stopped)
+        with pytest.raises(keystore.KeyStoreError) as refused:
+            keystore.load(home, AUTO)
+
+        assert "is in the system keychain" in str(refused.value)
+        assert not paths.key_path(home).exists()
+        assert "system keychain" in keystore.location(home)
+
+
+def test_the_file_store_never_replaces_a_key_held_by_the_keychain(home, ring):
+    key = keystore.load(home, AUTO)
+
+    with pytest.raises(keystore.KeyStoreError) as refused:
+        keystore.load(home, FILE)
+
+    assert "no key file exists" in str(refused.value)
+    assert not paths.key_path(home).exists()
+    assert stored(ring, home) == key.value
+
+
+def test_a_keychain_that_lost_the_key_is_never_given_a_new_one(home, ring):
+    keystore.load(home, AUTO)
+    ring.entries.clear()
+
+    with pytest.raises(keystore.KeyStoreError) as refused:
+        keystore.load(home, AUTO)
+
+    assert "no longer holds the sealing key" in str(refused.value)
+    assert ring.entries == {}
+    assert not paths.key_path(home).exists()
+
+
 def test_two_different_keys_stop_everything(home, ring):
     keystore.load(home, AUTO)
     paths.write_private(paths.key_path(home), "another-key")

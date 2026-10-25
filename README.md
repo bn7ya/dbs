@@ -428,9 +428,11 @@ wherever one works, and reads it back before relying on it. Where no keychain wo
 stays in `keys/secret.key` inside the data folder, and the manager warns at start, on the
 dashboard and in its health report that anyone who can read the folder can open its secrets.
 
-`DBS_MANAGER_KEY_STORE=keychain` or `=file` chooses the store yourself. The manager never
-makes a new key when the keychain does not answer, and refuses to start when the keychain
-and a key file disagree, naming both. On Windows a new data folder is limited to its owner.
+`DBS_MANAGER_KEY_STORE=keychain` or `=file` chooses the store yourself. Once the key is in
+the keychain, the data folder records it, and the manager never makes a new key: when the
+keychain does not answer, has lost the entry, or `=file` asks for a key file that does not
+exist, it refuses to start and says why. It also refuses when the keychain and a key file
+disagree, naming both. On Windows a new data folder is limited to its owner.
 
 ### Accounts and roles
 
@@ -1120,6 +1122,11 @@ users, groups, permissions and passwords count as high-risk actions.
   thresholds still apply.
 * **Idle sessions end.** A session idle in the admin for longer than the policy's idle
   timeout (from 15 minutes to 8 hours by level; 0 turns it off) is ended on its next request.
+* **A guard that cannot decide refuses changes.** If the guard cannot check a request — its
+  tables are missing, the database refuses a query — the admin still reads, but every change,
+  download and export answers `503` until it can, and the reason goes to the `dbs` log. A
+  session the guard decided to end is refused even when ending it failed. Pages outside the
+  admin are never affected.
 * **Telemetry is kept short and coarse.** Session events store the /24 (IPv4) or /48
   (IPv6) network and a keyed hash of the full address, anomalies only the network.
   Telemetry older than `DBS_SECURITY_RETENTION_DAYS` (90 by default) is removed once a day.
@@ -1137,7 +1144,7 @@ a request that arrives from one of them, walking the header from the right to th
 address that is not a proxy. An address the guard cannot read counts as a new network.
 
 The forest needs scikit-learn, which `pip install django-dbs` installs. If it cannot be
-imported, the guard scores with its rules alone. `manage.py check` warns about the three ways
+imported, the guard scores with its rules alone. `manage.py check` warns about the four ways
 a guard can be set up wrong:
 
 | Check | Means |
@@ -1145,6 +1152,7 @@ a guard can be set up wrong:
 | `dbs.security.W001` | `DBS_TRUST_FORWARDED_FOR` is on but `DBS_TRUSTED_PROXIES` names no proxy network |
 | `dbs.security.W002` | `DBSSecurityMiddleware` runs before `AuthenticationMiddleware`, so it scores nothing |
 | `dbs.security.W003` | scikit-learn cannot be imported; `pip install --force-reinstall "django-dbs"` repairs it |
+| `dbs.security.W004` | `DBS_TRUSTED_PROXIES` or `DBS_TRUSTED_NETWORKS` lists an entry the guard ignores: not a network, or broader than /8 (IPv4) or /16 (IPv6) |
 
 ---
 
@@ -1380,6 +1388,62 @@ See [SECURITY.md](SECURITY.md) for the reporting process and the threat model.
 DBS logs to the `dbs` logger, including a `WARNING` whenever silent corruption was detected
 and healed. Route it somewhere you will see it. The manager also writes `manager.log` in its
 data folder.
+
+## When DBS fails
+
+A failure inside DBS stays inside DBS; your project keeps serving its pages.
+
+* **Requests outside the admin** are never affected by a DBS failure. If the scheduler thread
+  cannot start, that process logs an error, runs no scheduled backups, and serves the request.
+* **In the admin**, a guard that cannot check a session keeps pages readable and refuses
+  changes, downloads and exports with `503` (see [The session guard](#the-session-guard)).
+  Errors raised by your own views reach Django exactly as before.
+* **A failed sign-in** is recorded in a savepoint of its own. If the row cannot be written,
+  the sign-in still just fails, your transaction is untouched, and the problem is logged.
+* **Panel and scheduled jobs** run in a child process or a thread. A failure is recorded on
+  the job, in the audit trail and in the `dbs` log, and never raised into a request. A
+  backup that cannot finish leaves no file behind and touches no older backup; a retention
+  run that fails after a good backup leaves that backup in place, and the failure is logged
+  and recorded.
+* **The manager** never makes a new sealing key while its key is in a system keychain that
+  does not answer: it refuses to start and says so. A server or application check that
+  loses its connection is recorded as failed with the reason, never as engines, files or
+  django-dbs missing.
+
+### What each failure raises
+
+Everything DBS raises derives from `dbs.exceptions.DBSError`:
+
+| Exception | Raised when |
+|---|---|
+| `ConfigurationError` | a setting or argument DBS cannot work with, including an empty passphrase for a new backup |
+| `HostKeyError` | an SSH server presents a key other than the trusted one (a `ConfigurationError`) |
+| `AuthenticationFailed` | the SSH server refuses the credentials (a `ConfigurationError`) |
+| `HostUnreachable` | the SSH server cannot be reached, or the handshake fails |
+| `ConnectionLost` | an SSH connection drops while it works |
+| `RemoteTimeout` | a remote command runs past its idle or total deadline |
+| `StreamInterrupted` | a streamed transfer breaks before it ends |
+| `CryptoError` | Argon2id parameters outside the bounds DBS accepts |
+| `InvalidPassphrase` | the passphrase does not open the backup (a `CryptoError`) |
+| `ContainerError` | the input is not a DBS backup, or is a format this version cannot read; the message names the version |
+| `CorruptionError` | damage beyond what parity repairs (a `ContainerError`); `report` names the failed blocks |
+| `BackupError` | the backup could not be written, for example over an existing file |
+| `MissingSourceFiles` | a source file could not be read (a `BackupError`); `files` lists them |
+| `RestoreError` | a file target or row the restore refuses; if only moving files into place failed after the rows committed, the message says so |
+| `ScheduleError` | a scheduled backup with no folder or no passphrase |
+| `Busy` | another backup or restore holds the runner |
+
+A failure from outside DBS passes through unchanged, with its own detail: a full disk, a
+missing folder or a refused permission is the `OSError`; a broken database connection, or a
+constraint a restored row breaks, is Django's `DatabaseError`; a wrong argument type is a
+`TypeError`. A backup to a path that fails in any of these ways leaves no file there, and a
+restore that fails before its rows commit leaves the database as it was. `validate_backup`
+raises only when it cannot open its input; damage, a wrong passphrase or a file that is not a
+backup come back as `ok=False` with the reason in `messages`.
+
+Panel jobs, the schedule and the audit trail record the same failures as error codes:
+`disk_full`, `permission_denied`, `read_only`, `database_failed`, `time_limit`,
+`memory_limit`, `killed`, `interrupted`, or the name of the exception.
 
 ---
 

@@ -8,6 +8,7 @@ from typing import Any, TypeVar
 
 from rest_framework.exceptions import APIException
 
+from dbs.manager.servers.exceptions import RemoteCommandTimedOut
 from dbs.manager.servers.gateways import DbsProfile, EntryKind, RemoteHost
 
 VERSION_PROBE = (
@@ -112,8 +113,8 @@ def probe(remote: RemoteHost, profile: DbsProfile, python: str | None = None) ->
         result = remote.run_python(
             profile, ["-c", VERSION_PROBE], python=python, with_settings=False
         )
-    except APIException:
-        return Probe(version=None, error="")
+    except RemoteCommandTimedOut as exc:
+        return Probe(version=None, error=str(exc.detail))
     output = result.stdout.strip().splitlines()
     errors = result.stderr.strip().splitlines()
     error = errors[-1][:REPORTED_OUTPUT_LIMIT] if errors else ""

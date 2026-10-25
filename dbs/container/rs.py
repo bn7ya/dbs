@@ -16,6 +16,8 @@ MAX_NSYM = 254
 
 PARITY_BATCH_ROWS = 4096
 
+UNDECODABLE = (ReedSolomonError, ValueError, ZeroDivisionError)
+
 
 def _field_tables() -> tuple[list[int], list[int]]:
     exp = [0] * 512
@@ -231,9 +233,7 @@ def decode_codeword(codeword_bytes: bytes, nsym: int, erasures=None) -> bytes | 
             decoded = codec.decode(codeword_bytes, erase_pos=list(erasures))
         else:
             decoded = codec.decode(codeword_bytes)
-    except ReedSolomonError:
-        return None
-    except Exception:
+    except UNDECODABLE:
         return None
     return bytes(decoded[0]) if isinstance(decoded, tuple) else bytes(decoded)
 
@@ -241,9 +241,7 @@ def decode_codeword(codeword_bytes: bytes, nsym: int, erasures=None) -> bytes | 
 def decode_whole(encoded: bytes, nsym: int) -> bytes | None:
     try:
         decoded = _codec(nsym).decode(encoded)
-    except ReedSolomonError:
-        return None
-    except Exception:
+    except UNDECODABLE:
         return None
     return bytes(decoded[0]) if isinstance(decoded, tuple) else bytes(decoded)
 

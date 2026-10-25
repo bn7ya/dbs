@@ -47,6 +47,20 @@ def forwarded_for_unanchored() -> bool:
     return bool(setting("DBS_TRUST_FORWARDED_FOR", False)) and not trusted_proxies()
 
 
+NETWORK_SETTINGS = ("DBS_TRUSTED_PROXIES", "DBS_TRUSTED_NETWORKS")
+
+
+def ignored_network_settings() -> dict:
+    from .networks import ignored_networks
+
+    found = {}
+    for name in NETWORK_SETTINGS:
+        ignored = ignored_networks(setting(name, ()) or ())
+        if ignored:
+            found[name] = ignored
+    return found
+
+
 def scoring_model_missing() -> bool:
     from .detector import model_available
 
@@ -82,6 +96,16 @@ def check_session_guard(app_configs=None, **kwargs):
                 "alone and the anomaly model is off.",
                 hint=REPAIR,
                 id="dbs.security.W003",
+            )
+        )
+    for name, ignored in ignored_network_settings().items():
+        found.append(
+            checks.Warning(
+                f"{name} lists {', '.join(repr(entry) for entry in ignored)}, which the "
+                "session guard ignores: each entry must be a network no broader than /8 "
+                "for IPv4 or /16 for IPv6.",
+                hint=f'Write one network per entry, for example {name} = ["10.0.0.0/24"].',
+                id="dbs.security.W004",
             )
         )
     return found

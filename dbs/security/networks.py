@@ -25,24 +25,31 @@ def parse_address(text):
         return None
 
 
-def parse_networks(raw):
+def _candidates(raw):
     if isinstance(raw, (list, tuple, set, frozenset)):
         raw = "\n".join(str(entry) for entry in raw)
     if not isinstance(raw, str):
-        return []
-    found = []
-    for line in raw.replace(",", "\n").split("\n"):
-        candidate = line.strip()
-        if not candidate:
-            continue
-        try:
-            network = ipaddress.ip_network(candidate, strict=False)
-        except ValueError:
-            continue
-        if network.prefixlen < MINIMUM_PREFIX[network.version]:
-            continue
-        found.append(network)
-    return found
+        return [str(raw)]
+    return [line.strip() for line in raw.replace(",", "\n").split("\n") if line.strip()]
+
+
+def _accepted(candidate):
+    try:
+        network = ipaddress.ip_network(candidate, strict=False)
+    except ValueError:
+        return None
+    if network.prefixlen < MINIMUM_PREFIX[network.version]:
+        return None
+    return network
+
+
+def parse_networks(raw):
+    accepted = (_accepted(candidate) for candidate in _candidates(raw))
+    return [network for network in accepted if network is not None]
+
+
+def ignored_networks(raw):
+    return [candidate for candidate in _candidates(raw) if _accepted(candidate) is None]
 
 
 def contains(networks, address) -> bool:

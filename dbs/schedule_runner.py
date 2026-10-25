@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from . import audit, jobs, leases, retention
 from .conf import setting
-from .exceptions import BackupError, DBSError
+from .exceptions import BackupError, ScheduleError
 from .io import create_new_file
 from .naming import DEFAULT_PREFIX, backup_stem, parse_backup_moment, reserve_backup_name
 
@@ -37,10 +37,6 @@ MODES = (THREAD, COMMAND, OFF)
 _started_in = {"pid": None}
 _start_lock = threading.Lock()
 stop_event = threading.Event()
-
-
-class ScheduleError(DBSError):
-    pass
 
 
 def mode():
@@ -81,8 +77,10 @@ def discard_reservation(path):
     try:
         if os.path.getsize(path) == 0:
             os.remove(path)
-    except OSError:
-        pass
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        logger.warning("could not remove the empty reservation %s: %s", path, exc)
 
 
 def write_reserved(output, passphrase, *, verify=True, **options):
@@ -211,7 +209,10 @@ def verification_states(names):
 def stored_backups(directory, stem):
     try:
         listed = os.listdir(directory)
-    except OSError:
+    except OSError as exc:
+        logger.warning(
+            "could not list %s, so retention kept every backup there: %s", directory, exc
+        )
         return []
     names = retention.current_backup_names(listed, stem)
     moments = recorded_moments(directory, names)
@@ -385,7 +386,9 @@ def tick():
         sweep()
         return run_due()
     except DatabaseError as exc:
-        logger.debug("the backup schedule could not be read: %s", exc)
+        logger.warning(
+            "the backup schedule could not be read, so no scheduled backup ran: %s", exc
+        )
     except Exception as exc:
         logger.exception("scheduled backup failed: %s", exc)
     finally:
@@ -408,5 +411,12 @@ def ensure_started(**kwargs):
         if _started_in["pid"] == pid:
             return False
         _started_in["pid"] = pid
-    threading.Thread(target=_loop, name="dbs-scheduler", daemon=True).start()
+    try:
+        threading.Thread(target=_loop, name="dbs-scheduler", daemon=True).start()
+    except Exception:
+        logger.exception(
+            "DBS could not start its scheduler thread, so this process runs no scheduled "
+            "backups"
+        )
+        return False
     return True

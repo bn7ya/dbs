@@ -22,7 +22,7 @@ from ..container import (
 )
 from ..container.stream import MAX_WINDOW_BYTES, StreamLayout, layout_problem
 from ..crypto.kdf import KDFParams
-from ..exceptions import BackupError, CorruptionError, MissingSourceFiles
+from ..exceptions import BackupError, ConfigurationError, CorruptionError, MissingSourceFiles
 from ..files import SkippedFile, list_instance_files, list_root_files, read_chunks
 from ..introspect import _label
 from ..io import create_new_file
@@ -101,7 +101,16 @@ def write_backup(
     missing or unreadable stops the backup unless ``allow_missing_files`` is
     true; the paths left out are then listed in the backup and appended to
     ``skipped_files`` when a list is passed.
+
+    An empty passphrase raises ``ConfigurationError``. A backup DBS cannot
+    finish raises a ``DBSError`` subclass, or the ``OSError`` or
+    ``DatabaseError`` behind it, and leaves no file at ``output``.
     """
+    if not passphrase:
+        raise ConfigurationError(
+            "A backup needs a passphrase: pass one, or default_passphrase() to derive it "
+            "from SECRET_KEY. An empty one would let anyone open the backup."
+        )
     options = {
         "registry": registry,
         "models": models,
@@ -205,6 +214,11 @@ def _write_path(output: str, passphrase: str, verify: bool, options: dict) -> Ba
 
 def _write_stream(output, passphrase: str, verify: bool, options: dict) -> BackupSummary:
     start = _verifiable_start(output) if verify else None
+    if verify and start is None:
+        logger.warning(
+            "this backup is not verified: its output cannot be read back, so check it with "
+            "validate_backup once it is stored"
+        )
     summary = _stream_backup(output, passphrase, **options)
     if start is not None:
         end = output.tell()
@@ -222,7 +236,7 @@ def _verifiable_start(output):
         if output.seekable() and output.readable():
             return output.tell()
     except (AttributeError, OSError, ValueError):
-        pass
+        return None
     return None
 
 

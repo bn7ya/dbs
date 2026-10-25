@@ -10,7 +10,7 @@ from django.db import connections
 from django.utils import timezone
 
 from . import audit, leases
-from .exceptions import ConfigurationError, DBSError
+from .exceptions import Busy, ConfigurationError, DBSError
 
 logger = logging.getLogger("dbs")
 
@@ -23,9 +23,6 @@ BACKUP = "backup.create"
 RESTORE = "backup.restore"
 PANEL_ACTIONS = (BACKUP, RESTORE)
 UPLOAD_PREFIX = ".restore-upload.dbs."
-
-class Busy(DBSError):
-    code = "busy"
 
 
 def job_lease(event_id):
@@ -301,26 +298,40 @@ def _take_backup(job, runner, output, stem, database, passphrase, note, actor):
     from .schedule_runner import discard_reservation, keep_newest, write_reserved
 
     try:
-        with job.tracked():
-            summary = write_reserved(output, passphrase or default_passphrase(), using=database)
-            job.data.update(
-                size=summary.bytes_written,
-                sha256=summary.sha256,
-                verified=True,
-                compressed=True,
+        try:
+            with job.tracked():
+                summary = write_reserved(
+                    output, passphrase or default_passphrase(), using=database
+                )
+                job.data.update(
+                    size=summary.bytes_written,
+                    sha256=summary.sha256,
+                    verified=True,
+                    compressed=True,
+                )
+                audit.record_backup(
+                    output,
+                    summary.bytes_written,
+                    summary.sha256,
+                    database,
+                    created_by=actor,
+                    note=note,
+                )
+        except DBSError as exc:
+            logger.warning("the panel backup to %s failed: %s", output, exc)
+            return
+        directory = os.path.dirname(output)
+        try:
+            keep_newest(directory, stem, BackupSchedule.seed_keep(BackupSchedule.load().keep))
+        except Exception as exc:
+            logger.exception("the panel backup %s was written, but retention did not run", output)
+            audit.safe_record(
+                "backup.prune",
+                target=directory,
+                status=audit.FAILED,
+                error_code=audit.error_code_for(exc),
+                detail=str(exc) or type(exc).__name__,
             )
-            audit.record_backup(
-                output,
-                summary.bytes_written,
-                summary.sha256,
-                database,
-                created_by=actor,
-                note=note,
-            )
-        keep = BackupSchedule.seed_keep(BackupSchedule.load().keep)
-        keep_newest(os.path.dirname(output), stem, keep)
-    except DBSError:
-        return
     finally:
         discard_reservation(output)
         runner.release()
@@ -340,7 +351,8 @@ def _restore(job, runner, path, passphrase, dry_run, flush, owned):
                 passphrase or None,
             )
             job.data.update(restore_outcome(result, dry_run))
-    except DBSError:
+    except DBSError as exc:
+        logger.warning("the panel restore of %s failed: %s", path, exc)
         return
     finally:
         if owned:
@@ -379,8 +391,10 @@ def keep_upload(upload, directory=None):
 def _remove(path):
     try:
         os.remove(path)
-    except OSError:
-        pass
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        logger.warning("could not remove the uploaded backup %s: %s", path, exc)
 
 
 def describe(event):

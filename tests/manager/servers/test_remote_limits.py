@@ -190,11 +190,15 @@ def test_the_timeout_probe_runs_unbounded_on_the_host_and_in_the_container():
     ]
 
 
-@pytest.mark.parametrize(
-    "session", [Session(result=(127, "", "timeout: not found")), Session(failure=DBSError())]
-)
-def test_a_server_without_timeout_says_so(session):
+def test_a_server_without_timeout_says_so():
+    session = Session(result=(127, "", "timeout: not found"))
+
     assert RemoteHost(session).has_timeout() is False
+
+
+def test_a_timeout_probe_that_cannot_run_is_not_taken_for_a_missing_timeout():
+    with pytest.raises(RemoteCommandFailed):
+        RemoteHost(Session(failure=DBSError())).has_timeout()
 
 
 def test_a_failure_on_a_dropped_connection_is_reported_as_lost(monkeypatch):

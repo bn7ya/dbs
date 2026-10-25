@@ -145,6 +145,15 @@ driver makes itself. On MySQL a backup opens
 `REPEATABLE READ` with a consistent snapshot, so every page sees the same moment. The container
 format is unchanged; 0.7.0 reads 0.8.0 backups.
 
+### A failure stays inside DBS
+
+A DBS failure never fails your project's request. Pages outside the admin are untouched by
+it; while the session guard cannot check a session, the admin stays readable and refuses
+changes, downloads and exports with `503`; a failed sign-in that cannot be recorded still just
+fails; and each of these is logged to `dbs`. `dbs.exceptions` now lists everything DBS raises,
+with `HostUnreachable` and `AuthenticationFailed` for SSH, and the README says which failure
+raises what. `write_backup` and `create_backup` refuse an empty passphrase.
+
 ### Tested at scale
 
 New suites back up 1,000 tables and a million rows, 100 MB rows, failing backups in real child
@@ -224,6 +233,14 @@ Every server needs django-dbs 0.7.0 or later; resumed transfers and progress nee
 - `dbs validate` with a wrong passphrase ended in a traceback; it now says so and exits 1, and
   takes `--passphrase-stdin`.
 - The manager's SQLite could fail a job with "database is locked" while another wrote.
+- The manager could make a new sealing key, leaving every sealed secret unreadable, when its key
+  was in a system keychain that stopped answering or lost the entry. It now refuses to start and
+  says why.
+- A server or application check whose connection dropped reported an engine, a file or
+  django-dbs as missing; it is now recorded as failed with the reason.
+- Failures that went unreported now reach the `dbs` log, among them a panel backup or restore
+  that fails, a retention run that fails after a good backup, and a schedule the database cannot
+  read.
 
 ## Security
 

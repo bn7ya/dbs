@@ -424,10 +424,7 @@ class RemoteHost:
         else:
             probe = profile.container.exec_argv(TIMEOUT_PROBE)
             cwd = profile.project_dir
-        try:
-            return bool(self.run(probe, cwd=cwd, limited=True).ok)
-        except RemoteCommandFailed:
-            return False
+        return bool(self.run(probe, cwd=cwd, limited=True).ok)
 
     def run_python(
         self,

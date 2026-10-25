@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 from dataclasses import dataclass
@@ -18,6 +19,8 @@ RECOVERY_CONTEXT = "accounts.recovery"
 RECOVERY_CODES = 10
 RECOVERY_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 RECOVERY_HALF = 5
+
+logger = logging.getLogger("dbs.manager")
 
 
 @dataclass(frozen=True)
@@ -57,7 +60,12 @@ class TwoFactorService:
     def opened(self, sealed: bytes) -> str | None:
         try:
             return unseal_text(sealed, context=self._context(SECRET_CONTEXT))
-        except VaultError:
+        except VaultError as exc:
+            logger.error(
+                "the two-factor secret of %s cannot be opened, so its codes are refused: %s",
+                self.account.user.get_username(),
+                exc,
+            )
             return None
 
     def enroll(self, sealed: bytes, code: str) -> list[str] | None:

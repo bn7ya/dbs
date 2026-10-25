@@ -175,6 +175,11 @@ Changes to `dbs/security/` must preserve these:
   both thresholds apply from the first request.
 - **`X-Forwarded-For` is believed only from `DBS_TRUSTED_PROXIES`.** An address the guard
   cannot read counts as a new network, never as a trusted one.
+- **A guard that cannot decide changes nothing, and touches nothing outside the admin.** When
+  checking an admin request raises, the middleware lets reads through and refuses every
+  unsafe method, download and export; a session it decided to end is refused outright. The
+  project's own views run outside the guarded step, so their errors reach Django unchanged,
+  and no DBS receiver, signal or thread lets an exception into a project's request.
 
 ## Upgrade path
 
@@ -216,6 +221,9 @@ version to read them before it offers giving them up.
   only an application exactly as a discovery in the same call found it skips it
   (`found_by_discovery`), so the REST API never does. `python_path` names a Python and
   `manage_path` a `manage.py`, never an option.
+- The sealing key is never replaced. Once it is in the keychain, `keys/in-keychain` records
+  that, and a keychain that does not answer, a lost entry or `DBS_MANAGER_KEY_STORE=file`
+  without a key file stops the manager instead of minting a new key.
 - The manager pulls; a server never pushes. It removes a server's copy only after its own
   copy is verified, keeps at most five good backups per application and plan, and never
   deletes the newest one that passed verification.

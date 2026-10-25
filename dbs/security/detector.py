@@ -35,6 +35,8 @@ _refitting = set()
 
 _generation = 0
 
+_import_failure_reported = threading.Event()
+
 
 @dataclass
 class PersonalFit:
@@ -49,6 +51,13 @@ def model_available() -> bool:
     try:
         importlib.import_module("sklearn.ensemble")
     except ImportError:
+        return False
+    except Exception:
+        if not _import_failure_reported.is_set():
+            _import_failure_reported.set()
+            logger.warning(
+                "scikit-learn failed to import, so the anomaly model is off", exc_info=True
+            )
         return False
     return True
 

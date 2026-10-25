@@ -302,7 +302,7 @@ class ApplicationService:
                     health = self._health(application, remote, report["dbs_version"])
                     report["panel_schedule"] = _panel_schedule(health)
                     limits = self._limits(application, remote, report)
-            except CONNECTION_ERRORS as exc:
+            except (*CONNECTION_ERRORS, RemoteCommandFailed) as exc:
                 self._record(
                     application,
                     Application.CheckStatus.FAILED,
@@ -353,12 +353,9 @@ class ApplicationService:
     ) -> dict[str, Any] | None:
         if remote_version is None:
             return None
-        try:
-            result = remote.run_manage(
-                self.connections.dbs_profile(application), ["dbs", "health", "--json"]
-            )
-        except RemoteCommandFailed:
-            return None
+        result = remote.run_manage(
+            self.connections.dbs_profile(application), ["dbs", "health", "--json"]
+        )
         return _health_report(result.stdout)
 
     def _limits(
@@ -497,18 +494,13 @@ def _present(
     probe: str,
 ) -> bool:
     if not application.in_container:
-        return _exists(remote, path)
+        return remote.exists(path)
     if path == application.env_path and not application.env_in_container:
-        return _exists(remote, path)
+        return remote.exists(path)
     on_host = host_path(application, path)
     if on_host is not None:
-        return _exists(remote, on_host)
-    try:
-        return bool(
-            remote.run_python(profile, ["-c", probe, path], with_settings=False).ok
-        )
-    except RemoteCommandFailed:
-        return False
+        return remote.exists(on_host)
+    return bool(remote.run_python(profile, ["-c", probe, path], with_settings=False).ok)
 
 
 def _python_suggestion(
@@ -527,19 +519,13 @@ def _python_suggestion(
 
 
 def _succeeds(remote: RemoteHost, profile: DbsProfile, arguments: list[str]) -> bool:
-    try:
-        ok: bool = remote.run_manage(profile, arguments).ok
-        return ok
-    except RemoteCommandFailed:
-        return False
+    ok: bool = remote.run_manage(profile, arguments).ok
+    return ok
 
 
 def _container_report(remote: RemoteHost, profile: DbsProfile) -> dict[str, Any]:
     target = cast(ContainerTarget, profile.container)
-    try:
-        version = remote.run(target.version_argv())
-    except RemoteCommandFailed:
-        return {"engine": target.engine, "version": None, "error": "", "running": False}
+    version = remote.run(target.version_argv())
     if not version.ok:
         return {
             "engine": target.engine,
@@ -548,23 +534,13 @@ def _container_report(remote: RemoteHost, profile: DbsProfile) -> dict[str, Any]
             "running": False,
         }
     reported = version.stdout.strip()[:REPORTED_OUTPUT_LIMIT]
-    try:
-        listed = remote.run_engine(profile, target.running_argv())
-    except RemoteCommandFailed:
-        return {"engine": target.engine, "version": reported, "error": "", "running": False}
+    listed = remote.run_engine(profile, target.running_argv())
     return {
         "engine": target.engine,
         "version": reported,
         "error": "" if listed.ok else last_line(listed),
         "running": listed.ok and target.running_in(listed.stdout),
     }
-
-
-def _exists(remote: RemoteHost, path: str) -> bool:
-    try:
-        return remote.exists(path)
-    except RemoteCommandFailed:
-        return False
 
 
 def _ready(report: dict[str, Any]) -> bool:

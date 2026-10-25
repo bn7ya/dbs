@@ -569,8 +569,8 @@ def _discard(staging: str, placement: Placement) -> None:
         return
     try:
         placement.storage.delete(staging)
-    except Exception:
-        logger.warning("could not remove the staging file %s", staging)
+    except Exception as exc:
+        logger.warning("could not remove the staging file %s: %s", staging, exc)
 
 
 def _remove_quietly(path: str) -> None:

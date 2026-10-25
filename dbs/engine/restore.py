@@ -205,6 +205,11 @@ def restore_backup(
     when the rows commit. ``dry_run`` runs the same checks, lists refused files
     in ``files_refused`` and rehearses the load in a transaction it rolls back,
     changing nothing.
+
+    A wrong passphrase raises ``InvalidPassphrase``, damage beyond repair
+    ``CorruptionError`` naming the blocks, a file that is not a DBS backup
+    ``ContainerError``, and a refused file or row ``RestoreError``. Any failure
+    before the rows commit leaves the database as it was.
     """
     return restore_translated(
         data,

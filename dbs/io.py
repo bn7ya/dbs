@@ -3,12 +3,15 @@ from __future__ import annotations
 import errno
 import hashlib
 import itertools
+import logging
 import os
 import shutil
 import stat
 import tempfile
 from contextlib import contextmanager
 from typing import Iterable
+
+logger = logging.getLogger("dbs")
 
 PRIVATE_MODE = 0o600
 
@@ -22,6 +25,8 @@ LINK_UNSUPPORTED = {
     errno.EOPNOTSUPP,
 }
 
+
+SYNC_UNSUPPORTED = {errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}
 
 DIGEST_CHUNK = 1024 * 1024
 
@@ -110,14 +115,18 @@ def _copy_exclusive(source: str, destination: str) -> None:
 
 
 def sync_directory(directory: str) -> None:
+    if os.name != "posix":
+        return
     try:
         descriptor = os.open(directory, os.O_RDONLY)
-    except OSError:
+    except OSError as exc:
+        logger.warning("could not open %s to make its new entries durable: %s", directory, exc)
         return
     try:
         os.fsync(descriptor)
-    except OSError:
-        pass
+    except OSError as exc:
+        if exc.errno not in SYNC_UNSUPPORTED:
+            logger.warning("could not make the new entries in %s durable: %s", directory, exc)
     finally:
         os.close(descriptor)
 
