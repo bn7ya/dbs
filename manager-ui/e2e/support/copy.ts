@@ -97,6 +97,8 @@ export const COPY = {
   // Add an application
   addApplication: { en: 'Add an application', ar: 'إضافة تطبيق' },
   applicationWizardTitle: { en: 'Add an application', ar: 'إضافة تطبيق' },
+  stepProfile: { en: 'How it runs', ar: 'طريقة التشغيل' },
+  runsInHost: { en: 'On the server, with a virtualenv', ar: 'على الخادم، مع بيئة افتراضية' },
   stepFolder: { en: 'Folder', ar: 'المجلد' },
   stepDiscovery: { en: 'Discovery', ar: 'البحث' },
   stepReview: { en: 'Review', ar: 'المراجعة' },

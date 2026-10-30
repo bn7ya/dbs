@@ -120,6 +120,10 @@ test.describe('adding a server and its application', () => {
     const form = page.getByRole('main');
     const next = form.getByRole('button', { name: t('next'), exact: true });
 
+    await stepIs(form, t('stepProfile'));
+    await form.getByRole('radio', { name: t('runsInHost') }).check();
+    await next.click();
+
     await stepIs(form, t('stepFolder'));
     await form.getByRole('textbox', { name: t('folderOnServer') }).fill(SSH.projectDir);
     await next.click();

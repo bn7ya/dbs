@@ -83,6 +83,7 @@ export const APPLICATION: Application = {
   },
   last_health: { status: 'ok' },
   timeout_in_container: true,
+  deployment: { runs_in: 'compose', engine: 'docker', database: 'postgresql' },
   discovered_at: '2026-09-30T11:00:00Z',
   created_at: '2026-09-30T11:00:00Z',
   updated_at: '2026-09-30T12:00:00Z',

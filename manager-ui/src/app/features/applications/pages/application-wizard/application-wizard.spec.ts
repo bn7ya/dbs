@@ -113,6 +113,7 @@ describe('ApplicationWizardPage', () => {
     TestBed.tick();
     http.expectOne(`/api/servers/${SERVER_ID}/`).flush(HOST);
     await settle();
+    await wizard.advance();
   });
 
   afterEach(() => {
@@ -121,7 +122,7 @@ describe('ApplicationWizardPage', () => {
     localStorage.clear();
   });
 
-  it('walks six steps on the server named in the address, the passphrase optional', async () => {
+  it('walks seven steps on the server named in the address, the passphrase optional', async () => {
     expect(html().querySelector('header p')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
       'On the server Production web deploy@web-1.example.com:22',
     );
@@ -129,6 +130,7 @@ describe('ApplicationWizardPage', () => {
     const steps = await stepper.getSteps();
 
     expect(await Promise.all(steps.map((step) => step.getLabel()))).toEqual([
+      'How it runs',
       'Folder',
       'Discovery',
       'Review',
@@ -136,14 +138,39 @@ describe('ApplicationWizardPage', () => {
       'Backup passphrase',
       'Test backup',
     ]);
-    expect(await steps[4].isOptional()).toBe(true);
+    expect(await steps[5].isOptional()).toBe(true);
+  });
+
+  it('sends how the application runs with the search and with the application it adds', async () => {
+    wizard.step.set(0);
+    wizard.profile.set({ runs_in: 'compose', engine: 'docker', web_server: 'nginx' });
+    await wizard.advance();
+    wizard.folder.set('/srv/shop');
+    await wizard.advance();
+
+    const search = await vi.waitFor(() => http.expectOne('/api/applications/discover/'));
+    expect(search.request.body).toEqual({
+      server: SERVER_ID,
+      folder: '/srv/shop',
+      deployment: { runs_in: 'compose', engine: 'docker' },
+    });
+    search.flush(DISCOVERY);
+    await settle();
+    await wizard.advance();
+    const creating = wizard.advance();
+    const create = http.expectOne('/api/applications/');
+    expect(create.request.body).toMatchObject({ deployment: { runs_in: 'compose', engine: 'docker' } });
+    create.flush(APPLICATION, { status: 201, statusText: 'Created' });
+    await creating;
+    (await vi.waitFor(() => http.expectOne(`${DETAIL}check/`))).flush(CHECKED);
+    await settle();
   });
 
   it('wants a full path for the folder', async () => {
     wizard.folder.set('srv/shop');
     await wizard.advance();
 
-    expect(wizard.step()).toBe(0);
+    expect(wizard.step()).toBe(1);
     expect(wizard.error('folder')).toBe('absolute_path_required');
   });
 
@@ -179,7 +206,7 @@ describe('ApplicationWizardPage', () => {
   it('lists what was found, best first, with what each one has', async () => {
     await toDiscovery();
 
-    const group = await TestbedHarnessEnvironment.loader(harness.fixture).getHarness(MatRadioGroupHarness);
+    const group = await TestbedHarnessEnvironment.loader(harness.fixture).getHarness(MatRadioGroupHarness.with({ name: 'candidate' }));
     expect(await group.getCheckedValue()).toBe('0');
     const labels = await Promise.all((await group.getRadioButtons()).map((button) => button.getLabelText()));
     expect(labels).toEqual(['Compose service, Docker web', 'On the server /srv/shop']);
@@ -217,7 +244,7 @@ describe('ApplicationWizardPage', () => {
     await toDiscovery();
     wizard.choose(1);
     await wizard.advance();
-    expect(wizard.step()).toBe(2);
+    expect(wizard.step()).toBe(3);
     expect(wizard.draft()).toMatchObject({ name: 'shop', kind: 'host', python_path: 'python3' });
 
     wizard.choose(0);
@@ -241,7 +268,7 @@ describe('ApplicationWizardPage', () => {
     post.flush(APPLICATION, { status: 201, statusText: 'Created' });
     await creating;
 
-    expect(wizard.step()).toBe(3);
+    expect(wizard.step()).toBe(4);
     http.expectOne(`${DETAIL}check/`).flush(CHECKED);
     await settle();
   });
@@ -263,7 +290,7 @@ describe('ApplicationWizardPage', () => {
 
     expect(prompted).toHaveBeenCalledOnce();
     expect(prompted.mock.calls[0][1].data?.bodyKey).toBe('applications.wizard.password.adding');
-    expect(wizard.step()).toBe(3);
+    expect(wizard.step()).toBe(4);
     http.expectOne(`${DETAIL}check/`).flush(CHECKED);
     await settle();
   });
@@ -280,7 +307,7 @@ describe('ApplicationWizardPage', () => {
     );
     await creating;
 
-    expect(wizard.step()).toBe(2);
+    expect(wizard.step()).toBe(3);
     expect(wizard.error('name')).toBe('name_taken');
     expect(wizard.errors()).toMatchObject({ container_name: 'invalid' });
     expect(wizard.detailsOpen()).toBe(true);
@@ -316,7 +343,7 @@ describe('ApplicationWizardPage', () => {
     const nexting = wizard.advance();
     http.expectOne(`${DETAIL}check/`).flush(missing);
     await nexting;
-    expect(wizard.step()).toBe(3);
+    expect(wizard.step()).toBe(4);
 
     const switching = wizard.useSuggestedPython();
     const patch = http.expectOne(DETAIL);
@@ -328,7 +355,7 @@ describe('ApplicationWizardPage', () => {
     page = html().textContent ?? '';
     expect(page).toContain('django-dbs here and in the application work together.');
     await wizard.advance();
-    expect(wizard.step()).toBe(4);
+    expect(wizard.step()).toBe(5);
   });
 
   it('locks the steps before the application once it exists', async () => {
@@ -337,7 +364,7 @@ describe('ApplicationWizardPage', () => {
     await settle();
 
     wizard.back();
-    expect(wizard.step()).toBe(3);
+    expect(wizard.step()).toBe(4);
   });
 
   it('reads the passphrase, takes a test backup and links to the application', async () => {
@@ -351,7 +378,7 @@ describe('ApplicationWizardPage', () => {
     await settle();
     expect(html().textContent).toContain('The backup passphrase is saved.');
     await wizard.advance();
-    expect(wizard.step()).toBe(5);
+    expect(wizard.step()).toBe(6);
 
     wizard.takeBackup();
     http.expectOne('/api/backups/take/').flush({ activity: 7 }, { status: 202, statusText: 'Accepted' });

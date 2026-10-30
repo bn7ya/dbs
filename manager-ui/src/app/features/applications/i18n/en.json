@@ -276,6 +276,7 @@
       "onServer": "On the server",
       "steps": {
         "label": "Steps",
+        "profile": "How it runs",
         "folder": "Folder",
         "discovery": "Discovery",
         "review": "Review",
@@ -283,10 +284,15 @@
         "passphrase": "Backup passphrase",
         "backup": "Test backup"
       },
+      "profile": {
+        "intro": "Tell the manager how this Django project is deployed, as far as you know. Discovery looks first for what you describe and says where it finds something else. Every question can stay on Not sure."
+      },
       "folder": {
         "intro": "Choose the folder of the Django project, or of the compose file that runs it. DBS looks inside it for manage.py and for the containers that use it.",
         "label": "Folder on the server",
-        "hint": "Leave empty to see the project folders found on this server."
+        "hint": "Leave empty to see the project folders found on this server.",
+        "hintCompose": "The folder that holds compose.yaml.",
+        "hintHost": "The folder that holds manage.py."
       },
       "discovery": {
         "searching": "Searching the folder…",
@@ -352,6 +358,106 @@
       "chooseHere": "Choose this folder",
       "browseLabel": "Browse the server for: {field}",
       "truncated": "This folder holds more than 5000 entries. Only the first 5000 are listed."
+    },
+    "deployment": {
+      "title": "How it runs",
+      "body": "How this Django project is deployed: what you said, beside what the last check found.",
+      "intro": "Answer what you know. The manager finds the rest and says where it differs.",
+      "notSure": "Not sure, let the manager find out",
+      "found": "Found: {value}",
+      "saidFound": "You said {question} {said}, but the manager found {found}.",
+      "differs": "What you said differs from what the last check found. Check it, or use what was found.",
+      "useFound": "Use what was found",
+      "saved": "Saved how it runs.",
+      "runs_in": {
+        "label": "Where does Django run?",
+        "hint": "Where manage.py runs for this project.",
+        "host": "On the server, with a virtualenv",
+        "compose": "In a Docker or Podman Compose service",
+        "container": "In a single container"
+      },
+      "engine": {
+        "label": "Which container engine?",
+        "hint": "The engine that runs its containers.",
+        "docker": "Docker",
+        "podman": "Podman"
+      },
+      "database": {
+        "label": "Which database?",
+        "hint": "The engine of the default database in its settings.",
+        "postgresql": "PostgreSQL",
+        "mysql": "MySQL",
+        "mariadb": "MariaDB",
+        "sqlite": "SQLite",
+        "other": "Another database"
+      },
+      "database_runs": {
+        "label": "Where does the database run?",
+        "hint": "A database on another machine is shared, so a server move never restores over it.",
+        "compose": "In a Compose service beside the application",
+        "this_server": "Installed on this server",
+        "elsewhere": "On another machine or a managed service",
+        "file": "In a file of the project"
+      },
+      "settings_from": {
+        "label": "Where do its settings come from?",
+        "hint": "Where SECRET_KEY, the database password and the like are read from.",
+        "folder_env": "A .env file in the project folder",
+        "compose_env_file": "A file Compose names with env_file",
+        "image": "Inside the image",
+        "environment": "Environment variables, with no file"
+      },
+      "source": {
+        "label": "Where does its code come from?",
+        "hint": "A server move carries the folder with its git history.",
+        "git": "A git checkout",
+        "copied": "Copied files",
+        "image": "Built into the image"
+      },
+      "process_manager": {
+        "label": "What keeps it running?",
+        "hint": "A server move carries the systemd services that name the folder.",
+        "systemd": "A systemd service",
+        "systemd_user": "A systemd user service",
+        "supervisor": "Supervisor",
+        "other": "Something else"
+      },
+      "web_server": {
+        "label": "Which web server is in front of it?",
+        "hint": "A server move carries the nginx sites that name the folder.",
+        "nginx": "nginx",
+        "other": "Another web server",
+        "none": "None"
+      }
+    },
+    "nextSteps": {
+      "title": "Next steps",
+      "copy": "Copy the command",
+      "engine_permission_denied": {
+        "docker": "Add the SSH user to the docker group, then connect again:",
+        "podman": "Run the application's containers with rootless Podman as the SSH user."
+      },
+      "engine_missing": "Neither Docker nor Podman answers on this server. Install the engine the application uses, or move the server's applications onto a server where the move installs it.",
+      "container_not_running": {
+        "compose": "Start the {service} service:",
+        "container": "Start the {container} container:"
+      },
+      "dbs_missing": {
+        "host": "Install django-dbs in the application's virtualenv, then add \"dbs\" to INSTALLED_APPS and migrate:",
+        "image": "Add django-dbs to the requirements the image installs and \"dbs\" to INSTALLED_APPS, then build the image and start it again:"
+      },
+      "dbs_too_old": {
+        "host": "Upgrade django-dbs in the application's virtualenv:",
+        "image": "Upgrade django-dbs in the requirements the image installs, then build the image and start it again:"
+      },
+      "backup_command_missing": "django-dbs is installed but its commands do not run. Add \"dbs\" to INSTALLED_APPS, migrate, and let django-dbs check the project:",
+      "env_file_missing": "The .env file {path} is not there. Create it, or choose the file the application reads in its settings.",
+      "root_missing": "An allowed folder is not there. Create it, or take it out of the settings.",
+      "backup_dir_not_mounted": {
+        "compose": "Mount a folder of the server at {dir}: add this line under the volumes of the {service} service, then start the service again:",
+        "container": "Start the container again with a folder of the server mounted at {dir}."
+      },
+      "backup_dir_missing": "Create the backup folder {dir} and let the application write to it:"
     }
   },
   "errors": {

@@ -1,0 +1,19 @@
+<form class="dialog-form" (submit)="$event.preventDefault(); save()">
+  <p class="text-secondary">{{ 'applications.deployment.intro' | t }}</p>
+
+  @if (submitted() && !busy() && data.error(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <app-deployment-questions [profile]="profile()" [detected]="data.detected" (changed)="profile.set($event)" />
+
+  <div class="dialog-actions">
+    <button matButton type="button" (click)="cancel()">{{ 'actions.cancel' | t }}</button>
+    <button matButton="filled" type="submit" [disabled]="busy()" [attr.aria-busy]="busy()">
+      @if (busy()) {
+        <i matButtonIcon class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      }
+      {{ 'actions.save' | t }}
+    </button>
+  </div>
+</form>

@@ -23,6 +23,7 @@ import type { PasswordPromptData } from '@shared/password-prompt/password-prompt
 import { uniqueId } from '@shared/unique-id';
 import { CandidateFacts } from '../../components/candidate-facts/candidate-facts';
 import { CheckReport } from '../../components/check-report/check-report';
+import { DeploymentQuestions } from '../../components/deployment-questions/deployment-questions';
 import { browseServer } from '../../components/server-browser/browse-server';
 import type { BrowsedField } from '../../components/server-browser/server-browser.types';
 import {
@@ -36,10 +37,12 @@ import {
 import { SettingsFields } from '../../components/settings-fields/settings-fields';
 import type { ApplicationDraft, DraftErrors, DraftField } from '../../components/settings-fields/settings-fields.types';
 import { WhereItRuns } from '../../components/where-it-runs/where-it-runs';
+import type { DeploymentProfile } from '../../data/applications.types';
+import { asked } from '../../data/deployment';
 import { ApplicationWizardStore } from '../../state/application-wizard.store';
 import type { WizardField, WizardStep } from './application-wizard.types';
 
-const STEPS: readonly WizardStep[] = ['folder', 'discovery', 'review', 'check', 'passphrase', 'backup'];
+const STEPS: readonly WizardStep[] = ['profile', 'folder', 'discovery', 'review', 'check', 'passphrase', 'backup'];
 
 const FIRST_AFTER_CREATION = STEPS.indexOf('check');
 
@@ -67,6 +70,7 @@ const ABSOLUTE_PATH = /^\//;
     MatSuffix,
     CandidateFacts,
     CheckReport,
+    DeploymentQuestions,
     FieldError,
     JobConnection,
     Notice,
@@ -95,6 +99,14 @@ export class ApplicationWizardPage {
   protected readonly shownStep = signal(0);
   private readonly attempted = signal<ReadonlySet<WizardStep>>(new Set());
 
+  readonly profile = signal<DeploymentProfile>({});
+  readonly folderHint = computed(() => {
+    const runsIn = this.profile().runs_in;
+    if (runsIn === 'compose') {
+      return 'applications.wizard.folder.hintCompose';
+    }
+    return runsIn === 'host' ? 'applications.wizard.folder.hintHost' : 'applications.wizard.folder.hint';
+  });
   readonly folder = signal('');
   private readonly discoveredFolder = signal<string | null>(null);
   readonly chosen = signal<number | null>(null);
@@ -257,7 +269,11 @@ export class ApplicationWizardPage {
 
   async discover(): Promise<void> {
     const folder = this.folder().trim();
-    const found = await this.withPassword((password) => this.store.discover(folder, password), this.store.discoverError);
+    const deployment = asked(this.profile());
+    const found = await this.withPassword(
+      (password) => this.store.discover(folder, password, deployment),
+      this.store.discoverError,
+    );
     if (found) {
       this.discoveredFolder.set(folder);
       this.chosen.set(found.candidates.length > 0 ? 0 : null);
@@ -322,6 +338,8 @@ export class ApplicationWizardPage {
 
   private stepReady(step: WizardStep): boolean {
     switch (step) {
+      case 'profile':
+        return true;
       case 'folder':
         return !this.problems().has('folder');
       case 'discovery':
@@ -361,7 +379,11 @@ export class ApplicationWizardPage {
       return true;
     }
     this.edited.set(new Set());
-    const settings = { ...settingsOf(this.draft()), discovered: this.candidate() !== null };
+    const settings = {
+      ...settingsOf(this.draft()),
+      deployment: asked(this.profile()),
+      discovered: this.candidate() !== null,
+    };
     const created = await this.withPassword(
       (password) => this.store.create({ ...settings, ...(password ? { account_password: password } : {}) }),
       this.store.createError,

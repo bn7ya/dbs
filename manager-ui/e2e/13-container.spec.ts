@@ -30,6 +30,7 @@ test.describe('an application in a Compose service', () => {
     const form = page.getByRole('main');
     const next = form.getByRole('button', { name: t('next'), exact: true });
 
+    await next.click();
     await form.getByRole('textbox', { name: t('folderOnServer') }).fill(CONTAINER.folder);
     await next.click();
 

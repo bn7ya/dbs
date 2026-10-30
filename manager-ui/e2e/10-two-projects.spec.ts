@@ -50,6 +50,7 @@ const addApplication = async (
   const form = page.getByRole('main');
   const next = form.getByRole('button', { name: t('next'), exact: true });
 
+  await next.click();
   await pick(page, form, journey);
   await stepIs(form, t('stepDiscovery'));
   await expect(form.getByRole('radio', { name: `${t('onTheServer')} ${folder}` })).toBeChecked({ timeout: 120_000 });

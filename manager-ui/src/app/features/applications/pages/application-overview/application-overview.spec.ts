@@ -204,4 +204,27 @@ describe('ApplicationOverviewPage', () => {
     expect(prompted.mock.calls[0][1].data).toMatchObject({ destructive: true, bodyValues: { name: '⁨shop⁩' } });
     expect(navigate).toHaveBeenCalledWith(['/servers', SERVER_ID, 'applications']);
   });
+
+  it('shows how it runs beside what the check found, and keeps what was found on request', async () => {
+    const page = await show({
+      ...APPLICATION,
+      last_check_report: {
+        ...APPLICATION.last_check_report,
+        detected: { runs_in: 'compose', engine: 'docker', database: 'mysql' },
+      },
+    });
+
+    const text = html().textContent ?? '';
+    expect(text).toContain('How it runs');
+    expect(text).toContain('PostgreSQL');
+    expect(text).toContain('Found: MySQL');
+    expect(text).toContain('What you said differs from what the last check found.');
+
+    const saving = page.useWhatWasFound();
+    const saved = http.expectOne(DETAIL);
+    expect(saved.request.method).toBe('PATCH');
+    expect(saved.request.body).toEqual({ deployment: { runs_in: 'compose', engine: 'docker', database: 'mysql' } });
+    saved.flush(APPLICATION);
+    await saving;
+  });
 });

@@ -23,9 +23,12 @@ import { ApplicationForm } from '../../components/application-form/application-f
 import type { ApplicationFormData } from '../../components/application-form/application-form.types';
 import { CheckReport } from '../../components/check-report/check-report';
 import { CheckTag } from '../../components/check-tag/check-tag';
-import type { Application } from '../../data/applications.types';
+import { DeploymentDialog } from '../../components/deployment-dialog/deployment-dialog';
+import type { DeploymentDialogData } from '../../components/deployment-dialog/deployment-dialog.types';
+import type { Application, DeploymentProfile } from '../../data/applications.types';
+import { DEPLOYMENT_QUESTIONS, answerKey, answerOf, asks, merged } from '../../data/deployment';
 import { ApplicationsStore } from '../../state/applications.store';
-import type { SettingRow } from './application-overview.types';
+import type { DeploymentRow, SettingRow } from './application-overview.types';
 
 @Component({
   selector: 'app-application-overview-page',
@@ -76,6 +79,13 @@ export class ApplicationOverviewPage {
     const application = this.application();
     return application ? settingRows(application) : [];
   });
+
+  readonly deploymentRows = computed<readonly DeploymentRow[]>(() => {
+    const application = this.application();
+    return application ? deploymentRows(application.deployment, application.last_check_report.detected) : [];
+  });
+
+  readonly differs = computed(() => this.deploymentRows().some((row) => row.differs));
 
   readonly envInContainer = computed(() => {
     const application = this.application();
@@ -137,6 +147,36 @@ export class ApplicationOverviewPage {
     }
   }
 
+  async editDeployment(): Promise<void> {
+    const application = this.application();
+    if (!application) {
+      return;
+    }
+    const data: DeploymentDialogData = {
+      profile: application.deployment,
+      detected: application.last_check_report.detected ?? null,
+      save: async (profile) => (await this.store.update({ deployment: profile })) !== null,
+      error: this.store.saveError,
+    };
+    const saved = await this.dialogs
+      .open<boolean, DeploymentDialogData>(DeploymentDialog, { titleKey: 'applications.deployment.title', data, size: 'md' })
+      .whenClosed();
+    if (saved) {
+      this.notify('success', 'applications.deployment.saved');
+    }
+  }
+
+  async useWhatWasFound(): Promise<void> {
+    const application = this.application();
+    if (!application) {
+      return;
+    }
+    const profile = merged(application.deployment, application.last_check_report.detected);
+    if (await this.store.update({ deployment: profile })) {
+      this.notify('success', 'applications.deployment.saved');
+    }
+  }
+
   async togglePassphrase(): Promise<void> {
     if (this.passphrase()) {
       this.store.hidePassphrase();
@@ -190,6 +230,24 @@ export class ApplicationOverviewPage {
 
 function asksForPassword(error: ApiError | null): boolean {
   return (error?.fields?.['account_password'] ?? []).length > 0;
+}
+
+function deploymentRows(said: DeploymentProfile, found: DeploymentProfile | undefined): readonly DeploymentRow[] {
+  const shown = merged(said, found);
+  return DEPLOYMENT_QUESTIONS.filter((question) => asks(question.key, shown)).map((question) => {
+    const answer = answerOf(said, question.key);
+    const detected = answerOf(found, question.key);
+    return {
+      question: question.key,
+      saidKey: answerKey(question.key, answer),
+      foundKey: detected ? answerKey(question.key, detected) : '',
+      differs: answer !== '' && detected !== '' && sameAnswer(question.key, answer) !== sameAnswer(question.key, detected),
+    };
+  });
+}
+
+function sameAnswer(question: string, value: string): string {
+  return question === 'database' && value === 'mariadb' ? 'mysql' : value;
 }
 
 function codeRow(labelKey: string, code: string): SettingRow {
