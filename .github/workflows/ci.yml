@@ -286,7 +286,7 @@ jobs:
         if: failure()
         run: |
           sudo cat "$RUNNER_TEMP/sshd/sshd.log"
-          sudo su dbs-ssh -s /bin/sh -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
+          sudo su -l dbs-ssh -s /bin/sh -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
 
   upgrade-from-0-7:
     name: Upgrade a project and a manager from 0.7.0

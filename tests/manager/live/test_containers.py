@@ -182,7 +182,8 @@ def test_a_backup_arrives_verified_and_leaves_nothing_in_the_container(
     assert backup.validation == BackupFile.Validation.VERIFIED
     with BackupStorage().open_read(backup.storage_path) as handle:
         assert validate_backup(handle, PASSPHRASE).ok
-    assert sorted(os.listdir(f"{FOLDER}/backups")) == []
+    kept = on_server(f"{ENGINE} compose exec -T web ls -A /var/backups/dbs")
+    assert kept.ok and kept.stdout.strip() == "", kept.stderr
     leftovers = on_server(
         f"{ENGINE} compose exec -T web sh -c "
         "'ls -A /var/backups/dbs /tmp | grep -E \"part-|dbs-restore\" || true'"
