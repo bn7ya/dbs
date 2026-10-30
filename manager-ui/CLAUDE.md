@@ -37,6 +37,13 @@ built directory is gitignored. The Angular CLI needs Node 22.22.3+ or 24.15+.
 provides `APP_BASE_HREF` as `/`, so router URLs stay at `/`, `/servers`, `/setup`, `/sign-in/code`.
 API calls are absolute (`/api/...`) and unaffected by either.
 
+`build.options.assets` copies `public/` into the bundle unhashed: `logo.svg` and `favicon.svg`,
+the developer's DBS logo with only its `viewBox` fitted to the letters (the original is
+`docs/assets/dbs-logo.svg`; `tests/manager/test_logo.py` keeps the copies the same artwork).
+`index.html` links `favicon.svg` relatively, and `BrandMark` loads `logo.svg` relatively, so both
+resolve under `/static/dbs_manager/` and under `ng serve`. Their names never look hashed, so
+`spa.asset` serves them with `no-cache`.
+
 The initial bundle is about 820 kB (190 kB compressed): `main` and the chunks it imports
 statically, Angular and Material among them. The `initial` budget warns at 900 kB and fails at
 1 MB, so a change that adds to the first load shows in the build.
@@ -102,6 +109,7 @@ manager-ui/
   angular.json  package.json  tsconfig*.json  eslint.config.js  playwright.config.ts
   proxy.conf.json           /api → http://127.0.0.1:8765
   scripts/check-icons.mjs   every fa-* used exists in Font Awesome Free
+  public/                   logo.svg and favicon.svg, copied into the bundle as they are
   e2e/                      Playwright journeys; e2e/support/ is what they share
   src/
     styles/_tokens.scss     the --app-* tokens: one light, blue scheme
@@ -260,7 +268,7 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   the master asked for, until it changes it. **`AccountPage`** (`/account`, "Your account" in the
   account menu) — the role, when the password expires, `ChangePasswordForm`, and new recovery codes
   behind the password.
-- **`AppLayout`** — the signed-in frame: a `mat-toolbar` header with the product name, the language
+- **`AppLayout`** — the signed-in frame: a `mat-toolbar` header with the logo (`BrandMark`, named DBS, linking home), the language
   switch and an account `mat-menu` holding Your account, About and sign-out; a `mat-nav-list` of
   `SECTIONS` (dashboard, servers, applications, backups, console for `console.run`, activity, and
   accounts for the master), each section shown only for its capability; the one `<main id="main">`.
@@ -291,6 +299,10 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   `warning` and `danger`, `role="status"` otherwise.
 - **`StatusTag`** (`<app-status-tag severity icon label>`) — a state as icon and word, never colour
   alone.
+- **`BrandMark`** (`<app-brand-mark size="small|large" decorative>`) — the DBS logo from `logo.svg`, sized by
+  `$brand-small` and `$brand-large` in `_layout.scss`. Named DBS in the toolbar link; `decorative` (empty alt)
+  where a heading already names the page: atop the sign-in, two-factor, enrolment, password, setup and
+  stand-alone status cards, and the About page.
 - **`Skeleton`** — a CSS-only loading line. **`Breadcrumb`** (`<app-breadcrumb [items] [label] code>`)
   — a labelled trail of router links, the last one the current page.
 - **`CopyButton`** (`<app-copy-button [text] [label]>`) — copies `text` to the clipboard and says so

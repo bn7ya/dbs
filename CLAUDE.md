@@ -156,6 +156,12 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   `scripts/container_fixture.sh ENGINE DIR`) over OpenSSH when `DBS_TEST_CONTAINER_ENGINE`
   names an engine. `scripts/upgrade_rehearsal.py` installs 0.7.0 from PyPI, fills a project and
   a manager, upgrades both to the checkout and checks that nothing was lost.
+- `README.md` — the short front page, also PyPI's: what DBS does, a quick start, links. Its images
+  and links are absolute URLs so they work on PyPI. `docs/` holds the guides and the reference
+  (`docs/README.md` is the index); links between them are relative, and every fact in them is
+  checked against the code. `docs/assets/dbs-logo.svg` is the official logo as drawn; the copies
+  in `manager-ui/public/` and `dbs/static/dbs/` change only its `viewBox`, and
+  `tests/manager/test_logo.py` keeps them the same artwork.
 - `RELEASE_NOTES.md` — the developer-facing notes for the current release, used as the GitHub
   Release body. `THIRD_PARTY_LICENSES.md` — the license of every dependency; update it in
   the same commit that adds, removes or bundles one.

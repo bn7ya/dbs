@@ -18,7 +18,9 @@ whose connection broke resumes where it stopped. `pip install django-dbs` instal
 and the manager answers to `django-dbs`, `django_dbs` and `dbs`.
 
 The full list of changes is in the
-[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#080---2026-10-30).
+[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#080---2026-10-30), and the
+documentation now lives in [`docs/`](https://github.com/bn7ya/dbs/tree/main/docs), starting with
+[Getting started](https://github.com/bn7ya/dbs/blob/main/docs/getting-started.md).
 
 ## Highlights
 
@@ -32,7 +34,7 @@ to an application, so one server runs several.
 
 ```bash
 django_dbs server add web-1 --host 203.0.113.7 --user deploy --key-file ~/.ssh/id_ed25519
-django_dbs app add --server web-1 --folder /srv/shop
+django_dbs app add shop --server web-1 --folder /srv/shop
 django_dbs app check shop
 ```
 
@@ -106,7 +108,7 @@ list with checked names and its own time limit (1 to 120 minutes):
 
 | Step | Runs |
 |---|---|
-| `git_pull` | `git -C FOLDER pull --ff-only --no-rebase [REMOTE [BRANCH]]`, never prompting |
+| `git_pull` | `git -C FOLDER pull --ff-only --no-rebase [REMOTE BRANCH]` (both or neither), never prompting |
 | `compose_pull`, `compose_build`, `compose_up` | `compose pull`, `compose build [--pull]`, `compose up -d` for the services named |
 | `restart` | the Compose service or the container |
 | `systemd_user_restart` | `systemctl --user restart UNIT.service` |
@@ -164,7 +166,7 @@ longer takes a backup with it.
 | `DBS_JOB_MEMORY_LIMIT` | `"2G"` | Stops the job with `memory_limit`; `0` switches it off |
 | `DBS_JOB_NICE` | `10` | The child's niceness |
 | `DBS_JOB_PYTHON` | this interpreter | For uWSGI, mod_wsgi and other servers whose `sys.executable` is not Python |
-| `DBS_JOB_BOOTSTRAP` | `""` | A module that sets Django up, for django-configurations and similar |
+| `DBS_JOB_BOOTSTRAP` | `django.setup` | A dotted path to the callable that sets Django up, such as `configurations.setup` |
 
 A backup that fails for lack of space, a refused folder or a lost database records `disk_full`,
 `permission_denied`, `read_only` or `database_failed`.
@@ -185,7 +187,15 @@ New suites back up 1,000 tables and a million rows, 100 MB rows, failing backups
 processes, a Django site under load during a backup (the CI job publishes the report: throughput,
 latency percentiles, errors and memory before, during and after), several instances of one
 project sharing a database, two hundred applications in one manager, Docker and rootless Podman
-Compose projects over OpenSSH, and an upgrade from a real 0.7.0.
+Compose projects over OpenSSH, and an upgrade from a real 0.7.0. The interface journeys follow a
+developer's real work in English and Arabic, from the first run to a real server move.
+
+### The DBS logo and the documentation
+
+DBS has its own logo, in the manager's tab, toolbar, sign-in and setup screens and About page,
+and in the panel's tab and navigation. The README is a short front page with a quick start, and
+the guides and the command, settings and Python API reference live in
+[`docs/`](https://github.com/bn7ya/dbs/tree/main/docs).
 
 ## Upgrading from 0.7.x
 
@@ -258,6 +268,8 @@ Every server needs django-dbs 0.7.0 or later; resumed transfers and progress nee
 - `dbs validate` with a wrong passphrase ended in a traceback; it now says so and exits 1, and
   takes `--passphrase-stdin`.
 - The manager's SQLite could fail a job with "database is locked" while another wrote.
+- A real restore, deploy, server move or revert run from a script said to pass `--yes`; it now
+  names `--confirm-name` and the name to give.
 
 ## Security
 
