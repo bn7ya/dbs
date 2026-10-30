@@ -1,7 +1,5 @@
 # DBS 0.8.0 — release notes
 
-Released as a candidate first, `0.8.0rc1`, then as `0.8.0`.
-
 ```bash
 pip install --upgrade django-dbs   # everything: the library, the guard, SSH and the manager
 python manage.py dbs upgrade
@@ -20,7 +18,7 @@ whose connection broke resumes where it stopped. `pip install django-dbs` instal
 and the manager answers to `django-dbs`, `django_dbs` and `dbs`.
 
 The full list of changes is in the
-[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#080---unreleased).
+[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#080---2026-10-30).
 
 ## Highlights
 

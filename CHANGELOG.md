@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.8.0] - Unreleased
+## [0.8.0] - 2026-10-30
 
 A server and the Django projects on it are now separate things: the DBS manager adds a server
 by its SSH address, then finds each application on it from a folder, on the server itself, in
