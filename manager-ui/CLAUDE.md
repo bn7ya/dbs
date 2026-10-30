@@ -4,7 +4,8 @@ The Angular source of the standalone DBS manager (`django_dbs run`). It is built
 into `dbs/manager/static/dbs_manager/` and shipped inside the wheel; Django serves it at `/` with
 the assets under `/static/dbs_manager/`. A developer who installs `django-dbs` never needs Node.
 The repository's own `CLAUDE.md` still governs: say "developer", never "end user", and never compare
-DBS to another tool.
+DBS to another tool. Its Stability rules hold here too: the REST API under `/api/` only grows from
+0.8.0 on, so the interface may use a new field or endpoint, never one renamed or removed.
 
 ## Stack
 
