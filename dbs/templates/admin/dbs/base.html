@@ -1,6 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% load static dbs_admin %}
 
+{% block extrahead %}{{ block.super }}{% include "admin/dbs/_favicon.html" %}{% endblock %}
+
 {% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'dbs/panel.css' %}">{% endblock %}
 
 {% block breadcrumbs %}
@@ -15,6 +17,7 @@
 
 {% block content %}
 <nav class="dbs-nav">
+  <a class="dbs-nav__brand" href="{% dbs_dashboard_url %}"><img class="dbs-nav__logo" src="{% static 'dbs/logo.svg' %}" alt="DBS"></a>
   <a href="{% dbs_dashboard_url %}">Dashboard</a>
   <a href="{% url 'admin:dbs_backup_create' %}">Take a backup</a>
   <a href="{% url 'admin:dbs_backup_restore' %}">Restore</a>

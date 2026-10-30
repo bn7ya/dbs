@@ -164,6 +164,21 @@ def test_restore_rehearses_unless_real(terminal, admin, host, two_applications):
 
 
 @RUNS_JOBS
+def test_a_real_restore_from_a_script_names_the_option_that_confirms_it(
+    terminal, admin, host, two_applications
+):
+    terminal("backup", "take", "shop")
+    backup = BackupFileRepository().all_including_deleted().get()
+
+    ran = terminal("backup", "restore", backup.pk, "--mode", "merge", "--real")
+
+    assert ran.code == 1
+    assert "pass --confirm-name shop from a script" in ran.err
+    assert "--yes" not in ran.err
+    assert host.restores == []
+
+
+@RUNS_JOBS
 def test_restore_onto_another_application_needs_its_name(
     terminal, admin, host, two_applications
 ):

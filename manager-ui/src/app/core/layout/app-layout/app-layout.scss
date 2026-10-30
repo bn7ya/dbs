@@ -31,10 +31,8 @@
 }
 
 .app-layout__brand {
-  font-size: var(--app-text-1);
-  font-weight: var(--app-weight-bold);
-  color: inherit;
-  text-decoration: none;
+  display: inline-flex;
+  border-radius: var(--app-radius-sm);
 }
 
 .app-layout__account {

@@ -10,6 +10,7 @@ import { errorText, ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleSwitcher } from '@core/i18n/locale-switcher/locale-switcher';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { BrandMark } from '@shared/brand-mark/brand-mark';
 import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
 import { AuthStore } from '../../state/auth.store';
@@ -17,6 +18,7 @@ import { AuthStore } from '../../state/auth.store';
 @Component({
   selector: 'app-two-factor',
   imports: [
+    BrandMark,
     FormsModule,
     MatButton,
     MatCard,

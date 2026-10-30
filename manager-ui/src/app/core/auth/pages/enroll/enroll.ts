@@ -10,6 +10,7 @@ import { errorText, ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { LocaleSwitcher } from '@core/i18n/locale-switcher/locale-switcher';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { BrandMark } from '@shared/brand-mark/brand-mark';
 import { CopyButton } from '@shared/copy-button/copy-button';
 import { FieldError } from '@shared/field/field-error';
 import { Notice } from '@shared/notice/notice';
@@ -23,6 +24,7 @@ const SECRET_GROUP = /.{1,4}/g;
 @Component({
   selector: 'app-enroll',
   imports: [
+    BrandMark,
     FormsModule,
     MatButton,
     MatCard,

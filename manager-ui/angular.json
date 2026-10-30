@@ -22,6 +22,7 @@
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": [],
+            "assets": [{ "glob": "**/*", "input": "public" }],
             "tsConfig": "tsconfig.app.json",
             "styles": [
               "@fontsource/tajawal/400.css",

@@ -6,10 +6,11 @@ import { MatCard, MatCardContent } from '@angular/material/card';
 
 import { SHELL_FRAME } from '@core/layout/shell-frame';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { BrandMark } from '@shared/brand-mark/brand-mark';
 
 @Component({
   selector: 'app-status-page',
-  imports: [NgTemplateOutlet, RouterLink, MatButton, MatCard, MatCardContent, TranslatePipe],
+  imports: [NgTemplateOutlet, RouterLink, MatButton, MatCard, MatCardContent, BrandMark, TranslatePipe],
   templateUrl: './status-page.html',
   styleUrl: './status-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

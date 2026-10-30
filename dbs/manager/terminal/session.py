@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import getpass
+import shlex
 import sys
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -80,7 +81,9 @@ class TerminalSession:
         if getattr(self.args, "yes", False):
             return
         if not interactive():
-            raise CommandFailed("this needs a confirmation; pass --yes from a script.")
+            raise CommandFailed(
+                f"this needs a confirmation; pass {self._answer_option(expected)} from a script."
+            )
         try:
             answer = input(f"{question} ").strip()
         except EOFError:
@@ -90,6 +93,11 @@ class TerminalSession:
         if expected is not None and answer == expected:
             return
         raise CommandFailed("stopped; nothing was changed.")
+
+    def _answer_option(self, expected: str | None) -> str:
+        if expected is not None and hasattr(self.args, "confirm_name"):
+            return f"--confirm-name {shlex.quote(expected)}"
+        return "--yes"
 
 
 def interactive() -> bool:

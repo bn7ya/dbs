@@ -103,7 +103,14 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
 - **Test suites** for 1,000 tables and a million rows, 100 MB rows, failing backups in real
   child processes, a Django site under load during a backup (with a published report),
   several instances of one project, two hundred applications in one manager, Docker and
-  rootless Podman Compose projects over OpenSSH, and an upgrade from 0.7.0.
+  rootless Podman Compose projects over OpenSSH, and an upgrade from 0.7.0. The interface
+  journeys are scenarios of a developer's real work in English and Arabic, a real server move
+  among them.
+- **The DBS logo.** The manager shows it in its tab, its toolbar, its sign-in and setup screens
+  and its About page, and the panel in its tab and its navigation.
+- **Documentation in `docs/`**: getting started, the project, the panel, the manager,
+  deploying and moving, restoring, the session guard, AI assistants, how it works, and the
+  command, settings and Python API reference. The README is a short front page.
 
 ### Changed
 
@@ -145,6 +152,8 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
 - A move could restore a backup that failed verification; it now refuses with
   `backup_quarantined`.
 - `dbs validate` with a wrong passphrase ended in a traceback.
+- A real restore, deploy, server move or revert run from a script said to pass `--yes`, which
+  those commands lack; it now names `--confirm-name` and the name to give.
 
 ### Security
 

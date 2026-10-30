@@ -85,7 +85,8 @@ def test_files_list_upload_download_mkdir_and_delete(
     )
     assert copy.read_bytes() == b"logo"
 
-    assert terminal("files", "delete", "web-1", media / "logo.png").code == 1
+    refused = terminal("files", "delete", "web-1", media / "logo.png")
+    assert refused.code == 1 and "pass --yes from a script" in refused.err
     assert terminal("files", "delete", "web-1", media / "logo.png", "--yes").code == 0
     assert not (media / "logo.png").exists()
 

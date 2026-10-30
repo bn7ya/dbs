@@ -52,6 +52,26 @@ def test_the_panel_wears_the_admin_theme(panel):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "page",
+    [PANEL, "/admin/dbs/backupschedule/", "/admin/dbs/auditevent/", "/admin/dbs/knownlocation/"],
+)
+def test_every_panel_page_carries_the_dbs_favicon(panel, page):
+    response = panel.get(page, follow=True)
+
+    assert response.status_code == 200
+    assert b'<link rel="icon" type="image/svg+xml" href="/static/dbs/favicon.svg">' in response.content
+
+
+@pytest.mark.django_db
+def test_the_panel_navigation_starts_with_the_logo(panel):
+    content = panel.get(PANEL).content.decode()
+
+    assert '<img class="dbs-nav__logo" src="/static/dbs/logo.svg" alt="DBS">' in content
+    assert content.index("dbs-nav__logo") < content.index(">Dashboard</a>")
+
+
+@pytest.mark.django_db
 def test_every_wiki_page_renders(panel):
     assert panel.get(WIKI).status_code == 200
     for page in (

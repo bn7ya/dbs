@@ -67,6 +67,7 @@ dbs = "dbs.manager.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/bn7ya/dbs"
+Documentation = "https://github.com/bn7ya/dbs/tree/main/docs"
 Repository = "https://github.com/bn7ya/dbs"
 Issues = "https://github.com/bn7ya/dbs/issues"
 Changelog = "https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md"

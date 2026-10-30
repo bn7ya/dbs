@@ -70,7 +70,7 @@ chain. Also `manage.py dbs_audit`. No DBS command deletes audit rows.
 Prints what the DBS manager reads from this project: project directory, Python, manage.py,
 settings module, backup directory, file roots, `.env` path and version, and on a server the
 host, SSH user and host key fingerprints. `"container": true` says it runs in a container,
-whose hostname, user and host keys say nothing about the server, so they are left out. The
+whose hostname, user and host keys say nothing about the server, so they come back empty. The
 manager's discovery runs it itself; nobody pastes it anywhere. Never a passphrase.
 
 ## `dbs key [--show]`
@@ -136,7 +136,9 @@ Each takes `--as NAME` (the account to act as; defaults to the only one), `--jso
 API's output) and `--password-stdin` (for actions that need the account password). Accounts
 have roles (master, admin, operator, viewer) and a command refuses what the role does not
 allow. Secrets are prompted for or read from stdin, never passed as arguments; confirmations
-need `--yes` from a script. `server add` confirms the host key, signs in and checks which
+need `--yes` from a script, and a real `backup restore`, `app deploy`, `server move`,
+`redeploy start` or `redeploy revert` needs `--confirm-name NAME` instead, the name a person
+would type. `server add` confirms the host key, signs in and checks which
 engines answer. `server confirm-host-key ID` is for a person at a real terminal: never run it
 on their behalf.
 
