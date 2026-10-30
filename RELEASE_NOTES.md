@@ -48,6 +48,22 @@ django-dbs name, best candidate first. Nothing runs in a folder, or a project be
 another account can write to. There is no snippet to paste any more: `dbs connection --json` run
 inside a container described the container, not the server.
 
+### How it runs
+
+The application wizard now begins by asking how the project is deployed: on the server itself,
+in a Compose service or in a container; Docker or Podman; which database and where it runs;
+where the settings come from; whether the folder is a git checkout; and, for a project on the
+server, what keeps it running and the web server in front. Every answer may be *Not sure*. The
+answers put the matching place first in discovery and point out where it differs, and the
+application's **How it runs** card shows each answer beside what the manager found: the database
+vendor and host from the settings (never the password), git, the `.env` source, and the systemd
+units, Supervisor files and nginx sites that name the folder. A problem the check finds comes
+with the next step for that deployment and the command to run.
+
+```bash
+django_dbs app add shop --server web-1 --folder /srv/shop --deployment runs_in=compose --deployment database=postgresql
+```
+
 ### Docker and Podman
 
 Every command in a container goes through the engine, with the passphrase on standard input. A
@@ -57,6 +73,25 @@ container, so a taken backup leaves nothing behind on the server. The check repo
 its Compose, and whether the SSH user may use it. Backups, restores and the check never use
 `sudo`: an `engine_permission_denied` is fixed by the engine's group or by rootless Podman. Only
 a server move uses `sudo`, to install what the new server lacks.
+
+### Move a server
+
+**Move to another server** carries every application on a server onto another server, which may
+have nothing installed: the code with its `.git`, the images, the volumes, the files, the `.env`
+and the data. The rehearsal only reads and lists what moves, the packages the new server lacks,
+what would stop the move and what to check afterwards. Moving for real takes your password, the
+new server's name and the `sudo` password of the SSH user there; the manager installs what is
+missing, carries each application through a spool it checks with SHA-256, makes or carries the
+virtualenv, starts the application, adds it to the manager with the same backup passphrase,
+runs `migrate` and restores a fresh backup of the old one, then installs its systemd units and
+nginx sites and copies its plans, paused. The old server keeps running untouched, nothing on the
+new server is written over, and a move that stops resumes where it stopped. The new server may
+run Debian, Ubuntu, the RHEL family or Fedora, on amd64 or arm64.
+
+```bash
+django_dbs server move web-1 --to web-2           # a rehearsal
+django_dbs server move web-1 --to web-2 --real
+```
 
 ### Schedules with a first run, a time zone, a pause
 

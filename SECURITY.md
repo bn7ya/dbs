@@ -270,8 +270,9 @@ installed, so it is the one place the manager uses `sudo`:
   or accepted by the MCP server, and is scrubbed from any output the move keeps. Before it is
   sent, `sudo -n -k -- true` tells whether the account needs one, so a password line never
   reaches a command; it is checked once per move.
-- On the old server the move only reads: archives, image saves, volume exports, `du`, `find`
-  and a fresh DBS backup, which removes its own file. Nothing there is stopped or changed.
+- On the old server the move only reads: archives, image saves, volume exports, `du`, `find`,
+  `stat` and a fresh DBS backup, which records itself in the project's audit trail like any
+  backup and removes its own file. Nothing there is stopped or changed.
 - On the new server nothing is written over: folders arrive beside their place and are moved
   in only where nothing is, files use `cp -n` and are checked, images, volumes, units and sites
   that already exist stop the move, and no `rm -r` ever runs. What a stopped move left is
@@ -282,6 +283,10 @@ installed, so it is the one place the manager uses `sudo`:
   database on another machine is shared and never restored over. A database the move creates
   on the new server takes its name, user and password from the moved project's own settings,
   read on the new server and sent to the database on standard input.
+- Before `migrate` and the restore, the move reads the moved project's database settings on the
+  new server and stops (`database_is_the_sources`) when they still name the old application's
+  database, as they could on the same machine. A carried `.env`, systemd unit or nginx site that
+  names the old folder has the new folder written in its place first.
 - Rehearsing needs the operator role and uses no sudo password; a move for real needs an
   admin, the account password and the new server's name typed out.
 

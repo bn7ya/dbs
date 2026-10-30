@@ -125,7 +125,8 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   nothing installed: `systems.py` (os-release), `packages.py` (the package table per family,
   Docker's repository and pinned key), `catalogue.py` (every command, as fixed argument lists),
   `privileged.py` (sudo modes and the password on stdin), `inventory.py` (the read-only plan),
-  `transfer.py` (an archive, image or volume through a verified spool) and `steps.py` (the job).
+  `transfer.py` (an archive, image or volume through a verified spool), `requirements.py` (a
+  rebuilt virtualenv's requirements from `pip freeze`) and `steps.py` (the job).
 - `dbs/manager/applications/deployment.py` and `applications/services/facts.py` — how an
   application is deployed, as the developer says it and as discovery and the check find it.
 - `dbs/manager/console/` — `POST /api/console/`: one terminal command line run as the
@@ -251,8 +252,11 @@ version to read them before it offers giving them up.
   is typed per move, travels to the job in memory and to the server on stdin only, and is
   never stored, logged, audited or accepted by MCP. The old server only reads and is never
   stopped or changed; on the new server nothing is written over and no `rm -r` runs. Database
-  data arrives only through a DBS restore; a database elsewhere is shared, never restored over.
-  The MCP server and the console only rehearse a move (the console without a sudo password).
+  data arrives only through a DBS restore; a database elsewhere is shared, never restored over,
+  and migrate and restore refuse a database that is still the old application's own
+  (`database_is_the_sources`). A carried `.env`, unit or site that names the old folder gets the
+  new one. The MCP server only rehearses a move; the console never takes a sudo password, so it
+  moves for real only where none is needed.
 - The built interface is generated at release time and never committed.
 
 ## Install constraint

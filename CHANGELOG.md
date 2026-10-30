@@ -26,6 +26,29 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
   the host, its mounts, its `.env` and where that file lives. Backups, plans, `.env`
   versions, files, deploys and moves belong to an application, so one server runs several.
   `/api/applications/`, the terminal's `app` area and the MCP tools follow the split.
+- **How it runs.** The application wizard first asks how the project is deployed: where
+  Django runs, the engine, the database and where it runs, where the settings come from,
+  where the code comes from, and for a project on the server what keeps it running and the
+  web server in front; every answer may be *Not sure*. Discovery ranks the place that matches
+  first and says where it differs; discovery and the check read the database's vendor, host
+  and name (never its password), git, the `.env` source and the units, Supervisor files and
+  nginx sites that name the folder. The overview's **How it runs** card shows each answer
+  beside what was found, and the check's problems (`problems`) come with next steps for that
+  deployment. The answers (`deployment`) change no command and need no password; the terminal
+  takes `--deployment KEY=VALUE` and the MCP tools a closed set of values.
+- **Move a server.** `POST /api/servers/{id}/move/`, **Move to another server** on a server's
+  overview and `django_dbs server move SERVER --to SERVER` carry every application on a
+  server, with its code, `.git`, images, volumes, files, `.env` and data, onto another server
+  that may have nothing installed. A rehearsal only reads and lists what moves, the packages
+  the new server lacks, blockers and notes. A real move needs an admin, the account password,
+  the new server's name and the `sudo` password of the SSH user there: it installs what is
+  missing (Docker from Docker's repository with a pinned key), carries each application
+  through a verified spool, makes or carries its virtualenv, starts it, adds it to the
+  manager with the same passphrase, runs `migrate`, restores a fresh backup of the old
+  application, installs its units and sites, checks it and copies its plans paused. The old
+  server is left running and untouched, nothing on the new one is written over, and a move
+  that stops resumes where it stopped. Debian, Ubuntu, the RHEL family and Fedora, on amd64
+  or arm64. Claude can rehearse one (`rehearse_server_move`).
 - **Discovery from a folder.** Given a server and a folder, the manager lists the folder,
   asks Docker and Podman which containers belong to it (Compose labels, working folder, bind
   mounts), joins replicas, finds each container's Python and `manage.py`, asks django-dbs
@@ -138,6 +161,11 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
 - Discovery leaves out containers whose names or Compose labels could be read as options, and
   the manager reads or replaces no `.env` on a server whose folder, or the folder it links
   into, another account can write to (`env_folder_shared`).
+- A server move is the one place the manager uses `sudo`. Its commands are fixed argument
+  lists built from checked names; the `sudo` password is typed per move, reaches the server
+  only on standard input and is never stored, logged, audited or accepted by the MCP server.
+  The old server only reads; on the new one nothing is written over and no `rm -r` runs, and
+  `migrate` and the restore refuse a database that is still the old application's own.
 - The panel's invariant stays: it runs no remote command and keeps no SSH credential.
 
 ## [0.7.0] - 2026-10-13
