@@ -140,6 +140,11 @@
       "action": "Merge",
       "done": "Servers merged."
     },
+    "move": {
+      "title": "Move to another server",
+      "body": "Carries every application of this server, with its code, git, images, volumes, files and data, onto another server, even one with nothing installed. This server keeps running untouched.",
+      "action": "Move to another server"
+    },
     "delete": {
       "title": "Delete server",
       "body": "Removes this server from the manager. Remove its applications first.",
@@ -215,13 +220,16 @@
       },
       "check": {
         "addKey": "The server refused the new key. Add the public key to {path} on the server, then check again.",
-        "ok": "The manager can sign in to this server."
+        "ok": "The manager can sign in to this server.",
+        "moveTarget": "A server with nothing installed is fine as the target of a move: the move installs what the applications need."
       },
       "done": {
         "ready": "The server is ready.",
         "next": "Add the Django projects it runs, on the server itself or in containers.",
         "addApplication": "Add an application",
-        "openServer": "Open the server"
+        "openServer": "Open the server",
+        "nextMove": "Go back to the move to plan it onto this server.",
+        "backToMove": "Back to the move"
       }
     }
   },

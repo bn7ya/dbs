@@ -1,0 +1,162 @@
+@if (inventory(); as found) {
+  <div class="plan">
+    @if (system(); as target) {
+      <p class="text-secondary">
+        {{ 'relocation.plan.system' | t: { system: target.distribution + ' ' + target.version, architecture: target.architecture } }}
+      </p>
+    }
+
+    @for (blocker of detail().blockers; track $index) {
+      <app-notice severity="danger">
+        @if (blocker.application) {
+          <bdi>{{ blocker.application }}</bdi>:
+        }
+        {{ 'relocation.blockers.' + blocker.code | t: values(blocker) }}
+      </app-notice>
+    }
+
+    <section class="plan__section">
+      <h3 class="text-label">{{ 'relocation.plan.packages' | t }}</h3>
+      @if (packages().length > 0) {
+        <p><bdi class="plan__code" dir="ltr">{{ packages().join(' ') }}</bdi></p>
+      } @else {
+        <p class="text-muted">{{ 'relocation.plan.nothingToInstall' | t }}</p>
+      }
+    </section>
+
+    @for (note of notes(); track $index) {
+      <app-notice severity="info">{{ 'relocation.notes.' + note.code | t: values(note) }}</app-notice>
+    }
+
+    @for (application of found.applications; track application.application) {
+      <section class="plan__application" [attr.aria-label]="application.name">
+        <h3>
+          <bdi>{{ application.name }}</bdi>
+          <i class="fa-solid fa-arrow-right plan__arrow" aria-hidden="true"></i>
+          <bdi>{{ application.target_name }}</bdi>
+        </h3>
+        <dl class="plan__facts">
+          <div class="plan__fact">
+            <dt class="text-label text-secondary">{{ 'relocation.plan.folder' | t }}</dt>
+            <dd>
+              <bdi class="plan__code" dir="ltr">{{ application.folder.target || '-' }}</bdi>
+              <span class="text-sm text-secondary">
+                @if (application.folder.bytes !== null) {
+                  {{ application.folder.bytes | fileSize }}
+                } @else {
+                  {{ 'relocation.plan.sizeUnknown' | t }}
+                }
+              </span>
+              @if (application.folder.excluded.length > 0) {
+                <span class="text-sm text-secondary">
+                  {{ 'relocation.plan.leftOut' | t }}
+                  <bdi class="plan__code" dir="ltr">{{ application.folder.excluded.join(', ') }}</bdi>
+                </span>
+              }
+            </dd>
+          </div>
+          @if (application.git; as git) {
+            <div class="plan__fact">
+              <dt class="text-label text-secondary">{{ 'relocation.plan.git' | t }}</dt>
+              <dd>
+                <bdi class="plan__code" dir="ltr">{{ git.branch }} {{ short(git.head) }}</bdi>
+                @if (git.remote) {
+                  <bdi class="plan__code text-sm text-secondary" dir="ltr">{{ git.remote }}</bdi>
+                }
+              </dd>
+            </div>
+          }
+          @if (application.images.length > 0) {
+            <div class="plan__fact">
+              <dt class="text-label text-secondary">{{ 'relocation.plan.images' | t }}</dt>
+              <dd>
+                <ul class="plan__list" role="list">
+                  @for (image of application.images; track image.ref) {
+                    <li>
+                      <bdi class="plan__code" dir="ltr">{{ image.ref }}</bdi>
+                      <span class="text-sm text-secondary">
+                        @if (image.on_target) {
+                          {{ 'relocation.plan.alreadyThere' | t }}
+                        } @else if (image.bytes !== null) {
+                          {{ image.bytes | fileSize }}
+                        }
+                      </span>
+                    </li>
+                  }
+                </ul>
+              </dd>
+            </div>
+          }
+          @if (application.volumes.length > 0) {
+            <div class="plan__fact">
+              <dt class="text-label text-secondary">{{ 'relocation.plan.volumes' | t }}</dt>
+              <dd>
+                <ul class="plan__list" role="list">
+                  @for (volume of application.volumes; track volume.name) {
+                    <li>
+                      <bdi class="plan__code" dir="ltr">{{ volume.name }}</bdi>
+                      <span class="text-sm text-secondary">
+                        @if (!volume.selected) {
+                          {{ 'relocation.plan.reasons.' + volume.reason | t }}
+                        } @else if (volume.bytes !== null) {
+                          {{ volume.bytes | fileSize }}
+                        }
+                      </span>
+                    </li>
+                  }
+                </ul>
+              </dd>
+            </div>
+          }
+          @if (application.binds.length > 0) {
+            <div class="plan__fact">
+              <dt class="text-label text-secondary">{{ 'relocation.plan.binds' | t }}</dt>
+              <dd>
+                <ul class="plan__list" role="list">
+                  @for (bind of application.binds; track bind.source) {
+                    <li>
+                      <bdi class="plan__code" dir="ltr">{{ bind.source }}</bdi>
+                      @if (!bind.selected) {
+                        <span class="text-sm text-secondary">{{ 'relocation.plan.reasons.database_volume' | t }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+              </dd>
+            </div>
+          }
+          @if (application.database.vendor) {
+            <div class="plan__fact">
+              <dt class="text-label text-secondary">{{ 'relocation.plan.database' | t }}</dt>
+              <dd>{{ 'relocation.plan.databaseActions.' + (application.database.action || 'unknown') | t: { vendor: application.database.vendor } }}</dd>
+            </div>
+          }
+          @if (application.python.action) {
+            <div class="plan__fact">
+              <dt class="text-label text-secondary">{{ 'relocation.plan.python' | t }}</dt>
+              <dd>{{ 'relocation.plan.pythonActions.' + application.python.action | t: { version: application.python.version ?? '' } }}</dd>
+            </div>
+          }
+          @if (application.units.length > 0 || application.sites.length > 0) {
+            <div class="plan__fact">
+              <dt class="text-label text-secondary">{{ 'relocation.plan.services' | t }}</dt>
+              <dd>
+                <ul class="plan__list" role="list">
+                  @for (unit of application.units; track unit.name) {
+                    <li><bdi class="plan__code" dir="ltr">{{ unit.name }}</bdi></li>
+                  }
+                  @for (site of application.sites; track site.name) {
+                    <li><bdi class="plan__code" dir="ltr">nginx: {{ site.name }}</bdi></li>
+                  }
+                </ul>
+              </dd>
+            </div>
+          }
+        </dl>
+        @for (note of application.notes; track $index) {
+          <app-notice severity="info">{{ 'relocation.notes.' + note.code | t: values(note) }}</app-notice>
+        }
+      </section>
+    }
+  </div>
+}

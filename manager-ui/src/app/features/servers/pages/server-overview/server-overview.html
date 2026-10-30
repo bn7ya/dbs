@@ -154,6 +154,22 @@
       </mat-card>
     }
 
+    <mat-card *appCan="'relocation.rehearse'" appearance="outlined">
+      <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'servers.move.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'servers.move.body' | t }}</p>
+        </div>
+
+        <div class="overview__actions">
+          <a matButton="outlined" [routerLink]="['/servers', current.id, 'move']">
+            <i matButtonIcon class="fa-solid fa-truck-arrow-right" aria-hidden="true"></i>
+            {{ 'servers.move.action' | t }}
+          </a>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
     <mat-card appearance="outlined">
       <mat-card-content class="overview__card">
         <div class="overview__intro">

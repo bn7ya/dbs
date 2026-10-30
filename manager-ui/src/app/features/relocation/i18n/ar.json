@@ -1,0 +1,199 @@
+{
+  "relocation": {
+    "title": "النقل إلى خادم آخر",
+    "back": "العودة إلى الخادم",
+    "from": "من",
+    "intro": "ينقل كل تطبيقات هذا الخادم إلى خادم آخر قد لا يكون مثبتا عليه شيء: مجلده مع git والصور ووحدات التخزين والملفات و.env، ثم تستعاد بياناته من نسخة احتياطية جديدة. يبقى هذا الخادم كما هو.",
+    "wizard": {
+      "target": "الخادم الجديد",
+      "applications": "التطبيقات",
+      "plan": "الخطة",
+      "confirm": "النقل",
+      "progress": "التقدم"
+    },
+    "steps": {
+      "label": "الخطوات",
+      "connect": "الاتصال بالخادمين",
+      "inventory": "تخطيط ما ينقل",
+      "evaluate": "فحص ما قد يمنعه",
+      "sudo_check": "فحص كلمة مرور sudo",
+      "repositories": "إضافة مستودعات الحزم",
+      "packages": "تثبيت الحزم",
+      "engine_setup": "إعداد محرك الحاويات",
+      "services": "تشغيل الخدمات",
+      "users": "إضافة مستخدمي النظام",
+      "recheck": "فحص الخادم الجديد",
+      "source_backup": "نسخ التطبيق احتياطيا",
+      "carry_folder": "نقل مجلد المشروع",
+      "carry_extra": "نقل ملف",
+      "carry_bind": "نقل مجلد مربوط",
+      "carry_image": "نقل صورة",
+      "carry_volume": "نقل وحدة تخزين",
+      "backup_dir": "إنشاء مجلد النسخ الاحتياطية",
+      "python": "تجهيز Python",
+      "database_create": "إنشاء قاعدة البيانات",
+      "networks": "إنشاء الشبكات",
+      "start": "تشغيل التطبيق",
+      "register": "إضافة التطبيق المنقول",
+      "migrate": "تنفيذ الترحيلات",
+      "restore": "استعادة البيانات",
+      "install_units": "تثبيت خدمات systemd",
+      "install_sites": "تثبيت مواقع nginx",
+      "final_check": "فحص التطبيق المنقول",
+      "copy_plans": "نسخ خطط النسخ الاحتياطي"
+    },
+    "target": {
+      "intro": "اختر الخادم الذي تنتقل إليه التطبيقات. قد لا يكون مثبتا عليه شيء: يثبت النقل ما تحتاجه.",
+      "none": "لا يوجد خادم آخر بعد. أضف الخادم الجديد أولا.",
+      "required": "اختر الخادم الجديد.",
+      "add": "إضافة خادم جديد"
+    },
+    "applications": {
+      "intro": "ينتقل كل تطبيق افتراضيا. ألغ تحديد ما يبقى، واختر الاسم والمجلد لكل تطبيق على الخادم الجديد.",
+      "name": "الاسم على الخادم الجديد",
+      "nameRequired": "أدخل اسما.",
+      "folder": "المجلد على الخادم الجديد",
+      "folderHint": "المجلد نفسه ما لم تغيره.",
+      "none": "لا يشغل هذا الخادم أي تطبيق.",
+      "pickOne": "اختر تطبيقا واحدا على الأقل.",
+      "copyPlans": "انسخ خطط النسخ الاحتياطي موقوفة"
+    },
+    "plan": {
+      "make": "خطط للنقل",
+      "planning": "قراءة الخادمين…",
+      "blocked": "يوجد ما يمنع النقل. أصلح ما هو مذكور ثم خطط من جديد.",
+      "again": "خطط من جديد",
+      "system": "الخادم الجديد: {system} على {architecture}",
+      "packages": "ما يثبت على الخادم الجديد",
+      "nothingToInstall": "لا شيء للتثبيت.",
+      "folder": "المجلد",
+      "sizeUnknown": "الحجم غير معروف",
+      "leftOut": "مستبعد:",
+      "git": "Git",
+      "images": "الصور",
+      "alreadyThere": "موجودة هناك",
+      "volumes": "وحدات التخزين",
+      "reasons": {
+        "database_volume": "بيانات قاعدة البيانات نفسها، تستعاد بدلا منها",
+        "skipped": "تبقى هنا"
+      },
+      "binds": "المجلدات المربوطة",
+      "database": "قاعدة البيانات",
+      "databaseActions": {
+        "restore": "{vendor}: قاعدة بيانات جديدة ثم استعادة النسخة الاحتياطية الجديدة",
+        "shared": "{vendor} على جهاز آخر: مشتركة، ولا يستعاد فوقها أبدا",
+        "unknown": "{vendor}: مكان تشغيلها غير معروف"
+      },
+      "python": "Python",
+      "pythonActions": {
+        "carry": "تنتقل البيئة الافتراضية كما هي (Python {version})",
+        "rebuild": "تنشأ البيئة الافتراضية من جديد وتثبت حزمها (Python {version})",
+        "system": "Python الخادم نفسه (Python {version})"
+      },
+      "services": "الخدمات"
+    },
+    "blockers": {
+      "os_unsupported": "نظام الخادم الجديد ليس مما يستطيع النقل التثبيت عليه: Debian أو Ubuntu أو RHEL ونسخه أو Fedora.",
+      "architecture_mismatch": "معالج الخادم الجديد مختلف، فلا تعمل الصور عليه.",
+      "sudo_missing": "لا يوجد sudo على الخادم الجديد، فلا يمكن تثبيت شيء.",
+      "not_enough_space": "لا توجد على الخادم الجديد مساحة كافية لما ينتقل.",
+      "manager_space_low": "لا يتسع قرص المدير لأكبر عنصر يمر عبره.",
+      "port_in_use": "منفذ ينشره التطبيق مستخدم على الخادم الجديد.",
+      "target_folder_not_empty": "‏{path} يحوي شيئا على الخادم الجديد.",
+      "file_exists_on_target": "‏{path} موجود على الخادم الجديد.",
+      "image_exists_on_target": "توجد نسخة مختلفة من {image} على الخادم الجديد.",
+      "volume_exists_on_target": "وحدة التخزين {volume} موجودة على الخادم الجديد.",
+      "unit_exists_on_target": "الخدمة {path} موجودة على الخادم الجديد.",
+      "site_exists_on_target": "الموقع {path} موجود على الخادم الجديد.",
+      "container_exists_on_target": "توجد حاوية باسم {name} على الخادم الجديد.",
+      "container_options_unsupported": "تستخدم الحاوية خيارات لا يستطيع النقل إعدادها من جديد. شغلها من ملف compose أولا.",
+      "container_missing": "الحاوية {name} ليست على هذا الخادم.",
+      "compose_provider_unavailable": "لا يستطيع Podman على نظام الخادم الجديد تشغيل ملفات compose.",
+      "epel_required": "يأتي podman-compose على RHEL من EPEL. فعل EPEL على الخادم الجديد أولا.",
+      "passphrase_missing": "لا توجد عبارة مرور للنسخ الاحتياطي لهذا التطبيق بعد.",
+      "name_taken": "يحمل تطبيق آخر الاسم {name}.",
+      "database_name_unsupported": "لقاعدة البيانات أو مستخدمها اسم لا يستطيع النقل إنشاءه بأمان."
+    },
+    "notes": {
+      "same_machine": "الخادمان جهاز واحد.",
+      "python_version_differs": "Python هنا {source} وعلى الخادم الجديد {target}، فتنشأ البيئة الافتراضية من جديد.",
+      "venv_rebuilt": "تنشأ البيئة الافتراضية من جديد على الخادم الجديد وتثبت حزمها من الإنترنت.",
+      "env_mentions_folder": "يذكر ملف .env المجلد القديم. راجعه بعد نقل التطبيق.",
+      "compose_absolute_path": "يذكر ملف compose المجلد القديم. راجعه بعد نقل التطبيق.",
+      "git_remote_has_credentials": "كان عنوان git البعيد يحوي كلمة مرور أو رمزا، فاستبعد مما يعرض.",
+      "git_uncommitted_changes": "في المجلد تغييرات غير محفوظة في git، وتنتقل أيضا.",
+      "mysql_replaced_by_mariadb": "يثبت MySQL على Debian باسم MariaDB.",
+      "process_manager_not_carried": "يذكر ملف Supervisor المجلد، فأعد إعداده على الخادم الجديد.",
+      "database_shared_with_source": "تعمل قاعدة البيانات على جهاز آخر: يستخدمها الخادمان، ولا يستعاد شيء فوقها.",
+      "tls_certificate_missing": "يحتاج الموقع {name} شهادات لا توجد على الخادم الجديد، فيثبت موقوفا حتى تتوفر.",
+      "firewall_may_block": "قد يحجب جدار الحماية على الخادم الجديد منافذ التطبيق.",
+      "selinux_enforcing": "SELinux مفعل على الخادم الجديد، فتعاد سياقات الملفات المنقولة.",
+      "facts_unknown": "لم يذكر التطبيق قاعدة البيانات التي يستخدمها، فيأخذ النقل نسخة احتياطية ويستعيدها.",
+      "volume_size_unknown": "تعذرت قراءة حجم {volume}.",
+      "source_sudo_needed": "تحتاج بعض الملفات على هذا الخادم sudo لقراءتها، فيطلب النقل كلمة مرور sudo الخاصة به.",
+      "database_reach_from_container": "تعمل قاعدة البيانات على الخادم نفسه، فاسمح للحاويات بالوصول إليها على الخادم الجديد.",
+      "broker_queue_not_carried": "لا تنقل الرسائل المنتظرة في طابور المهام."
+    },
+    "confirm": {
+      "intro": "يثبت النقل ما ينقص {target}، وينقل التطبيقات ويستعيد بياناتها. لا يتغير شيء على هذا الخادم.",
+      "resuming": "يستأنف هذا النقل {job} من حيث توقف.",
+      "sudo": "كلمة مرور sudo للمستخدم {user} على {server}",
+      "sudoHint": "اتركها فارغة إن لم يحتج الحساب إليها. تستخدم لهذا النقل فقط ولا تحفظ.",
+      "sourceSudo": "كلمة مرور sudo للمستخدم {user} على {server}",
+      "sourceSudoHint": "تستخدم فقط لقراءة ملفات لا يستطيع مستخدم SSH قراءتها على هذا الخادم."
+    },
+    "run": {
+      "rehearse": "خطط من جديد",
+      "rehearsing": "جار التخطيط…",
+      "run": "انقل فعليا",
+      "running": "جار النقل…",
+      "passwordHint": "كلمة مرورك، للتأكد من هويتك.",
+      "confirmName": "اسم الخادم الجديد",
+      "confirmNameHint": "اكتب {name} للتأكيد."
+    },
+    "progress": {
+      "moved": "نقل {size} من العنصر الحالي",
+      "current": "تقدم العنصر الحالي",
+      "starting": "بدء النقل…",
+      "resume": "استئناف النقل"
+    },
+    "phases": {
+      "plan": "الخطة",
+      "prepare": "تجهيز الخادم الجديد",
+      "application": "{name} إلى {target}"
+    },
+    "status": {
+      "pending": "بانتظار",
+      "running": "يعمل",
+      "succeeded": "تم",
+      "failed": "فشل",
+      "skipped": "تخطي"
+    },
+    "done": {
+      "cutover": "تعمل التطبيقات على {target}. ما زال {source} يعمل دون تغيير: وجه الزيارات إلى {target} عندما تكون جاهزا.",
+      "created": "التطبيقات المنقولة",
+      "leftovers": "ما تركته على الخادم الجديد خطوة توقفت:"
+    }
+  },
+  "errors": {
+    "same_server": "اختر خادما غير هذا.",
+    "nothing_to_move": "لا يشغل هذا الخادم أي تطبيق لنقله.",
+    "move_blocked": "يوجد ما يمنع النقل، والخطة تذكره.",
+    "server_move_running": "يجري نقل على أحد هذين الخادمين.",
+    "move_not_resumable": "لا يستأنف إلا نقل فعلي توقف.",
+    "sudo_missing": "لا يوجد sudo على الخادم.",
+    "sudo_password_required": "أدخل كلمة مرور sudo.",
+    "sudo_password_wrong": "رفض sudo كلمة المرور.",
+    "sudo_needs_tty": "يطلب sudo على الخادم طرفية، فاسمح لمستخدم SSH دونها.",
+    "privileged_command_failed": "فشل أمر شغل بصلاحيات الجذر على الخادم.",
+    "package_install_failed": "تعذر تثبيت الحزم.",
+    "repository_key_mismatch": "مفتاح توقيع المستودع ليس المفتاح المتوقع.",
+    "transfer_digest_mismatch": "ما وصل يختلف عما أرسل.",
+    "target_folder_not_empty": "يوجد شيء في المجلد على الخادم الجديد.",
+    "file_exists_on_target": "ملف يكتبه النقل موجود على الخادم الجديد.",
+    "database_exists_on_target": "قاعدة البيانات موجودة على الخادم الجديد.",
+    "database_credentials_unknown": "لم يذكر التطبيق المنقول قاعدة البيانات التي يستخدمها.",
+    "moved_application_not_found": "لم يوجد التطبيق المنقول على الخادم الجديد.",
+    "image_mismatch": "الصورة على الخادم الجديد ليست التي أرسلت."
+  }
+}

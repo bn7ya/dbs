@@ -66,6 +66,26 @@ SKIPPED = "skipped"
 DONE_BEFORE = "done_before"
 PLAN_STEPS = ("connect", "inventory", "evaluate")
 PREPARE_STEPS = ("sudo_check", "repositories", "packages", "engine_setup", "services", "users", "recheck")
+APPLICATION_STEPS = (
+    "source_backup",
+    "carry_folder",
+    "carry_extra",
+    "carry_bind",
+    "carry_image",
+    "carry_volume",
+    "backup_dir",
+    "python",
+    "database_create",
+    "networks",
+    "start",
+    "register",
+    "migrate",
+    "restore",
+    "install_units",
+    "install_sites",
+    "final_check",
+    "copy_plans",
+)
 PROGRESS_EVERY = 5.0
 FINGERPRINT_LINE = re.compile(r"^fpr:+([0-9A-F]{40}):", re.M)
 SUBORDINATE_IDS = "/etc/subuid"

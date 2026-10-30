@@ -23,6 +23,8 @@ export const EVERY_CAPABILITY: readonly Capability[] = [
   'files.change',
   'redeploy.rehearse',
   'redeploy.run',
+  'relocation.rehearse',
+  'relocation.run',
   'shell.open',
   'console.run',
 ];
@@ -39,6 +41,7 @@ export const OPERATOR_CAPABILITIES: readonly Capability[] = [
   'env.pull',
   'files.download',
   'redeploy.rehearse',
+  'relocation.rehearse',
 ];
 
 export const MASTER_ACCOUNT = {

@@ -265,6 +265,9 @@
                 }
                 <app-notice severity="success">{{ 'servers.wizard.check.ok' | t }}</app-notice>
               }
+              @if (returnTo) {
+                <app-notice severity="info">{{ 'servers.wizard.check.moveTarget' | t }}</app-notice>
+              }
             </div>
           </mat-step>
 
@@ -272,14 +275,24 @@
             <div class="wizard__step">
               @if (server(); as current) {
                 <app-notice severity="success">{{ 'servers.wizard.done.ready' | t }}</app-notice>
-                <p class="text-secondary">{{ 'servers.wizard.done.next' | t }}</p>
-                <div class="wizard__actions">
-                  <a *appCan="'applications.manage'" matButton="filled" [routerLink]="['/servers', current.id, 'applications', 'new']">
-                    <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
-                    {{ 'servers.wizard.done.addApplication' | t }}
-                  </a>
-                  <a matButton="outlined" [routerLink]="['/servers', current.id]">{{ 'servers.wizard.done.openServer' | t }}</a>
-                </div>
+                @if (returnTo; as back) {
+                  <p class="text-secondary">{{ 'servers.wizard.done.nextMove' | t }}</p>
+                  <div class="wizard__actions">
+                    <a matButton="filled" [routerLink]="back" [queryParams]="{ target: current.id }">
+                      {{ 'servers.wizard.done.backToMove' | t }}
+                    </a>
+                    <a matButton="outlined" [routerLink]="['/servers', current.id]">{{ 'servers.wizard.done.openServer' | t }}</a>
+                  </div>
+                } @else {
+                  <p class="text-secondary">{{ 'servers.wizard.done.next' | t }}</p>
+                  <div class="wizard__actions">
+                    <a *appCan="'applications.manage'" matButton="filled" [routerLink]="['/servers', current.id, 'applications', 'new']">
+                      <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
+                      {{ 'servers.wizard.done.addApplication' | t }}
+                    </a>
+                    <a matButton="outlined" [routerLink]="['/servers', current.id]">{{ 'servers.wizard.done.openServer' | t }}</a>
+                  </div>
+                }
               }
             </div>
           </mat-step>

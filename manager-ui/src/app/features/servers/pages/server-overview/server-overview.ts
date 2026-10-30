@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButton } from '@angular/material/button';
 import { MatCard, MatCardContent } from '@angular/material/card';
 import { MatFormField, MatLabel } from '@angular/material/form-field';
@@ -32,6 +32,7 @@ import type { SettingRow } from './server-overview.types';
   selector: 'app-server-overview-page',
   imports: [
     Can,
+    RouterLink,
     MatButton,
     MatCard,
     MatCardContent,

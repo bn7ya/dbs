@@ -1,0 +1,250 @@
+<div class="move">
+  <header class="move__header">
+    <a matButton [routerLink]="['/servers', serverId()]">{{ 'relocation.back' | t }}</a>
+    <h1>{{ 'relocation.title' | t }}</h1>
+    @if (source(); as from) {
+      <p class="text-secondary">
+        {{ 'relocation.from' | t }} <bdi>{{ from.name }}</bdi>&ngsp;<bdi class="move__code" dir="ltr">{{ from.username }}&#64;{{ from.host }}:{{ from.port }}</bdi>
+      </p>
+    }
+    <p class="text-sm text-secondary">{{ 'relocation.intro' | t }}</p>
+  </header>
+
+  @if (loadError(); as failure) {
+    <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+  }
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      <mat-stepper
+        [linear]="true"
+        orientation="vertical"
+        [selectedIndex]="shownStep()"
+        [attr.aria-label]="'relocation.steps.label' | t"
+        (selectionChange)="step.set($event.selectedIndex)"
+      >
+        <ng-template matStepperIcon="edit"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
+        <ng-template matStepperIcon="done"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
+
+        <mat-step [label]="'relocation.wizard.target' | t" [completed]="stepDone('target')" [editable]="!started()">
+          <div class="move__step">
+            <p class="text-secondary">{{ 'relocation.target.intro' | t }}</p>
+            @if (targets().length > 0) {
+              <mat-radio-group
+                class="move__targets"
+                name="target"
+                [value]="target()"
+                [attr.aria-label]="'relocation.wizard.target' | t"
+                (change)="target.set($event.value)"
+              >
+                @for (server of targets(); track server.id) {
+                  <mat-radio-button [value]="server.id">
+                    <bdi>{{ server.name }}</bdi>&ngsp;<bdi class="move__code text-secondary" dir="ltr">{{ server.username }}&#64;{{ server.host }}:{{ server.port }}</bdi>
+                  </mat-radio-button>
+                }
+              </mat-radio-group>
+            } @else {
+              <app-notice severity="info">{{ 'relocation.target.none' | t }}</app-notice>
+            }
+            @if (shown('target') && !targetServer()) {
+              <app-notice severity="warning">{{ 'relocation.target.required' | t }}</app-notice>
+            }
+            <div class="move__actions">
+              <a
+                *appCan="'servers.manage'"
+                matButton="outlined"
+                routerLink="/servers/new"
+                [queryParams]="{ returnTo: '/servers/' + serverId() + '/move' }"
+              >
+                <i matButtonIcon class="fa-solid fa-plus" aria-hidden="true"></i>
+                {{ 'relocation.target.add' | t }}
+              </a>
+              <button matButton="filled" type="button" (click)="advance()">{{ 'actions.next' | t }}</button>
+            </div>
+          </div>
+        </mat-step>
+
+        <mat-step [label]="'relocation.wizard.applications' | t" [completed]="stepDone('applications')" [editable]="!started()">
+          <div class="move__step">
+            <p class="text-secondary">{{ 'relocation.applications.intro' | t }}</p>
+            @for (draft of drafts(); track draft.application.id; let index = $index) {
+              <fieldset class="move__choice">
+                <legend>
+                  <mat-checkbox [checked]="draft.selected" (change)="update(index, { selected: $event.checked })">
+                    <bdi>{{ draft.application.name }}</bdi>
+                  </mat-checkbox>
+                </legend>
+                @if (draft.selected) {
+                  <mat-form-field>
+                    <mat-label>{{ 'relocation.applications.name' | t }}</mat-label>
+                    <input
+                      matInput
+                      autocomplete="off"
+                      [name]="'name-' + index"
+                      [appFieldError]="nameError(draft) | t"
+                      [ngModel]="draft.name"
+                      (ngModelChange)="update(index, { name: $event })"
+                    />
+                    @if (nameError(draft); as message) {
+                      <mat-error>{{ message | t }}</mat-error>
+                    }
+                  </mat-form-field>
+                  @if (draft.application.project_dir) {
+                    <mat-form-field>
+                      <mat-label>{{ 'relocation.applications.folder' | t }}</mat-label>
+                      <input
+                        matInput
+                        dir="ltr"
+                        autocomplete="off"
+                        spellcheck="false"
+                        [name]="'folder-' + index"
+                        [appFieldError]="folderError(draft) | errorText"
+                        [ngModel]="draft.folder"
+                        (ngModelChange)="update(index, { folder: $event })"
+                      />
+                      <mat-hint>{{ 'relocation.applications.folderHint' | t }}</mat-hint>
+                      @if (folderError(draft) | errorText; as message) {
+                        <mat-error>{{ message }}</mat-error>
+                      }
+                    </mat-form-field>
+                  }
+                }
+              </fieldset>
+            } @empty {
+              <app-notice severity="info">{{ 'relocation.applications.none' | t }}</app-notice>
+            }
+            @if (shown('applications') && choices().length === 0 && drafts().length > 0) {
+              <app-notice severity="warning">{{ 'relocation.applications.pickOne' | t }}</app-notice>
+            }
+            <mat-checkbox [checked]="copyPlans()" (change)="copyPlans.set($event.checked)">
+              {{ 'relocation.applications.copyPlans' | t }}
+            </mat-checkbox>
+            <div class="move__actions">
+              <button matButton type="button" (click)="back()">{{ 'actions.back' | t }}</button>
+              <button matButton="filled" type="button" (click)="advance()">{{ 'relocation.plan.make' | t }}</button>
+            </div>
+          </div>
+        </mat-step>
+
+        <mat-step [label]="'relocation.wizard.plan' | t" [completed]="stepDone('plan')" [editable]="!started()">
+          <div class="move__step" [attr.aria-busy]="planning.busy()">
+            @if (planning.busy()) {
+              <p class="move__working" role="status">
+                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                {{ 'relocation.plan.planning' | t }}
+              </p>
+            }
+            @if (planning.error(); as failure) {
+              <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+            }
+            @if (planBlocked()) {
+              <app-notice severity="warning">{{ 'relocation.plan.blocked' | t }}</app-notice>
+            } @else if (planning.job()?.status === 'failed') {
+              <app-notice severity="danger">{{ planning.job()?.error_code ?? '' | errorText }}</app-notice>
+            }
+            @if (plan(); as detail) {
+              <app-move-plan [detail]="detail" />
+            }
+            <div class="move__actions">
+              <button matButton type="button" (click)="back()">{{ 'actions.back' | t }}</button>
+              <button matButton="outlined" type="button" [disabled]="planning.busy()" (click)="rehearse()">
+                {{ 'relocation.plan.again' | t }}
+              </button>
+              <button matButton="filled" type="button" [disabled]="!planned()" (click)="advance()">{{ 'actions.next' | t }}</button>
+            </div>
+          </div>
+        </mat-step>
+
+        <mat-step [label]="'relocation.wizard.confirm' | t" [completed]="stepDone('confirm')">
+          <div class="move__step">
+            <app-notice severity="warning">{{ 'relocation.confirm.intro' | t: { target: targetName() } }}</app-notice>
+            @if (resumeOf(); as resumed) {
+              <app-notice severity="info">{{ 'relocation.confirm.resuming' | t: { job: resumed } }}</app-notice>
+            }
+            <app-confirmed-run
+              primary
+              prefix="relocation.run"
+              runCapability="relocation.run"
+              rehearseCapability="relocation.rehearse"
+              [expectedName]="targetName()"
+              [busy]="moving.busy() || planning.busy()"
+              [rehearsing]="planning.busy()"
+              [error]="moving.error()"
+              (run)="run($event)"
+            >
+              <div runFields class="move__secrets">
+                @if (needsSudo().target) {
+                  <app-password-input
+                    [label]="'relocation.confirm.sudo' | t: { user: targetServer()?.username ?? '', server: targetName() }"
+                    [hint]="'relocation.confirm.sudoHint' | t"
+                    name="sudo_password"
+                    autocomplete="off"
+                    [ngModel]="sudoPassword()"
+                    (ngModelChange)="sudoPassword.set($event)"
+                  />
+                }
+                @if (needsSudo().source) {
+                  <app-password-input
+                    [label]="'relocation.confirm.sourceSudo' | t: { user: source()?.username ?? '', server: source()?.name ?? '' }"
+                    [hint]="'relocation.confirm.sourceSudoHint' | t"
+                    name="source_sudo_password"
+                    autocomplete="off"
+                    [ngModel]="sourceSudoPassword()"
+                    (ngModelChange)="sourceSudoPassword.set($event)"
+                  />
+                }
+              </div>
+            </app-confirmed-run>
+            <div class="move__actions">
+              <button matButton type="button" (click)="back()">{{ 'actions.back' | t }}</button>
+            </div>
+          </div>
+        </mat-step>
+
+        <mat-step [label]="'relocation.wizard.progress' | t" [completed]="moved()">
+          <div class="move__step">
+            @if (moving.error(); as failure) {
+              <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+            }
+            @if (moveJob(); as job) {
+              <app-move-progress [job]="job" />
+            } @else if (moving.busy()) {
+              <p class="move__working" role="status">
+                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+                {{ 'relocation.progress.starting' | t }}
+              </p>
+            }
+            @if (stopped()) {
+              <div class="move__actions">
+                <button *appCan="'relocation.run'" matButton="filled" type="button" (click)="resume()">
+                  {{ 'relocation.progress.resume' | t }}
+                </button>
+              </div>
+            }
+            @if (moved()) {
+              <app-notice severity="success">{{ 'relocation.done.cutover' | t: { source: source()?.name ?? '', target: targetName() } }}</app-notice>
+              @if (created().length > 0) {
+                <section class="move__created">
+                  <h3 class="text-label">{{ 'relocation.done.created' | t }}</h3>
+                  <div class="move__actions">
+                    @for (application of created(); track application.target) {
+                      <a matButton="tonal" [routerLink]="['/applications', application.target]">
+                        <bdi>{{ application.name }}</bdi>
+                      </a>
+                    }
+                  </div>
+                </section>
+              }
+            }
+            @if (leftovers().length > 0) {
+              <app-notice severity="warning">
+                {{ 'relocation.done.leftovers' | t }}
+                <bdi class="move__code" dir="ltr">{{ leftovers().join(', ') }}</bdi>
+              </app-notice>
+            }
+          </div>
+        </mat-step>
+      </mat-stepper>
+    </mat-card-content>
+  </mat-card>
+</div>
