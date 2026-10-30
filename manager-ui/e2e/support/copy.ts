@@ -334,6 +334,20 @@ export const COPY = {
   // Deploy steps
   deploySteps: { en: 'Deploy steps', ar: 'خطوات النشر' },
   stepCheckApplication: { en: 'Check the application', ar: 'فحص التطبيق' },
+
+  // Server move
+  serverMove: { en: 'Move to another server', ar: 'النقل إلى خادم آخر' },
+  moveNewFolder: { en: 'Folder on the new server', ar: 'المجلد على الخادم الجديد' },
+  moveNewName: { en: 'Name on the new server', ar: 'الاسم على الخادم الجديد' },
+  planTheMove: { en: 'Plan the move', ar: 'خطط للنقل' },
+  moveSameMachine: { en: 'Both servers are the same machine.', ar: 'الخادمان جهاز واحد.' },
+  moveBlocked: {
+    en: 'Something stops the move. Fix what is listed, then plan again.',
+    ar: 'يوجد ما يمنع النقل. أصلح ما هو مذكور ثم خطط من جديد.',
+  },
+  moveInstalls: { en: 'Installs on the new server', ar: 'ما يثبت على الخادم الجديد' },
+  movePlanAgain: { en: 'Plan again', ar: 'خطط من جديد' },
+  moveForReal: { en: 'Move for real', ar: 'انقل فعليا' },
 } as const satisfies Record<string, { en: string; ar: string }>;
 
 export function copyIn(lang: Lang): (key: CopyKey) => string {
