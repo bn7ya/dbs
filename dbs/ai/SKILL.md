@@ -97,8 +97,9 @@ the backup and its partial file on standard error, then reports the bytes writte
 seconds. It is how the DBS manager takes backups, and resumes one whose connection broke.
 
 `dbs.contrib`, the original in-request backup and restore views, was removed in 0.8.0. If a
-URLconf still has `include("dbs.contrib.urls")`, the project will not start: delete the line
-and point the developer at `/admin/dbs/` or the DBS manager.
+URLconf still has `include("dbs.contrib.urls")`, or `INSTALLED_APPS` still lists
+`"dbs.contrib"`, the project will not start: delete both and point the developer at
+`/admin/dbs/` or the DBS manager.
 
 ## Passphrases — read this before writing any DBS code
 
@@ -345,7 +346,7 @@ deleting them where you find them, and the DBS manager for off-site copies.
 | Scheduler exits immediately | It needs `--output-dir` or `DBS_BACKUP_DIR` |
 | Scheduled backups never run | `dbs health` says the scheduler has not checked in: no request has reached a worker yet, or uWSGI runs without threads. Use `DBS_SCHEDULER = "command"` and `manage.py dbs schedule` |
 | `django-dbs` says the installation cannot import a package | `pip install --force-reinstall django-dbs` repairs it |
-| The project will not start: `dbs.contrib` not found | 0.8.0 removed it. Delete `include("dbs.contrib.urls")`; backups are taken at `/admin/dbs/` or by the DBS manager |
+| The project will not start: `dbs.contrib` not found | 0.8.0 removed it. Delete `include("dbs.contrib.urls")` and `"dbs.contrib"` in `INSTALLED_APPS`; backups are taken at `/admin/dbs/` or by the DBS manager |
 | A panel job fails with `time_limit`, `memory_limit` or `killed` | It ran past `DBS_JOB_TIME_LIMIT`, used more than `DBS_JOB_MEMORY_LIMIT`, or its process died. Raise the limit or check the server's log; never move the job into the web request |
 | Panel jobs cannot start: the interpreter cannot load the project | Set `DBS_JOB_PYTHON` to the project's virtualenv Python, or `DBS_JOB_BOOTSTRAP`; `dbs upgrade` names the interpreter it tried |
 | Manager says `engine_permission_denied` | The SSH user may not use Docker or Podman: the `docker` group, or rootless Podman as that user. Never suggest `sudo` for backups |
