@@ -4,6 +4,7 @@ import { MatButton } from '@angular/material/button';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
+import { BrandMark } from '@shared/brand-mark/brand-mark';
 import { CopyButton } from '@shared/copy-button/copy-button';
 import { Notice } from '@shared/notice/notice';
 import { Skeleton } from '@shared/skeleton/skeleton';
@@ -20,7 +21,17 @@ const COMMANDS: readonly AboutCommand[] = [
 
 @Component({
   selector: 'app-about-page',
-  imports: [MatButton, CopyButton, Notice, Skeleton, AppDatePipe, TimeAgoPipe, ErrorTextPipe, TranslatePipe],
+  imports: [
+    MatButton,
+    BrandMark,
+    CopyButton,
+    Notice,
+    Skeleton,
+    AppDatePipe,
+    TimeAgoPipe,
+    ErrorTextPipe,
+    TranslatePipe,
+  ],
   templateUrl: './about.html',
   styleUrl: './about.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -1,0 +1,14 @@
+@use "layout" as *;
+
+:host {
+  display: inline-flex;
+}
+
+.brand-mark__image {
+  block-size: $brand-small;
+  inline-size: auto;
+}
+
+:host(.brand-mark--large) .brand-mark__image {
+  block-size: $brand-large;
+}

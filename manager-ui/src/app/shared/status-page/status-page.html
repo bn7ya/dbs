@@ -11,6 +11,9 @@
 <ng-template #card>
   <mat-card appearance="outlined" class="status-page__card"><mat-card-content>
     <div class="status-page__content">
+      @if (!framed) {
+        <app-brand-mark size="large" decorative />
+      }
       <h1>{{ titleKey() | t }}</h1>
       <p class="text-secondary">{{ bodyKey() | t }}</p>
       <a matButton routerLink="/">{{ 'errors.goHome' | t }}</a>

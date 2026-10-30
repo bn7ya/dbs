@@ -1,6 +1,9 @@
 .dbs-nav { display: flex; gap: 1rem; flex-wrap: wrap; margin: 0 0 1.5rem; padding: .6rem 0;
   border-bottom: 1px solid var(--hairline-color, #e0e0e0); }
 .dbs-nav a { font-weight: 600; }
+.dbs-nav { align-items: center; }
+.dbs-nav__brand { display: inline-flex; padding: .2rem .4rem; border-radius: 6px; background: #fff; }
+.dbs-nav__logo { display: block; height: 2rem; width: auto; }
 .dbs-lede { color: var(--body-quiet-color, #666); max-width: 60ch; }
 .dbs-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); }
 .dbs-card { background: var(--darkened-bg, #f8f8f8); border: 1px solid var(--hairline-color, #e0e0e0);

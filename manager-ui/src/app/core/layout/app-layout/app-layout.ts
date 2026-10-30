@@ -8,6 +8,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthStore } from '@core/auth/state/auth.store';
 import { LocaleSwitcher } from '@core/i18n/locale-switcher/locale-switcher';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { BrandMark } from '@shared/brand-mark/brand-mark';
 import { SHELL_FRAME } from '../shell-frame';
 import { SECTIONS } from './app-layout.types';
 
@@ -28,6 +29,7 @@ import { SECTIONS } from './app-layout.types';
     MatListItemTitle,
     LocaleSwitcher,
     TranslatePipe,
+    BrandMark,
   ],
   providers: [{ provide: SHELL_FRAME, useValue: true }],
   templateUrl: './app-layout.html',

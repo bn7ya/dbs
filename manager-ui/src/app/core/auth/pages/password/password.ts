@@ -5,13 +5,23 @@ import { Router } from '@angular/router';
 
 import { LocaleSwitcher } from '@core/i18n/locale-switcher/locale-switcher';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
+import { BrandMark } from '@shared/brand-mark/brand-mark';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { ChangePasswordForm } from '../../components/change-password-form/change-password-form';
 import { AuthStore } from '../../state/auth.store';
 
 @Component({
   selector: 'app-password',
-  imports: [MatButton, MatCard, MatCardContent, ChangePasswordForm, LocaleSwitcher, AppDatePipe, TranslatePipe],
+  imports: [
+    BrandMark,
+    MatButton,
+    MatCard,
+    MatCardContent,
+    ChangePasswordForm,
+    LocaleSwitcher,
+    AppDatePipe,
+    TranslatePipe,
+  ],
   templateUrl: './password.html',
   styleUrl: './password.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
