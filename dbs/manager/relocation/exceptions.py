@@ -105,6 +105,15 @@ class DatabaseExists(APIException):
     default_detail = "The database is already on the new server; the move leaves it alone."
 
 
+class DatabaseIsTheSources(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "database_is_the_sources"
+    default_detail = (
+        "The moved application's settings still name the old application's database; "
+        "nothing was written to it."
+    )
+
+
 class DatabaseCredentialsUnknown(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_code = "database_credentials_unknown"

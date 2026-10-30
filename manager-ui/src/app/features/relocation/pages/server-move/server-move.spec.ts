@@ -23,6 +23,7 @@ import {
   MOVE_ID,
   MOVE_STOPPED,
   MOVING,
+  OTHER,
   PLANNED,
   PLAN_ID,
   RESUMED_ID,
@@ -144,8 +145,8 @@ describe('ServerMovePage', () => {
     await click('Next');
 
     expect(page.choices().map((choice) => [choice.application, choice.name, choice.folder])).toEqual([
-      [SHOP, 'Shop', '/srv/shop'],
-      [BLOG, 'Blog', '/home/deploy/blog'],
+      [SHOP, 'Shop (New web)', '/srv/shop'],
+      [BLOG, 'Blog (New web)', '/home/deploy/blog'],
     ]);
 
     page.update(0, { selected: false });
@@ -154,6 +155,16 @@ describe('ServerMovePage', () => {
 
     expect(text()).toContain('Choose at least one application.');
     http.expectNone(`/api/servers/${SOURCE}/move/`);
+  });
+
+  it('follows another target in the names it made, and keeps a name the developer typed', async () => {
+    await show();
+    page.update(1, { name: 'Journal' });
+
+    page.target.set(OTHER);
+    render();
+
+    expect(page.choices().map((choice) => choice.name)).toEqual(['Shop (Spare)', 'Journal']);
   });
 
   it('refuses an empty name and a folder that is not absolute', async () => {
@@ -201,8 +212,8 @@ describe('ServerMovePage', () => {
     expect(post.request.body).toEqual({
       target_server: TARGET,
       applications: [
-        { application: SHOP, name: 'Shop', folder: '/srv/shop', skip_volumes: [], copy_plans: true },
-        { application: BLOG, name: 'Blog', folder: '/home/deploy/blog', skip_volumes: [], copy_plans: true },
+        { application: SHOP, name: 'Shop (New web)', folder: '/srv/shop', skip_volumes: [], copy_plans: true },
+        { application: BLOG, name: 'Blog (New web)', folder: '/home/deploy/blog', skip_volumes: [], copy_plans: true },
       ],
       rehearsal: false,
       password: 'hunter2',

@@ -179,6 +179,7 @@
         "carry_bind": "Server move: carry a mounted folder",
         "carry_image": "Server move: carry an image",
         "carry_volume": "Server move: carry a volume",
+        "rewrite_env": "Server move: write the new folder into the .env",
         "backup_dir": "Server move: make the backup folder",
         "python": "Server move: prepare Python",
         "database_create": "Server move: create the database",

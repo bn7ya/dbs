@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from dbs.manager.relocation import catalogue
@@ -82,6 +84,20 @@ def test_the_sources_user_becomes_the_targets_user(world):
     chowns = [run["argv"] for run in world["target"].ran if run["argv"][0] == "chown"]
     assert [argv[3:5] for argv in chowns] == [["--from=1001", "1000"], ["--from=:1001", ":1000"]]
     assert all(run["sudo"] for run in world["target"].ran if run["argv"][0] == "chown")
+
+
+def test_the_folder_itself_takes_the_owner_and_mode_it_had_on_the_source(world):
+    world["carrier"].carry(replace(folder_item(world), owner=("1001", "1001", "750")))
+
+    ran = [run["argv"] for run in world["target"].ran if run["argv"][0] in ("chown", "chmod")]
+    assert [argv[:3] for argv in ran] == [
+        ["chown", "-h", "1001:1001"],
+        ["chmod", "750", "--"],
+        ["chown", "-R", "-h"],
+        ["chown", "-R", "-h"],
+    ]
+    assert ".shop.dbs-incoming-" in ran[0][-1]
+    assert world["target_folder"].stat().st_mode & 0o777 == 0o750
 
 
 def test_a_folder_that_already_holds_something_is_never_written_over(world):

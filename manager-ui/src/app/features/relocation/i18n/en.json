@@ -29,6 +29,7 @@
       "carry_bind": "Carry a mounted folder",
       "carry_image": "Carry an image",
       "carry_volume": "Carry a volume",
+      "rewrite_env": "Write the new folder into the .env",
       "backup_dir": "Make the backup folder",
       "python": "Prepare Python",
       "database_create": "Create the database",
@@ -51,6 +52,7 @@
     "applications": {
       "intro": "Every application moves by default. Untick the ones that stay, and choose the name and folder each takes on the new server.",
       "name": "Name on the new server",
+      "nameHint": "Each application in the manager has a name of its own.",
       "nameRequired": "Enter a name.",
       "folder": "Folder on the new server",
       "folderHint": "The same folder unless you change it.",
@@ -118,7 +120,7 @@
       "same_machine": "Both servers are the same machine.",
       "python_version_differs": "Python {source} here and {target} on the new server; the virtualenv is made again.",
       "venv_rebuilt": "The virtualenv is made again on the new server and its packages installed from the internet.",
-      "env_mentions_folder": "The .env names the old folder. Check it once the application has moved.",
+      "env_mentions_folder": "The .env names the old folder; the move writes the new folder in its place.",
       "compose_absolute_path": "A compose file names the old folder. Check it once the application has moved.",
       "git_remote_has_credentials": "The git remote held a password or token; it was left out of what is shown.",
       "git_uncommitted_changes": "The folder has changes not committed to git; they move too.",
@@ -192,6 +194,7 @@
     "target_folder_not_empty": "Something is already in the folder on the new server.",
     "file_exists_on_target": "A file the move writes is already on the new server.",
     "database_exists_on_target": "The database is already on the new server.",
+    "database_is_the_sources": "The moved application's settings still name this server's database, so nothing was written to it.",
     "database_credentials_unknown": "The moved application did not say which database it uses.",
     "moved_application_not_found": "The moved application was not found on the new server.",
     "image_mismatch": "The image on the new server is not the one sent."

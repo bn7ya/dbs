@@ -26,6 +26,14 @@ def test_the_terminal_plans_a_move_and_says_what_it_carries(terminal, world):  #
 
 
 @pytest.mark.django_db(transaction=True)
+def test_without_a_new_name_the_application_takes_the_new_servers_beside_its_own(terminal, world):  # noqa: F811
+    ran = terminal("server", "move", "old", "--to", "new", "--app", folder_arg(world))
+
+    assert ran.code == 0, ran.err
+    assert "shop -> shop (new) in" in ran.out
+
+
+@pytest.mark.django_db(transaction=True)
 def test_the_terminal_moves_for_real_with_both_passwords_on_stdin(terminal, world):  # noqa: F811
     ran = terminal(
         "server",

@@ -59,6 +59,9 @@ def test_extraction_keeps_owners_and_never_writes_over_a_file():
         lambda: catalogue.add_to_group("root\nx", "docker"),
         lambda: catalogue.make_folder("/srv/shop", "777", "0", "0"),
         lambda: catalogue.own_user("/srv/shop", "deploy", "1000"),
+        lambda: catalogue.own_folder("/srv/shop", "0", "root"),
+        lambda: catalogue.folder_mode("/srv/shop", "u+s", root=True),
+        lambda: catalogue.folder_mode("/srv/shop", "-R", root=False),
         lambda: catalogue.fetch_key("https://example.com/gpg", "/tmp/k"),
         lambda: catalogue.dnf_module_enable("postgresql:16; id"),
     ],
@@ -99,6 +102,18 @@ def test_the_sources_user_is_mapped_to_the_targets_in_two_passes():
         "--from=:1001",
         ":1000",
     )
+
+
+def test_the_folder_itself_is_read_and_given_its_owner_and_mode_by_number():
+    assert catalogue.folder_owner("/srv/shop").argv == ("stat", "--format=%u:%g:%a", "--", "/srv/shop")
+    assert catalogue.own_folder("/srv/shop", "1001", "1001").argv == (
+        "chown",
+        "-h",
+        "1001:1001",
+        "--",
+        "/srv/shop",
+    )
+    assert catalogue.folder_mode("/srv/shop", "2775", root=False).argv == ("chmod", "2775", "--", "/srv/shop")
 
 
 def test_a_folder_moves_into_place_only_where_nothing_is():

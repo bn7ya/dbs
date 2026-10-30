@@ -1011,6 +1011,7 @@ class Survey:
         if folder != plan["folder"]["target"]:
             content = quiet(self.source.remote.read_small, host, ENV_BYTES)
             if content and found_facts.mentions(content.decode("utf-8", errors="replace"), folder):
+                plan["env"]["rewrite"] = mapped(host, folder, plan["folder"]["target"])
                 note(plan, "env_mentions_folder")
 
 

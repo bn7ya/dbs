@@ -224,8 +224,10 @@ def world(admin, tmp_path, monkeypatch, settings):
     def source_python(argv, line):
         if version_of(argv):
             return 0, "3.12\n", ""
+        if argv[1:5] == ["-m", "pip", "list", "--format=json"]:
+            return 0, json.dumps([{"name": "Django", "version": "5.2"}, {"name": "django-dbs", "version": "0.8.0"}]), ""
         if argv[1:3] == ["-m", "pip"]:
-            return 0, "Django==5.2\ndjango-dbs==0.8.0\n-e git+https://x/y#egg=shop\n", ""
+            return 0, "Django==5.2\ndjango-dbs @ file:///gone/django_dbs-0.8.0-py3-none-any.whl\n", ""
         if argv[1:] == ["manage.py", "shell", "-c", DATABASE_FACTS]:
             return facts_for(project)
         if argv[1:4] == ["manage.py", "dbs_backup", "--stream"]:

@@ -20,6 +20,7 @@ SITE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 USER = re.compile(r"^[a-z_][a-z0-9_-]{0,31}\$?$")
 NUMERIC = re.compile(r"^[0-9]{1,10}$")
 MODE = re.compile(r"^0[0-7]{3}$")
+FOLDER_MODE = re.compile(r"^[0-7]{3,4}$")
 MODULE_STREAM = re.compile(r"^[a-z0-9-]+:[0-9]+$")
 RELATIVE = re.compile(r"^(?!-)(?!.*(?:^|/)\.\.(?:/|$))[^*?\[\]\n\0]{1,1024}$")
 CONTAINER_USER = re.compile(r"^[A-Za-z0-9_.-]{1,64}(?::[A-Za-z0-9_.-]{1,64})?$")
@@ -307,6 +308,27 @@ def make_folder(folder: str, mode: str, owner: str, group: str) -> Command:
         ),
         root=True,
     )
+
+
+def folder_owner(folder: str, *, root: bool = False) -> Command:
+    return Command(("stat", "--format=%u:%g:%a", "--", path(folder)), root=root)
+
+
+def own_folder(folder: str, uid: str, gid: str) -> Command:
+    return Command(
+        (
+            "chown",
+            "-h",
+            f"{matched(NUMERIC, uid, 'user id')}:{matched(NUMERIC, gid, 'group id')}",
+            "--",
+            path(folder),
+        ),
+        root=True,
+    )
+
+
+def folder_mode(folder: str, mode: str, *, root: bool) -> Command:
+    return Command(("chmod", matched(FOLDER_MODE, mode, "mode"), "--", path(folder)), root=root)
 
 
 def copy_new(staged: str, destination: str) -> Command:
@@ -622,6 +644,10 @@ def pip_freeze(python: str) -> Command:
     return Command((path(python), "-m", "pip", "freeze", "--all", "--exclude-editable"))
 
 
+def pip_list(python: str) -> Command:
+    return Command((path(python), "-m", "pip", "list", "--format=json"))
+
+
 def make_venv(python: str, folder: str) -> Command:
     return Command((path(python), "-m", "venv", path(folder)))
 
@@ -671,6 +697,7 @@ SOURCE_READS = (
     ("git", "-C"),
     ("dpkg-query",),
     ("rpm", "-q"),
+    ("stat", "--format=%u:%g:%a"),
 )
 SOURCE_ENGINE_READS = (
     ("ps",),

@@ -96,6 +96,9 @@ class LocalTarget:
             return 0, "", ""
         if name in ("chown", "restorecon"):
             return 0, "", ""
+        if name == "chmod":
+            os.chmod(argv[-1], int(argv[1], 8))
+            return 0, "", ""
         if name in ("docker", "podman"):
             if argv[1] == "load":
                 self.loaded.append(Path(argv[-1]).read_bytes())

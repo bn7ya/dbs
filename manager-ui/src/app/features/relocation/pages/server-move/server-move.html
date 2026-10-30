@@ -85,6 +85,7 @@
                       [ngModel]="draft.name"
                       (ngModelChange)="update(index, { name: $event })"
                     />
+                    <mat-hint>{{ 'relocation.applications.nameHint' | t }}</mat-hint>
                     @if (nameError(draft); as message) {
                       <mat-error>{{ message | t }}</mat-error>
                     }

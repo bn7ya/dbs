@@ -816,7 +816,7 @@ def _server_move(verbs, surface: Surface) -> None:
         dest="names",
         action="append",
         metavar="APP=NEW",
-        help="The name an application takes on the new server.",
+        help="The name an application takes on the new server; without it, its name and the new server's in brackets.",
     )
     move.add_argument(
         "--skip-volume",

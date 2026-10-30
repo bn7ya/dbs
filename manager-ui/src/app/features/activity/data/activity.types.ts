@@ -62,6 +62,7 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'relocation.carry_bind',
   'relocation.carry_image',
   'relocation.carry_volume',
+  'relocation.rewrite_env',
   'relocation.backup_dir',
   'relocation.python',
   'relocation.database_create',

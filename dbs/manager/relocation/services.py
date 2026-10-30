@@ -43,6 +43,7 @@ from dbs.models import AuditEvent
 PASSWORD_REQUIRED = "Enter your own password to move for real."
 NOT_ON_SOURCE = "Choose an application that runs on the server being moved."
 ABSOLUTE_PATH_REQUIRED = "Use an absolute path that starts with / and has no '..' in it."
+NAME_MAX = 100
 
 Detail = dict[str, Any]
 
@@ -101,7 +102,7 @@ class RelocationService:
             ]
             detail["created_applications"] = earlier.data.get("created_applications", [])
         else:
-            detail["choices"] = self._choices(source, applications)
+            detail["choices"] = self._choices(source, target, applications)
         if not detail["choices"]:
             raise NothingToMove()
         if not rehearsal:
@@ -109,7 +110,7 @@ class RelocationService:
         return self._queue(source, target, detail, SudoPasswords(sudo_password, source_sudo_password))
 
     def _choices(
-        self, source: Server, applications: Iterable[Mapping[str, Any]]
+        self, source: Server, target: Server, applications: Iterable[Mapping[str, Any]]
     ) -> list[Detail]:
         given = {str(choice["application"]): choice for choice in applications}
         on_source = list(self.applications.list(server=source.pk))
@@ -126,7 +127,7 @@ class RelocationService:
             choices.append(
                 {
                     "application": str(application.pk),
-                    "name": (choice.get("name") or application.name).strip(),
+                    "name": (choice.get("name") or "").strip() or moved_name(application.name, target.name),
                     "folder": absolute_path(folder) if folder else "",
                     "skip_volumes": sorted(set(choice.get("skip_volumes") or [])),
                     "copy_plans": bool(choice.get("copy_plans", True)),
@@ -221,3 +222,7 @@ class RelocationService:
     def moving(self, server: Server | Application) -> bool:
         server_id = server.server_id if isinstance(server, Application) else server.pk
         return self.locks.held(server_id)
+
+
+def moved_name(name: str, server: str) -> str:
+    return f"{name} ({server})"[:NAME_MAX]

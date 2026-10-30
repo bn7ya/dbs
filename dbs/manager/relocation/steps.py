@@ -16,6 +16,7 @@ from dbs.manager.activity import job_leases
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.repositories import ApplicationRepository
+from dbs.manager.applications.services import facts as found_facts
 from dbs.manager.applications.services import ApplicationService
 from dbs.manager.applications.services.discovery_service import (
     Discovery,
@@ -31,6 +32,7 @@ from dbs.manager.relocation import catalogue, database, inventory, packages
 from dbs.manager.relocation.exceptions import (
     DatabaseCredentialsUnknown,
     DatabaseExists,
+    DatabaseIsTheSources,
     MoveBlocked,
     MovedApplicationNotFound,
     PackageInstallFailed,
@@ -40,6 +42,7 @@ from dbs.manager.relocation.exceptions import (
 )
 from dbs.manager.relocation.inventory import Choice, Side, Survey
 from dbs.manager.relocation.privileged import Privileged, SudoPasswords, sudo_mode
+from dbs.manager.relocation.requirements import installed_versions, requirements_of
 from dbs.manager.relocation.systems import DEBIAN, System
 from dbs.manager.relocation.transfer import (
     FILE,
@@ -73,6 +76,7 @@ APPLICATION_STEPS = (
     "carry_bind",
     "carry_image",
     "carry_volume",
+    "rewrite_env",
     "backup_dir",
     "python",
     "database_create",
@@ -87,10 +91,10 @@ APPLICATION_STEPS = (
     "copy_plans",
 )
 PROGRESS_EVERY = 5.0
+OWNER_LINE = re.compile(r"^([0-9]{1,10}):([0-9]{1,10}):([0-7]{3,4})$")
 FINGERPRINT_LINE = re.compile(r"^fpr:+([0-9A-F]{40}):", re.M)
 SUBORDINATE_IDS = "/etc/subuid"
 SUBORDINATE_BYTES = 256 * 1024
-FREEZE_SKIPPED = ("-e ", "--editable", "file://", " @ file:")
 DOCKER_KEY_FOLDER = "/etc/apt/keyrings"
 PG_VERSION_FILE = "/var/lib/pgsql/data/PG_VERSION"
 NGINX_AVAILABLE = "/etc/nginx/sites-available"
@@ -151,6 +155,8 @@ def application_steps(plan: Detail) -> list[Detail]:
         for volume in plan["volumes"]
         if volume["selected"]
     ]
+    if plan["env"].get("rewrite"):
+        steps.append({"step": "rewrite_env", "key": plan["env"]["rewrite"]})
     if plan["backup_dir"].get("create"):
         steps.append({"step": "backup_dir", "key": plan["backup_dir"]["target"]})
     if kind == Application.Kind.HOST:
@@ -569,8 +575,14 @@ class Move:
                 target=folder["target"],
                 numeric=plan["kind"] != Application.Kind.HOST,
                 size=folder.get("bytes"),
+                owner=self.owner_of(folder["path"], root),
             )
         )
+
+    def owner_of(self, folder: str, root: bool) -> tuple[str, str, str]:
+        found = self.source_root.run(catalogue.folder_owner(folder, root=root), check=False)
+        matched = OWNER_LINE.match(found.stdout.strip()) if found.ok else None
+        return (matched.group(1), matched.group(2), matched.group(3)) if matched else ()
 
     def step_carry_extra(self, phase: Detail, step: Detail) -> Detail:
         plan = self.plan_of(phase)
@@ -598,6 +610,7 @@ class Move:
                 target=bind["target"],
                 numeric=True,
                 size=bind.get("bytes"),
+                owner=self.owner_of(bind["source"], root),
             )
         )
 
@@ -693,11 +706,12 @@ class Move:
         frozen = self.source.run(catalogue.pip_freeze(source.python_path))
         if frozen is None or not frozen.ok:
             raise PrivilegedCommandFailed(output=(frozen.stderr if frozen else "")[-OUTPUT_TAIL:])
-        lines = [
-            line
-            for line in frozen.stdout.splitlines()
-            if line.strip() and not any(marker in line for marker in FREEZE_SKIPPED)
-        ]
+        listed = self.source.run(catalogue.pip_list(source.python_path))
+        lines, left_out = requirements_of(
+            frozen.stdout,
+            installed_versions(listed.stdout if listed is not None and listed.ok else ""),
+            self.reachable_on_target,
+        )
         requirements = self.staged(("\n".join(lines) + "\n").encode(), "requirements.txt")
         interpreter = packages.python_command(self.system(), python.get("version", ""))
         try:
@@ -709,7 +723,10 @@ class Move:
             )
         finally:
             self.unstage(requirements)
-        return {"action": "rebuild", "packages": len(lines)}
+        return {"action": "rebuild", "packages": len(lines), "left_out": left_out}
+
+    def reachable_on_target(self, local: str) -> bool:
+        return local.startswith("/") and bool(quiet(self.target.remote.exists, local, default=False))
 
     def step_database_create(self, phase: Detail, step: Detail) -> Detail:
         application = self.target_application(phase, folder_only=True)
@@ -808,8 +825,32 @@ class Move:
         )
         return {"application": str(created.pk), "name": created.name}
 
+    def step_rewrite_env(self, phase: Detail, step: Detail) -> Detail:
+        plan = self.plan_of(phase)
+        remote = self.target.remote
+        found = remote.read_small(step["key"], inventory.ENV_BYTES)
+        text = found.decode("utf-8", errors="replace")
+        changed = inventory.rewritten(text, plan["folder"]["path"], plan["folder"]["target"])
+        if changed == text:
+            return {"rewritten": False}
+        permissions = remote.lstat(step["key"]).permissions
+        remote.replace_file(step["key"], changed.encode(), mode=(permissions or 0o600) & 0o777)
+        return {"rewritten": True}
+
+    def own_database(self, phase: Detail) -> None:
+        if self.source_server.host_key != self.target_server.host_key:
+            return
+        said = self.plan_of(phase)["database"]
+        target = self.target_application(phase)
+        found = found_facts.database_facts(self.target.remote, self.connections.dbs_profile(target))
+        if not found:
+            raise DatabaseCredentialsUnknown()
+        if all(found.get(key, "") == said.get(key, "") for key in ("vendor", "host", "name")):
+            raise DatabaseIsTheSources()
+
     def step_migrate(self, phase: Detail, step: Detail) -> Detail:
         target = self.target_application(phase)
+        self.own_database(phase)
         result = restoring.manage(target, self.actor, "migrate", "--noinput")
         if not result.ok:
             raise PrivilegedCommandFailed(output=(result.stderr or result.stdout).strip()[-OUTPUT_TAIL:])
@@ -817,6 +858,7 @@ class Move:
 
     def step_restore(self, phase: Detail, step: Detail) -> Detail:
         target = self.target_application(phase)
+        self.own_database(phase)
         file = restoring.stored(phase["backup"])
         return restoring.restore_file(file, target, self.actor, flush=True, dry_run=False)
 

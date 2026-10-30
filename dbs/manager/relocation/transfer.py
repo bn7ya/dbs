@@ -47,6 +47,7 @@ class Item:
     labels: tuple[tuple[str, str], ...] = ()
     expected_id: str = ""
     size: int | None = None
+    owner: tuple[str, str, str] = ()
 
 
 @dataclass
@@ -206,12 +207,21 @@ class Carrier:
         incoming = self.incoming(item.target)
         try:
             self.extract(staged, incoming, item.numeric)
+            self.adopt(incoming, item.owner)
             self.remap(incoming)
         except BaseException:
             self.leftovers.append(incoming)
             raise
         self.settle(incoming, item.target)
         return {"placed": item.target}
+
+    def adopt(self, folder: str, owner: tuple[str, str, str]) -> None:
+        if not owner:
+            return
+        uid, gid, mode = owner
+        if self.as_root:
+            self.target.run(catalogue.own_folder(folder, uid, gid))
+        self.target.run(catalogue.folder_mode(folder, mode, root=self.as_root))
 
     def place_file(self, item: Item, staged: str) -> dict[str, Any]:
         remote = self.target.remote

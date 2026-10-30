@@ -66,7 +66,7 @@ def _choices(session: TerminalSession, source: Server) -> list[dict[str, Any]]:
     return [
         {
             "application": application.pk,
-            "name": names.get(application.name, application.name),
+            "name": names.get(application.name, ""),
             "folder": folder,
             "skip_volumes": skipped.get(application.name, []),
             "copy_plans": not args.no_plans,
@@ -134,6 +134,8 @@ def _report(session: TerminalSession, entry: Any) -> None:
     packages = (found.get("packages") or {}).get("packages") or []
     if packages:
         _say(session, f"Installs on the new server: {' '.join(packages)}")
+    for item in found.get("notes", []):
+        _say(session, f"Note: {item['code']}")
     for item in detail.get("blockers", []):
         where = f"{item['application']}: " if item.get("application") else ""
         _say(session, f"Blocked: {where}{item['code']}")

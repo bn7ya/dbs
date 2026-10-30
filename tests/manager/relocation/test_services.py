@@ -13,6 +13,7 @@ from dbs.manager.backups.repositories import BackupPlanRepository
 from dbs.manager.backups.services.backup_plan_service import BackupPlanService
 from dbs.manager.permissions import Role
 from dbs.manager.relocation.locks import ServerMoveLock
+from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerConnectionService
 from dbs.models import AuditEvent
 from tests.manager.relocation.conftest import SOURCE, SUDO_PASSWORD, TARGET
@@ -55,6 +56,21 @@ def statuses(job, name):
 
 def every_argv(world, host):
     return [entry["argv"] for entry in world["hosts"].everything(host)]
+
+
+@pytest.mark.django_db
+def test_an_application_moved_without_a_new_name_takes_the_new_servers_name_beside_its_own(
+    api, world, run_jobs
+):
+    url, payload = move(world)
+    payload["applications"][0].pop("name")
+    with run_jobs():
+        response = api.post(url, payload, format="json")
+    job = AuditEvent.objects.get(pk=response.json()["activity"])
+
+    [plan] = job.data["inventory"]["applications"]
+    assert plan["target_name"] == "shop (new)"
+    assert plan["blockers"] == []
 
 
 @pytest.mark.django_db
@@ -115,7 +131,7 @@ def test_a_move_for_real_carries_the_application_and_restores_its_data(
     assert (landed / ".git" / "HEAD").read_text() == "ref: refs/heads/main\n"
     assert (landed / ".env").read_text() == "SECRET_KEY=moving\n"
     assert not (landed / "db.sqlite3").exists()
-    assert "Django==5.2" in world["pip"] and "-e git" not in world["pip"]
+    assert world["pip"] == "Django==5.2\ndjango-dbs==0.8.0\n"
     assert world["migrations"] == 1
     [restore] = world["restores"]
     assert "--flush" in restore["argv"] and restore["line"] == BACKUP_PASSPHRASE
@@ -131,6 +147,52 @@ def test_a_move_for_real_carries_the_application_and_restores_its_data(
         world["project"]
     )
     assert (world["project"] / "db.sqlite3").exists()
+
+
+def moved_for_real(api, world, run_jobs):
+    return started(
+        api,
+        world,
+        run_jobs,
+        rehearsal=False,
+        password=PASSWORD,
+        confirm_name="new",
+        sudo_password=SUDO_PASSWORD,
+    )
+
+
+@pytest.mark.django_db
+def test_an_env_that_names_the_old_folder_names_the_new_one_on_the_new_server(api, world, run_jobs):
+    project, landed = world["project"], world["target_folder"]
+    (project / ".env").write_text(f"SECRET_KEY=moving\nDATABASE={project}/db.sqlite3\n")
+
+    job = moved_for_real(api, world, run_jobs)
+
+    assert job.status == audit.SUCCEEDED, (job.error_code, job.data.get("output"))
+    assert statuses(job, "shop")["rewrite_env"] == "succeeded"
+    assert (landed / ".env").read_text() == f"SECRET_KEY=moving\nDATABASE={landed}/db.sqlite3\n"
+    assert (project / ".env").read_text() == f"SECRET_KEY=moving\nDATABASE={project}/db.sqlite3\n"
+
+
+@pytest.mark.django_db
+def test_on_the_same_machine_the_old_applications_database_is_never_written(api, world, run_jobs):
+    Server.objects.filter(pk=world["target_server"].pk).update(host_key=world["source_server"].host_key)
+    answer = world["target_python_answer"]
+
+    def still_the_old_database(argv, line):
+        if argv[1:3] == ["manage.py", "shell"]:
+            return world["source_python"](argv, line)
+        return answer(argv, line)
+
+    world["target_python_answer"] = still_the_old_database
+
+    job = moved_for_real(api, world, run_jobs)
+
+    assert (job.status, job.error_code) == (audit.FAILED, "database_is_the_sources")
+    assert statuses(job, "shop")["migrate"] == "failed"
+    assert world["migrations"] == 0
+    assert world["restores"] == []
+    assert (world["project"] / "db.sqlite3").read_text() == "live rows\n"
 
 
 @pytest.mark.django_db
@@ -174,6 +236,7 @@ def test_nothing_runs_on_the_source_but_reads_and_the_backup(api, world, run_job
             or argv[0] in ("id", "uname", "getenforce", "du", "find", "df", "ss")
             or argv[:2] in (["sudo", "--version"], ["sudo", "-n"])
             or argv[:2] == ["git", "-C"]
+            or argv[:2] == ["stat", "--format=%u:%g:%a"]
             or argv[0] in ("docker", "podman") and argv[1] in ("version", "ps", "info")
             or argv[:1] == ["true"]
             or argv[0] == python

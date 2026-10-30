@@ -20,9 +20,10 @@ import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
 import { MovePlan } from '../../components/move-plan/move-plan';
 import { MoveProgress } from '../../components/move-progress/move-progress';
+import { movedName } from '../../data/moved-name';
 import type { ChoiceDraft, MoveChoice } from '../../data/relocation.types';
 import { ServerMoveStore } from '../../state/server-move.store';
-import type { MoveWizardStep } from './server-move.types';
+import type { DraftSource, MoveWizardStep } from './server-move.types';
 
 const STEPS: readonly MoveWizardStep[] = ['target', 'applications', 'plan', 'confirm', 'progress'];
 
@@ -83,21 +84,26 @@ export class ServerMovePage {
   readonly progress = this.store.progress;
 
   readonly target = signal<string | null>(this.route.snapshot.queryParamMap.get('target'));
-  readonly drafts = linkedSignal<readonly ChoiceDraft[]>(() =>
-    this.store.applications().map((application) => ({
-      application,
-      selected: true,
-      name: application.name,
-      folder: application.project_dir,
-    })),
-  );
+  readonly targetServer = computed(() => this.targets().find((server) => server.id === this.target()) ?? null);
+  readonly targetName = computed(() => this.targetServer()?.name ?? '');
+  readonly drafts = linkedSignal<DraftSource, readonly ChoiceDraft[]>({
+    source: () => ({ applications: this.store.applications(), target: this.targetName() }),
+    computation: ({ applications, target }, previous) =>
+      applications.map((application) => {
+        const name = movedName(application.name, target);
+        const before = previous?.value.find((draft) => draft.application.id === application.id);
+        if (!before) {
+          return { application, selected: true, name, folder: application.project_dir };
+        }
+        const untouched = before.name === movedName(application.name, previous?.source.target ?? '');
+        return { ...before, application, name: untouched ? name : before.name };
+      }),
+  });
   readonly copyPlans = signal(true);
   readonly sudoPassword = signal('');
   readonly sourceSudoPassword = signal('');
   readonly resumeOf = signal<number | null>(null);
 
-  readonly targetServer = computed(() => this.targets().find((server) => server.id === this.target()) ?? null);
-  readonly targetName = computed(() => this.targetServer()?.name ?? '');
   readonly choices = computed<readonly MoveChoice[]>(() =>
     this.drafts()
       .filter((draft) => draft.selected)
