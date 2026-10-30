@@ -1,3 +1,4 @@
+import type { RunRequest } from '@shared/confirmed-run/confirmed-run.types';
 import type { StepStatus } from '@shared/steps-list/steps-list.types';
 
 export type ApplicationKind = 'host' | 'compose' | 'container';
@@ -65,12 +66,6 @@ export interface RedeployEnvVersion {
 export interface DeployStepsRequest {
   readonly steps: readonly DeployStep[];
   readonly account_password: string;
-}
-
-export interface RunRequest {
-  readonly rehearsal: boolean;
-  readonly password: string;
-  readonly confirm_name: string;
 }
 
 export interface MoveRequest extends RunRequest {

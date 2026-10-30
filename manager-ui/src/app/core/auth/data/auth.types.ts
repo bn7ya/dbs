@@ -23,6 +23,8 @@ export type Capability =
   | 'files.change'
   | 'redeploy.rehearse'
   | 'redeploy.run'
+  | 'relocation.rehearse'
+  | 'relocation.run'
   | 'shell.open'
   | 'console.run';
 

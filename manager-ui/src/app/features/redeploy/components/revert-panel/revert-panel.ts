@@ -4,8 +4,8 @@ import type { ApiError } from '@core/http/api.types';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import type { Job } from '@core/jobs/job.types';
 import { uniqueId } from '@shared/unique-id';
-import type { RunRequest } from '../../data/redeploy.types';
-import { ConfirmedRun } from '../confirmed-run/confirmed-run';
+import type { RunRequest } from '@shared/confirmed-run/confirmed-run.types';
+import { ConfirmedRun } from '@shared/confirmed-run/confirmed-run';
 import { JobProgress } from '../job-progress/job-progress';
 
 @Component({

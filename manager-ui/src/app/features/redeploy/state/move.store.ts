@@ -4,8 +4,9 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { apiErrorOf } from '@core/http/api-error';
 import { moveOutcomeOf } from '../data/job-detail';
 import { RedeployApi } from '../data/redeploy.api';
-import type { MoveRequest, RunRequest } from '../data/redeploy.types';
-import { JobRun } from './job-run';
+import type { RunRequest } from '@shared/confirmed-run/confirmed-run.types';
+import type { MoveRequest } from '../data/redeploy.types';
+import { JobRun } from '@core/jobs/job-run';
 
 const DJANGO_DBS_BACKUP = 'dbs';
 
