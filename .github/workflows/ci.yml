@@ -274,6 +274,8 @@ jobs:
           if [ "${{ matrix.engine }}" = podman ]; then
             sudo apt-get install -y --no-install-recommends podman podman-compose uidmap slirp4netns
           fi
+      - name: Keep the runner's XDG folders to the runner
+        run: sudo sed -i '/^XDG_[A-Z_]*=/d' /etc/environment
       - name: Start an OpenSSH server on 127.0.0.1:2222
         run: sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
       - name: Build and start the Compose project as the SSH account
@@ -286,7 +288,7 @@ jobs:
         if: failure()
         run: |
           sudo cat "$RUNNER_TEMP/sshd/sshd.log"
-          sudo su -l dbs-ssh -s /bin/sh -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
+          sudo su dbs-ssh -s /bin/sh -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
 
   upgrade-from-0-7:
     name: Upgrade a project and a manager from 0.7.0
