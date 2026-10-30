@@ -1,6 +1,8 @@
 # Upgrading
 
-Pin the release in your requirements or lock file, reinstall, and let DBS check the project:
+From 0.8.0 on, an upgrade keeps every backup opening and everything your project uses working;
+[Stability](stability.md) says exactly what stays. Pin the release in your requirements or lock
+file, reinstall, and let DBS check the project:
 
 ```bash
 pip install "django-dbs==X.Y.Z"
@@ -42,7 +44,7 @@ Backups keep container format 2 and 0.8 adds no migration to projects, so a 0.7 
 | Step | What it says, and what to do |
 |---|---|
 | dependencies | `pip install django-dbs` now installs scikit-learn, paramiko, djangorestframework, waitress and keyring. One that cannot be imported is named, with `pip install --force-reinstall "django-dbs"` |
-| install extras | A requirement file still names `django-dbs[guard]`, `[manager]`, `[ssh]` or `[all]`: write `django-dbs` without the brackets. The extras add nothing in 0.8 and go away after it |
+| install extras | A requirement file still names `django-dbs[guard]`, `[manager]`, `[ssh]` or `[all]`: write `django-dbs` without the brackets. The extras add nothing, and keep resolving so an old requirement still installs |
 | contrib views | `dbs.contrib`, the original in-request backup and restore views, is gone. Delete `include("dbs.contrib.urls")` from the URLconf it names, and `"dbs.contrib"` from `INSTALLED_APPS`, where it stops Django before this step can run |
 | command names | A `Makefile`, `Procfile`, `Dockerfile`, compose file, shell script or workflow still runs `dbs-upgrade`: use `python manage.py dbs upgrade` |
 | old partial files | `.part` files left in `DBS_BACKUP_DIR` by a backup before 0.7 are no backups, and DBS no longer sweeps them; the `rm` line removes them |

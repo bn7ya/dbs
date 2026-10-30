@@ -111,12 +111,21 @@ installs everything, and the manager answers to `django-dbs`, `django_dbs` and `
 - **Documentation in `docs/`**: getting started, the project, the panel, the manager,
   deploying and moving, restoring, the session guard, AI assistants, how it works, and the
   command, settings and Python API reference. The README is a short front page.
+- **Stable from 0.8.0.** Every later release keeps what 0.8.0 offers: backups written by 0.8.0
+  or later keep restoring with the same passphrase, and the Python API, commands, options,
+  settings and defaults, `--json` keys, the manager's REST API, MCP tools, data folder and
+  sealed values stay as they are; migrations only add. `tests/stability/0.8.0/` records all of
+  it, with a golden backup, and `tests/test_stability.py` and `tests/manager/test_stability.py`
+  fail on anything removed or changed. `scripts/stability_snapshot.py` records each new
+  release. `docs/stability.md` is the promise; `CONTRIBUTING.md`, a pull request template, and
+  `AGENTS.md` and `.github/copilot-instructions.md` (copies of `CLAUDE.md` for Codex, opencode
+  and Copilot) give contributors and AI assistants the same rules.
 
 ### Changed
 
 - **`pip install django-dbs` installs everything DBS uses**: scikit-learn for the guard,
   paramiko for SSH, and djangorestframework, waitress and keyring for the manager. The
-  `guard`, `manager`, `ssh` and `all` extras remain as empty names for this release. The
+  `guard`, `manager`, `ssh` and `all` extras remain as empty names, and stay. The
   core still imports none of them outside `dbs/security`, `dbs/transports` and
   `dbs/manager`.
 - **Three command names.** `django-dbs`, `django_dbs` and `dbs` all start the manager's

@@ -26,6 +26,8 @@ the details; the reference is for looking things up.
 | [Python API](reference/python-api.md) | `dbs` and `dbs.transports` |
 | [Troubleshooting](troubleshooting.md) | A symptom, and what to do about it |
 | [Upgrading](upgrading.md) | What changes between releases, and what `dbs upgrade` checks |
+| [Stability](stability.md) | What every release from 0.8.0 on keeps: backups, the API, commands, settings |
 | [Development](development.md) | Tests, the interface, the journeys, and releasing |
 
 Security reports: [SECURITY.md](../SECURITY.md). Every change: [CHANGELOG.md](../CHANGELOG.md).
+Contributing: [CONTRIBUTING.md](../CONTRIBUTING.md).

@@ -45,7 +45,7 @@ many backups you are giving up. Even then nothing is deleted.</p>
 <h2>From 0.7.x</h2>
 <p><code>pip install django-dbs</code> installs everything again; write <code>django-dbs</code>
 without <code>[guard]</code>, <code>[manager]</code>, <code>[ssh]</code> or <code>[all]</code>
-in your requirements, since those names are empty now and go away later. 0.8.0 adds no
+in your requirements, since those names add nothing now. 0.8.0 adds no
 migration here and keeps the backup format, so 0.7.0 still reads every backup it writes. Then
 run <code>python manage.py dbs upgrade</code>, which reports each of these:</p>
 <ul>
