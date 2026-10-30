@@ -42,6 +42,14 @@ as_account() {
     su "$account" -s /bin/sh -c "cd '$1' && $2"
 }
 
+if [ "${E2E_FIXTURE_SUDO:-}" = 1 ]; then
+    rules=/etc/sudoers.d/dbs-e2e
+    printf '%s ALL=(ALL) ALL\n' "$account" > "$rules.new"
+    chmod 440 "$rules.new"
+    visudo -cf "$rules.new" >/dev/null
+    mv "$rules.new" "$rules"
+fi
+
 rm -rf "$wheels"
 python3 -m pip wheel --quiet --no-deps --wheel-dir "$wheels" "$repository"
 
@@ -108,6 +116,9 @@ echo "E2E_SSH_TARGET_PROJECT_DIR=$target"
 echo "E2E_SSH_TARGET_PYTHON=$target/.venv/bin/python"
 echo "E2E_SSH_TARGET_REMOTE_BACKUP_DIR=$target/backups"
 echo "E2E_SSH_FS=/"
+if [ "${E2E_FIXTURE_SUDO:-}" = 1 ]; then
+    echo "E2E_SSH_SUDO_PASSWORD=$password"
+fi
 if [ -n "$engine" ]; then
     echo "E2E_CONTAINER_ENGINE=$engine"
     echo "E2E_CONTAINER_FOLDER=$directory/$container_name"
