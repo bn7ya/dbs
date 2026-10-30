@@ -47,7 +47,7 @@ jobs:
       - name: Start an OpenSSH server on 127.0.0.1:2222
         run: sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
       - name: Prepare the projects and the Compose service the journeys use
-        run: sudo env "PATH=$PATH" scripts/e2e_fixture.sh /srv/e2e docker >> "$GITHUB_ENV"
+        run: sudo env "PATH=$PATH" E2E_FIXTURE_SUDO=1 scripts/e2e_fixture.sh /srv/e2e docker >> "$GITHUB_ENV"
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
         working-directory: manager-ui

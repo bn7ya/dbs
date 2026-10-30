@@ -27,6 +27,8 @@ export const COPY = {
   username: { en: 'Username', ar: 'اسم المستخدم' },
   password: { en: 'Password', ar: 'كلمة المرور' },
   signIn: { en: 'Sign in', ar: 'تسجيل الدخول' },
+  usernameRequired: { en: 'Enter your username.', ar: 'أدخل اسم المستخدم.' },
+  passwordRequired: { en: 'Enter your password.', ar: 'أدخل كلمة المرور.' },
   wrongCredentials: { en: 'The username or password is not correct.', ar: 'اسم المستخدم أو كلمة المرور غير صحيحة.' },
   tooManyAttempts: {
     en: 'Too many attempts. Wait a few minutes and try again.',
@@ -99,6 +101,24 @@ export const COPY = {
   applicationWizardTitle: { en: 'Add an application', ar: 'إضافة تطبيق' },
   stepProfile: { en: 'How it runs', ar: 'طريقة التشغيل' },
   runsInHost: { en: 'On the server, with a virtualenv', ar: 'على الخادم، مع بيئة افتراضية' },
+  runsInCompose: { en: 'In a Docker or Podman Compose service', ar: 'في خدمة Compose على Docker أو Podman' },
+  qRunsIn: { en: 'Where does Django run?', ar: 'أين يعمل Django؟' },
+  qEngine: { en: 'Which container engine?', ar: 'أي محرك حاويات؟' },
+  qDatabase: { en: 'Which database?', ar: 'أي قاعدة بيانات؟' },
+  qDatabaseRuns: { en: 'Where does the database run?', ar: 'أين تعمل قاعدة البيانات؟' },
+  qSettingsFrom: { en: 'Where do its settings come from?', ar: 'من أين تأتي إعداداته؟' },
+  qProcessManager: { en: 'What keeps it running?', ar: 'ما الذي يبقيه يعمل؟' },
+  databasePostgres: { en: 'PostgreSQL', ar: 'PostgreSQL' },
+  databaseSqlite: { en: 'SQLite', ar: 'SQLite' },
+  databaseOnThisServer: { en: 'Installed on this server', ar: 'مثبتة على هذا الخادم' },
+  databaseInAFile: { en: 'In a file of the project', ar: 'في ملف داخل المشروع' },
+  settingsFolderEnv: { en: 'A .env file in the project folder', ar: 'ملف .env في مجلد المشروع' },
+  settingsComposeEnvFile: { en: 'A file Compose names with env_file', ar: 'ملف يسميه Compose في env_file' },
+  keptBySystemdUser: { en: 'A systemd user service', ar: 'خدمة systemd للمستخدم' },
+  saidFound: {
+    en: 'You said {question} {said}, but the manager found {found}.',
+    ar: 'ذكرت أن {question} {said}، لكن المدير وجد {found}.',
+  },
   stepFolder: { en: 'Folder', ar: 'المجلد' },
   stepDiscovery: { en: 'Discovery', ar: 'البحث' },
   stepReview: { en: 'Review', ar: 'المراجعة' },
@@ -154,6 +174,16 @@ export const COPY = {
   removeApplication: { en: 'Remove application', ar: 'إزالة التطبيق' },
   applicationRemoved: { en: 'Application removed.', ar: 'تمت إزالة التطبيق.' },
   editApplication: { en: 'Edit application', ar: 'تعديل التطبيق' },
+  howItRuns: { en: 'How it runs', ar: 'طريقة التشغيل' },
+  deploymentDiffers: {
+    en: 'What you said differs from what the last check found. Check it, or use what was found.',
+    ar: 'ما ذكرته يختلف عما وجده آخر فحص. راجعه، أو استخدم ما وجد.',
+  },
+  foundValue: { en: 'Found: {value}', ar: 'وجد: {value}' },
+  useFound: { en: 'Use what was found', ar: 'استخدم ما وجد' },
+  editHowItRuns: { en: 'Edit how it runs', ar: 'تعديل طريقة التشغيل' },
+  deploymentSaved: { en: 'Saved how it runs.', ar: 'حفظت طريقة التشغيل.' },
+  nextSteps: { en: 'Next steps', ar: 'الخطوات التالية' },
 
   // Backups
   noBackupsYet: { en: 'No backups yet', ar: 'لا توجد نسخ احتياطية بعد' },
@@ -348,6 +378,10 @@ export const COPY = {
   moveInstalls: { en: 'Installs on the new server', ar: 'ما يثبت على الخادم الجديد' },
   movePlanAgain: { en: 'Plan again', ar: 'خطط من جديد' },
   moveForReal: { en: 'Move for real', ar: 'انقل فعليا' },
+  moveSudo: { en: 'sudo password of {user} on {server}', ar: 'كلمة مرور sudo للمستخدم {user} على {server}' },
+  moveConfirmName: { en: 'Name of the new server', ar: 'اسم الخادم الجديد' },
+  movePrepare: { en: 'Prepare the new server', ar: 'تجهيز الخادم الجديد' },
+  movedApplications: { en: 'Moved applications', ar: 'التطبيقات المنقولة' },
 } as const satisfies Record<string, { en: string; ar: string }>;
 
 export function copyIn(lang: Lang): (key: CopyKey) => string {

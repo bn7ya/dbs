@@ -633,11 +633,11 @@ password `password_change_required`. Connection codes are `connection_lost`,
 `playwright.config.ts` starts `django_dbs run --no-browser --port 8799 --data-dir <tmp>` (set
 `E2E_BASE_URL` to use a running manager instead, `E2E_DATA_DIR` to choose the data dir); the
 `django_dbs` on `PATH` must be the checkout's, and `npm run build:package` must have built the
-interface it serves. The `setup` project runs `00-setup.spec.ts` first: it reads the one-time key
+interface it serves. The `setup` project runs `00-first-run.spec.ts` first: it reads the one-time key
 from `<data dir>/setup.token` (or `E2E_SETUP_TOKEN`), creates the `ADMIN` account through the setup
 page and enrolls it in two-factor sign-in, keeping the key in the data dir (`E2E_ADMIN_TOTP_SECRET`
 supplies it for a manager set up beforehand). The `ltr` (`en-US`) and `rtl` (`ar`) projects depend on
-it and run the same journeys, two workers side by side.
+it and run the same scenarios, two workers side by side.
 
 **The fixture.** `scripts/openssh_test_server.sh` starts OpenSSH on 127.0.0.1:2222 for the account
 `dbs-ssh`; `scripts/e2e_fixture.sh DIRECTORY [docker|podman]` (as root) then prepares, for that
@@ -648,7 +648,10 @@ database, a `.env` (which the settings read: database path, backup folder), `med
 collect plan and, with an engine, the Compose project `DIRECTORY/e2e-shop` (service `web`) from
 `scripts/container_fixture.sh`. It prints the variables `e2e/support/config.ts` reads, so
 `scripts/e2e_fixture.sh /srv/e2e docker > e2e.env` and `set -a; . ./e2e.env` before
-`npx playwright test` is the whole setup; the defaults already match `/srv/e2e`.
+`npx playwright test` is the whole setup; the defaults already match `/srv/e2e`. With
+`E2E_FIXTURE_SUDO=1` the fixture also lets the account use `sudo` with its password
+(`/etc/sudoers.d/dbs-e2e`) and prints `E2E_SSH_SUDO_PASSWORD`, which the real server move needs;
+it is off by default, so a developer's own machine never gives the test account `sudo` unasked.
 
 | Variable | Default | What |
 |---|---|---|
@@ -657,29 +660,38 @@ collect plan and, with an engine, the Compose project `DIRECTORY/e2e-shop` (serv
 | `E2E_SSH_PROJECT_DIR`, `E2E_SSH_PYTHON` | `/srv/e2e/app`, its `.venv/bin/python` | the main application |
 | `E2E_SSH_REMOTE_BACKUP_DIR`, `E2E_SSH_ENV_PATH`, `E2E_SSH_MEDIA_DIR` | its `backups`, `.env`, `media` | what discovery and the tabs find |
 | `E2E_SSH_EXISTING_DIR`, `E2E_SSH_EXISTING_FILES` | `/srv/e2e/existing`, the two dumps | the collect plan's folder |
-| `E2E_SSH_TARGET_PROJECT_DIR`, `E2E_SSH_TARGET_PYTHON`, `E2E_SSH_TARGET_REMOTE_BACKUP_DIR` | `/srv/e2e/target`, … | the second application; empty skips `09` and `10` |
-| `E2E_CONTAINER_ENGINE`, `E2E_CONTAINER_FOLDER` | empty | the Compose project; empty skips `13` |
+| `E2E_SSH_TARGET_PROJECT_DIR`, `E2E_SSH_TARGET_PYTHON`, `E2E_SSH_TARGET_REMOTE_BACKUP_DIR` | `/srv/e2e/target`, … | the second application; empty skips `06` and `07` |
+| `E2E_CONTAINER_ENGINE`, `E2E_CONTAINER_FOLDER` | empty | the Compose project; empty skips `09` |
+| `E2E_SSH_SUDO_PASSWORD` | empty | the account's `sudo` password; empty skips the real move in `10` |
 | `E2E_SSH_FS` | `/` | where the SSH server's files are reachable from the runner; empty skips the checks that read them |
 | `E2E_SCREENSHOT_DIR` | `test-results/journeys` | a full-page screenshot of each step worth seeing, per project |
 
-**Journeys.** `01-shell` and `sign-in` (signed out), `02-add-server` (the server wizard, then the
-application wizard by folder, its check, passphrase, test backup and removal, and the application's
-tabs), `03-backups`, `04-plans` (the Schedule tab: first run, time zone, pause, resume, reschedule,
-folders and collect plans), `05-files`, `06-envfile`, `07-activity`, `08-lockout`, `09-redeploy` (deploy
-steps, a rehearsed and a real deploy, a rehearsed move onto the second application), `10-two-projects`
-(two applications on one server, one picked from discovery's suggestions and one through the server
-browser), `11-console`, `12-terminal`, `13-container` and `14-server-move` (a rehearsed move onto a
-second record of the same SSH account: the same-machine note and no blocker). Everything but `02` and `10` creates its
-server and application through `e2e/support/api.ts` and removes them afterwards.
+**Scenarios.** Each file follows a developer through one piece of real work, start to end:
+`00-first-run` (the setup link, the master account, two-factor sign-in), `01-signing-in` (missing
+fields, a wrong password, the lockout, the keyboard path, the other language, About, signing out),
+`02-host-project` (the server wizard, then the application wizard: *How it runs* answered with a
+database the developer misremembers, discovery saying so, the check, passphrase and test backup; the
+overview's card taking what was found and an answer edited without a password; a `.env` path that is
+not there giving its next step; the tabs, the passphrase, the host key, removal), `03-backups`,
+`04-schedule` (first run, time zone, pause, resume, reschedule, folders and collect plans),
+`05-files-and-env`, `06-deploy` (deploy steps, a rehearsed and a real deploy, a rehearsed move onto
+the second application), `07-two-projects` (one picked from discovery's suggestions, one through the
+server browser), `08-console-terminal-activity`, `09-compose-project` (answered as Compose, found
+running, checked, backed up and a restore rehearsed) and `10-server-move` (a rehearsal onto a second
+record of the same SSH account, then a real move with the `sudo` password into the account's home:
+the moved application checks ready, its restore succeeded and its `.env` names the new folder).
+Everything but `02` and `07` creates its server and application through `e2e/support/api.ts` and
+removes them afterwards; `e2e/support/wizard.ts` holds the wizard steps the scenarios share.
 
 **Rules.** Journeys select by role and accessible name, and every string they select by comes from
 `e2e/support/copy.ts` in both languages, copied from the bundles; a label with a placeholder goes
 through `journey.say(key, values)`. Each worker signs in once through the API (`Api.signIn`, one
 two-factor step) and pages reuse that session; a sign-in after a sign-out takes a fresh code per
 30-second step under a file lock. The two projects share the fixture, so journeys that change a
-shared file or hold a scarce resource take a lock (`acquireLock('envfile')`, `acquireLock('terminal')`).
+shared file or hold a scarce resource take a lock (`acquireLock('envfile')`, `acquireLock('terminal')`,
+`acquireLock('server-move')`).
 `tsconfig.e2e.json` type-checks the journeys during `npm run lint`.
 
 **CI.** `.github/workflows/e2e.yml` runs on a push to `main`, on demand and nightly: it builds the
-interface, starts OpenSSH, runs the fixture with Docker and then the journeys as root, so `E2E_SSH_FS`
+interface, starts OpenSSH, runs the fixture with Docker and `E2E_FIXTURE_SUDO=1` and then the scenarios as root, so `E2E_SSH_FS`
 can read and restore the SSH account's files, and uploads the HTML report and `test-results/`.

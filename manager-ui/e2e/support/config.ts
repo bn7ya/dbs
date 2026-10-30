@@ -10,6 +10,7 @@ export const SSH = {
   port: Number(env('E2E_SSH_PORT', '2222')),
   username: env('E2E_SSH_USER', 'dbs-ssh'),
   password: env('E2E_SSH_PASSWORD', 'dbs-ssh-password'),
+  sudoPassword: env('E2E_SSH_SUDO_PASSWORD', ''),
   fingerprint: env('E2E_SSH_FINGERPRINT', ''),
   projectDir: env('E2E_SSH_PROJECT_DIR', '/srv/e2e/app'),
   python: env('E2E_SSH_PYTHON', '/srv/e2e/app/.venv/bin/python'),
@@ -24,6 +25,13 @@ export const SSH = {
 export const FINGERPRINT: string | RegExp = SSH.fingerprint || /^SHA256:[A-Za-z0-9+/]{43}$/;
 
 export const ALLOWED_FOLDERS = [SSH.mediaDir, SSH.existingDir];
+
+export const HOST_PROFILE = {
+  runs_in: 'host',
+  database: 'sqlite',
+  database_runs: 'file',
+  settings_from: 'folder_env',
+};
 
 export const TARGET = {
   projectDir: env('E2E_SSH_TARGET_PROJECT_DIR', '/srv/e2e/target'),

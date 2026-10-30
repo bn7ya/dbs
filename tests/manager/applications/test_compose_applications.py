@@ -295,3 +295,34 @@ def test_the_passphrase_is_read_from_inside_the_service(
     assert ServerConnectionService(admin).backup_passphrase(stored) == (
         "derived-passphrase-from-the-container"
     )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("env_name", "settings_from"),
+    [(".env.prod", "compose_env_file"), ("settings.env", "folder_env")],
+)
+def test_the_check_finds_settings_where_compose_names_them_as_discovery_does(
+    api, compose_application, monkeypatch, tmp_path, env_name, settings_from
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "compose.yaml").write_text(
+        "services:\n  backend:\n    image: shop\n    env_file: .env.prod\n", encoding="utf-8"
+    )
+    (project / env_name).write_text("SECRET_KEY=x\n", encoding="utf-8")
+    ApplicationRepository().update(
+        compose_application,
+        project_dir=str(project),
+        compose_files=["compose.yaml"],
+        env_path=str(project / env_name),
+        env_location=Application.EnvLocation.HOST,
+        deployment={"settings_from": "compose_env_file"},
+    )
+    connected_to(monkeypatch, ComposeHost(tmp_path / "container"))
+
+    report = api.post(detail(compose_application, "check/")).json()["last_check_report"]
+
+    assert report["detected"]["settings_from"] == settings_from
+    disagreements = [m["found"] for m in report["mismatches"] if m["field"] == "settings_from"]
+    assert disagreements == ([] if settings_from == "compose_env_file" else ["folder_env"])

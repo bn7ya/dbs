@@ -12,7 +12,10 @@ const setupNeeded = async (request: APIRequestContext): Promise<boolean> =>
 
 const setupToken = (): string => SETUP_TOKEN ?? readFileSync(join(DATA_DIR, 'setup.token'), 'utf8').trim();
 
-test('the first visit creates the account from the setup link the server printed', async ({ page, request }) => {
+test('the developer opens the printed setup link, creates the master account and turns on two-factor', async ({
+  page,
+  request,
+}) => {
   test.skip(!(await setupNeeded(request)), 'The manager already has an account.');
 
   await page.goto('/servers');

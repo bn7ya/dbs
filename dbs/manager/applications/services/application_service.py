@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from dbs.manager.applications import deployment
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.paths import host_path
 from dbs.manager.applications.services import facts as found_facts
+from dbs.manager.applications.services.discovery_service import compose_env_files
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.common.paths import absolute_path
@@ -461,7 +463,7 @@ class ApplicationService:
                 "kind": application.kind,
                 "engine": application.engine,
                 "project_dir": application.project_dir,
-                "env": _env_entries(application),
+                "env": _env_entries(application, remote),
             },
             database=database,
             services_found=services,
@@ -627,13 +629,20 @@ def _exists(remote: RemoteHost, path: str) -> bool:
         return False
 
 
-def _env_entries(application: Application) -> list[dict[str, str]]:
+def _env_entries(application: Application, remote: RemoteHost) -> list[dict[str, str]]:
     if not application.env_path:
         return []
     mapped = host_path(application, application.env_path)
     if application.env_in_container and mapped is None:
         return [{"path": application.env_path, "location": "container", "source": "dbs"}]
-    return [{"path": application.env_path, "location": "host", "source": "folder"}]
+    on_host = mapped if application.env_in_container else application.env_path
+    named_by_compose = (
+        compose_env_files(remote, application.project_dir, application.compose_files)
+        if application.kind == Application.Kind.COMPOSE
+        else []
+    )
+    source = "compose" if posixpath.normpath(on_host) in named_by_compose else "folder"
+    return [{"path": application.env_path, "location": "host", "source": source}]
 
 
 def _container_names(remote: RemoteHost, engine: str) -> list[str]:

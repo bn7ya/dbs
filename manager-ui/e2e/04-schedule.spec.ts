@@ -32,7 +32,7 @@ const planMenu = async (page: Page, journey: Journey, plan: string, item: PlanAc
   await page.getByRole('menuitem', { name: journey.t(item) }).click();
 };
 
-test.describe('the schedule', () => {
+test.describe('a developer schedules backups in their time zone and collects dumps the server keeps', () => {
   let api: Api;
   let name = '';
   let applicationId = '';
