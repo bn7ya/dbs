@@ -8,7 +8,7 @@ import type {
   PlanRecord,
   ServerRecord,
 } from './api.types';
-import { ADMIN, ALLOWED_FOLDERS, SSH } from './config';
+import { ADMIN, ALLOWED_FOLDERS, HOST_PROFILE, SSH } from './config';
 import { freshCode } from './totp';
 
 const sessions = new Map<string, Api>();
@@ -87,6 +87,7 @@ export class Api {
       remote_backup_dir: SSH.remoteBackupDir,
       file_roots: ALLOWED_FOLDERS,
       env_path: SSH.envPath,
+      deployment: HOST_PROFILE,
       ...overrides,
     });
   }
@@ -113,6 +114,21 @@ export class Api {
 
   async applicationsOf(server: string): Promise<ApplicationRecord[]> {
     return (await this.get<Page<ApplicationRecord>>(`/api/applications/?server=${server}&page_size=100`)).results;
+  }
+
+  async homeOf(server: string): Promise<string> {
+    return (await this.get<{ home: string }>(`/api/servers/${server}/browse/`)).home;
+  }
+
+  async finished(activity: number, timeout: number): Promise<ActivityRecord> {
+    const read = () => this.get<ActivityRecord>(`/api/activity/${activity}/`);
+    await expect.poll(async () => (await read()).status, { timeout, intervals: [2_000] }).toMatch(/^(succeeded|failed)$/);
+    return read();
+  }
+
+  async activities(application: string, action: string): Promise<ActivityRecord[]> {
+    const query = `application=${application}&action=${encodeURIComponent(action)}&page_size=100`;
+    return (await this.get<Page<ActivityRecord>>(`/api/activity/?${query}`)).results;
   }
 
   async deleteApplication(id: string): Promise<void> {

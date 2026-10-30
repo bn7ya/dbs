@@ -4,7 +4,7 @@ import { baseUrlOf, expect, test } from './support/fixtures';
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('deploying in place and moving to another application', () => {
+test.describe('a developer deploys a change in place, then rehearses moving onto a second project', () => {
   // The fixture serves a second Django project unless E2E_SSH_TARGET_PROJECT_DIR is set empty.
   test.skip(TARGET.projectDir === '', 'needs a second Django project with django-dbs on the SSH fixture');
 

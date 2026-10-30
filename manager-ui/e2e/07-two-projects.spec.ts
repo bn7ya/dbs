@@ -3,12 +3,9 @@ import { Api } from './support/api';
 import { SSH, TARGET } from './support/config';
 import { baseUrlOf, expect, test } from './support/fixtures';
 import type { Journey } from './support/fixtures.types';
+import { answer, stepIs } from './support/wizard';
 
 test.describe.configure({ mode: 'serial' });
-
-const stepIs = async (form: Locator, name: string): Promise<void> => {
-  await expect(form.getByRole('button', { name: new RegExp(`^${name}`), expanded: true })).toBeVisible();
-};
 
 type Pick = (page: Page, form: Locator, journey: Journey) => Promise<void>;
 
@@ -50,6 +47,10 @@ const addApplication = async (
   const form = page.getByRole('main');
   const next = form.getByRole('button', { name: t('next'), exact: true });
 
+  await stepIs(form, t('stepProfile'));
+  await answer(form, journey, 'qRunsIn', 'runsInHost');
+  await answer(form, journey, 'qDatabase', 'databaseSqlite');
+  await answer(form, journey, 'qDatabaseRuns', 'databaseInAFile');
   await next.click();
   await pick(page, form, journey);
   await stepIs(form, t('stepDiscovery'));
@@ -74,7 +75,7 @@ const addApplication = async (
   await expect(form.getByText(t('testBackupWorked'))).toBeVisible({ timeout: 180_000 });
 };
 
-test.describe('two applications on one server', () => {
+test.describe('a developer runs two Django projects on one server and adds both', () => {
   test.skip(TARGET.projectDir === '', 'needs a second Django project with django-dbs on the SSH fixture');
 
   let api: Api;
@@ -112,6 +113,7 @@ test.describe('two applications on one server', () => {
     expect(a.python_path).toBe(SSH.python);
     expect(b.python_path).toBe(TARGET.python);
     expect([a.last_check_status, b.last_check_status]).toEqual(['ok', 'ok']);
+    expect([a.deployment.database, b.deployment.database]).toEqual(['sqlite', 'sqlite']);
 
     const [backupsOfA, backupsOfB] = await Promise.all([api.backups(a.id), api.backups(b.id)]);
     expect(backupsOfA).toHaveLength(1);

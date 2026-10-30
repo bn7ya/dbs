@@ -6,7 +6,7 @@ import { folderSnapshot, remoteExists, remoteReachable, scratchFile } from './su
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('backups', () => {
+test.describe('a developer backs up their application, checks the files and rehearses a restore', () => {
   let api: Api;
   let name = '';
   let backupsUrl = '';
@@ -29,7 +29,7 @@ test.describe('backups', () => {
     remoteFolder.restore();
   });
 
-  test('a new application has no backups yet', async ({ page, journey }) => {
+  test('a new application has no backups yet, and says how to take one', async ({ page, journey }) => {
     const { t } = journey;
     await journey.signIn(page);
     await page.goto(backupsUrl);

@@ -26,6 +26,11 @@ export function remoteExists(remotePath: string): boolean | null {
   return existsSync(local(remotePath));
 }
 
+export function removeRemote(remotePath: string): void {
+  if (!remoteReachable) return;
+  rmSync(local(remotePath), { recursive: true, force: true });
+}
+
 export function listRemote(remotePath: string): string[] | null {
   if (!remoteReachable) return null;
   return readdirSync(local(remotePath)).sort();

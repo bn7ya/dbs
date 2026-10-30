@@ -5,6 +5,17 @@ export interface ServerRecord {
   last_check_status: string;
 }
 
+export interface DeploymentRecord {
+  runs_in?: string;
+  engine?: string;
+  database?: string;
+  database_runs?: string;
+  settings_from?: string;
+  source?: string;
+  process_manager?: string;
+  web_server?: string;
+}
+
 export interface ApplicationRecord {
   id: string;
   name: string;
@@ -17,6 +28,7 @@ export interface ApplicationRecord {
   remote_backup_dir: string;
   file_roots: string[];
   env_path: string;
+  deployment: DeploymentRecord;
   has_backup_passphrase: boolean;
   last_check_status: string;
   deploy_steps: unknown[];

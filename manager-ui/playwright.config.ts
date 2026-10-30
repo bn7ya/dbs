@@ -44,16 +44,16 @@ export default defineConfig({
       },
 
   projects: [
-    { name: 'setup', testMatch: /00-setup\.spec\.ts/, use: { ...devices['Desktop Chrome'], locale: 'en-US' } },
+    { name: 'setup', testMatch: /00-first-run\.spec\.ts/, use: { ...devices['Desktop Chrome'], locale: 'en-US' } },
     {
       name: 'ltr',
-      testIgnore: /00-setup\.spec\.ts/,
+      testIgnore: /00-first-run\.spec\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], locale: 'en-US' },
     },
     {
       name: 'rtl',
-      testIgnore: /00-setup\.spec\.ts/,
+      testIgnore: /00-first-run\.spec\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'], locale: 'ar' },
     },
