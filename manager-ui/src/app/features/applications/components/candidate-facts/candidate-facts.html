@@ -18,6 +18,20 @@
   }
 </div>
 
+@for (mismatch of mismatches(); track mismatch.field) {
+  <app-notice severity="warning">
+    {{
+      'applications.deployment.saidFound'
+        | t
+          : {
+              question: ('applications.deployment.' + mismatch.field + '.label' | t),
+              said: (answer(mismatch.field, mismatch.said) | t),
+              found: (answer(mismatch.field, mismatch.found) | t),
+            }
+    }}
+  </app-notice>
+}
+
 @if (candidate().problems.length > 0) {
   <ul class="facts__problems" role="list">
     @for (problem of candidate().problems; track problem) {
@@ -28,6 +42,8 @@
     }
   </ul>
 }
+
+<app-next-steps [problems]="candidate().problems" [place]="candidate()" />
 
 <dl class="facts__list">
   <div class="facts__row">

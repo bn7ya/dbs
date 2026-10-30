@@ -198,7 +198,8 @@
     "passphrase_missing": "The backup passphrase of this application is not saved here.",
     "container_not_running": "The application's container is not running.",
     "container_engine_missing": "Neither Docker nor Podman answers on this server.",
-    "engine_permission_denied": "The SSH user may not use the container engine. Add it to the engine's group, or run the containers with rootless Podman as that user."
+    "engine_permission_denied": "The SSH user may not use the container engine. Add it to the engine's group, or run the containers with rootless Podman as that user.",
+    "confirm_name_mismatch": "Type the name exactly as it is shown."
   },
   "actions": {
     "cancel": "Cancel",

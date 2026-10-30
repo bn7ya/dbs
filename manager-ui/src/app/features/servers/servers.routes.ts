@@ -31,6 +31,11 @@ export const routes: Routes = [
         loadChildren: () => import('@features/applications/application-wizard.routes').then((m) => m.routes),
       },
       {
+        path: ':serverId/move',
+        canActivate: [capabilityGuard('relocation.rehearse')],
+        loadChildren: () => import('@features/relocation/relocation.routes').then((m) => m.routes),
+      },
+      {
         path: ':serverId',
         canActivate: [serversGuard],
         loadComponent: () => import('./pages/server/server').then((m) => m.ServerPage),

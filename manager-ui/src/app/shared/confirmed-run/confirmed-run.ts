@@ -4,6 +4,7 @@ import { MatButton } from '@angular/material/button';
 import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 
+import type { Capability } from '@core/auth/data/auth.types';
 import { Can } from '@core/auth/directives/can';
 import type { ApiError } from '@core/http/api.types';
 import { ErrorTextPipe, errorText } from '@core/i18n/error-text.pipe';
@@ -13,8 +14,7 @@ import { FieldError } from '@shared/field/field-error';
 import { isolated } from '@shared/isolated/isolated';
 import { Notice } from '@shared/notice/notice';
 import { PasswordInput } from '@shared/password-input/password-input';
-import type { RunRequest } from '../../data/redeploy.types';
-import type { RunAttempt } from './confirmed-run.types';
+import type { RunAttempt, RunRequest } from './confirmed-run.types';
 
 const FIELD_FAILURES: ReadonlySet<string> = new Set(['invalid_password', 'confirm_name_mismatch']);
 
@@ -51,6 +51,8 @@ export class ConfirmedRun {
   readonly error = input<ApiError | null>(null);
   readonly ready = input(true);
   readonly primary = input(false, { transform: booleanAttribute });
+  readonly runCapability = input<Capability>('redeploy.run');
+  readonly rehearseCapability = input<Capability>('redeploy.rehearse');
 
   readonly attempted = output<RunAttempt>();
   readonly run = output<RunRequest>();

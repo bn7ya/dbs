@@ -71,6 +71,7 @@ def test_each_role_holds_every_capability_of_the_roles_below_it():
         Capability.ENV_PULL,
         Capability.FILES_DOWNLOAD,
         Capability.REDEPLOY_REHEARSE,
+        Capability.RELOCATION_REHEARSE,
     }
     assert admin - operator == {
         Capability.SERVERS_MANAGE,
@@ -84,6 +85,7 @@ def test_each_role_holds_every_capability_of_the_roles_below_it():
         Capability.ENV_PUSH,
         Capability.FILES_CHANGE,
         Capability.REDEPLOY_RUN,
+        Capability.RELOCATION_RUN,
         Capability.SHELL_OPEN,
     }
 

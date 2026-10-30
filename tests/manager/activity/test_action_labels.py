@@ -20,6 +20,7 @@ from dbs.manager.files.services import file_service
 from dbs.manager.redeploy import deploy as deploys
 from dbs.manager.redeploy import services as redeploy
 from dbs.manager.redeploy.catalogue import KINDS
+from dbs.manager.relocation import steps as relocation
 from dbs.manager.servers.services import (
     host_key_confirmation_service,
     server_service,
@@ -62,6 +63,15 @@ def recordable() -> set[str]:
         deploys.DEPLOY,
         shell.OPEN,
         console.RUN,
+    }
+    codes |= {relocation.ACTION}
+    codes |= {
+        f"{relocation.PREFIX}{step}"
+        for step in (
+            *relocation.PLAN_STEPS,
+            *relocation.PREPARE_STEPS,
+            *relocation.APPLICATION_STEPS,
+        )
     }
     codes |= {f"redeploy.{step}" for step in redeploy.MOVE_STEPS}
     codes |= {f"{redeploy.REVERT}_{step}" for step in redeploy.REVERT_STEPS}

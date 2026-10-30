@@ -356,7 +356,11 @@ def test_discovery_finds_the_project_over_sftp(api, admin, project, monkeypatch)
         "compatible": False,
         "problems": ["dbs_missing"],
     }
-    assert [run["argv"][:2] for run in hosts.runs("10.0.0.5")][-3:] == [
+    assert [
+        run["argv"][:2]
+        for run in hosts.runs("10.0.0.5")
+        if run["argv"][0] != "git"
+    ][-3:] == [
         [f"{app}/.venv/bin/python", "-c"],
         ["python3", "-c"],
         ["python", "-c"],
@@ -412,7 +416,10 @@ def test_discovery_prefers_what_the_project_says_about_itself(
     ]
     assert (candidate["dbs_version"], candidate["compatible"]) == ("0.7.1", True)
     assert candidate["problems"] == []
-    assert hosts.runs("10.0.0.5")[-1]["setup"] == [
+    [connection] = [
+        run for run in hosts.runs("10.0.0.5") if run["argv"][-2:] == ["connection", "--json"]
+    ]
+    assert connection["setup"] == [
         f"cd {app} || exit 1",
         "export DJANGO_SETTINGS_MODULE=shop.settings.prod",
     ]
@@ -475,7 +482,9 @@ def test_discovery_finds_a_virtualenv_of_any_name_that_has_django_dbs(
         "python3",
         "python",
     ]
-    assert hosts.runs("10.0.0.5")[-1]["argv"][:3] == [venv, "manage.py", "dbs"]
+    assert [
+        run["argv"][:3] for run in hosts.runs("10.0.0.5") if "manage.py" in run["argv"]
+    ][0] == [venv, "manage.py", "dbs"]
 
 
 @pytest.mark.django_db

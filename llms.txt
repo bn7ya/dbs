@@ -31,7 +31,11 @@ The manager runs outside any project: `django_dbs run` (also `django-dbs run` or
 `dbs run`; a local app that opens the browser), `django_dbs export` / `import` to move it,
 `django_dbs mcp` for Claude. A server is an SSH machine; an application is one Django
 project on it, added from a folder with `django_dbs app add NAME --server S --folder F`,
-which finds the containers, the Python, `manage.py` and the `.env`. Everything the
+which finds the containers, the Python, `manage.py` and the `.env`, guided by how the
+developer says it runs (`--deployment runs_in=compose`, the database, where settings come
+from). `django_dbs server move S --to T` carries every application on a server, with its
+code, `.git`, images, volumes, `.env` and data, onto a server that may have nothing
+installed; it rehearses unless `--real`. Everything the
 interface does is also `django_dbs server|app|backup|plan|activity|env|files|redeploy VERB`;
 `createuser`, `account` and `password` manage its accounts. The interface also has a
 console for these commands and, for admins, a terminal on a server or in a container.
@@ -75,8 +79,8 @@ a human.
   transfer that broke. The panel has no SFTP targets and no console; there is no dbs-client,
   and `dbs.contrib` was removed in 0.8.0.
 - An application's backup passphrase is stored in the manager once and never changed. Deploy
-  steps come from a fixed catalogue; Claude's MCP tools rehearse deploys, restores and moves
-  but never run them for real, and never reach the console or the terminal.
+  steps come from a fixed catalogue; Claude's MCP tools rehearse deploys, restores, moves and
+  server moves but never run them for real, and never reach the console or the terminal.
 - Admin sessions are scored by an IsolationForest; a flagged session cannot change or
   export anything, and a high score ends the session.
   `manage.py dbs security unlock USER` always gets you back in.

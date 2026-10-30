@@ -8,8 +8,9 @@ import { LocaleStore } from '@core/i18n/locale.store';
 import { Toaster } from '@shared/toaster/toaster';
 import { deployOutcomeOf } from '../data/job-detail';
 import { RedeployApi } from '../data/redeploy.api';
-import type { DeployStep, RunRequest } from '../data/redeploy.types';
-import { JobRun } from './job-run';
+import type { RunRequest } from '@shared/confirmed-run/confirmed-run.types';
+import type { DeployStep } from '../data/redeploy.types';
+import { JobRun } from '@core/jobs/job-run';
 
 const STEP_FIELD = /^steps\.(\d+)$/;
 const STEPS_FIELD = 'steps';

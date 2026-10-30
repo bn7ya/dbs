@@ -6,6 +6,8 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
+import { VIEWER } from '@core/auth/testing/identity.fixtures';
+import { AuthStore } from '@core/auth/state/auth.store';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { errorText } from '@core/i18n/error-text.pipe';
 import { LocaleStore } from '@core/i18n/locale.store';
@@ -126,6 +128,24 @@ describe('ServerOverviewPage', () => {
 
     expect(prompted.mock.calls[0][1].data).toMatchObject({ bodyValues: { name: '⁨Production web⁩', into: '⁨Web again⁩' } });
     expect(navigate).toHaveBeenCalledWith(['/servers', TWIN.id]);
+  });
+
+  it('offers to move the server onto another one', async () => {
+    await show(SERVER);
+
+    const link = Array.from(html().querySelectorAll('a')).find((found) => found.textContent?.includes('Move to another server'));
+    expect(link?.getAttribute('href')).toBe(`/servers/${SERVER.id}/move`);
+    expect(html().textContent).toContain('This server keeps running untouched.');
+  });
+
+  it('offers no move to a role that may not even plan one', async () => {
+    const restoring = TestBed.inject(AuthStore).restore();
+    http.expectOne('/api/auth/me/').flush(VIEWER);
+    await restoring;
+
+    await show(SERVER);
+
+    expect(html().textContent).not.toContain('Move to another server');
   });
 
   it('shows the public key of a key server on request, and none for a password server', async () => {

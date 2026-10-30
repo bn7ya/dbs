@@ -7,7 +7,7 @@ import { MatError, MatFormField, MatHint, MatLabel } from '@angular/material/for
 import { MatInput } from '@angular/material/input';
 import { MatRadioButton, MatRadioGroup } from '@angular/material/radio';
 import { MatStep, MatStepper, MatStepperIcon } from '@angular/material/stepper';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { Can } from '@core/auth/directives/can';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
@@ -29,6 +29,8 @@ const STEPS: readonly WizardStep[] = ['address', 'hostKey', 'signIn', 'check', '
 const SIGN_IN_CHOICES: readonly SignInChoice[] = ['generate', 'key', 'password'];
 
 const FIRST_AFTER_CREATION = STEPS.indexOf('check');
+
+const MOVE_PATH = /^\/servers\/[0-9a-f-]{36}\/move$/;
 
 const NEW_DRAFT: WizardDraft = {
   name: '',
@@ -86,12 +88,14 @@ const FIELD_STEPS: Readonly<Partial<Record<WizardField, WizardStep>>> = {
 })
 export class ServerWizardPage {
   private readonly store = inject(ServerWizardStore);
+  private readonly route = inject(ActivatedRoute);
 
   readonly steps = STEPS;
   readonly signInChoices = SIGN_IN_CHOICES;
   readonly firstAfterCreation = FIRST_AFTER_CREATION;
   readonly signInStep = STEPS.indexOf('signIn');
   protected readonly confirmId = uniqueId('host-key-confirmed');
+  readonly returnTo = moveReturn(this.route.snapshot.queryParamMap.get('returnTo'));
 
   readonly step = signal(0);
   protected readonly shownStep = signal(0);
@@ -287,4 +291,8 @@ function creationOf(draft: WizardDraft, hostKey: HostKey): ServerCreate {
     ...secrets,
     host_key: hostKey.line,
   };
+}
+
+function moveReturn(path: string | null): string | null {
+  return path !== null && MOVE_PATH.test(path) ? path : null;
 }

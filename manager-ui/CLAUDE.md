@@ -146,7 +146,8 @@ hangs off its application.
 /servers                             servers, and host keys waiting for a person
 /servers/new                         add a server: address and host key, sign-in, check
 /servers/:serverId                   tabs: overview | applications | terminal | activity
-/servers/:serverId/applications/new  add an application: folder, discovery, review, check, passphrase, test backup
+/servers/:serverId/applications/new  add an application: how it runs, folder, discovery, review, check, passphrase, test backup
+/servers/:serverId/move              move every application onto another server: target, applications, plan, move, progress
 /applications                        every application
 /applications/:applicationId         tabs: overview | backups | schedule | files | environment | deploy | terminal | activity
 /backups                             every application's backups and the storage they use
@@ -271,7 +272,9 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   `AppStepperIntl`**.
 - **`csrfInterceptor`, `errorInterceptor`, `apiErrorOf()`** — CSRF on unsafe requests; failures as
   `ApiError`.
-- **`JobsApi`, `JobWatcher`** — follow a background job to its end.
+- **`JobsApi`, `JobWatcher`** — follow a background job to its end. **`JobRun`**
+  (`core/jobs/job-run.ts`) is one job at a time, started and then followed, built inside a store:
+  `busy`, `error`, `job`, `rehearsal`, `start(rehearsal, started$)`, `forget()`.
 
 ## shared
 
@@ -317,6 +320,12 @@ overlay. Journeys select by role and accessible name, in both languages, from `e
   `FakeTerminalScreens` from `shared/terminal-view/testing/`; nothing else imports xterm, and its
   stylesheet loads in the `vendor` cascade layer. xterm cannot lay out right-to-left text, so pages
   put their notices beside the terminal, never in it.
+- **`ConfirmedRun`** (`<app-confirmed-run prefix expectedName [busy] [rehearsing] [error]
+  [runCapability] [rehearseCapability] primary (run)>`) — Rehearse, and behind `runCapability` the
+  account password, the typed name and the real button; it emits `RunRequest` `{rehearsal,
+  password, confirm_name}`. Its strings are `<prefix>.rehearse|rehearsing|run|running|
+  passwordHint|confirmName|confirmNameHint`; fields a run also needs go in `[runFields]`. Redeploy
+  and relocation share it.
 - **`PasswordInput`**, **`EmptyState`**, **`StatusPage`**, **`FieldError`**, **`AppDatePipe`**,
   **`FileSizePipe`**, **`uniqueId()`**.
 
@@ -345,7 +354,8 @@ role cannot take are left out with `*appCan`.
   decided yet, with Confirm (asked once more) and Reject. The server page has its check and a
   `ConnectionDot` in the header and a `mat-tab-nav-bar`: overview, applications
   (`server-applications.routes.ts` of the applications feature), terminal (only with `shell.open`)
-  and activity. The overview runs the check and shows `EnginesReport` (the system, each engine
+  and activity. The overview runs the check and offers **Move to another server**
+  (`relocation.rehearse`). It shows `EnginesReport` (the system, each engine
   installed, usable, its version and Compose, `engine_permission_denied` explained, and the
   `timeout` command), edits the connection in `ServerForm` (only what changed is sent; the account
   password field appears when the backend asks), re-pins a changed host key (`HostKeyReview`,
@@ -357,7 +367,10 @@ role cannot take are left out with `*appCan`.
   confirmed; sign-in (create a key pair, paste a key with an optional passphrase, or a password —
   the server is created here, and a generated key's `authorized_keys` line is shown to copy); check,
   with `EnginesReport`, saying to add a generated key the server refused; and a last step whose main
-  action is "Add an application". Steps up to sign-in lock once the server exists.
+  action is "Add an application". Steps up to sign-in lock once the server exists. Opened with
+  `?returnTo=/servers/<id>/move` (nothing else is followed), the check says a server with nothing
+  installed will do and the last step's main action is "Back to the move", with `?target=` the new
+  server.
 - **applications** (`/applications`, `/applications/:applicationId`,
   `/servers/:serverId/applications`, `/servers/:serverId/applications/new`) — an application is one
   Django project on a server: on the host, in a Compose service or in a container, under Docker or
@@ -373,9 +386,18 @@ role cannot take are left out with `*appCan`.
   written inside a container is lost when it is created again, edits them in `ApplicationForm`
   (`SettingsFields` with browse buttons, only what changed sent), shows the backup passphrase behind
   the account password with the warning that it must never change or reads it from the application
-  while there is none, and removes the application behind the account password.
+  while there is none, and removes the application behind the account password. Its **How it
+  runs** card lists each deployment answer beside what the check detected (`DeploymentRow`),
+  marks a difference, saves what was found with *Use what was found* and edits the answers in
+  `DeploymentDialog` (`applications.manage`, no password). `CheckReport` and `CandidateFacts`
+  show the check's `problems` as `NextSteps`: `nextSteps(problems, place)` picks
+  `applications.nextSteps.<code>.<variant>` for how the application runs, with the command in a
+  `dir="ltr"` `<bdi>`.
 - **application wizard** (`/servers/:serverId/applications/new`, `ApplicationWizardStore`) — a
-  linear vertical `mat-stepper`: folder, with the server browser; discovery (`POST
+  linear vertical `mat-stepper`: how it runs (`DeploymentQuestions`, one `mat-radio-group` per
+  question of `data/deployment.ts`, each starting on *Not sure*; the host questions only for a
+  project on the server), whose answers set the folder hint and go with discovery and creation;
+  folder, with the server browser; discovery (`POST
   /api/applications/discover/` on arrival, asking the account password through `PasswordPrompt` once
   the setup window is over), which says when the folder is not there and offers the suggested
   `folders`, says when `trusted: false` means nothing was run, and offers the candidates as a
@@ -448,6 +470,18 @@ role cannot take are left out with `*appCan`.
   application, the backup to restore if this one does not answer (the newest, or none), the `.env`
   version and whether to replace the data; a real move types the target's name, and a move that
   stopped after changing the target offers "Revert the new application".
+- **relocation** (`/servers/:serverId/move`, `capabilityGuard('relocation.rehearse')`,
+  `ServerMoveStore`) — a linear vertical `mat-stepper`: the new server (every other server, or
+  *Add a new server* to the server wizard and back with `?target=`); the applications, all ticked,
+  each with its name on the new server (`NAME (NEW SERVER)` by default, `movedName()`, kept once
+  typed) and folder; the plan, a rehearsal followed with `JobRun` and shown by `MovePlan` (the new
+  server's system, packages, blockers as danger notices, notes, and per application its folder,
+  git, images, volumes, binds, database, Python and services); the move, a `ConfirmedRun`
+  (`relocation.run`, the new server's name typed) with the `sudo` passwords in `[runFields]` when
+  the plan's `needs_sudo` asks; and progress (`MoveProgress`: a `StepsList` per phase, the current
+  item's bytes as a `mat-progress-bar`, `JobConnection`), with *Resume the move* when it stopped,
+  the moved applications' links and the cutover note when it finished. `data/move-detail.ts` reads
+  the job's `detail` defensively.
 - **console** (`/console`, `console.run`) — one `django_dbs` line at a time as the signed-in account
   (`POST /api/console/`). A `role="log"` area (`aria-live="polite"`, monospace, `dir="ltr"`) keeps
   the commands, their output and exit codes, newest at the bottom; a failure carries a danger edge
@@ -500,6 +534,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | GET/PATCH | `/api/servers/{id}/` | `{name, host, port?, username, auth_method, private_key?, key_passphrase?, password?, account_password?}` → `Server` (`…ServerSummary`, `auth_method, has_private_key, has_key_passphrase, has_password, host_key, host_key_type, host_key_fingerprint, last_check_error, last_check_report, timeout_on_host, created_at, updated_at`) |
 | DELETE | `/api/servers/{id}/` | `{account_password}` → 204; `server_has_applications` (409) while it runs any |
 | POST | `/api/servers/{id}/check/` | → `Server`; `last_check_report` is `{system, engines: {docker\|podman: {installed, usable, version, compose, error}}, timeout}` |
+| POST | `/api/servers/{id}/move/` | `{target_server, applications: [{application, name?, folder?, skip_volumes?, copy_plans?}], rehearsal, password, confirm_name, sudo_password, source_sudo_password, resume_of?}` → 202 `{activity}`; the job's `detail` holds `inventory`, `phases`, `blockers`, `current`, `leftovers`, `created_applications` |
 | POST | `/api/servers/{id}/merge/` | `{into, account_password}` → `Server`, the one kept; refused unless both are the same machine |
 | POST | `/api/servers/fingerprint/` | `{host, port}` → `{key_type, line, fingerprint}` |
 | GET | `/api/servers/host-keys/?page=&page_size=` | → page of `HostKeyConfirmation` (`id`, `host`, `port`, `key_type`, `fingerprint`, `status`, `requested_at`, `expires_at`) |
@@ -508,7 +543,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/servers/{id}/host-key/` | `{host_key, password}` → `Server` |
 | GET | `/api/servers/{id}/browse/?path=&page=&page_size=` | → `RemoteFolder` (`path`, `parent`, `home`, `project`, `truncated`, page of entries); no `path` is the home folder |
 | GET | `/api/applications/?server=&search=&page=&page_size=` | → page of `ApplicationSummary` (`id, name, server: {id, name, host, port, connection_state}, kind, engine, compose_service, container_name, project_dir, last_check_status, last_checked_at`) |
-| POST | `/api/applications/discover/` | `{server, folder?, account_password?}` → `Discovery` `{folder, trusted, listing, engines, candidates, folders}`; the password is required once the server's setup window is over |
+| POST | `/api/applications/discover/` | `{server, folder?, account_password?, deployment?}` → `Discovery` `{folder, trusted, listing, engines, candidates, folders}`; the password is required once the server's setup window is over |
 | POST | `/api/applications/` | `ApplicationSettings` + `server` + `account_password` (always; the wizard asks with `PasswordPrompt` on `account_password: required`) → 201 `Application` |
 | GET/PATCH | `/api/applications/{id}/` | `ApplicationSettings` + `account_password?` → `Application` |
 | DELETE | `/api/applications/{id}/` | `{account_password}` → 204 |
@@ -556,8 +591,9 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 `ApplicationSettings` is `{name, kind: host|compose|container, engine: ""|docker|podman,
 compose_project, compose_service, compose_files, container_name, project_dir, workdir,
 python_path, manage_path, settings_module, remote_backup_dir, mounts: [{type, source,
-destination, rw}], file_roots, env_path, env_location: host|container, backup_passphrase?,
-discovered?}`. `Application` returns those (never the passphrase) with `server`,
+destination, rw}], file_roots, env_path, env_location: host|container, deployment, backup_passphrase?,
+discovered?}`; `deployment` is `{runs_in?, engine?, database?, database_runs?, settings_from?,
+source?, process_manager?, web_server?}`, an empty value meaning not sure. `Application` returns those (never the passphrase) with `server`,
 `has_backup_passphrase`, `last_check_status`, `last_check_error`, `last_checked_at`,
 `last_check_report` (`{system, dbs_version, dbs_error, python_suggestion, backup_command, env_file,
 roots, remote_backup_dir, container?, panel_schedule?: {enabled, mode}}`), `last_health`,
@@ -567,7 +603,9 @@ A `Discovery` candidate is `{kind, engine, compose_project, compose_service, com
 container_name, replicas, running, project_dir, workdir, python_path, python_paths, manage_path,
 settings_module, remote_backup_dir, backup_dir_on_host, mounts, file_roots: [{path, on_host}],
 env: [{path, location, source}], dbs_version, compatible, problems, score}`, best first; `problems`
-holds codes (`container_not_running`, `dbs_missing`, `dbs_too_old`, `backup_dir_not_mounted`).
+holds codes (`container_not_running`, `dbs_missing`, `dbs_too_old`, `backup_dir_not_mounted`), and each has
+`facts`, `detected` and `mismatches` against the deployment sent. The check report adds
+`facts`, `detected`, `mismatches` and `problems`.
 With no folder, or one that is not there, `folders` suggests project folders under the home
 folder. `trusted: false` means the folder or its parent can be written by others, so nothing in
 it was run.
@@ -630,7 +668,8 @@ tabs), `03-backups`, `04-plans` (the Schedule tab: first run, time zone, pause, 
 folders and collect plans), `05-files`, `06-envfile`, `07-activity`, `08-lockout`, `09-redeploy` (deploy
 steps, a rehearsed and a real deploy, a rehearsed move onto the second application), `10-two-projects`
 (two applications on one server, one picked from discovery's suggestions and one through the server
-browser), `11-console`, `12-terminal` and `13-container`. Everything but `02` and `10` creates its
+browser), `11-console`, `12-terminal`, `13-container` and `14-server-move` (a rehearsed move onto a
+second record of the same SSH account: the same-machine note and no blocker). Everything but `02` and `10` creates its
 server and application through `e2e/support/api.ts` and removes them afterwards.
 
 **Rules.** Journeys select by role and accessible name, and every string they select by comes from

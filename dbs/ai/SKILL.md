@@ -244,11 +244,24 @@ in a project's `INSTALLED_APPS`.
   `manage.py dbs connection --json`, maps container paths to the server through the mounts
   and offers `.env` candidates. It runs nothing in a folder, or a project below it, that
   another account can write to. The developer never pastes `dbs connection --json` anymore.
+- Ask the developer how the project runs, or pass what they said: `--deployment KEY=VALUE` on
+  `app discover`, `app add` and `app edit` (`runs_in` host|compose|container, `engine`,
+  `database` postgresql|mysql|mariadb|sqlite|other, `database_runs`
+  compose|this_server|elsewhere|file, `settings_from` folder_env|compose_env_file|image|environment,
+  `source` git|copied|image, `process_manager`, `web_server`). The answers rank discovery and
+  change no command; `app show` prints them beside what was found.
+- **Moving a server**: `django_dbs server move OLD --to NEW` rehearses carrying every
+  application on OLD onto NEW, which may have nothing installed, and lists the packages to
+  install, blockers and notes; `--real` asks the account password, NEW's name and the `sudo`
+  password of NEW's SSH user, installs what is missing, carries code, `.git`, images, volumes,
+  files and `.env`, restores a fresh backup and leaves OLD untouched. `--resume JOB` continues
+  a move that stopped. Through MCP, only `rehearse_server_move`.
 - Each server needs django-dbs 0.7.0 or later (0.8.0 to resume a broken transfer), a stable
   `SECRET_KEY`, `DBS_BACKUP_DIR` (on a mounted folder in a container), and an SSH user that
   owns the project and, for containers, may run `docker` (the `docker` group) or rootless
-  `podman` as itself. The manager never uses `sudo`; `engine_permission_denied` means the SSH
-  user may not use the engine.
+  `podman` as itself. Backups and the check never use `sudo`; `engine_permission_denied` means
+  the SSH user may not use the engine. Only a server move uses `sudo`, with the password the
+  person types for that move.
 - It **pulls**: each run collects backups waiting on the server under its own name, streams
   a fresh one with `dbs backup --stream`, verifies it, and only then removes the server's
   copies beyond `keep_remote` (0 to 5). A broken stream from a 0.8 server resumes where it
@@ -281,8 +294,8 @@ in a project's `INSTALLED_APPS`.
 `django_dbs mcp` is the MCP server Claude drives. Through it Claude may read everything but
 secrets, add servers, discover, add and check applications, take, verify and save backups,
 add and run plans, keep more backups, keep `.env` versions and rehearse restores, moves,
-deploys (`rehearse_deploy`) and reverts. It cannot reveal a secret, restore, move, deploy or
-revert for real, change deploy steps, push a `.env`, keep fewer backups, save a file the
+server moves (`rehearse_server_move`), deploys (`rehearse_deploy`) and reverts. It cannot
+reveal a secret, restore, move, deploy or revert for real, take a `sudo` password, change deploy steps, push a `.env`, keep fewer backups, save a file the
 manager keeps encrypted, remove or delete anything, reach the console or the terminal, or pin
 a host key a person did not confirm. When adding a server, show the person the fingerprint
 from `fingerprint_host` and wait for them to confirm it on the Servers page or with
@@ -335,7 +348,7 @@ deleting them where you find them, and the DBS manager for off-site copies.
 | The project will not start: `dbs.contrib` not found | 0.8.0 removed it. Delete `include("dbs.contrib.urls")`; backups are taken at `/admin/dbs/` or by the DBS manager |
 | A panel job fails with `time_limit`, `memory_limit` or `killed` | It ran past `DBS_JOB_TIME_LIMIT`, used more than `DBS_JOB_MEMORY_LIMIT`, or its process died. Raise the limit or check the server's log; never move the job into the web request |
 | Panel jobs cannot start: the interpreter cannot load the project | Set `DBS_JOB_PYTHON` to the project's virtualenv Python, or `DBS_JOB_BOOTSTRAP`; `dbs upgrade` names the interpreter it tried |
-| Manager says `engine_permission_denied` | The SSH user may not use Docker or Podman: the `docker` group, or rootless Podman as that user. Never suggest `sudo` |
+| Manager says `engine_permission_denied` | The SSH user may not use Docker or Podman: the `docker` group, or rootless Podman as that user. Never suggest `sudo` for backups |
 | Manager backups are quarantined | The passphrase the manager stores is not the one the application's backups use. Do not change a passphrase to fix it; tell the developer |
 
 ## Testing this project

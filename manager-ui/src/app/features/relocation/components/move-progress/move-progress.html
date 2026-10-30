@@ -1,0 +1,31 @@
+<section class="progress" aria-live="polite">
+  @for (phase of phases(); track phase.key) {
+    <div class="progress__phase">
+      <h3>{{ phase.title }}</h3>
+      <app-steps-list [steps]="phase.steps" />
+    </div>
+  }
+
+  @if (current(); as now) {
+    @if (now.bytes !== undefined) {
+      <div class="progress__current">
+        <p class="text-sm text-secondary">
+          {{ 'relocation.progress.moved' | t: { size: (now.bytes | fileSize) } }}
+        </p>
+        @if (percent(); as share) {
+          <mat-progress-bar mode="determinate" [value]="share" [attr.aria-label]="'relocation.progress.current' | t" />
+        } @else {
+          <mat-progress-bar mode="indeterminate" [attr.aria-label]="'relocation.progress.current' | t" />
+        }
+      </div>
+    }
+  }
+
+  @if (job().connection; as connection) {
+    <app-job-connection [connection]="connection" />
+  }
+
+  @if (job().status === 'failed') {
+    <app-notice severity="danger">{{ job().error_code | errorText }}</app-notice>
+  }
+</section>

@@ -82,6 +82,10 @@ FORBIDDEN_PROPERTIES = {
     "compose_project",
     "compose_service",
     "compose_files",
+    "sudo_password",
+    "source_sudo_password",
+    "confirm_name",
+    "resume_of",
 }
 SHELL_MODULE_WORDS = ("console", "shell", "terminal", "subprocess", "pexpect")
 TOOLS = {
@@ -117,6 +121,7 @@ TOOLS = {
     "compare_env_versions",
     "list_files",
     "rehearse_redeploy",
+    "rehearse_server_move",
     "rehearse_deploy",
     "rehearse_revert",
 }
@@ -454,6 +459,60 @@ def test_add_application_adds_the_candidate_and_checks_it(
     )
     assert application.discovered_at is not None and application.has_backup_passphrase
     assert [entry.actor for entry in logged("application.create")] == [admin]
+
+
+@pytest.mark.django_db
+def test_add_application_keeps_how_the_person_says_it_is_deployed(
+    mcp, make_server, remote
+):
+    make_server()
+
+    added = mcp(
+        "add_application",
+        server="web-1",
+        folder=PROJECT_DIR,
+        name="shop",
+        deployment={"runs_in": "host", "database": "postgresql", "web_server": ""},
+    )
+
+    assert added.ok, added.text
+    application = ApplicationRepository().active().get()
+    assert application.deployment == {"runs_in": "host", "database": "postgresql"}
+
+
+@pytest.mark.django_db
+def test_update_application_changes_the_answers_without_a_password(
+    mcp, make_server, make_application, remote
+):
+    server = settled(make_server())
+    application = settled(make_application(name="shop", server=server))
+
+    changed = mcp(
+        "update_application",
+        application="shop",
+        deployment={"runs_in": "compose", "engine": "podman"},
+    )
+
+    assert changed.ok, changed.text
+    assert changed.data["deployment"] == {"runs_in": "compose", "engine": "podman"}
+    assert ApplicationRepository().find(application.pk).deployment == {
+        "runs_in": "compose",
+        "engine": "podman",
+    }
+
+
+@pytest.mark.django_db
+def test_a_deployment_answer_the_tool_does_not_know_is_refused(mcp, make_server, remote):
+    make_server()
+
+    found = mcp(
+        "discover_applications",
+        server="web-1",
+        folder=PROJECT_DIR,
+        deployment={"runs_in": "kubernetes"},
+    )
+
+    assert not found.ok
 
 
 @pytest.mark.django_db
@@ -845,3 +904,29 @@ def test_a_compose_application_is_added_with_its_service(
         SERVICE,
     )
     assert added.data["check"]["status"] == Application.CheckStatus.OK
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_server_move_through_mcp_is_always_a_plan(mcp, make_server, make_application, monkeypatch):
+    from dbs.manager.relocation import services as relocation_services
+
+    source = make_server(name="old")
+    make_server(name="new", host="10.0.0.6")
+    make_application(name="shop", server=source)
+    started = []
+    real_start = relocation_services.RelocationService.start
+
+    def spy(self, **kwargs):
+        started.append(kwargs)
+        return real_start(self, **kwargs)
+
+    monkeypatch.setattr(relocation_services.RelocationService, "start", spy)
+
+    planned = mcp("rehearse_server_move", source="old", target="new")
+
+    assert planned.data is not None, planned.text
+    [kwargs] = started
+    assert kwargs["rehearsal"] is True
+    assert not {"password", "sudo_password", "source_sudo_password", "confirm_name"} & {
+        key for key, value in kwargs.items() if value
+    }

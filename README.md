@@ -534,7 +534,33 @@ time, the manager starts no backup, restore or move on that application (`server
 ### Add an application
 
 You give the manager a server and a folder on it — the Django project's folder, or the
-folder that holds the compose file that runs it. It finds the rest:
+folder that holds the compose file that runs it. First the wizard asks **how the project
+runs**, and every question may be answered *Not sure*:
+
+| Question | Answers |
+|---|---|
+| Where does Django run? | on the server itself, in a Docker or Podman Compose service, in a single container |
+| Which engine? | Docker or Podman |
+| Which database, and where? | PostgreSQL, MySQL, MariaDB, SQLite or another; in the Compose project, on this server, on another machine or a managed service, or a file |
+| Where do the settings come from? | a `.env` in the project folder, a Compose `env_file`, the image, the environment |
+| Where does the code come from? | a git checkout, copied files, an image |
+| What keeps it running, and what is in front of it? | systemd, a systemd user unit, Supervisor or other; nginx, another web server or none (for a project on the server itself) |
+
+The answers guide the rest: the folder step says which folder to give, discovery puts the
+place that matches them first, and a place that differs says so ("You said Podman, found
+Docker"). Discovery and the check also read what they can without changing anything — the
+database's vendor, host and name from the settings (never its password), the git branch,
+commit, remote (without credentials) and uncommitted changes, where the `.env` comes from,
+and the systemd units, Supervisor files and nginx sites that name the folder — and the
+application's **How it runs** card on its overview shows each answer beside what was found,
+with *Use what was found* and *Edit*. Changing the answers needs no password: they change no
+command the manager runs. When the check finds a problem, it says what to do next for that
+deployment, with the command to run (add the user to the `docker` group, mount the backup
+folder into the service, install django-dbs in the image and rebuild it). From a terminal the
+answers are `--deployment KEY=VALUE` on `app discover`, `app add` and `app edit`; `app show`
+prints them beside what was found.
+
+It finds the rest:
 
 1. **The folder.** It lists the folder for `manage.py`, compose files, a `Dockerfile` or
    `Containerfile` and `.env` files. Left empty, it suggests the project folders it finds in
@@ -589,7 +615,7 @@ that, those ask for your password too.
 
 | On the server | |
 |---|---|
-| An SSH user that owns the project, with the manager's key in `~/.ssh/authorized_keys` | the manager needs no `root`, and never uses `sudo` or a shell profile |
+| An SSH user that owns the project, with the manager's key in `~/.ssh/authorized_keys` | the manager needs no `root` and no shell profile; it uses `sudo` only to prepare the server a move goes to |
 | The project, its Python and `manage.py`, on the server or in its image | the manager runs `manage.py dbs …` with fixed arguments |
 | `pip install django-dbs` and `"dbs"` in `INSTALLED_APPS`, migrated | 0.7.0 or later; 0.8.0 or later to resume a transfer that broke |
 | A stable `SECRET_KEY` (or `DBS_PASSPHRASE`) | the backup passphrase comes from it, and must never change |
@@ -633,7 +659,7 @@ SSH user itself: its containers are its own, and its SSH login needs `XDG_RUNTIM
 as a systemd login does. `podman compose` uses the provider Podman is set up with, podman-compose
 included. A bind-mounted folder must belong to the container's user inside Podman's user
 namespace: `podman unshare chown 10001:10001 backups` gives it to user 10001 of the
-container. The manager never uses `sudo`. The check names what is wrong:
+container. Backups, restores and the check never use `sudo`. The check names what is wrong:
 
 | Code | Means |
 |---|---|
@@ -735,7 +761,7 @@ for more, in order), `--container`, `--project-dir`, `--workdir`, `--python`, `-
 
 | Area | Commands |
 |---|---|
-| `server` | `list` · `show` · `add` · `edit` · `remove` · `check SERVER… \| --all` · `merge SERVER --into SERVER` · `browse [PATH]` · `public-key` · `host-key` · `confirm-host-key ID` |
+| `server` | `list` · `show` · `add` · `edit` · `remove` · `check SERVER… \| --all` · `merge SERVER --into SERVER` · `browse [PATH]` · `public-key` · `host-key` · `confirm-host-key ID` · `move SERVER --to SERVER [--real]` |
 | `app` | `list [--server] [--search]` · `show` · `discover SERVER [--folder]` · `add --server --folder` · `edit` · `remove` · `check APP… \| --all` · `passphrase` · `capture-passphrase` · `deploy [--real]` · `deploy-steps [--set FILE]` |
 | `backup` | `list [--app]` · `take APP… \| --all` · `verify` · `restore --mode merge\|replace [--to APP] [--real]` · `download [-o PATH]` · `upload` · `delete` · `undo-delete` |
 | `plan` | `list` · `show` · `add` · `edit` · `remove` · `run` · `reschedule --at WHEN` · `pause` · `resume` |
@@ -844,11 +870,11 @@ What Claude can do:
   first backup;
 - take, verify and save backups, add and run plans, keep more backups, and keep `.env`
   versions;
-- rehearse a restore, a move, a deploy, or putting an application back after a move that
-  stopped. A rehearsal changes nothing.
+- rehearse a restore, a move, a deploy, a server move, or putting an application back after a
+  move that stopped. A rehearsal changes nothing.
 
-What Claude cannot do: reveal a passphrase or a `.env` value, restore, move, deploy or revert
-for real, choose deploy steps, push a `.env`, make a plan keep fewer backups, save a file the manager keeps encrypted, remove a server or an application, delete backups or
+What Claude cannot do: reveal a passphrase or a `.env` value, restore, move a server or an
+application, deploy or revert for real, give a `sudo` password, choose deploy steps, push a `.env`, make a plan keep fewer backups, save a file the manager keeps encrypted, remove a server or an application, delete backups or
 files, open a console or a terminal, or pin or re-pin a host key you did not confirm. The MCP
 server never takes your account password, so anything the interface protects with it —
 changing a checked application's paths, archive and collect plans — comes back to you to do
@@ -968,6 +994,75 @@ django_dbs redeploy start --from old --to new            # a rehearsal
 django_dbs redeploy start --from old --to new --real
 django_dbs redeploy revert 412 --real                    # 412: the move's activity number
 ```
+
+### Moving a server
+
+**Move to another server** on a server's overview carries every application on it onto
+another server, with its code, `.git`, images, volumes, files, `.env` and data. The new server
+may have nothing installed: the manager installs what the applications need. The old server
+keeps running, untouched, until you point the traffic at the new one.
+
+1. **Add the new server** — the move offers *Add a new server* and comes back to it — and
+   choose it.
+2. **Choose the applications** that move, the folder each takes (the same one by default) and
+   its name. Application names are unique in the manager, so a moved application is called
+   `NAME (NEW SERVER)` unless you name it.
+3. **Plan the move.** The rehearsal only reads, on both servers, and lists what moves: each
+   folder and its size, what is left out (the virtualenv when it is made again, a SQLite
+   file), git, the images and volumes (the database's own volume stays: its data is restored
+   instead), the database, the Python, the systemd units and nginx sites, and the packages the
+   new server lacks. A blocker stops the move until you fix it — an unsupported system, a
+   different processor for images, no `sudo`, too little space, a port, folder, file, image,
+   volume, unit, site or container already on the new server, a name already taken, an
+   application without a stored passphrase. Notes say what to check afterwards.
+4. **Move for real** with your password, the new server's name typed out, and the `sudo`
+   password of the SSH user on the new server when it needs one. The SSH user on the old server
+   needs `sudo` only to read files it cannot read itself, and the move asks for that password
+   only then.
+
+The move then works in phases, each step in the audit trail:
+
+- **Prepare the new server**: check the `sudo` password once, add Docker's own package
+  repository (its signing key is checked against the fingerprint DBS ships) when Docker is
+  needed, install the packages, start the engine and its services, add the users the units
+  run as, and check the server again.
+- **Each application**: take a fresh backup of it; carry its folder, files outside the folder
+  such as a `.env` kept elsewhere, the folders mounted into its containers, its images
+  (loaded and their ids compared) and its volumes; write the new folder into a carried `.env`
+  that names the old one; make the backup folder; carry the virtualenv as it is, or make it
+  again from `pip freeze` when the folder, the system or the Python differs; create the
+  database for a PostgreSQL or MariaDB on the server itself; start the Compose services that
+  ran (`compose up -d --no-build`, under the same project name) or the containers; add the
+  moved application to the manager with the same backup passphrase and answers; run
+  `migrate`, restore the fresh backup into it, install the systemd units and nginx sites with
+  the new folder written into them (a site is enabled only when its certificates are there and
+  `nginx -t` passes), check it, and copy its backup plans, paused.
+
+Everything travels through the manager: read on the old server, written to a private spool
+with its SHA-256, uploaded into a staging folder on the new server, checked there, then put
+in place. Nothing on the new server is written over, and no `rm -r` runs: a folder lands
+beside its place and is renamed into it only where nothing is. A database on another machine
+or a managed service is shared by both servers, so the move does not restore over it. Rows
+written on the old server after its fresh backup are not carried; move when it is quiet, or
+take the old application offline first. A move that stops says which step and what it left
+in the staging folder, and **Resume the move** starts again from there; only one move runs on
+a server at a time, and a server a move holds cannot be removed.
+
+The new server runs Debian 11, 12 or 13, Ubuntu 22.04, 24.04 or 26.04, RHEL, Rocky Linux,
+AlmaLinux or Oracle Linux 8 to 10, CentOS Stream 9 or 10, or Fedora 41 or later, on amd64 or
+arm64, with the same container engine as the old one. From a terminal:
+
+```bash
+django_dbs server move web-1 --to web-2                                # a rehearsal
+django_dbs server move web-1 --to web-2 --app shop=/srv/shop --name shop=shop-eu
+django_dbs server move web-1 --to web-2 --real                         # asks the passwords
+django_dbs server move web-1 --to web-2 --real --resume 512            # 512: the move's activity number
+```
+
+`--skip-volume APP:VOLUME` leaves a volume behind, `--no-plans` copies no plan,
+`--sudo-password-stdin` reads the `sudo` password after your own, and `--no-sudo-password`
+says the SSH user is root or needs none. Claude can only rehearse a move
+(`rehearse_server_move`); the console runs a real one only with `--no-sudo-password`.
 
 ### Moving the manager itself
 
@@ -1454,7 +1549,7 @@ application whose django-dbs is older than 0.7 answers `dbs_too_old`; upgrade it
 
 **The check says `engine_permission_denied`.** The SSH user may not use Docker or Podman. Add
 it to the `docker` group, or run the application's containers with rootless Podman as that
-user. The manager never uses `sudo`. `container_engine_missing` means neither engine answers;
+user. The check never uses `sudo`. `container_engine_missing` means neither engine answers;
 `container_not_running` that the application's container is stopped.
 
 **Discovery found nothing, or ran nothing in the folder.** A folder that another account can

@@ -1,0 +1,25 @@
+<div class="questions">
+  @for (question of questions(); track question.key) {
+    <fieldset class="questions__item">
+      <legend class="text-label">{{ 'applications.deployment.' + question.key + '.label' | t }}</legend>
+      <p class="text-sm text-secondary">{{ 'applications.deployment.' + question.key + '.hint' | t }}</p>
+      <mat-radio-group
+        class="questions__options"
+        [value]="answer(question.key)"
+        [attr.aria-label]="'applications.deployment.' + question.key + '.label' | t"
+        (change)="choose(question.key, $event.value)"
+      >
+        <mat-radio-button value="">{{ 'applications.deployment.notSure' | t }}</mat-radio-button>
+        @for (option of question.options; track option) {
+          <mat-radio-button [value]="option">{{ label(question.key, option) | t }}</mat-radio-button>
+        }
+      </mat-radio-group>
+      @if (found(question.key); as value) {
+        <p class="questions__found text-sm">
+          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+          {{ 'applications.deployment.found' | t: { value: (label(question.key, value) | t) } }}
+        </p>
+      }
+    </fieldset>
+  }
+</div>

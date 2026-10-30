@@ -1,0 +1,202 @@
+{
+  "relocation": {
+    "title": "Move to another server",
+    "back": "Back to the server",
+    "from": "From",
+    "intro": "Carries every application of this server onto another one, which may have nothing installed: its folder with git, images, volumes, files and .env, then its data restored from a fresh backup. This server is left as it is.",
+    "wizard": {
+      "target": "New server",
+      "applications": "Applications",
+      "plan": "Plan",
+      "confirm": "Move",
+      "progress": "Progress"
+    },
+    "steps": {
+      "label": "Steps",
+      "connect": "Connect to both servers",
+      "inventory": "Plan what to carry",
+      "evaluate": "Check what would stop it",
+      "sudo_check": "Check the sudo password",
+      "repositories": "Add package repositories",
+      "packages": "Install packages",
+      "engine_setup": "Set up the container engine",
+      "services": "Start services",
+      "users": "Add system users",
+      "recheck": "Check the new server",
+      "source_backup": "Back up the application",
+      "carry_folder": "Carry the project folder",
+      "carry_extra": "Carry a file",
+      "carry_bind": "Carry a mounted folder",
+      "carry_image": "Carry an image",
+      "carry_volume": "Carry a volume",
+      "rewrite_env": "Write the new folder into the .env",
+      "backup_dir": "Make the backup folder",
+      "python": "Prepare Python",
+      "database_create": "Create the database",
+      "networks": "Create networks",
+      "start": "Start the application",
+      "register": "Add the moved application",
+      "migrate": "Run the migrations",
+      "restore": "Restore the data",
+      "install_units": "Install the systemd services",
+      "install_sites": "Install the nginx sites",
+      "final_check": "Check the moved application",
+      "copy_plans": "Copy the backup plans"
+    },
+    "target": {
+      "intro": "Choose the server the applications move to. It may have nothing installed: the move installs what they need.",
+      "none": "There is no other server yet. Add the new server first.",
+      "required": "Choose the new server.",
+      "add": "Add a new server"
+    },
+    "applications": {
+      "intro": "Every application moves by default. Untick the ones that stay, and choose the name and folder each takes on the new server.",
+      "name": "Name on the new server",
+      "nameHint": "Each application in the manager has a name of its own.",
+      "nameRequired": "Enter a name.",
+      "folder": "Folder on the new server",
+      "folderHint": "The same folder unless you change it.",
+      "none": "This server runs no application.",
+      "pickOne": "Choose at least one application.",
+      "copyPlans": "Copy the backup plans, paused"
+    },
+    "plan": {
+      "make": "Plan the move",
+      "planning": "Reading both servers…",
+      "blocked": "Something stops the move. Fix what is listed, then plan again.",
+      "again": "Plan again",
+      "system": "New server: {system} on {architecture}",
+      "packages": "Installs on the new server",
+      "nothingToInstall": "Nothing to install.",
+      "folder": "Folder",
+      "sizeUnknown": "size unknown",
+      "leftOut": "Left out:",
+      "git": "Git",
+      "images": "Images",
+      "alreadyThere": "already there",
+      "volumes": "Volumes",
+      "reasons": {
+        "database_volume": "the database's own data, restored instead",
+        "skipped": "left behind"
+      },
+      "binds": "Mounted folders",
+      "database": "Database",
+      "databaseActions": {
+        "restore": "{vendor}: a new database, then the fresh backup restored",
+        "shared": "{vendor} on another machine: shared, never restored over",
+        "unknown": "{vendor}: where it runs is unknown"
+      },
+      "python": "Python",
+      "pythonActions": {
+        "carry": "The virtualenv moves as it is (Python {version})",
+        "rebuild": "The virtualenv is made again and its packages installed (Python {version})",
+        "system": "The server's own Python (Python {version})"
+      },
+      "services": "Services"
+    },
+    "blockers": {
+      "os_unsupported": "The new server's system is not one the move can install on: Debian, Ubuntu, RHEL and its rebuilds, or Fedora.",
+      "architecture_mismatch": "The new server's processor differs, so the images cannot run there.",
+      "sudo_missing": "The new server has no sudo, so nothing can be installed.",
+      "not_enough_space": "The new server lacks the space for what moves.",
+      "manager_space_low": "The manager's disk lacks room for the largest item that passes through it.",
+      "port_in_use": "A port the application publishes is already taken on the new server.",
+      "target_folder_not_empty": "{path} already holds something on the new server.",
+      "file_exists_on_target": "{path} is already on the new server.",
+      "image_exists_on_target": "A different {image} is already on the new server.",
+      "volume_exists_on_target": "The volume {volume} is already on the new server.",
+      "unit_exists_on_target": "The service {path} is already on the new server.",
+      "site_exists_on_target": "The site {path} is already on the new server.",
+      "container_exists_on_target": "A container named {name} is already on the new server.",
+      "container_options_unsupported": "The container uses options the move cannot set up again. Run it from a compose file first.",
+      "container_missing": "The container {name} is not on this server.",
+      "compose_provider_unavailable": "Podman on the new server's system cannot run compose files.",
+      "epel_required": "podman-compose on RHEL comes from EPEL. Enable EPEL on the new server first.",
+      "passphrase_missing": "The application has no backup passphrase yet.",
+      "name_taken": "Another application already has the name {name}.",
+      "database_name_unsupported": "The database or its user has a name the move cannot create safely."
+    },
+    "notes": {
+      "same_machine": "Both servers are the same machine.",
+      "python_version_differs": "Python {source} here and {target} on the new server; the virtualenv is made again.",
+      "venv_rebuilt": "The virtualenv is made again on the new server and its packages installed from the internet.",
+      "env_mentions_folder": "The .env names the old folder; the move writes the new folder in its place.",
+      "compose_absolute_path": "A compose file names the old folder. Check it once the application has moved.",
+      "git_remote_has_credentials": "The git remote held a password or token; it was left out of what is shown.",
+      "git_uncommitted_changes": "The folder has changes not committed to git; they move too.",
+      "mysql_replaced_by_mariadb": "MySQL is installed as MariaDB on Debian.",
+      "process_manager_not_carried": "A Supervisor file names the folder; set it up again on the new server.",
+      "database_shared_with_source": "The database runs on another machine: both servers use it, and nothing is restored over it.",
+      "tls_certificate_missing": "The site {name} needs certificates the new server lacks; it is installed but left off until they are there.",
+      "firewall_may_block": "The new server's firewall may block the application's ports.",
+      "selinux_enforcing": "SELinux is enforcing on the new server; the moved files get their contexts set again.",
+      "facts_unknown": "The application did not say which database it uses; the move takes a backup and restores it.",
+      "volume_size_unknown": "The size of {volume} could not be read.",
+      "source_sudo_needed": "Some files on this server need sudo to read; the move asks for its sudo password.",
+      "database_reach_from_container": "The database runs on the server itself; let the containers reach it on the new server.",
+      "broker_queue_not_carried": "Messages waiting in the task queue are not carried."
+    },
+    "confirm": {
+      "intro": "The move installs what {target} lacks, carries the applications and restores their data. Nothing on this server changes.",
+      "resuming": "This resumes move {job} from where it stopped.",
+      "sudo": "sudo password of {user} on {server}",
+      "sudoHint": "Leave it empty if the account needs none. It is used for this move only and never kept.",
+      "sourceSudo": "sudo password of {user} on {server}",
+      "sourceSudoHint": "Used only to read files the SSH user cannot read on this server."
+    },
+    "run": {
+      "rehearse": "Plan again",
+      "rehearsing": "Planning…",
+      "run": "Move for real",
+      "running": "Moving…",
+      "passwordHint": "Your own password, to confirm it is you.",
+      "confirmName": "Name of the new server",
+      "confirmNameHint": "Type {name} to confirm."
+    },
+    "progress": {
+      "moved": "Moved {size} of the current item",
+      "current": "Progress of the current item",
+      "starting": "Starting the move…",
+      "resume": "Resume the move"
+    },
+    "phases": {
+      "plan": "Plan",
+      "prepare": "Prepare the new server",
+      "application": "{name} to {target}"
+    },
+    "status": {
+      "pending": "Waiting",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "done": {
+      "cutover": "The applications run on {target}. {source} still runs, untouched: point the traffic at {target} when ready.",
+      "created": "Moved applications",
+      "leftovers": "Left on the new server by a step that stopped:"
+    }
+  },
+  "errors": {
+    "same_server": "Choose a server other than this one.",
+    "nothing_to_move": "This server runs no application to move.",
+    "move_blocked": "Something stops the move; the plan lists what.",
+    "server_move_running": "A move already runs on one of these servers.",
+    "move_not_resumable": "Only a move for real that stopped can be resumed.",
+    "sudo_missing": "The server has no sudo.",
+    "sudo_password_required": "Enter the sudo password.",
+    "sudo_password_wrong": "sudo refused the password.",
+    "sudo_needs_tty": "sudo on the server asks for a terminal; allow the SSH user without one.",
+    "privileged_command_failed": "A command run as root on the server failed.",
+    "package_install_failed": "The packages could not be installed.",
+    "repository_key_mismatch": "The repository's signing key is not the expected one.",
+    "transfer_digest_mismatch": "What arrived differs from what was sent.",
+    "target_folder_not_empty": "Something is already in the folder on the new server.",
+    "file_exists_on_target": "A file the move writes is already on the new server.",
+    "database_exists_on_target": "The database is already on the new server.",
+    "database_is_the_sources": "The moved application's settings still name this server's database, so nothing was written to it.",
+    "database_credentials_unknown": "The moved application did not say which database it uses.",
+    "moved_application_not_found": "The moved application was not found on the new server.",
+    "image_mismatch": "The image on the new server is not the one sent."
+  }
+}

@@ -239,8 +239,9 @@ project that reaches each server over SSH. It is never added to a host project's
 - Container names, Compose projects, services and files that `docker inspect` or
   `podman inspect` reports are dropped unless they are plain names, so none can be read as an
   option of `exec`.
-- The manager never uses `sudo`. An SSH user that cannot reach the engine's socket gets
-  `engine_permission_denied`, whose remedy is the engine's own group or rootless Podman.
+- Backups, restores, the check and discovery never use `sudo`. An SSH user that cannot reach
+  the engine's socket gets `engine_permission_denied`, whose remedy is the engine's own group
+  or rootless Podman. Only a server move uses `sudo` (see *Server moves*).
 - A restore into a container streams the backup over standard input into a new private file
   inside it, written as the container's own user, and checks its size; nothing is staged on
   the host.
@@ -254,6 +255,40 @@ names (a git remote and branch, services, a systemd unit, a requirements file in
 project), each checked against a strict pattern. No command line, program or argument list is
 taken from a request. Editing the steps needs an admin and the account password; a deploy
 takes a safety backup first and records the `.env` it found.
+
+### Server moves
+
+A server move carries a server's applications onto another server that may have nothing
+installed, so it is the one place the manager uses `sudo`:
+
+- Every command it runs, on either server, is a fixed argument list built in
+  `dbs/manager/relocation/catalogue.py` from checked names (packages, images, volumes, units,
+  sites, users, database names) and absolute paths. No command line or argument list is taken
+  from a request.
+- The sudo password is typed for that move, travels to the job in memory only and reaches the
+  server on standard input to `sudo -S -k`. It is never stored, logged, put in the audit trail
+  or accepted by the MCP server, and is scrubbed from any output the move keeps. Before it is
+  sent, `sudo -n -k -- true` tells whether the account needs one, so a password line never
+  reaches a command; it is checked once per move.
+- On the old server the move only reads: archives, image saves, volume exports, `du`, `find`,
+  `stat` and a fresh DBS backup, which records itself in the project's audit trail like any
+  backup and removes its own file. Nothing there is stopped or changed.
+- On the new server nothing is written over: folders arrive beside their place and are moved
+  in only where nothing is, files use `cp -n` and are checked, images, volumes, units and sites
+  that already exist stop the move, and no `rm -r` ever runs. What a stopped move left is
+  listed for the person.
+- Docker comes from Docker's own repository, whose signing key is fetched and checked against
+  a fingerprint pinned in the code before it is trusted.
+- A database reaches the new server only through a DBS restore of a verified backup; a
+  database on another machine is shared and never restored over. A database the move creates
+  on the new server takes its name, user and password from the moved project's own settings,
+  read on the new server and sent to the database on standard input.
+- Before `migrate` and the restore, the move reads the moved project's database settings on the
+  new server and stops (`database_is_the_sources`) when they still name the old application's
+  database, as they could on the same machine. A carried `.env`, systemd unit or nginx site that
+  names the old folder has the new folder written in its place first.
+- Rehearsing needs the operator role and uses no sudo password; a move for real needs an
+  admin, the account password and the new server's name typed out.
 
 ### The console
 

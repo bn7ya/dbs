@@ -17,7 +17,7 @@ import { MASTER, OPERATOR } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { JobWatcher } from '@core/jobs/job-watcher';
 import type { Job } from '@core/jobs/job.types';
-import { ConfirmedRun } from '../../components/confirmed-run/confirmed-run';
+import { ConfirmedRun } from '@shared/confirmed-run/confirmed-run';
 import { MoveApplication } from '../../components/move-application/move-application';
 import type { DeployApplication } from '../../data/redeploy.types';
 import {
@@ -201,7 +201,7 @@ describe('RedeployPage', () => {
       buttonIn(section(DEPLOY), 'Deploy')?.click();
       http.expectNone(`/api/applications/${SOURCE}/deploy/`);
       expect(run.passwordError()).toBe('Enter your password.');
-      expect(run.nameError()).toBe("Type the application's name exactly as shown.");
+      expect(run.nameError()).toBe('Type the name exactly as it is shown.');
 
       run.setPassword('secret');
       run.setTypedName(' Shop ');
@@ -406,7 +406,7 @@ describe('RedeployPage', () => {
       run.runForReal();
       http.expectNone('/api/redeploy/');
       expect(run.passwordError()).toBe('Enter your password.');
-      expect(run.nameError()).toBe("Type the application's name exactly as shown.");
+      expect(run.nameError()).toBe('Type the name exactly as it is shown.');
 
       run.setPassword('secret');
       run.setTypedName(' Shop next ');
@@ -448,7 +448,7 @@ describe('RedeployPage', () => {
       expect(revert.expectedName()).toBe('Shop next');
       revert.runForReal();
       http.expectNone(`/api/redeploy/${MOVE_ID}/revert/`);
-      expect(revert.nameError()).toBe("Type the application's name exactly as shown.");
+      expect(revert.nameError()).toBe('Type the name exactly as it is shown.');
 
       revert.setPassword('secret');
       revert.setTypedName('Shop next');

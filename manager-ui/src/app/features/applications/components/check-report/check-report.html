@@ -46,6 +46,8 @@
   </app-notice>
 }
 
+<app-next-steps [problems]="problems()" [place]="application()" />
+
 @if (panelSchedules()) {
   <app-notice severity="warning">{{ 'applications.check.panelSchedule' | t }}</app-notice>
 }

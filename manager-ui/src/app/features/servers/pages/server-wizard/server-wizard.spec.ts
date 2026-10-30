@@ -6,7 +6,8 @@ import { MatButtonHarness } from '@angular/material/button/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { MatRadioGroupHarness } from '@angular/material/radio/testing';
 import { MatStepperHarness } from '@angular/material/stepper/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { errorInterceptor } from '@core/http/error.interceptor';
@@ -245,5 +246,43 @@ describe('ServerWizardPage', () => {
     );
     expect(await add.getAppearance()).toBe('filled');
     expect(await (await add.host()).getAttribute('href')).toBe(`/servers/${SERVER.id}/applications/new`);
+  });
+
+  describe('opened from a server move', () => {
+    const MOVE = '/servers/a1b2c3d4-1111-4a5b-8c9d-0e1f2a3b0001/move';
+
+    const opened = async (returnTo: string): Promise<HTMLElement> => {
+      TestBed.inject(Router).resetConfig([{ path: 'servers/new', component: ServerWizardPage }]);
+      const harness = await RouterTestingHarness.create();
+      wizard = await harness.navigateByUrl(`/servers/new?returnTo=${encodeURIComponent(returnTo)}`, ServerWizardPage);
+      await createWithPassword();
+      http.expectOne(`/api/servers/${SERVER.id}/check/`).flush(CHECKED);
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+      return harness.routeNativeElement as HTMLElement;
+    };
+
+    it('says a server with nothing installed will do, and ends on going back to the move with it', async () => {
+      const page = await opened(MOVE);
+      expect(page.textContent).toContain('A server with nothing installed is fine as the target of a move');
+
+      await wizard.advance();
+      await fixture.whenStable();
+      const links = Array.from(page.querySelectorAll('a'), (link) => [link.textContent?.trim(), link.getAttribute('href')]);
+
+      expect(links).toContainEqual(['Back to the move', `${MOVE}?target=${SERVER.id}`]);
+      expect(page.textContent).not.toContain('Add an application');
+    });
+
+    it('ignores a way back that is not a move', async () => {
+      const page = await opened('https://example.com/servers/x/move');
+      expect(page.textContent).not.toContain('A server with nothing installed');
+
+      await wizard.advance();
+      await fixture.whenStable();
+
+      expect(page.textContent).not.toContain('Back to the move');
+      expect(page.textContent).toContain('Add an application');
+    });
   });
 });

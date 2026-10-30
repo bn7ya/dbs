@@ -8,6 +8,7 @@ import pytest
 
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.applications.services import discovery_service
+from dbs.manager.applications.services.facts import DATABASE_FACTS
 from dbs.manager.applications.services.discovery_service import (
     FIND_PROJECT,
     settings_of,
@@ -340,6 +341,19 @@ def test_the_service_is_asked_inside_for_its_python_project_and_connection(
             "connection",
             "--json",
         ],
+        [
+            *exec_prefix,
+            "-w",
+            "/app",
+            "-e",
+            "DJANGO_SETTINGS_MODULE=shop.settings.prod",
+            "backend",
+            "/opt/venv/bin/python",
+            "/app/manage.py",
+            "shell",
+            "-c",
+            DATABASE_FACTS,
+        ],
     ]
     assert all(run["setup"] == [f"cd {site['shop']} || exit 1"] for run in runs)
 
@@ -557,7 +571,8 @@ def test_podman_compose_labels_are_read_as_well(api, server, site, podman, hosts
         "/usr/src/app/wiki",
     )
     assert web["settings_module"] == "wiki.settings"
-    assert ran(hosts)[-1][:9] == [
+    [connection] = [argv for argv in ran(hosts) if argv[-2:] == ["connection", "--json"]]
+    assert connection[:9] == [
         "podman",
         "compose",
         "-f",
@@ -991,3 +1006,44 @@ def test_a_container_named_as_it_should_be_is_kept():
 def test_a_container_whose_names_could_be_read_as_options_is_left_out(row):
     assert not discovery_service.well_named(discovery_service.summary("docker", row))
 
+
+
+@pytest.mark.django_db
+def test_answers_that_disagree_with_a_candidate_are_named(api, server, site, docker):
+    report = discovered(
+        api, server, site["shop"], deployment={"runs_in": "host", "engine": "docker"}
+    )
+
+    backend = candidate(report, compose_service="backend")
+    assert backend["detected"]["runs_in"] == "compose"
+    assert backend["mismatches"] == [
+        {"field": "runs_in", "said": "host", "found": "compose"}
+    ]
+    assert backend["facts"]["image"]["ref"]
+
+
+@pytest.mark.django_db
+def test_a_candidate_that_matches_the_answers_comes_first(api, server, site, docker):
+    plain = discovered(api, server, site["shop"])
+    answered = discovered(api, server, site["shop"], deployment={"runs_in": "compose"})
+
+    scores = {each["compose_service"]: each["score"] for each in plain["candidates"]}
+    for each in answered["candidates"]:
+        assert each["score"] == scores[each["compose_service"]] + 4
+
+
+@pytest.mark.django_db
+def test_an_unknown_answer_is_refused_before_anything_runs(api, server, site, hosts):
+    response = api.post(
+        DISCOVER,
+        {
+            "server": str(server.pk),
+            "folder": str(site["shop"]),
+            "account_password": PASSWORD,
+            "deployment": {"runs_in": "kubernetes"},
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert hosts.runs("10.0.0.5") == []

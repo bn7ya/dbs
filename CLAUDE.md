@@ -120,7 +120,15 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   `parsers.py` imports no Django, so `--help` stays instant.
 - `dbs/manager/redeploy/` — moving an application onto another, deploying one in place from
   the step catalogue (`catalogue.py`, `deploy.py`), and putting either back from its safety
-  backup.
+  backup; `restoring.py` holds the migrate and restore steps a server move shares.
+- `dbs/manager/relocation/` — moving a server's applications onto another server that may have
+  nothing installed: `systems.py` (os-release), `packages.py` (the package table per family,
+  Docker's repository and pinned key), `catalogue.py` (every command, as fixed argument lists),
+  `privileged.py` (sudo modes and the password on stdin), `inventory.py` (the read-only plan),
+  `transfer.py` (an archive, image or volume through a verified spool), `requirements.py` (a
+  rebuilt virtualenv's requirements from `pip freeze`) and `steps.py` (the job).
+- `dbs/manager/applications/deployment.py` and `applications/services/facts.py` — how an
+  application is deployed, as the developer says it and as discovery and the check find it.
 - `dbs/manager/console/` — `POST /api/console/`: one terminal command line run as the
   signed-in account through the same parsers and handlers, without the verbs that read the
   manager's own disk or stdin; jobs it starts are returned, not waited for.
@@ -239,6 +247,16 @@ version to read them before it offers giving them up.
   without input, a minute without a poll or two hours in all; at most four run at once, two
   per account. Its audit row records where, the size, how long, the bytes each way and why it
   closed, never what was typed or shown. The MCP server and the console never reach it.
+- A server move (`dbs/manager/relocation/`) is the only place the manager uses `sudo`. Every
+  command it runs is built in `relocation/catalogue.py` from validated names; the sudo password
+  is typed per move, travels to the job in memory and to the server on stdin only, and is
+  never stored, logged, audited or accepted by MCP. The old server only reads and is never
+  stopped or changed; on the new server nothing is written over and no `rm -r` runs. Database
+  data arrives only through a DBS restore; a database elsewhere is shared, never restored over,
+  and migrate and restore refuse a database that is still the old application's own
+  (`database_is_the_sources`). A carried `.env`, unit or site that names the old folder gets the
+  new one. The MCP server only rehearses a move; the console never takes a sudo password, so it
+  moves for real only where none is needed.
 - The built interface is generated at release time and never committed.
 
 ## Install constraint

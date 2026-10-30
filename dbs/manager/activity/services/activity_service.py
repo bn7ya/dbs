@@ -181,13 +181,21 @@ class ActivityService:
     def progress(self, activity_id: int, detail: dict[str, Any]) -> None:
         self.entries.set_running_data(activity_id, detail)
 
-    def interrupt(self, *, idle_since: datetime | None = None) -> int:
-        keep = job_leases.live() if idle_since is None else []
+    def interrupt(
+        self, *, idle_since: datetime | None = None, renewed_since: datetime | None = None
+    ) -> int:
+        if idle_since is None:
+            keep = job_leases.live()
+        elif renewed_since is not None:
+            keep = job_leases.renewed_since(renewed_since)
+        else:
+            keep = []
         return audit.interrupt(idle_since=idle_since, keep=keep)
 
 
 def sweep_stale_jobs() -> int:
     limit = timedelta(seconds=settings.BACKUP_TASK_TIME_LIMIT)
+    now = timezone.now()
     return ActivityService(None).interrupt(
-        idle_since=timezone.now() - limit - STALE_AFTER_LIMIT
+        idle_since=now - limit - STALE_AFTER_LIMIT, renewed_since=now - STALE_AFTER_LIMIT
     )

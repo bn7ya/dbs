@@ -211,7 +211,6 @@
     }
   },
   "errors": {
-    "confirm_name_mismatch": "Type the application's name exactly as shown.",
     "same_application": "Choose an application other than this one.",
     "target_not_ready": "django-dbs is not installed, or the project is not ready, in the application being changed.",
     "source_unreachable": "This application did not answer and no backup of it was chosen.",

@@ -45,12 +45,20 @@ class CheckedApplication:
 
 
 def discover(
-    user: Any, server: Server, folder: str, account_password: str = ""
+    user: Any,
+    server: Server,
+    folder: str,
+    account_password: str = "",
+    deployment: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    fields = validated(
-        DiscoverRequestSerializer,
-        {"server": str(server.pk), "folder": folder, "account_password": account_password},
-    )
+    body: dict[str, Any] = {
+        "server": str(server.pk),
+        "folder": folder,
+        "account_password": account_password,
+    }
+    if deployment is not None:
+        body["deployment"] = deployment
+    fields = validated(DiscoverRequestSerializer, body)
     fields.pop("server")
     return DiscoveryService(user).discover(server.pk, **fields)
 

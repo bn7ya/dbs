@@ -19,6 +19,7 @@ from dbs.manager.adapters import (
     servers,
 )
 from dbs.manager.adapters.forms import validated
+from dbs.manager.applications.deployment import QUESTIONS
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.serializers import (
     ApplicationListSerializer,
@@ -51,6 +52,8 @@ from dbs.manager.redeploy.serializers import (
     RevertSerializer,
 )
 from dbs.manager.redeploy.services import RedeployService
+from dbs.manager.relocation.serializers import ServerMoveSerializer
+from dbs.manager.relocation.services import RelocationService
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
     AddedServerSerializer,
@@ -125,6 +128,17 @@ SETTINGS = {
     },
 }
 
+DEPLOYMENT = {
+    "type": "object",
+    "additionalProperties": False,
+    "description": "How the application is deployed, as the person describes it. Leave a "
+    "question out when unsure; discovery finds it.",
+    "properties": {
+        key: {"type": "string", "enum": ["", *values]}
+        for key, values in QUESTIONS.items()
+    },
+}
+
 PLAN_FIELDS = {
     "paths": {
         "type": "array",
@@ -184,7 +198,8 @@ INSTRUCTIONS = (
     "discover_applications with the application's folder and add_application with the "
     "candidate to keep. Taking a backup waits until it is done. "
     "A plan can be made to keep more backups here, never fewer. Restores, moves and "
-    "reverts of a move here are always rehearsals: nothing on the server changes. An "
+    "reverts of a move here are always rehearsals: nothing on the server changes. "
+    "rehearse_server_move only plans moving a whole server onto another. An "
     "application's backup passphrase must never be changed, because older backups would "
     "no longer open; capture it only while adding an application, before its first "
     "backup. "
@@ -341,7 +356,7 @@ class Toolbox:
                 "settings, backup folder, .env and the problems found. Without folder it "
                 "suggests folders that look like projects. In a server's first hour "
                 "it needs no password; after that the person does it in the manager.",
-                dict(server=SERVER, folder=FOLDER),
+                dict(server=SERVER, folder=FOLDER, deployment=DEPLOYMENT),
                 self.discover_applications,
                 required=("server",),
                 idempotent=True,
@@ -364,6 +379,7 @@ class Toolbox:
                         "description": "Which candidate from discover_applications. "
                         "Defaults to 1.",
                     },
+                    deployment=DEPLOYMENT,
                     **SETTINGS,
                 ),
                 self.add_application,
@@ -375,7 +391,12 @@ class Toolbox:
                 "Change an application's name or settings. Once its check has passed, "
                 "changing anything but its name needs the account password, which this "
                 "tool never takes: it says so, and the person does it in the manager.",
-                dict(application=APPLICATION, name=TEXT, **SETTINGS),
+                dict(
+                    application=APPLICATION,
+                    name=TEXT,
+                    deployment=DEPLOYMENT,
+                    **SETTINGS,
+                ),
                 self.update_application,
                 required=("application",),
             ),
@@ -606,6 +627,34 @@ class Toolbox:
                 idempotent=True,
             ),
             Tool(
+                "rehearse_server_move",
+                "Plan a server move",
+                "Plan moving a server's applications onto another server, which may have "
+                "nothing installed: what each application carries (its folder with git, "
+                "images, volumes, files, .env), how its database reaches the new server, "
+                "which packages the new server lacks, and what would stop the move. "
+                "Nothing changes on either server and no sudo password is used. The move "
+                "for real is done by the person in the manager.",
+                dict(
+                    source=SERVER,
+                    target=SERVER,
+                    applications={
+                        **APPLICATIONS,
+                        "description": "The applications to move by name or id. Leave "
+                        "empty to move every application of the server.",
+                    },
+                    target_folders={
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                        "description": "An application's name mapped to the absolute "
+                        "folder it goes to. Defaults to the same folder.",
+                    },
+                ),
+                self.rehearse_server_move,
+                required=("source", "target"),
+                idempotent=True,
+            ),
+            Tool(
                 "rehearse_deploy",
                 "Rehearse a deploy",
                 "Check that an application could be deployed in place with its deploy "
@@ -722,13 +771,25 @@ class Toolbox:
 
     def discover_applications(self, arguments: Arguments) -> dict[str, Any]:
         server = self._server(arguments["server"])
-        return applications.discover(self.user, server, arguments.get("folder") or "")
+        return applications.discover(
+            self.user,
+            server,
+            arguments.get("folder") or "",
+            deployment=arguments.get("deployment"),
+        )
 
     def add_application(self, arguments: Arguments) -> dict[str, Any]:
         server = self._server(arguments["server"])
-        report = applications.discover(self.user, server, arguments["folder"])
+        report = applications.discover(
+            self.user,
+            server,
+            arguments["folder"],
+            deployment=arguments.get("deployment"),
+        )
         given = {
-            field: arguments[field] for field in SETTING_FIELDS if field in arguments
+            field: arguments[field]
+            for field in (*SETTING_FIELDS, "deployment")
+            if field in arguments
         }
         candidate = arguments.get("candidate")
         added = applications.add(
@@ -919,6 +980,32 @@ class Toolbox:
             )
         data = validated(RedeploySerializer, body)
         return self._job(RedeployService(self.user).start(**data))
+
+    def rehearse_server_move(self, arguments: Arguments) -> dict[str, Any]:
+        source = self._server(arguments["source"])
+        target = self._server(arguments["target"])
+        folders = arguments.get("target_folders") or {}
+        named = [self._application(name) for name in arguments.get("applications") or []]
+        body: dict[str, Any] = {
+            "target_server": target.pk,
+            "applications": [
+                {
+                    "application": application.pk,
+                    "folder": folders.get(application.name, ""),
+                }
+                for application in named
+            ],
+            "rehearsal": True,
+        }
+        data = validated(ServerMoveSerializer, body)
+        finished = jobs.finished(
+            self.user, RelocationService(self.user).start(source_server=source.pk, **data)
+        )
+        return {
+            **self._job(finished),
+            "inventory": (finished.data or {}).get("inventory"),
+            "blockers": (finished.data or {}).get("blockers", []),
+        }
 
     def rehearse_deploy(self, arguments: Arguments) -> dict[str, Any]:
         application = self._application(arguments["application"])

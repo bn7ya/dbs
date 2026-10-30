@@ -74,4 +74,16 @@ describe('CheckReport', () => {
     expect(text).toContain('Not set');
     expect(text).not.toContain('The timeout command inside the container');
   });
+
+  it('names the next steps for what the check found missing, with the command to run', async () => {
+    const text = await render({
+      ...APPLICATION,
+      last_check_report: { ...APPLICATION.last_check_report, problems: ['dbs_missing', 'backup_dir_missing'] },
+    });
+
+    expect(text).toContain('Next steps');
+    expect(text).toContain('Add django-dbs to the requirements the image installs');
+    expect(text).toContain('docker compose build web && docker compose up -d web');
+    expect(text).toContain('mkdir -p /var/backups/dbs');
+  });
 });

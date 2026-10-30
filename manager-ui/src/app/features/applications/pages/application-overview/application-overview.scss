@@ -87,3 +87,13 @@
   font-family: var(--app-font-mono);
   overflow-wrap: anywhere;
 }
+
+.overview__answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.overview__differs {
+  color: var(--app-color-warning);
+}

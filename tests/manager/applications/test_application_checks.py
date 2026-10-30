@@ -7,6 +7,7 @@ import pytest
 import dbs
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.applications.services import ApplicationService
+from dbs.manager.applications.services.facts import DATABASE_FACTS, GIT_ENV
 from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import (
     HostKeyChanged,
@@ -43,6 +44,13 @@ HEALTH = {
 HEALTH_ARGV = (PYTHON, "manage.py", "dbs", "health", "--json")
 
 
+FACT_KEYS = ("facts", "detected", "mismatches", "problems")
+
+
+def core(report: dict) -> dict:
+    return {key: value for key, value in report.items() if key not in FACT_KEYS}
+
+
 def check(application_id) -> str:
     return f"/api/applications/{application_id}/check/"
 
@@ -72,7 +80,7 @@ def test_an_application_with_everything_in_place_is_ok(
     assert body["last_check_status"] == "ok"
     assert body["last_check_error"] == ""
     assert body["last_checked_at"] is not None
-    assert body["last_check_report"] == {
+    assert core(body["last_check_report"]) == {
         "system": "Linux 6.1.0-18-amd64",
         "dbs_version": REMOTE_DBS_VERSION,
         "dbs_error": "",
@@ -104,6 +112,16 @@ def test_the_check_runs_argv_lists_in_the_project(api, monkeypatch, application)
             "env": settings,
         },
         {"argv": ["uname", "-sr"], "cwd": None, "env": None},
+        {
+            "argv": [PYTHON, "manage.py", "shell", "-c", DATABASE_FACTS],
+            "cwd": PROJECT_DIR,
+            "env": settings,
+        },
+        {
+            "argv": ["git", "-C", PROJECT_DIR, "rev-parse", "HEAD"],
+            "cwd": None,
+            "env": GIT_ENV,
+        },
         {"argv": list(HEALTH_ARGV), "cwd": PROJECT_DIR, "env": settings},
     ]
 
@@ -146,7 +164,11 @@ def test_a_probe_that_fails_marks_only_its_own_item(api, monkeypatch, applicatio
     body = api.post(check(application.pk)).json()
 
     assert body["last_check_status"] == "problem"
-    assert body["last_check_report"] == {
+    assert body["last_check_report"]["problems"] == [
+        "dbs_missing",
+        "backup_dir_missing",
+    ]
+    assert core(body["last_check_report"]) == {
         "system": None,
         "dbs_version": None,
         "dbs_error": "ModuleNotFoundError: No module named 'dbs'",
@@ -197,7 +219,8 @@ def test_what_is_not_configured_is_not_looked_at(api, admin, monkeypatch, server
     body = api.post(check(bare.pk)).json()
 
     assert body["last_check_status"] == "ok"
-    assert body["last_check_report"] == {
+    assert body["last_check_report"]["problems"] == []
+    assert core(body["last_check_report"]) == {
         "system": "Linux 6.1.0-18-amd64",
         "dbs_version": REMOTE_DBS_VERSION,
         "dbs_error": "",
@@ -342,3 +365,23 @@ def test_checked_through_the_service_carries_the_compatibility(
         "installed": True,
         "compatible": False,
     }
+
+
+@pytest.mark.django_db
+def test_the_check_names_what_it_found_and_what_disagrees(
+    api, monkeypatch, application
+):
+    ApplicationRepository().update(
+        application, deployment={"runs_in": "compose", "web_server": "nginx"}
+    )
+    remote = healthy_remote()
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+
+    report = api.post(check(application.pk)).json()["last_check_report"]
+
+    assert report["detected"]["runs_in"] == "host"
+    assert report["mismatches"] == [
+        {"field": "runs_in", "said": "compose", "found": "host"}
+    ]
+    assert report["problems"] == []
+    assert report["facts"]["git"] is None

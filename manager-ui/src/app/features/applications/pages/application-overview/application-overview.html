@@ -59,6 +59,44 @@
 
     <mat-card appearance="outlined">
       <mat-card-content class="overview__card">
+        <div class="overview__intro">
+          <h2>{{ 'applications.deployment.title' | t }}</h2>
+          <p class="text-sm text-secondary">{{ 'applications.deployment.body' | t }}</p>
+        </div>
+
+        @if (differs()) {
+          <app-notice severity="warning">{{ 'applications.deployment.differs' | t }}</app-notice>
+        }
+
+        <dl class="overview__facts">
+          @for (row of deploymentRows(); track row.question) {
+            <div class="overview__fact">
+              <dt class="text-label text-secondary">{{ 'applications.deployment.' + row.question + '.label' | t }}</dt>
+              <dd class="overview__answer">
+                <span [class.text-muted]="row.saidKey === 'applications.deployment.notSure'">{{ row.saidKey | t }}</span>
+                @if (row.foundKey) {
+                  <span class="text-sm" [class.text-secondary]="!row.differs" [class.overview__differs]="row.differs">
+                    {{ 'applications.deployment.found' | t: { value: (row.foundKey | t) } }}
+                  </span>
+                }
+              </dd>
+            </div>
+          }
+        </dl>
+
+        <div class="overview__actions" *appCan="'applications.manage'">
+          @if (differs() || current.last_check_report.detected) {
+            <button matButton="tonal" type="button" [disabled]="saving()" [attr.aria-busy]="saving()" (click)="useWhatWasFound()">
+              {{ 'applications.deployment.useFound' | t }}
+            </button>
+          }
+          <button matButton="outlined" type="button" (click)="editDeployment()">{{ 'applications.deployment.edit' | t }}</button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content class="overview__card">
         <h2>{{ 'applications.settings.title' | t }}</h2>
 
         @if (envInContainer()) {

@@ -59,13 +59,78 @@ export interface ApplicationSettings {
   readonly env_location: EnvLocation;
 }
 
+export type DatabaseVendor = 'postgresql' | 'mysql' | 'mariadb' | 'sqlite' | 'other';
+
+export type DatabaseRuns = 'compose' | 'this_server' | 'elsewhere' | 'file';
+
+export type SettingsFrom = 'folder_env' | 'compose_env_file' | 'image' | 'environment';
+
+export type CodeSource = 'git' | 'copied' | 'image';
+
+export type ProcessManager = 'systemd' | 'systemd_user' | 'supervisor' | 'other';
+
+export type WebServer = 'nginx' | 'other' | 'none';
+
+export interface DeploymentProfile {
+  readonly runs_in?: ApplicationKind;
+  readonly engine?: ContainerEngine;
+  readonly database?: DatabaseVendor;
+  readonly database_runs?: DatabaseRuns;
+  readonly settings_from?: SettingsFrom;
+  readonly source?: CodeSource;
+  readonly process_manager?: ProcessManager;
+  readonly web_server?: WebServer;
+}
+
+export type DeploymentQuestion = keyof DeploymentProfile;
+
+export interface DeploymentMismatch {
+  readonly field: DeploymentQuestion;
+  readonly said: string;
+  readonly found: string;
+}
+
+export interface GitFacts {
+  readonly head: string;
+  readonly branch: string;
+  readonly remote: string;
+  readonly remote_has_credentials: boolean;
+  readonly dirty: number | null;
+}
+
+export interface DatabaseFacts {
+  readonly vendor: string;
+  readonly host: string;
+  readonly name: string;
+}
+
+export interface FoundFacts {
+  readonly database: DatabaseFacts | null;
+  readonly placement: string;
+  readonly git: GitFacts | null;
+}
+
+export type CheckProblem =
+  | 'engine_permission_denied'
+  | 'engine_missing'
+  | 'container_not_running'
+  | 'dbs_missing'
+  | 'dbs_too_old'
+  | 'backup_command_missing'
+  | 'env_file_missing'
+  | 'root_missing'
+  | 'backup_dir_not_mounted'
+  | 'backup_dir_missing';
+
 export interface ApplicationCreate extends ApplicationSettings {
   readonly server: string;
   readonly discovered: boolean;
+  readonly deployment?: DeploymentProfile;
   readonly account_password?: string;
 }
 
 export interface ApplicationUpdate extends Partial<ApplicationSettings> {
+  readonly deployment?: DeploymentProfile;
   readonly account_password?: string;
 }
 
@@ -97,6 +162,10 @@ export interface ApplicationCheckReport {
   readonly remote_backup_dir?: boolean;
   readonly container?: ContainerReport;
   readonly panel_schedule?: PanelSchedule | null;
+  readonly detected?: DeploymentProfile;
+  readonly mismatches?: readonly DeploymentMismatch[];
+  readonly problems?: readonly CheckProblem[];
+  readonly facts?: FoundFacts;
 }
 
 export type HealthStatus = 'ok' | 'warn' | 'error';
@@ -115,6 +184,7 @@ export interface Application extends ApplicationSettings {
   readonly last_check_report: ApplicationCheckReport;
   readonly last_health: HealthReport | null;
   readonly timeout_in_container: boolean | null;
+  readonly deployment: DeploymentProfile;
   readonly discovered_at: string | null;
   readonly created_at: string;
   readonly updated_at: string;
@@ -175,6 +245,9 @@ export interface Candidate {
   readonly compatible: boolean;
   readonly problems: readonly DiscoveryProblem[];
   readonly score: number;
+  readonly detected?: DeploymentProfile;
+  readonly mismatches?: readonly DeploymentMismatch[];
+  readonly facts?: FoundFacts;
 }
 
 export interface DiscoveryListing {
@@ -192,6 +265,7 @@ export interface Discovery {
 export interface DiscoverRequest {
   readonly server: string;
   readonly folder?: string;
+  readonly deployment?: DeploymentProfile;
   readonly account_password?: string;
 }
 

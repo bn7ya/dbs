@@ -4,6 +4,8 @@ import argparse
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from dbs.manager.applications.deployment import QUESTIONS
+
 RESTORE_MODES = ("merge", "replace")
 PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
@@ -107,7 +109,20 @@ def _yes(parser) -> None:
     )
 
 
+def _deployment(parser) -> None:
+    parser.add_argument(
+        "--deployment",
+        dest="deployment_answers",
+        action="append",
+        metavar="KEY=VALUE",
+        help="How the application is deployed, one answer each: "
+        + "; ".join(f"{key}={'|'.join(values)}" for key, values in QUESTIONS.items())
+        + ". An empty value means not sure.",
+    )
+
+
 def _application_settings(parser) -> None:
+    _deployment(parser)
     parser.add_argument(
         "--kind",
         choices=("host", "compose", "container"),
@@ -260,6 +275,8 @@ def servers(commands, surface: Surface) -> None:
     check.add_argument("servers", nargs="*", metavar="SERVER")
     check.add_argument("--all", action="store_true", help="Check every server.")
 
+    _server_move(verbs, surface)
+
     merge = _verb(
         verbs,
         "merge",
@@ -351,6 +368,7 @@ def applications(commands, surface: Surface) -> None:
         help="The application's folder on the server. Without it, folders that "
         "look like projects are suggested.",
     )
+    _deployment(discover)
 
     add = _verb(
         verbs,
@@ -767,6 +785,76 @@ def files(commands, surface: Surface) -> None:
     delete.add_argument("application", help="The application's name or id.")
     delete.add_argument("path", help="What to delete.")
     _yes(delete)
+
+
+def _server_move(verbs, surface: Surface) -> None:
+    move = _verb(
+        verbs,
+        "move",
+        "Move a server's applications onto another server, which may have nothing "
+        "installed: plan it, install what is missing with sudo, carry each "
+        "application's folder with its git, images, volumes, files and .env, start "
+        "it, restore its data and check it. The old server is left as it is. "
+        "Rehearses unless --real.",
+        "terminal.relocation:move",
+        surface,
+    )
+    move.add_argument("server", help="The server the applications run on now.")
+    move.add_argument(
+        "--to", dest="target", required=True, help="The server to move them to."
+    )
+    move.add_argument(
+        "--app",
+        dest="apps",
+        action="append",
+        metavar="NAME[=FOLDER]",
+        help="An application to move, and the folder it goes to on the new server. "
+        "Repeat for more; without it every application moves to the same folders.",
+    )
+    move.add_argument(
+        "--name",
+        dest="names",
+        action="append",
+        metavar="APP=NEW",
+        help="The name an application takes on the new server; without it, its name and the new server's in brackets.",
+    )
+    move.add_argument(
+        "--skip-volume",
+        dest="skip_volumes",
+        action="append",
+        metavar="APP:VOLUME",
+        help="A volume to leave behind.",
+    )
+    move.add_argument(
+        "--no-plans",
+        action="store_true",
+        help="Do not copy the backup plans; they are copied paused otherwise.",
+    )
+    move.add_argument("--real", action="store_true", help="Move for real.")
+    move.add_argument(
+        "--confirm-name", help="The new server's name, instead of typing it."
+    )
+    move.add_argument(
+        "--resume", metavar="JOB_ID", help="Resume a move that stopped, from where it did."
+    )
+    move.add_argument(
+        "--no-sudo-password",
+        action="store_true",
+        help="The SSH user is root, or runs sudo without a password.",
+    )
+    move.add_argument(
+        "--source-sudo-password",
+        action="store_true",
+        help="Ask the sudo password on the old server too, to read what its SSH user "
+        "cannot.",
+    )
+    if not surface.console:
+        move.add_argument(
+            "--sudo-password-stdin",
+            action="store_true",
+            help="Read the sudo password from stdin, on the line after the account "
+            "password.",
+        )
 
 
 def redeploy(commands, surface: Surface) -> None:

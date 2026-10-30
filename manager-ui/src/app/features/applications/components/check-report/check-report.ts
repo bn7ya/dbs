@@ -4,6 +4,7 @@ import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { Notice } from '@shared/notice/notice';
 import { isolated } from '@shared/isolated/isolated';
 import type { Application, Compatibility } from '../../data/applications.types';
+import { NextSteps } from '../next-steps/next-steps';
 import type { Presence, PresenceLook, ReportRow, RootRow, Verdict } from './check-report.types';
 
 const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
@@ -17,7 +18,7 @@ const PRESENCE_LOOKS: Readonly<Record<Presence, PresenceLook>> = {
 
 @Component({
   selector: 'app-check-report',
-  imports: [Notice, TranslatePipe],
+  imports: [NextSteps, Notice, TranslatePipe],
   templateUrl: './check-report.html',
   styleUrl: './check-report.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -85,6 +86,8 @@ export class CheckReport {
   });
 
   protected readonly panelSchedules = computed(() => this.report().panel_schedule?.enabled === true);
+
+  protected readonly problems = computed(() => this.report().problems ?? []);
 
   look(presence: Presence): PresenceLook {
     return PRESENCE_LOOKS[presence];

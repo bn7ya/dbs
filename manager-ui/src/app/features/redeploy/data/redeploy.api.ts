@@ -4,6 +4,7 @@ import type { Observable } from 'rxjs';
 
 import type { Page } from '@core/http/api.types';
 import type { JobStarted } from '@core/jobs/job.types';
+import type { RunRequest } from '@shared/confirmed-run/confirmed-run.types';
 import type {
   DeployApplication,
   DeployStepsRequest,
@@ -11,7 +12,6 @@ import type {
   RedeployApplication,
   RedeployBackup,
   RedeployEnvVersion,
-  RunRequest,
 } from './redeploy.types';
 
 const REDEPLOY_LIST_SIZE = 100;

@@ -57,6 +57,8 @@ class Capability:
     FILES_CHANGE = "files.change"
     REDEPLOY_REHEARSE = "redeploy.rehearse"
     REDEPLOY_RUN = "redeploy.run"
+    RELOCATION_REHEARSE = "relocation.rehearse"
+    RELOCATION_RUN = "relocation.run"
     SHELL_OPEN = "shell.open"
     CONSOLE_RUN = "console.run"
 
@@ -84,6 +86,8 @@ MINIMUM_ROLE = {
     Capability.FILES_CHANGE: Role.ADMIN,
     Capability.REDEPLOY_REHEARSE: Role.OPERATOR,
     Capability.REDEPLOY_RUN: Role.ADMIN,
+    Capability.RELOCATION_REHEARSE: Role.OPERATOR,
+    Capability.RELOCATION_RUN: Role.ADMIN,
     Capability.SHELL_OPEN: Role.ADMIN,
     Capability.CONSOLE_RUN: Role.VIEWER,
 }
@@ -91,6 +95,7 @@ MINIMUM_ROLE = {
 REHEARSALS = {
     Capability.BACKUPS_RESTORE: ("rehearse", Capability.BACKUPS_REHEARSE),
     Capability.REDEPLOY_RUN: ("rehearsal", Capability.REDEPLOY_REHEARSE),
+    Capability.RELOCATION_RUN: ("rehearsal", Capability.RELOCATION_REHEARSE),
 }
 
 

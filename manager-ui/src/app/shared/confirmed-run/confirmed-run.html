@@ -5,7 +5,9 @@
 
   <ng-content />
 
-  <ng-container *appCan="'redeploy.run'">
+  <ng-container *appCan="runCapability()">
+    <ng-content select="[runFields]" />
+
     <app-password-input
       [label]="'password.label' | t"
       [hint]="prefix() + '.passwordHint' | t"
@@ -39,7 +41,7 @@
 
   <div class="confirmed-run__actions">
     <button
-      *appCan="'redeploy.rehearse'"
+      *appCan="rehearseCapability()"
       matButton="outlined"
       type="button"
       [disabled]="busy()"
@@ -52,7 +54,7 @@
       {{ prefix() + (rehearsalBusy() ? '.rehearsing' : '.rehearse') | t }}
     </button>
     <button
-      *appCan="'redeploy.run'"
+      *appCan="runCapability()"
       [matButton]="primary() ? 'filled' : 'outlined'"
       class="app-danger"
       type="submit"

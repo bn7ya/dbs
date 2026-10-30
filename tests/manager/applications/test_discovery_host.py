@@ -91,6 +91,21 @@ def test_a_project_on_the_host_is_found_over_sftp(api, server, project, hosts):
             "compatible": False,
             "problems": ["dbs_missing"],
             "score": 4,
+            "facts": {
+                "database": None,
+                "placement": "",
+                "git": None,
+                "image": None,
+                "services": [],
+                "env_source": "folder_env",
+                "folder_read": True,
+            },
+            "detected": {
+                "runs_in": "host",
+                "settings_from": "folder_env",
+                "source": "copied",
+            },
+            "mismatches": [],
         }
     ]
     assert all("manage.py" not in run["argv"] for run in ran(hosts))
@@ -155,7 +170,7 @@ def test_discovery_prefers_what_the_project_says_about_itself(
         [],
     )
     assert found["score"] == 15
-    last = ran(hosts)[-1]
+    [last] = [run for run in ran(hosts) if run["argv"][-1] == "--json"]
     assert last["argv"] == [venv, "manage.py", "dbs", "connection", "--json"]
     assert last["setup"] == [
         f"cd {app} || exit 1",
@@ -199,7 +214,9 @@ def test_a_virtualenv_of_any_name_that_has_django_dbs_is_chosen(
         "python3",
         "python",
     ]
-    assert ran(hosts)[-1]["argv"][:3] == [venv, "manage.py", "dbs"]
+    assert [run["argv"][:3] for run in ran(hosts) if "manage.py" in run["argv"]][
+        0
+    ] == [venv, "manage.py", "dbs"]
 
 
 @pytest.mark.django_db

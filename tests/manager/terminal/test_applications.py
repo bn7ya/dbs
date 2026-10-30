@@ -571,3 +571,42 @@ def test_capturing_the_passphrase_reads_it_from_the_application(
         ServerConnectionService(admin).backup_passphrase(application)
         == "captured-secret"
     )
+
+
+@pytest.mark.django_db
+def test_how_an_application_is_deployed_is_saved_without_a_password(
+    terminal, make_application
+):
+    application = settled(make_application())
+
+    saved = terminal(
+        "app",
+        "edit",
+        "web-1",
+        "--deployment",
+        "runs_in=compose",
+        "--deployment",
+        "database=postgresql",
+        "--deployment",
+        "web_server=",
+    )
+    shown = terminal("app", "show", "web-1")
+
+    assert saved.code == 0, saved.err
+    assert ApplicationRepository().find(application.pk).deployment == {
+        "runs_in": "compose",
+        "database": "postgresql",
+    }
+    assert "runs_in=compose, database=postgresql" in shown.out
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("given", ["runs_in", "runs_in=kubernetes", "favourite=docker"])
+def test_a_deployment_answer_it_does_not_know_is_refused(
+    terminal, make_application, given
+):
+    make_application()
+
+    refused = terminal("app", "edit", "web-1", "--deployment", given)
+
+    assert refused.code != 0

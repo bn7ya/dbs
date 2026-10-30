@@ -12,6 +12,7 @@ import type {
   ApplicationCreate,
   ApplicationUpdate,
   Compatibility,
+  DeploymentProfile,
   Discovery,
   HostServer,
 } from '../data/applications.types';
@@ -58,7 +59,7 @@ export class ApplicationWizardStore {
     this.serverId.set(serverId);
   }
 
-  async discover(folder: string, accountPassword?: string): Promise<Discovery | null> {
+  async discover(folder: string, accountPassword?: string, deployment?: DeploymentProfile): Promise<Discovery | null> {
     const server = this.serverId();
     if (!server) {
       return null;
@@ -66,6 +67,7 @@ export class ApplicationWizardStore {
     const request = {
       server,
       ...(folder ? { folder } : {}),
+      ...(deployment && Object.keys(deployment).length > 0 ? { deployment } : {}),
       ...(accountPassword ? { account_password: accountPassword } : {}),
     };
     const found = await this.run(this.api.discover(request), this.discovering, this.discoverError);

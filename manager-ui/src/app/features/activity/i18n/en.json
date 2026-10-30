@@ -160,6 +160,38 @@
       },
       "console": {
         "command": "Run a console command"
+      },
+      "relocation": {
+        "move": "Move a server",
+        "connect": "Server move: connect to both servers",
+        "inventory": "Server move: plan what to carry",
+        "evaluate": "Server move: check what would stop it",
+        "sudo_check": "Server move: check the sudo password",
+        "repositories": "Server move: add package repositories",
+        "packages": "Server move: install packages",
+        "engine_setup": "Server move: set up the container engine",
+        "services": "Server move: start services",
+        "users": "Server move: add system users",
+        "recheck": "Server move: check the new server",
+        "source_backup": "Server move: back up the application",
+        "carry_folder": "Server move: carry the project folder",
+        "carry_extra": "Server move: carry a file",
+        "carry_bind": "Server move: carry a mounted folder",
+        "carry_image": "Server move: carry an image",
+        "carry_volume": "Server move: carry a volume",
+        "rewrite_env": "Server move: write the new folder into the .env",
+        "backup_dir": "Server move: make the backup folder",
+        "python": "Server move: prepare Python",
+        "database_create": "Server move: create the database",
+        "networks": "Server move: create networks",
+        "start": "Server move: start the application",
+        "register": "Server move: add the moved application",
+        "migrate": "Server move: run the migrations",
+        "restore": "Server move: restore the data",
+        "install_units": "Server move: install the systemd services",
+        "install_sites": "Server move: install the nginx sites",
+        "final_check": "Server move: check the moved application",
+        "copy_plans": "Server move: copy the backup plans"
       }
     }
   }

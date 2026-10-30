@@ -27,6 +27,13 @@
           <ng-template matStepperIcon="edit"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
           <ng-template matStepperIcon="done"><i class="fa-solid fa-check" aria-hidden="true"></i></ng-template>
 
+          <mat-step [label]="'applications.wizard.steps.profile' | t" [completed]="stepDone('profile')" [editable]="!created()">
+            <div class="wizard__step">
+              <p class="text-secondary">{{ 'applications.wizard.profile.intro' | t }}</p>
+              <app-deployment-questions [profile]="profile()" (changed)="profile.set($event)" />
+            </div>
+          </mat-step>
+
           <mat-step [label]="'applications.wizard.steps.folder' | t" [completed]="stepDone('folder')" [editable]="!created()">
             <div class="wizard__step">
               <p class="text-secondary">{{ 'applications.wizard.folder.intro' | t }}</p>
@@ -52,7 +59,7 @@
                 >
                   <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
                 </button>
-                <mat-hint>{{ 'applications.wizard.folder.hint' | t }}</mat-hint>
+                <mat-hint>{{ folderHint() | t }}</mat-hint>
                 @if (error('folder') | errorText; as message) {
                   <mat-error>{{ message }}</mat-error>
                 }

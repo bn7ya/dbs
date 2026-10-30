@@ -238,10 +238,15 @@ class ServerService:
     def delete(self, server_id: UUID, account_password: str = "") -> None:
         from dbs.manager.applications.repositories import ApplicationRepository
 
+        from dbs.manager.relocation.exceptions import ServerMoveRunning
+        from dbs.manager.relocation.locks import ServerMoveLock
+
         server = self.get(server_id)
         require_account_password(account_password, DELETE_PASSWORD_REQUIRED)
         if ApplicationRepository().on_server(server.pk).exists():
             raise ServerHasApplications()
+        if ServerMoveLock().held(server.pk):
+            raise ServerMoveRunning()
         with self.activity.track(Action.DELETE, subject=server, target=server.name):
             AccountService(self.user).confirm_password(account_password)
             self.servers.soft_delete(server)

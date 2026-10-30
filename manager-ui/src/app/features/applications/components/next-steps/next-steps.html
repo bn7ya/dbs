@@ -1,0 +1,18 @@
+@if (steps().length > 0) {
+  <section class="steps">
+    <h3 class="text-label">{{ 'applications.nextSteps.title' | t }}</h3>
+    <ol class="steps__list">
+      @for (step of steps(); track step.key) {
+        <li class="steps__item">
+          <span>{{ step.key | t: step.values }}</span>
+          @if (step.command) {
+            <span class="steps__command">
+              <code class="steps__code" dir="ltr">{{ step.command }}</code>
+              <app-copy-button [text]="step.command" [label]="'applications.nextSteps.copy' | t" />
+            </span>
+          }
+        </li>
+      }
+    </ol>
+  </section>
+}
