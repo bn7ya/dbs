@@ -60,6 +60,7 @@ class Application(BaseModel):
         max_length=16, choices=EnvLocation.choices, default=EnvLocation.HOST
     )
     deploy_steps = models.JSONField(default=list, blank=True)
+    deployment = models.JSONField(default=dict, blank=True)
 
     last_check_status = models.CharField(
         max_length=16,

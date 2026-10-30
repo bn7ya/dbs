@@ -4,6 +4,7 @@ from typing import Any
 
 from dbs.manager.adapters import applications, references
 from dbs.manager.adapters.forms import validated
+from dbs.manager.applications.deployment import QUESTIONS
 from dbs.manager.applications.serializers import (
     ApplicationListSerializer,
     ApplicationSerializer,
@@ -50,6 +51,8 @@ SHOWN_FIELDS = (
     "env_path",
     "env_location",
     "file_roots",
+    "deployment",
+    "detected",
     "last_check_status",
     "last_check_error",
     "last_checked_at",
@@ -111,16 +114,26 @@ def show(session: TerminalSession) -> int:
     if session.out.as_json:
         session.out.json(data)
         return 0
-    session.out.fields({**data, "server": data["server"]["name"]}, SHOWN_FIELDS)
+    detected = (data.get("last_check_report") or {}).get("detected") or {}
+    session.out.fields(
+        {
+            **data,
+            "server": data["server"]["name"],
+            "deployment": _answers(data["deployment"]),
+            "detected": _answers(detected),
+        },
+        SHOWN_FIELDS,
+    )
     return 0
 
 
 def discover(session: TerminalSession) -> int:
     args = session.args
     server = references.server(session.user, args.server)
+    answers = _deployment_answers(args)
     report = session.guarded(
         lambda password: applications.discover(
-            session.user, server, args.folder, account_password=password
+            session.user, server, args.folder, account_password=password, deployment=answers
         )
     )
     if session.out.as_json:
@@ -133,12 +146,16 @@ def discover(session: TerminalSession) -> int:
 def add(session: TerminalSession) -> int:
     args = session.args
     server = references.server(session.user, args.server)
+    given = _given_settings(args)
     report = session.guarded(
         lambda password: applications.discover(
-            session.user, server, args.folder, account_password=password
+            session.user,
+            server,
+            args.folder,
+            account_password=password,
+            deployment=given.get("deployment"),
         )
     )
-    given = _given_settings(args)
     if args.backup_passphrase:
         given["backup_passphrase"] = session.secret("Backup passphrase")
     added = session.guarded(
@@ -258,14 +275,44 @@ def _print_report(session: TerminalSession, report: dict[str, Any]) -> None:
         for number, candidate in enumerate(report["candidates"], start=1)
     ]
     session.out.table(rows, CANDIDATE_COLUMNS, empty="Found no Django project here.")
+    for number, candidate in enumerate(report["candidates"], start=1):
+        for mismatch in candidate.get("mismatches") or []:
+            session.out.line(
+                f"{number}: you said {mismatch['field']} is {mismatch['said']}, "
+                f"found {mismatch['found']}."
+            )
 
 
 def _given_settings(args: Any) -> dict[str, Any]:
-    return {
+    given = {
         field: getattr(args, field)
         for field in SETTING_FIELDS
         if getattr(args, field, None) is not None
     }
+    answers = _deployment_answers(args)
+    if answers is not None:
+        given["deployment"] = answers
+    return given
+
+
+def _deployment_answers(args: Any) -> dict[str, str] | None:
+    given = getattr(args, "deployment_answers", None)
+    if not given:
+        return None
+    answers: dict[str, str] = {}
+    for item in given:
+        key, separator, value = item.partition("=")
+        key = key.strip().replace("-", "_")
+        if not separator or key not in QUESTIONS:
+            raise CommandFailed(
+                f"--deployment takes KEY=VALUE with KEY one of {', '.join(QUESTIONS)}."
+            )
+        answers[key] = value.strip()
+    return answers
+
+
+def _answers(answers: dict[str, str]) -> str:
+    return ", ".join(f"{key}={value}" for key, value in answers.items() if value)
 
 
 def _row(item: applications.CheckedApplication) -> dict[str, Any]:

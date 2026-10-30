@@ -15,8 +15,10 @@ from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications import deployment
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.paths import host_path
+from dbs.manager.applications.services import facts as found_facts
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.common.paths import absolute_path
@@ -57,9 +59,10 @@ PLAIN_FIELDS = (
     "env_location",
 )
 LIST_FIELDS = ("compose_files", "mounts")
+DICT_FIELDS = ("deployment",)
 OPTIONAL_PATH_FIELDS = ("project_dir", "workdir", "env_path")
 REQUIRED_PATH_FIELDS = ("remote_backup_dir",)
-UNGUARDED_FIELDS = frozenset({"name"})
+UNGUARDED_FIELDS = frozenset({"name", "deployment"})
 RUN_FIELDS = frozenset(
     {
         "kind",
@@ -93,6 +96,7 @@ SETUP_FIELDS = frozenset(
         "file_roots",
         "env_path",
         "env_location",
+        "deployment",
     }
 )
 SETUP_WINDOW = timedelta(hours=1)
@@ -101,6 +105,7 @@ CONNECTION_ERRORS = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
 REPORTED_OUTPUT_LIMIT = 200
 IS_FOLDER = "import os, sys; sys.exit(0 if os.path.isdir(sys.argv[1]) else 1)"
 IS_FILE = "import os, sys; sys.exit(0 if os.path.isfile(sys.argv[1]) else 1)"
+COMPOSE_MAX_BYTES = 256 * 1024
 
 ABSOLUTE_PATH_REQUIRED = (
     "Use an absolute path that starts with / and has no '..' in it."
@@ -173,6 +178,7 @@ class ApplicationService:
         errors: Errors = {}
         fields = {name: data[name] for name in PLAIN_FIELDS if name in data}
         fields |= {name: list(data[name]) for name in LIST_FIELDS if name in data}
+        fields |= {name: dict(data[name]) for name in DICT_FIELDS if name in data}
         fields |= self._paths(data, errors)
         self._runtime(fields, errors, current=None)
         if self.applications.name_in_use(data["name"]):
@@ -208,6 +214,7 @@ class ApplicationService:
         errors: Errors = {}
         changes = {name: data[name] for name in PLAIN_FIELDS if name in data}
         changes |= {name: list(data[name]) for name in LIST_FIELDS if name in data}
+        changes |= {name: dict(data[name]) for name in DICT_FIELDS if name in data}
         changes |= self._paths(data, errors)
         self._runtime(changes, errors, current=application)
         if "name" in data and self.applications.name_in_use(
@@ -407,7 +414,60 @@ class ApplicationService:
         }
         if container is not None:
             report["container"] = container
+        facts = self._facts(application, remote, profile, dbs_version)
+        report["detected"] = facts.pop("detected")
+        report["facts"] = facts
+        report["mismatches"] = deployment.mismatches(
+            application.deployment, report["detected"]
+        )
+        report["problems"] = _problems(application, report)
         return report
+
+    def _facts(
+        self,
+        application: Application,
+        remote: RemoteHost,
+        profile: DbsProfile,
+        dbs_version: str | None,
+    ) -> dict[str, Any]:
+        database = (
+            found_facts.database_facts(remote, profile)
+            if dbs_version is not None
+            else None
+        )
+        services = (
+            found_facts.host_services(remote, pythons.quiet(remote.realpath, ".") or "/")
+            if not application.in_container
+            else []
+        )
+        declared = (
+            found_facts.compose_services(
+                remote,
+                application.project_dir,
+                application.compose_files,
+                COMPOSE_MAX_BYTES,
+            )
+            if application.kind == Application.Kind.COMPOSE
+            else {}
+        )
+        neighbours = (
+            _container_names(remote, application.engine)
+            if application.kind == Application.Kind.CONTAINER
+            else []
+        )
+        return found_facts.facts_for(
+            remote,
+            {
+                "kind": application.kind,
+                "engine": application.engine,
+                "project_dir": application.project_dir,
+                "env": _env_entries(application),
+            },
+            database=database,
+            services_found=services,
+            project_services=list(declared),
+            containers=neighbours,
+        )
 
     def _record(
         self, application: Application, status: str, error: str, report: dict[str, Any]
@@ -565,6 +625,54 @@ def _exists(remote: RemoteHost, path: str) -> bool:
         return remote.exists(path)
     except RemoteCommandFailed:
         return False
+
+
+def _env_entries(application: Application) -> list[dict[str, str]]:
+    if not application.env_path:
+        return []
+    mapped = host_path(application, application.env_path)
+    if application.env_in_container and mapped is None:
+        return [{"path": application.env_path, "location": "container", "source": "dbs"}]
+    return [{"path": application.env_path, "location": "host", "source": "folder"}]
+
+
+def _container_names(remote: RemoteHost, engine: str) -> list[str]:
+    if not engine:
+        return []
+    listed = pythons.quiet(remote.run, [engine, "ps", "--all", "--format", "{{.Names}}"])
+    if listed is None or not listed.ok:
+        return []
+    return [line.strip() for line in listed.stdout.splitlines() if line.strip()]
+
+
+def _problems(application: Application, report: dict[str, Any]) -> list[str]:
+    container = report.get("container") or {}
+    problems = []
+    if container:
+        if container.get("error") == "engine_permission_denied":
+            problems.append("engine_permission_denied")
+        elif container.get("version") is None:
+            problems.append("engine_missing")
+        elif not container.get("running"):
+            problems.append("container_not_running")
+    if report["dbs_version"] is None:
+        problems.append("dbs_missing")
+    elif not versions.at_least(report["dbs_version"], versions.MINIMUM_REMOTE):
+        problems.append("dbs_too_old")
+    elif report["backup_command"] is False:
+        problems.append("backup_command_missing")
+    if report["env_file"] is False:
+        problems.append("env_file_missing")
+    if not all(report["roots"].values()):
+        problems.append("root_missing")
+    if not report["remote_backup_dir"]:
+        problems.append(
+            "backup_dir_not_mounted"
+            if application.in_container
+            and host_path(application, application.remote_backup_dir) is None
+            else "backup_dir_missing"
+        )
+    return problems
 
 
 def _ready(report: dict[str, Any]) -> bool:

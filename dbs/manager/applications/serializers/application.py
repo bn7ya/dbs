@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.core.validators import RegexValidator
 from rest_framework import serializers
 
+from dbs.manager.applications import deployment
+from dbs.manager.applications.deployment import NOT_SURE, QUESTIONS
 from dbs.manager.applications.models import Application
 from dbs.manager.servers.serializers import (
     absolute_or_blank,
@@ -106,6 +110,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             "last_health",
             "timeout_in_container",
             "deploy_steps",
+            "deployment",
             "discovered_at",
             "created_at",
             "updated_at",
@@ -124,6 +129,24 @@ class MountSerializer(serializers.Serializer):
 
     def validate_destination(self, value: str) -> str:
         return absolute_or_blank(value)
+
+
+class DeploymentSerializer(serializers.Serializer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        for key, values in QUESTIONS.items():
+            self.fields[key] = serializers.ChoiceField(
+                choices=[NOT_SURE, *values], required=False, allow_blank=True
+            )
+
+    def to_internal_value(self, data: Any) -> dict[str, str]:
+        if isinstance(data, dict):
+            unknown = sorted(set(data) - set(QUESTIONS))
+            if unknown:
+                raise serializers.ValidationError(
+                    {key: ["Not a deployment question."] for key in unknown}
+                )
+        return deployment.cleaned(super().to_internal_value(data))
 
 
 class ApplicationSettingsSerializer(serializers.Serializer):
@@ -169,6 +192,7 @@ class ApplicationSettingsSerializer(serializers.Serializer):
     env_location = serializers.ChoiceField(
         choices=Application.EnvLocation.choices, required=False
     )
+    deployment = DeploymentSerializer(required=False)
     discovered = serializers.BooleanField(required=False, default=False)
 
 
@@ -189,6 +213,7 @@ class ApplicationFilterSerializer(serializers.Serializer):
 class DiscoverRequestSerializer(serializers.Serializer):
     server = serializers.UUIDField()
     folder = optional_path()
+    deployment = DeploymentSerializer(required=False)
     account_password = secret_field(ACCOUNT_PASSWORD_MAX_LENGTH)
 
     def validate_folder(self, value: str) -> str:

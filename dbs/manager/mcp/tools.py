@@ -19,6 +19,7 @@ from dbs.manager.adapters import (
     servers,
 )
 from dbs.manager.adapters.forms import validated
+from dbs.manager.applications.deployment import QUESTIONS
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.serializers import (
     ApplicationListSerializer,
@@ -122,6 +123,17 @@ SETTINGS = {
         "type": "array",
         "items": {"type": "string"},
         "description": "Folders the Files tab may open.",
+    },
+}
+
+DEPLOYMENT = {
+    "type": "object",
+    "additionalProperties": False,
+    "description": "How the application is deployed, as the person describes it. Leave a "
+    "question out when unsure; discovery finds it.",
+    "properties": {
+        key: {"type": "string", "enum": ["", *values]}
+        for key, values in QUESTIONS.items()
     },
 }
 
@@ -341,7 +353,7 @@ class Toolbox:
                 "settings, backup folder, .env and the problems found. Without folder it "
                 "suggests folders that look like projects. In a server's first hour "
                 "it needs no password; after that the person does it in the manager.",
-                dict(server=SERVER, folder=FOLDER),
+                dict(server=SERVER, folder=FOLDER, deployment=DEPLOYMENT),
                 self.discover_applications,
                 required=("server",),
                 idempotent=True,
@@ -364,6 +376,7 @@ class Toolbox:
                         "description": "Which candidate from discover_applications. "
                         "Defaults to 1.",
                     },
+                    deployment=DEPLOYMENT,
                     **SETTINGS,
                 ),
                 self.add_application,
@@ -375,7 +388,12 @@ class Toolbox:
                 "Change an application's name or settings. Once its check has passed, "
                 "changing anything but its name needs the account password, which this "
                 "tool never takes: it says so, and the person does it in the manager.",
-                dict(application=APPLICATION, name=TEXT, **SETTINGS),
+                dict(
+                    application=APPLICATION,
+                    name=TEXT,
+                    deployment=DEPLOYMENT,
+                    **SETTINGS,
+                ),
                 self.update_application,
                 required=("application",),
             ),
@@ -722,13 +740,25 @@ class Toolbox:
 
     def discover_applications(self, arguments: Arguments) -> dict[str, Any]:
         server = self._server(arguments["server"])
-        return applications.discover(self.user, server, arguments.get("folder") or "")
+        return applications.discover(
+            self.user,
+            server,
+            arguments.get("folder") or "",
+            deployment=arguments.get("deployment"),
+        )
 
     def add_application(self, arguments: Arguments) -> dict[str, Any]:
         server = self._server(arguments["server"])
-        report = applications.discover(self.user, server, arguments["folder"])
+        report = applications.discover(
+            self.user,
+            server,
+            arguments["folder"],
+            deployment=arguments.get("deployment"),
+        )
         given = {
-            field: arguments[field] for field in SETTING_FIELDS if field in arguments
+            field: arguments[field]
+            for field in (*SETTING_FIELDS, "deployment")
+            if field in arguments
         }
         candidate = arguments.get("candidate")
         added = applications.add(

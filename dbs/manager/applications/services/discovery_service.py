@@ -8,8 +8,10 @@ from uuid import UUID
 
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
+from dbs.manager.applications import deployment
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.paths import on_host
+from dbs.manager.applications.services import facts as found_facts
 from dbs.manager.applications.serializers.application import (
     COMPOSE_FILE,
     COMPOSE_NAME,
@@ -61,6 +63,7 @@ COMPOSE_LABEL = "com.docker.compose."
 PODMAN_COMPOSE_LABEL = "io.podman.compose."
 PROJECT_FOLDERS = ("/app", "/code", "/srv", "/usr/src/app", "/opt/app")
 DISCOVER = "application.discover"
+ANSWER_WEIGHTS = {"runs_in": 4, "engine": 1, "database": 1}
 ACCOUNT_PASSWORD_REQUIRED = "Enter your own password to search this server."
 CONNECTION_KEYS = (
     "settings_module",
@@ -121,7 +124,11 @@ class DiscoveryService:
 
     @requires(Capability.APPLICATIONS_MANAGE)
     def discover(
-        self, server_id: UUID, folder: str = "", account_password: str = ""
+        self,
+        server_id: UUID,
+        folder: str = "",
+        account_password: str = "",
+        deployment: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         server = self.servers.get(server_id)
         if not account_password and not self.servers.in_setup(server):
@@ -132,7 +139,7 @@ class DiscoveryService:
             if account_password:
                 AccountService(self.user).confirm_password(account_password)
             with self.connections.open(server) as remote:
-                report = Discovery(remote).run(folder)
+                report = Discovery(remote, deployment).run(folder)
             entry.detail = {
                 "folder": report["folder"],
                 "candidates": len(report["candidates"]),
@@ -141,11 +148,18 @@ class DiscoveryService:
 
 
 class Discovery:
-    def __init__(self, remote: RemoteHost) -> None:
+    def __init__(
+        self, remote: RemoteHost, answers: dict[str, str] | None = None
+    ) -> None:
         self.remote = remote
+        self.answers = dict(answers or {})
+        self.neighbours: list[dict[str, Any]] = []
+        self.services_found: list[dict[str, Any]] | None = None
+        self.home = "/"
 
     def run(self, folder: str) -> dict[str, Any]:
         home = quiet(self.remote.realpath, ".") or "/"
+        self.home = home
         chosen = quiet(self.remote.realpath, folder) if folder else None
         if not chosen:
             return {
@@ -171,11 +185,16 @@ class Discovery:
         engines = {engine: engine_report(self.remote, engine) for engine in ENGINES}
         report["engines"] = engines
         compose_env = compose_env_files(self.remote, chosen, listing["compose_files"])
-        containers = [
-            container
+        listed = {
+            engine: listed_containers(self.remote, engine)
             for engine, facts in engines.items()
             if facts["usable"]
-            for container in matched_containers(self.remote, engine, chosen)
+        }
+        self.neighbours = [container for rows in listed.values() for container in rows]
+        containers = [
+            container
+            for engine, rows in listed.items()
+            for container in matched_containers(self.remote, engine, chosen, rows)
         ]
         candidates = [
             self.container_candidate(chosen, container, compose_env)
@@ -186,9 +205,37 @@ class Discovery:
             if host is not None:
                 candidates.append(host)
         report["candidates"] = sorted(
-            candidates[:CANDIDATES_PROBED], key=lambda found: -found["score"]
+            (self.with_facts(candidate) for candidate in candidates[:CANDIDATES_PROBED]),
+            key=lambda found: -found["score"],
         )
         return report
+
+    def with_facts(self, candidate: dict[str, Any]) -> dict[str, Any]:
+        if self.services_found is None:
+            self.services_found = found_facts.host_services(self.remote, self.home)
+        project = candidate.get("compose_project") or ""
+        facts = found_facts.facts_for(
+            self.remote,
+            candidate,
+            database=candidate.pop("database_facts", None),
+            services_found=self.services_found,
+            project_services=[
+                *candidate.pop("project_services", []),
+                *(
+                    neighbour["compose_service"]
+                    for neighbour in self.neighbours
+                    if project and neighbour["compose_project"] == project
+                ),
+            ],
+            containers=[neighbour["name"] for neighbour in self.neighbours],
+            image=candidate.pop("image", None),
+        )
+        detected = facts.pop("detected")
+        candidate["facts"] = facts
+        candidate["detected"] = detected
+        candidate["mismatches"] = deployment.mismatches(self.answers, detected)
+        candidate["score"] += answer_bonus(self.answers, detected)
+        return candidate
 
     def host_candidate(
         self, folder: str, listing: dict[str, Any]
@@ -248,6 +295,13 @@ class Discovery:
             if compose
             else []
         )
+        declared = (
+            found_facts.compose_services(
+                self.remote, project_dir, container["compose_files"], COMPOSE_MAX_BYTES
+            )
+            if compose
+            else {}
+        )
         candidate: dict[str, Any] = {
             "kind": Application.Kind.COMPOSE if compose else Application.Kind.CONTAINER,
             "engine": container["engine"],
@@ -271,6 +325,14 @@ class Discovery:
                 for path in dict.fromkeys([*compose_env, *started_with])
             ],
             "dbs_version": None,
+            "image": {
+                "ref": container["image"],
+                "id": container["image_id"],
+                "built_here": bool(
+                    declared.get(container["compose_service"], {}).get("build")
+                ),
+            },
+            "project_services": list(declared),
         }
         if not container["running"]:
             return scored(candidate)
@@ -332,6 +394,15 @@ class Discovery:
             elif isinstance(value, str) and value:
                 candidate[key] = value
         candidate["backup_dir_on_host"] = translated(candidate, candidate["remote_backup_dir"])
+        candidate["database_facts"] = found_facts.database_facts(self.remote, profile)
+
+
+def answer_bonus(answers: dict[str, str], detected: dict[str, str]) -> int:
+    return sum(
+        weight
+        for key, weight in ANSWER_WEIGHTS.items()
+        if deployment.agreements({key: answers.get(key, "")}, detected)
+    )
 
 
 def scored(candidate: dict[str, Any]) -> dict[str, Any]:
@@ -513,7 +584,22 @@ def _unquoted(value: str) -> str:
     return value.strip().strip("'\"").strip()
 
 
-def matched_containers(remote: RemoteHost, engine: str, folder: str) -> list[dict[str, Any]]:
+def matched_containers(
+    remote: RemoteHost,
+    engine: str,
+    folder: str,
+    listed: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    containers = listed if listed is not None else listed_containers(remote, engine)
+    matched = [
+        container
+        for container in containers
+        if well_named(container) and belongs(container, folder)
+    ]
+    return replicas_joined(matched)
+
+
+def listed_containers(remote: RemoteHost, engine: str) -> list[dict[str, Any]]:
     listed = quiet(remote.run, [engine, "ps", "--all", "--no-trunc", "--format", "{{json .}}"])
     if listed is None or not listed.ok:
         return []
@@ -528,13 +614,7 @@ def matched_containers(remote: RemoteHost, engine: str, folder: str) -> list[dic
     if inspected is None or not inspected.ok:
         return []
     rows = json_rows(inspected.stdout)
-    containers = [summary(engine, row) for row in rows if isinstance(row, dict)]
-    matched = [
-        container
-        for container in containers
-        if well_named(container) and belongs(container, folder)
-    ]
-    return replicas_joined(matched)
+    return [summary(engine, row) for row in rows if isinstance(row, dict)]
 
 
 def json_rows(text: str) -> list[Any]:
@@ -602,6 +682,7 @@ def summary(engine: str, row: dict[str, Any]) -> dict[str, Any]:
         "name": name,
         "running": bool(state.get("Running")),
         "image": str(config.get("Image") or ""),
+        "image_id": str(row.get("Image") or ""),
         "compose_project": _label(labels, "project"),
         "compose_service": _label(labels, "service"),
         "compose_dir": compose_dir,

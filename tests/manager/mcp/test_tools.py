@@ -457,6 +457,60 @@ def test_add_application_adds_the_candidate_and_checks_it(
 
 
 @pytest.mark.django_db
+def test_add_application_keeps_how_the_person_says_it_is_deployed(
+    mcp, make_server, remote
+):
+    make_server()
+
+    added = mcp(
+        "add_application",
+        server="web-1",
+        folder=PROJECT_DIR,
+        name="shop",
+        deployment={"runs_in": "host", "database": "postgresql", "web_server": ""},
+    )
+
+    assert added.ok, added.text
+    application = ApplicationRepository().active().get()
+    assert application.deployment == {"runs_in": "host", "database": "postgresql"}
+
+
+@pytest.mark.django_db
+def test_update_application_changes_the_answers_without_a_password(
+    mcp, make_server, make_application, remote
+):
+    server = settled(make_server())
+    application = settled(make_application(name="shop", server=server))
+
+    changed = mcp(
+        "update_application",
+        application="shop",
+        deployment={"runs_in": "compose", "engine": "podman"},
+    )
+
+    assert changed.ok, changed.text
+    assert changed.data["deployment"] == {"runs_in": "compose", "engine": "podman"}
+    assert ApplicationRepository().find(application.pk).deployment == {
+        "runs_in": "compose",
+        "engine": "podman",
+    }
+
+
+@pytest.mark.django_db
+def test_a_deployment_answer_the_tool_does_not_know_is_refused(mcp, make_server, remote):
+    make_server()
+
+    found = mcp(
+        "discover_applications",
+        server="web-1",
+        folder=PROJECT_DIR,
+        deployment={"runs_in": "kubernetes"},
+    )
+
+    assert not found.ok
+
+
+@pytest.mark.django_db
 def test_settings_passed_to_add_application_replace_what_was_found(
     mcp, make_server, remote
 ):

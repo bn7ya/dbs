@@ -56,6 +56,7 @@ APPLICATION_FIELDS = {
     "last_health",
     "timeout_in_container",
     "deploy_steps",
+    "deployment",
     "discovered_at",
     "created_at",
     "updated_at",

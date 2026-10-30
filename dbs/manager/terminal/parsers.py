@@ -4,6 +4,8 @@ import argparse
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from dbs.manager.applications.deployment import QUESTIONS
+
 RESTORE_MODES = ("merge", "replace")
 PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
@@ -107,7 +109,20 @@ def _yes(parser) -> None:
     )
 
 
+def _deployment(parser) -> None:
+    parser.add_argument(
+        "--deployment",
+        dest="deployment_answers",
+        action="append",
+        metavar="KEY=VALUE",
+        help="How the application is deployed, one answer each: "
+        + "; ".join(f"{key}={'|'.join(values)}" for key, values in QUESTIONS.items())
+        + ". An empty value means not sure.",
+    )
+
+
 def _application_settings(parser) -> None:
+    _deployment(parser)
     parser.add_argument(
         "--kind",
         choices=("host", "compose", "container"),
@@ -351,6 +366,7 @@ def applications(commands, surface: Surface) -> None:
         help="The application's folder on the server. Without it, folders that "
         "look like projects are suggested.",
     )
+    _deployment(discover)
 
     add = _verb(
         verbs,
