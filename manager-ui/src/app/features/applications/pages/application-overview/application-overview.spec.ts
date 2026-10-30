@@ -186,6 +186,7 @@ describe('ApplicationOverviewPage', () => {
     const labels = Array.from(html().querySelectorAll('button'), (button) => button.textContent?.trim());
     expect(labels).toContain('Check now');
     expect(labels).not.toContain('Edit');
+    expect(labels).not.toContain('Edit how it runs');
     expect(labels).not.toContain('Show passphrase');
     expect(labels).not.toContain('Remove application');
   });
@@ -219,6 +220,9 @@ describe('ApplicationOverviewPage', () => {
     expect(text).toContain('PostgreSQL');
     expect(text).toContain('Found: MySQL');
     expect(text).toContain('What you said differs from what the last check found.');
+    const labels = Array.from(html().querySelectorAll('button'), (button) => button.textContent?.trim());
+    expect(labels.filter((label) => label === 'Edit')).toHaveLength(1);
+    expect(labels).toContain('Edit how it runs');
 
     const saving = page.useWhatWasFound();
     const saved = http.expectOne(DETAIL);

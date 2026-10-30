@@ -368,6 +368,7 @@
       "saidFound": "You said {question} {said}, but the manager found {found}.",
       "differs": "What you said differs from what the last check found. Check it, or use what was found.",
       "useFound": "Use what was found",
+      "edit": "Edit how it runs",
       "saved": "Saved how it runs.",
       "runs_in": {
         "label": "Where does Django run?",
