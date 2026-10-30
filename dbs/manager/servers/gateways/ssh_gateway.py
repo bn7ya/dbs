@@ -912,19 +912,29 @@ class RemoteHost:
         env: Mapping[str, str] | None = None,
         timeout: float | None = None,
         limited: bool = False,
+        stdin_line: str | None = None,
     ) -> RemoteResult:
         seconds = timeout or settings.SSH_COMMAND_TIMEOUT
         if self.timeout_on_host and not limited:
             argv, limited = bounded(argv, seconds), True
         script = build_script(argv, cwd=cwd, env=env)
+        secret = stdin_line or ""
         try:
-            result = self.session.feed(
-                script, source, timeout=_waited(seconds, limited)
-            )
+            if stdin_line is None:
+                result = self.session.feed(
+                    script, source, timeout=_waited(seconds, limited)
+                )
+            else:
+                result = self.session.feed(
+                    script,
+                    source,
+                    stdin_line=stdin_line,
+                    timeout=_waited(seconds, limited),
+                )
         except DBSError as exc:
-            raise RemoteCommandFailed(output=_tail(str(exc))) from exc
+            raise RemoteCommandFailed(output=_tail(str(exc), secret)) from exc
         if limited and result.exit_status in TIMED_OUT_STATUSES:
-            raise RemoteCommandTimedOut(output=_tail(result.stderr))
+            raise RemoteCommandTimedOut(output=_tail(result.stderr, secret))
         return result
 
     def archive(
@@ -1223,6 +1233,15 @@ class RemoteHost:
 
     def _sha256(self, path: str, timeout: float) -> str:
         return _digest_in(self.run(["sha256sum", "--", path], timeout=timeout))
+
+    def sha256(self, path: str, timeout: float | None = None) -> str:
+        return self._sha256(path, timeout or settings.BACKUP_EXEC_TIMEOUT)
+
+    def ensure_folder(self, path: str) -> None:
+        self._make_dirs(path)
+
+    def lexists(self, path: str) -> bool:
+        return self._lexists(path)
 
 
 def _digest_in(result: RemoteResult) -> str:

@@ -154,7 +154,9 @@ Overriding what runs (`--kind` to `--settings`) asks for the account password; w
 found is added without it.
 `app capture-passphrase` runs once, before an application's first backup; an application's
 backup passphrase must never change afterwards. The SSH user needs the `docker` group or
-rootless Podman as itself; the manager never uses `sudo` (`engine_permission_denied`).
+rootless Podman as itself; backups and the check never use `sudo` (`engine_permission_denied`).
+`server move SOURCE --to TARGET` plans moving a server's applications onto another server and,
+with `--real`, installs what it lacks with `sudo`, carries each application and restores its data.
 
 `app deploy-steps APP --set FILE` takes a JSON list of steps from the fixed catalogue —
 `git_pull` (`remote`, `branch`), `compose_pull`, `compose_build` (`pull`), `compose_up`

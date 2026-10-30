@@ -589,7 +589,7 @@ that, those ask for your password too.
 
 | On the server | |
 |---|---|
-| An SSH user that owns the project, with the manager's key in `~/.ssh/authorized_keys` | the manager needs no `root`, and never uses `sudo` or a shell profile |
+| An SSH user that owns the project, with the manager's key in `~/.ssh/authorized_keys` | the manager needs no `root` and no shell profile; it uses `sudo` only to prepare the server a move goes to |
 | The project, its Python and `manage.py`, on the server or in its image | the manager runs `manage.py dbs …` with fixed arguments |
 | `pip install django-dbs` and `"dbs"` in `INSTALLED_APPS`, migrated | 0.7.0 or later; 0.8.0 or later to resume a transfer that broke |
 | A stable `SECRET_KEY` (or `DBS_PASSPHRASE`) | the backup passphrase comes from it, and must never change |
@@ -633,7 +633,7 @@ SSH user itself: its containers are its own, and its SSH login needs `XDG_RUNTIM
 as a systemd login does. `podman compose` uses the provider Podman is set up with, podman-compose
 included. A bind-mounted folder must belong to the container's user inside Podman's user
 namespace: `podman unshare chown 10001:10001 backups` gives it to user 10001 of the
-container. The manager never uses `sudo`. The check names what is wrong:
+container. Backups, restores and the check never use `sudo`. The check names what is wrong:
 
 | Code | Means |
 |---|---|
@@ -1454,7 +1454,7 @@ application whose django-dbs is older than 0.7 answers `dbs_too_old`; upgrade it
 
 **The check says `engine_permission_denied`.** The SSH user may not use Docker or Podman. Add
 it to the `docker` group, or run the application's containers with rootless Podman as that
-user. The manager never uses `sudo`. `container_engine_missing` means neither engine answers;
+user. The check never uses `sudo`. `container_engine_missing` means neither engine answers;
 `container_not_running` that the application's container is stopped.
 
 **Discovery found nothing, or ran nothing in the folder.** A folder that another account can

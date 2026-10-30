@@ -52,6 +52,8 @@ from dbs.manager.redeploy.serializers import (
     RevertSerializer,
 )
 from dbs.manager.redeploy.services import RedeployService
+from dbs.manager.relocation.serializers import ServerMoveSerializer
+from dbs.manager.relocation.services import RelocationService
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.serializers import (
     AddedServerSerializer,
@@ -196,7 +198,8 @@ INSTRUCTIONS = (
     "discover_applications with the application's folder and add_application with the "
     "candidate to keep. Taking a backup waits until it is done. "
     "A plan can be made to keep more backups here, never fewer. Restores, moves and "
-    "reverts of a move here are always rehearsals: nothing on the server changes. An "
+    "reverts of a move here are always rehearsals: nothing on the server changes. "
+    "rehearse_server_move only plans moving a whole server onto another. An "
     "application's backup passphrase must never be changed, because older backups would "
     "no longer open; capture it only while adding an application, before its first "
     "backup. "
@@ -624,6 +627,34 @@ class Toolbox:
                 idempotent=True,
             ),
             Tool(
+                "rehearse_server_move",
+                "Plan a server move",
+                "Plan moving a server's applications onto another server, which may have "
+                "nothing installed: what each application carries (its folder with git, "
+                "images, volumes, files, .env), how its database reaches the new server, "
+                "which packages the new server lacks, and what would stop the move. "
+                "Nothing changes on either server and no sudo password is used. The move "
+                "for real is done by the person in the manager.",
+                dict(
+                    source=SERVER,
+                    target=SERVER,
+                    applications={
+                        **APPLICATIONS,
+                        "description": "The applications to move by name or id. Leave "
+                        "empty to move every application of the server.",
+                    },
+                    target_folders={
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                        "description": "An application's name mapped to the absolute "
+                        "folder it goes to. Defaults to the same folder.",
+                    },
+                ),
+                self.rehearse_server_move,
+                required=("source", "target"),
+                idempotent=True,
+            ),
+            Tool(
                 "rehearse_deploy",
                 "Rehearse a deploy",
                 "Check that an application could be deployed in place with its deploy "
@@ -949,6 +980,32 @@ class Toolbox:
             )
         data = validated(RedeploySerializer, body)
         return self._job(RedeployService(self.user).start(**data))
+
+    def rehearse_server_move(self, arguments: Arguments) -> dict[str, Any]:
+        source = self._server(arguments["source"])
+        target = self._server(arguments["target"])
+        folders = arguments.get("target_folders") or {}
+        named = [self._application(name) for name in arguments.get("applications") or []]
+        body: dict[str, Any] = {
+            "target_server": target.pk,
+            "applications": [
+                {
+                    "application": application.pk,
+                    "folder": folders.get(application.name, ""),
+                }
+                for application in named
+            ],
+            "rehearsal": True,
+        }
+        data = validated(ServerMoveSerializer, body)
+        finished = jobs.finished(
+            self.user, RelocationService(self.user).start(source_server=source.pk, **data)
+        )
+        return {
+            **self._job(finished),
+            "inventory": (finished.data or {}).get("inventory"),
+            "blockers": (finished.data or {}).get("blockers", []),
+        }
 
     def rehearse_deploy(self, arguments: Arguments) -> dict[str, Any]:
         application = self._application(arguments["application"])

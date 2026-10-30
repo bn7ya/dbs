@@ -82,6 +82,10 @@ FORBIDDEN_PROPERTIES = {
     "compose_project",
     "compose_service",
     "compose_files",
+    "sudo_password",
+    "source_sudo_password",
+    "confirm_name",
+    "resume_of",
 }
 SHELL_MODULE_WORDS = ("console", "shell", "terminal", "subprocess", "pexpect")
 TOOLS = {
@@ -117,6 +121,7 @@ TOOLS = {
     "compare_env_versions",
     "list_files",
     "rehearse_redeploy",
+    "rehearse_server_move",
     "rehearse_deploy",
     "rehearse_revert",
 }
@@ -899,3 +904,29 @@ def test_a_compose_application_is_added_with_its_service(
         SERVICE,
     )
     assert added.data["check"]["status"] == Application.CheckStatus.OK
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_server_move_through_mcp_is_always_a_plan(mcp, make_server, make_application, monkeypatch):
+    from dbs.manager.relocation import services as relocation_services
+
+    source = make_server(name="old")
+    make_server(name="new", host="10.0.0.6")
+    make_application(name="shop", server=source)
+    started = []
+    real_start = relocation_services.RelocationService.start
+
+    def spy(self, **kwargs):
+        started.append(kwargs)
+        return real_start(self, **kwargs)
+
+    monkeypatch.setattr(relocation_services.RelocationService, "start", spy)
+
+    planned = mcp("rehearse_server_move", source="old", target="new")
+
+    assert planned.data is not None, planned.text
+    [kwargs] = started
+    assert kwargs["rehearsal"] is True
+    assert not {"password", "sudo_password", "source_sudo_password", "confirm_name"} & {
+        key for key, value in kwargs.items() if value
+    }

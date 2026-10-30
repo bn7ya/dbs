@@ -24,6 +24,17 @@ def let_go(activity_id: int) -> None:
     Lease.objects.filter(name=_name(activity_id)).delete()
 
 
+def renewed_since(moment) -> list[int]:
+    held = Lease.objects.filter(
+        name__startswith=PREFIX, renewed_at__gt=moment, expires_at__gt=timezone.now()
+    ).exclude(owner="")
+    return [
+        int(lease.name.removeprefix(PREFIX))
+        for lease in held
+        if not abandoned(lease.owner)
+    ]
+
+
 def live() -> list[int]:
     held = Lease.objects.filter(
         name__startswith=PREFIX, expires_at__gt=timezone.now()

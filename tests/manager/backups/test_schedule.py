@@ -9,6 +9,7 @@ import pytest
 from django.utils import timezone
 
 from dbs import audit
+from dbs.manager.activity import job_leases
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.services import ApplicationService
@@ -25,6 +26,7 @@ from dbs.manager.backups.timing import next_on_grid
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.scheduler import TASKS
 from tests.manager.factories import make_application
+from dbs.models import Lease
 from tests.manager.support import PASSWORD, backdated
 
 DAY = timedelta(days=1)
@@ -254,6 +256,9 @@ def job_entry(
     if started_ago is not None:
         job = ActivityService(None).start(job.pk)
         job = backdated(job, started_at=timezone.now() - started_ago)
+        Lease.objects.filter(name=f"{job_leases.PREFIX}{job.pk}").update(
+            renewed_at=timezone.now() - started_ago
+        )
     return backdated(job, created_at=timezone.now() - queued_ago)
 
 

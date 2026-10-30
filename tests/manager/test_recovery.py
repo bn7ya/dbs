@@ -189,3 +189,26 @@ def test_windows_is_asked_on_windows(monkeypatch):
 
     assert processes.pid_running(4242) is False
     assert processes.abandoned(f"{socket.gethostname()}:4242") is True
+
+
+@pytest.mark.django_db
+def test_the_sweep_leaves_a_long_job_that_still_renews_its_lease(
+    admin, application, settings
+):
+    long_ago = timezone.now() - timedelta(seconds=settings.BACKUP_TASK_TIME_LIMIT, hours=3)
+    renewing = queued_job(admin, application)
+    ActivityService(None).start(renewing.pk)
+    backdated(renewing, started_at=long_ago)
+    silent = ActivityService(admin).queue("backup.take", subject=application)
+    ActivityService(None).start(silent.pk)
+    backdated(silent, started_at=long_ago)
+    from dbs.models import Lease
+
+    Lease.objects.filter(name=f"{job_leases.PREFIX}{silent.pk}").update(
+        renewed_at=long_ago
+    )
+    job_leases.hold(renewing.pk)
+
+    assert recovery.sweep() == 1
+    assert ActivityRepository().find_joined(renewing.pk).status == audit.RUNNING
+    assert ActivityRepository().find_joined(silent.pk).status == audit.FAILED

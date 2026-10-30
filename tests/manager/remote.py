@@ -27,6 +27,7 @@ class ScriptedSession(LocalSftpSession):
         self.commands = commands
         self.runs = []
         self.streams = []
+        self.feeds = []
         if credentials is not None:
             self.target = SimpleNamespace(
                 host=credentials.host,
@@ -73,6 +74,32 @@ class ScriptedSession(LocalSftpSession):
             progress(len(sent))
         return RemoteResult(status, "", stderr)
 
+    def feed(self, script, source, *, stdin_line=None, timeout=None):
+        argv, setup = argv_of(script)
+        data = source.read()
+        self.feeds.append(
+            {
+                "argv": argv,
+                "setup": setup,
+                "stdin": stdin_line,
+                "timeout": timeout,
+                "data": data,
+            }
+        )
+        handler = self.commands.get(("feed", *argv)) or next(
+            (
+                found
+                for prefix, found in self.commands.items()
+                if prefix[:1] == ("feed",)
+                and callable(found)
+                and tuple(argv[: len(prefix) - 1]) == prefix[1:]
+            ),
+            None,
+        )
+        if handler is None:
+            return RemoteResult(*self._answer(argv, stdin_line))
+        return RemoteResult(*handler(argv, stdin_line, data))
+
     def _answer(self, argv, stdin_line):
         if argv[:2] == ["timeout", "-k"]:
             argv = argv[4:]
@@ -103,6 +130,12 @@ class Hosts:
 
     def streams(self, host):
         return [run for s in self.sessions if s.host == host for run in s.streams]
+
+    def feeds(self, host):
+        return [run for s in self.sessions if s.host == host for run in s.feeds]
+
+    def everything(self, host):
+        return [*self.runs(host), *self.streams(host), *self.feeds(host)]
 
 
 def scripted_hosts(monkeypatch):

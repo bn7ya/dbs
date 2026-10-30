@@ -7,25 +7,25 @@ from uuid import UUID
 from django.conf import settings
 from rest_framework.exceptions import APIException, ErrorDetail, ValidationError
 
-from dbs import audit, validate_backup
+from dbs import audit
 from dbs.manager.accounts.exceptions import InvalidPassword, TooManyAttempts
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.services import ApplicationService
-from dbs.manager.backups.exceptions import BackupMissing, BackupQuarantined
+from dbs.manager.backups.exceptions import BackupQuarantined
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
 from dbs.manager.backups.services.backup_run_service import BackupRunService
 from dbs.manager.backups.services.job_queue import JobQueue
-from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.common.exceptions import error_code_of
 from dbs.manager.envfiles.exceptions import EnvPathMissing
 from dbs.manager.envfiles.repositories import EnvVersionRepository
 from dbs.manager.envfiles.services import EnvFileService
 from dbs.manager.redeploy import deploy as deploys
+from dbs.manager.redeploy import restoring
 from dbs.manager.redeploy.catalogue import KINDS, validated
 from dbs.manager.redeploy.deploy import DEPLOY
 from dbs.manager.redeploy.exceptions import (
@@ -43,7 +43,6 @@ from dbs.manager.servers.exceptions import (
     PassphraseMissing,
     RemoteCommandFailed,
     RemoteNotFound,
-    RestoreFailed,
     SSHAuthFailed,
     SSHUnreachable,
     failure_facts,
@@ -437,33 +436,16 @@ class RedeployService:
         return True
 
     def _manage(self, target: Application, actor: Any, *arguments: str) -> Any:
-        connections = ServerConnectionService(actor)
-        with connections.open(target) as remote:
-            return remote.run_manage(
-                connections.dbs_profile(target),
-                arguments,
-                timeout=settings.BACKUP_EXEC_TIMEOUT,
-            )
+        return restoring.manage(target, actor, *arguments)
 
     def _migrated(self, target: Application, actor: Any) -> bool:
-        return bool(self._manage(target, actor, "migrate", "--check", "--noinput").ok)
+        return restoring.migrated(target, actor)
 
     def _stored(self, file_id: str) -> BackupFile:
-        file = self.files.find_including_deleted(UUID(file_id))
-        if file is None or file.removed_at is not None:
-            raise BackupMissing()
-        return file
+        return restoring.stored(file_id)
 
     def _validate(self, file: BackupFile, actor: Any) -> Detail:
-        passphrase = ServerConnectionService(actor).backup_passphrase(file.application)
-        try:
-            with BackupStorage().open_read(file.storage_path) as handle:
-                result = validate_backup(handle, passphrase)
-        except FileNotFoundError as exc:
-            raise BackupMissing() from exc
-        if not (result.ok and result.decrypted_ok):
-            raise RestoreFailed()
-        return {"validated": True, "target_not_migrated": True}
+        return restoring.validate(file, actor)
 
     def _restore_file(
         self,
@@ -474,30 +456,7 @@ class RedeployService:
         flush: bool,
         dry_run: bool,
     ) -> Detail:
-        connections = ServerConnectionService(actor)
-        try:
-            handle = BackupStorage().open_read(file.storage_path)
-        except FileNotFoundError as exc:
-            raise BackupMissing() from exc
-        with handle, connections.open(target) as remote:
-            report = remote.restore_dbs_backup(
-                handle,
-                profile=connections.dbs_profile(target),
-                passphrase=connections.backup_passphrase(file.application),
-                remote_dir=connections.staging_folder(target, remote),
-                flush=flush,
-                dry_run=dry_run,
-            )
-        outcome: Detail = {
-            "backup": str(file.pk),
-            "records": report.records,
-            "files": report.files,
-            "flushed": report.flushed,
-            "healed": report.healed,
-        }
-        if report.copy_left:
-            outcome["copy_left"] = report.copy_left
-        return outcome
+        return restoring.restore_file(file, target, actor, flush=flush, dry_run=dry_run)
 
     def _chosen_backup(self, backup: UUID | None, source: Application) -> str | None:
         if backup is None:

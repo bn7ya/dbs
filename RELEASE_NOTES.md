@@ -54,8 +54,9 @@ Every command in a container goes through the engine, with the passphrase on sta
 restore streams the backup into the container as the container's own user, a `.env` kept in the
 image is read and replaced in place, and stale partials and restore leftovers are swept inside the
 container, so a taken backup leaves nothing behind on the server. The check reports each engine,
-its Compose, and whether the SSH user may use it. The manager never uses `sudo`: an
-`engine_permission_denied` is fixed by the engine's group or by rootless Podman.
+its Compose, and whether the SSH user may use it. Backups, restores and the check never use
+`sudo`: an `engine_permission_denied` is fixed by the engine's group or by rootless Podman. Only
+a server move uses `sudo`, to install what the new server lacks.
 
 ### Schedules with a first run, a time zone, a pause
 

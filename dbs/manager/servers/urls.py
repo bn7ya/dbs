@@ -1,5 +1,7 @@
 from django.urls import path
 
+from dbs.manager.relocation.views import ServerMoveView
+
 from dbs.manager.servers.views import (
     BrowseView,
     CheckView,
@@ -40,4 +42,5 @@ urlpatterns = [
     path("<uuid:pk>/public-key/", PublicKeyView.as_view(), name="public-key"),
     path("<uuid:pk>/browse/", BrowseView.as_view(), name="browse"),
     path("<uuid:pk>/merge/", MergeView.as_view(), name="merge"),
+    path("<uuid:pk>/move/", ServerMoveView.as_view(), name="move"),
 ]
