@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from dbs.manager.servers.exceptions import SSHUnreachable
 from dbs.manager.servers.gateways import RemoteHost
 from dbs.transports import RemoteResult
+from dbs.transports.ssh import MAX_CAPTURED_OUTPUT
 from tests.manager.servers.support import LocalSftpSession
 
 CONNECT = "dbs.manager.servers.services.connection_service.connect"
@@ -41,7 +42,13 @@ class ScriptedSession(LocalSftpSession):
         self.runs.append(
             {"argv": argv, "setup": setup, "stdin": stdin_line, "timeout": timeout}
         )
-        return RemoteResult(*self._answer(argv, stdin_line))
+        status, stdout, stderr = self._answer(argv, stdin_line)
+        return RemoteResult(
+            status,
+            stdout[:MAX_CAPTURED_OUTPUT],
+            stderr[:MAX_CAPTURED_OUTPUT],
+            len(stdout) > MAX_CAPTURED_OUTPUT,
+        )
 
     def stream(
         self,

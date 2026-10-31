@@ -8,7 +8,10 @@ import pytest
 from dbs.manager.adapters.checks import problem
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.repositories import ApplicationRepository
-from dbs.manager.applications.services.discovery_service import FIND_PROJECT
+from dbs.manager.applications.services.discovery_service import (
+    FIND_PROJECT,
+    INSPECTED_FIELDS,
+)
 from dbs.manager.servers.gateways import EntryKind
 from dbs.manager.servers.models import Server
 from tests.manager.servers.support import (
@@ -37,22 +40,25 @@ COMPOSE_VERSION = "2.29.1"
 EXEC_OPTIONS = ("-T", "-i")
 EXEC_OPTIONS_WITH_VALUES = ("-u", "-w", "-e")
 NOT_FOUND = Result(127, "", "exec: not found")
+INSPECT = (
+    "docker",
+    "inspect",
+    "--type",
+    "container",
+    "--format",
+    INSPECTED_FIELDS,
+    CONTAINER_ID,
+)
 
 
 def inspected(running: bool) -> str:
-    return json.dumps(
-        [
+    return (
+        json.dumps(
             {
-                "Id": CONTAINER_ID,
                 "Name": "/shop-backend-1",
                 "State": {"Running": running},
                 "Config": {
                     "Image": "shop:latest",
-                    "WorkingDir": WORKDIR,
-                    "Env": [
-                        "PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin",
-                        f"DJANGO_SETTINGS_MODULE={COMPOSE_SETTINGS}",
-                    ],
                     "Labels": {
                         "com.docker.compose.project": "shop",
                         "com.docker.compose.service": SERVICE,
@@ -61,6 +67,11 @@ def inspected(running: bool) -> str:
                             posixpath.join(FOLDER, name) for name in COMPOSE_FILES
                         ),
                     },
+                    "WorkingDir": WORKDIR,
+                    "Env": [
+                        "PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin",
+                        f"DJANGO_SETTINGS_MODULE={COMPOSE_SETTINGS}",
+                    ],
                 },
                 "Mounts": [
                     {
@@ -71,7 +82,8 @@ def inspected(running: bool) -> str:
                     }
                 ],
             }
-        ]
+        )
+        + "\n"
     )
 
 
@@ -86,12 +98,10 @@ class ComposeProject(FakeRemote):
                 ("docker", "compose", "version", "--short"): Result(
                     0, f"{COMPOSE_VERSION}\n"
                 ),
-                ("docker", "ps", "--all", "--no-trunc", "--format", "{{json .}}"): (
-                    Result(0, json.dumps({"ID": CONTAINER_ID}) + "\n")
+                ("docker", "ps", "--all", "--no-trunc", "--format", "{{.ID}}"): (
+                    Result(0, f"{CONTAINER_ID}\n")
                 ),
-                ("docker", "inspect", "--type", "container", CONTAINER_ID): Result(
-                    0, inspected(running)
-                ),
+                INSPECT: Result(0, inspected(running)),
             },
             paths={HOST_BACKUP_DIR, HOST_ENV},
         )
@@ -198,6 +208,29 @@ def test_discover_finds_the_compose_service_that_runs_the_application(
         COMPOSE_SETTINGS,
         HOST_BACKUP_DIR,
         "-",
+    ]
+
+
+@pytest.mark.django_db
+def test_discover_names_a_container_whose_details_were_cut_off(
+    terminal, admin, make_server, compose_project
+):
+    make_server()
+    compose_project.answers[INSPECT] = Result(
+        0, inspected(True)[:100], stdout_truncated=True
+    )
+
+    ran = terminal("app", "discover", "web-1", "--folder", FOLDER)
+
+    assert ran.code == 0, ran.err
+    assert ran.out.splitlines()[-2:] == [
+        "Found no Django project here.",
+        f"Left out docker container {CONTAINER_ID}: "
+        "it describes itself in more than 64 KiB.",
+    ]
+    shown = terminal("app", "discover", "web-1", "--folder", FOLDER, "--json")
+    assert shown.json()["unread_containers"] == [
+        {"engine": "docker", "id": CONTAINER_ID}
     ]
 
 

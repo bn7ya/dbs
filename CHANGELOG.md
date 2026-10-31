@@ -6,6 +6,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `RemoteResult.stdout_truncated`: `SSHSession.run()` and `feed()` keep 64 KiB of standard
+  output, and now say when a command printed more.
+- A discovery report's `unread_containers` names each container (`engine`, `id`) that
+  describes itself in more than 64 KiB on its own; discovery leaves it out, and the terminal
+  says so under the candidates.
+
+### Fixed
+
+- Discovery found no application on a server whose containers, inspected together, came to
+  more than 64 KiB, such as a few containers with long environments: the answer was cut, could
+  not be read, and the folder was reported as holding no Django project. Discovery now lists
+  container ids only, inspects just the fields it reads, one line per container, and inspects
+  again in halves when an answer is cut. A container removed between listing and inspecting no
+  longer hides the others.
+
 ## [0.8.0] - 2026-10-30
 
 A server and the Django projects on it are now separate things: the DBS manager adds a server

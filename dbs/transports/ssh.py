@@ -103,9 +103,12 @@ class RemoteBackup:
 
 @dataclass
 class RemoteResult:
+    """What a remote command left: its exit status, its standard output and standard error as kept, and ``stdout_truncated``, true when standard output went past the 64 KiB kept."""
+
     exit_status: int
     stdout: str
     stderr: str
+    stdout_truncated: bool = False
 
     @property
     def ok(self) -> bool:
@@ -404,8 +407,10 @@ def _upload_source(data_or_path):
     yield data_or_path, size
 
 
-def _decode(stream) -> str:
-    return stream.read(MAX_CAPTURED_OUTPUT).decode("utf-8", "replace")
+def _captured(stream) -> tuple[str, bool]:
+    data = stream.read(MAX_CAPTURED_OUTPUT + 1)
+    kept = data[:MAX_CAPTURED_OUTPUT].decode("utf-8", "replace")
+    return kept, len(data) > MAX_CAPTURED_OUTPUT
 
 
 @dataclass
@@ -663,7 +668,7 @@ class SSHSession:
                 _close_quietly(channel)
         out.join(STDERR_WAIT)
         err.join(STDERR_WAIT)
-        return RemoteResult(status, out.text(), err.text())
+        return RemoteResult(status, out.text(), err.text(), out.truncated)
 
     def open_terminal(
         self,
@@ -721,8 +726,8 @@ class SSHSession:
                 stdin.write(stdin_line + "\n")
                 stdin.flush()
             stdin.channel.shutdown_write()
-            out = _decode(stdout)
-            err = _decode(stderr)
+            out, truncated = _captured(stdout)
+            err, _ = _captured(stderr)
             status = stdout.channel.recv_exit_status()
         except (socket.timeout, OSError) as exc:
             if deadline.passed or isinstance(exc, socket.timeout):
@@ -734,7 +739,7 @@ class SSHSession:
             raise RemoteTimeout(f"Remote command timed out after {limit}s.")
         if status == CLOSED_WITHOUT_STATUS and not self.is_alive():
             raise self._lost()
-        return RemoteResult(status, out, err)
+        return RemoteResult(status, out, err, truncated)
 
     def _failure(self, exc: BaseException) -> DBSError:
         if not self.is_alive():
@@ -1064,6 +1069,7 @@ class _StderrTail:
         self._on_line = on_line
         self._on_activity = on_activity
         self.last_activity = time.monotonic()
+        self.truncated = False
         self._thread = threading.Thread(target=self._read, daemon=True)
 
     def start(self) -> None:
@@ -1086,7 +1092,10 @@ class _StderrTail:
                 if self._on_activity is not None:
                     self._on_activity(0)
                 self._kept += chunk
-                del self._kept[: max(len(self._kept) - self._limit, 0)]
+                overflow = max(len(self._kept) - self._limit, 0)
+                if overflow:
+                    self.truncated = True
+                    del self._kept[:overflow]
                 if self._on_line is not None:
                     self._lines(chunk)
         except Exception:

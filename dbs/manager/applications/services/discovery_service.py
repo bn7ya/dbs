@@ -50,6 +50,13 @@ COMPOSE_FILES = (
 CONTAINER_FILES = ("Dockerfile", "Containerfile")
 ENV_SUFFIX = ".env"
 CONTAINERS_INSPECTED = 30
+INSPECTED_FIELDS = (
+    '{"Name":{{json .Name}},"Image":{{json .Image}},'
+    '"State":{"Running":{{json .State.Running}}},'
+    '"Config":{"Image":{{json .Config.Image}},"Labels":{{json .Config.Labels}},'
+    '"WorkingDir":{{json .Config.WorkingDir}},"Env":{{json .Config.Env}}},'
+    '"Mounts":{{json .Mounts}}}'
+)
 CANDIDATES_PROBED = 8
 MANAGE_MAX_BYTES = 64 * 1024
 COMPOSE_MAX_BYTES = 256 * 1024
@@ -169,6 +176,7 @@ class Discovery:
                 "engines": {},
                 "candidates": [],
                 "folders": project_folders(self.remote, home),
+                "unread_containers": [],
             }
         trusted = pythons.trusted_with_parent(self.remote, chosen)
         listing = folder_listing(self.remote, chosen)
@@ -179,6 +187,7 @@ class Discovery:
             "engines": {},
             "candidates": [],
             "folders": [],
+            "unread_containers": [],
         }
         if not trusted:
             return report
@@ -186,7 +195,7 @@ class Discovery:
         report["engines"] = engines
         compose_env = compose_env_files(self.remote, chosen, listing["compose_files"])
         listed = {
-            engine: listed_containers(self.remote, engine)
+            engine: listed_containers(self.remote, engine, report["unread_containers"])
             for engine, facts in engines.items()
             if facts["usable"]
         }
@@ -599,22 +608,42 @@ def matched_containers(
     return replicas_joined(matched)
 
 
-def listed_containers(remote: RemoteHost, engine: str) -> list[dict[str, Any]]:
-    listed = quiet(remote.run, [engine, "ps", "--all", "--no-trunc", "--format", "{{json .}}"])
+def listed_containers(
+    remote: RemoteHost, engine: str, unread: list[dict[str, str]] | None = None
+) -> list[dict[str, Any]]:
+    listed = quiet(remote.run, [engine, "ps", "--all", "--no-trunc", "--format", "{{.ID}}"])
     if listed is None or not listed.ok:
         return []
     ids = [
-        identifier
-        for identifier in (_container_id(row) for row in json_rows(listed.stdout))
-        if identifier and CONTAINER_ID.match(identifier)
+        identifier for identifier in listed.stdout.split() if CONTAINER_ID.match(identifier)
     ][:CONTAINERS_INSPECTED]
+    left_out: list[str] = []
+    rows = inspected_rows(remote, engine, ids, left_out)
+    if unread is not None:
+        unread.extend({"engine": engine, "id": identifier} for identifier in left_out)
+    return [summary(engine, row) for row in rows if isinstance(row, dict)]
+
+
+def inspected_rows(
+    remote: RemoteHost, engine: str, ids: list[str], left_out: list[str]
+) -> list[Any]:
     if not ids:
         return []
-    inspected = quiet(remote.run, [engine, "inspect", "--type", "container", *ids])
-    if inspected is None or not inspected.ok:
+    inspected = quiet(
+        remote.run,
+        [engine, "inspect", "--type", "container", "--format", INSPECTED_FIELDS, *ids],
+    )
+    if inspected is None:
         return []
-    rows = json_rows(inspected.stdout)
-    return [summary(engine, row) for row in rows if isinstance(row, dict)]
+    if not inspected.stdout_truncated:
+        return json_rows(inspected.stdout)
+    if len(ids) == 1:
+        left_out.extend(ids)
+        return []
+    half = len(ids) // 2
+    return inspected_rows(remote, engine, ids[:half], left_out) + inspected_rows(
+        remote, engine, ids[half:], left_out
+    )
 
 
 def json_rows(text: str) -> list[Any]:
@@ -636,16 +665,6 @@ def json_rows(text: str) -> list[Any]:
         except ValueError:
             continue
     return rows
-
-
-def _container_id(row: Any) -> str:
-    if not isinstance(row, dict):
-        return ""
-    for key in ("ID", "Id", "id"):
-        value = row.get(key)
-        if isinstance(value, str):
-            return value
-    return ""
 
 
 def well_named(container: dict[str, Any]) -> bool:

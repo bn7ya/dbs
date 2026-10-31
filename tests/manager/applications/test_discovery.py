@@ -266,9 +266,72 @@ def test_containers_are_listed_in_full_and_inspected_by_id(
     discovered(api, server, site["shop"])
 
     argvs = ran(hosts)
-    assert ["docker", "ps", "--all", "--no-trunc", "--format", "{{json .}}"] in argvs
+    assert ["docker", "ps", "--all", "--no-trunc", "--format", "{{.ID}}"] in argvs
     [asked] = docker.inspected
     assert asked == [row["Id"] for row in docker.rows]
+
+
+def padded(row, size):
+    row["Config"]["Env"] = [*row["Config"]["Env"], "PADDING=" + "x" * size]
+
+
+@pytest.mark.django_db
+def test_containers_that_describe_themselves_in_more_than_64_kib_are_inspected_in_halves(
+    api, server, site, docker
+):
+    for row in docker.rows:
+        padded(row, 10_000)
+
+    report = discovered(api, server, site["shop"])
+
+    ids = [row["Id"] for row in docker.rows]
+    assert docker.inspected == [ids, ids[:3], ids[3:]]
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+        "worker",
+    ]
+    assert report["unread_containers"] == []
+
+
+@pytest.mark.django_db
+def test_a_container_that_alone_passes_64_kib_is_named_and_the_others_still_found(
+    api, server, site, docker
+):
+    [redis] = [row for row in docker.rows if row["Name"] == "/redis"]
+    padded(redis, 70_000)
+
+    report = discovered(api, server, site["shop"])
+
+    assert docker.inspected[-1] == [redis["Id"]]
+    assert report["unread_containers"] == [{"engine": "docker", "id": redis["Id"]}]
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+        "worker",
+    ]
+
+
+@pytest.mark.django_db
+def test_a_container_gone_between_listing_and_inspecting_leaves_the_rest_found(
+    api, server, site, docker, hosts
+):
+    [worker] = [row for row in docker.rows if row["Name"] == "/shop-worker-1"]
+    docker.rows.remove(worker)
+    inspect = docker.inspecting(docker.rows)
+
+    def gone(argv, stdin_line):
+        status, stdout, stderr = inspect(argv, stdin_line)
+        return 1, stdout, f"Error response from daemon: No such container: {worker['Id']}"
+
+    docker.answer(["docker", "inspect"], gone)
+
+    report = discovered(api, server, site["shop"])
+
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+    ]
 
 
 @pytest.mark.django_db

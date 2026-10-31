@@ -281,6 +281,11 @@ def _print_report(session: TerminalSession, report: dict[str, Any]) -> None:
                 f"{number}: you said {mismatch['field']} is {mismatch['said']}, "
                 f"found {mismatch['found']}."
             )
+    for unread in report.get("unread_containers") or []:
+        session.out.line(
+            f"Left out {unread['engine']} container {unread['id'][:12]}: "
+            "it describes itself in more than 64 KiB."
+        )
 
 
 def _given_settings(args: Any) -> dict[str, Any]:

@@ -12,6 +12,7 @@ from dbs.naming import backup_filename
 from dbs.transports import HostKey, HostKeyError, SSHTarget, fetch_host_key, open_session
 from dbs.tee import PARTIAL_STALE_SECONDS, is_partial_name, partial_name
 from dbs.transports.ssh import (
+    MAX_CAPTURED_OUTPUT,
     StreamInterrupted,
     check_connection,
     delete_backup,
@@ -310,9 +311,33 @@ def test_run_captures_status_and_streams(fake_ssh):
 
     assert (result.exit_status, result.stdout, result.stderr) == (3, "out", "boom")
     assert result.ok is False
+    assert result.stdout_truncated is False
     assert fake_ssh.executions[0].stdin == "secret\n"
     assert fake_ssh.executions[0].stdin_closed is True
     assert fake_ssh.commands[0]["get_pty"] is False
+
+
+def test_run_keeps_the_first_64_kib_of_output_and_says_the_rest_was_cut(fake_ssh):
+    fake_ssh.on_exec(lambda command, session: (0, "a" * MAX_CAPTURED_OUTPUT + "b", ""))
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target()) as session:
+        result = session.run("docker inspect")
+
+    assert result.ok is True
+    assert result.stdout == "a" * MAX_CAPTURED_OUTPUT
+    assert result.stdout_truncated is True
+
+
+def test_run_output_of_exactly_64_kib_is_whole(fake_ssh):
+    fake_ssh.on_exec(lambda command, session: (0, "a" * MAX_CAPTURED_OUTPUT, ""))
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target()) as session:
+        result = session.run("docker inspect")
+
+    assert result.stdout == "a" * MAX_CAPTURED_OUTPUT
+    assert result.stdout_truncated is False
 
 
 def test_check_connection_reports_the_facts(fake_ssh):
@@ -737,10 +762,21 @@ def test_a_feed_sends_its_first_line_then_the_source_and_keeps_both_outputs(fake
         "received\n",
         "a warning\n",
     )
+    assert result.stdout_truncated is False
     assert fake_ssh.executions[0].stdin == "secret\n"
     assert bytes(fake_ssh.executions[0].sent) == payload
     assert fake_ssh.executions[0].stdin_closed is True
     assert fake_ssh.commands[0]["get_pty"] is False
+
+
+def test_a_feed_keeps_the_last_64_kib_of_output_and_says_the_rest_was_cut(fake_ssh):
+    streaming(fake_ssh, (0, "a" + "b" * MAX_CAPTURED_OUTPUT, ""))
+
+    with open_session(target()) as session:
+        result = session.feed("receive", io.BytesIO(b"payload"))
+
+    assert result.stdout == "b" * MAX_CAPTURED_OUTPUT
+    assert result.stdout_truncated is True
 
 
 def test_a_feed_that_ends_without_an_exit_status_was_interrupted(fake_ssh):
