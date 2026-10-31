@@ -58,6 +58,17 @@ server. `DBS_TEST_MOVE_PROJECT` names a host project to move, and
 | `scripts/minimum_requirements.py` | Prints the lowest version of every dependency, for the lowest-dependencies CI job |
 | `scripts/check_wheel.py dist/*.whl` | Checks a built wheel holds the manager's interface, its templates, the migrations and the console scripts |
 | `scripts/train_base_model.py` | Regenerates the synthetic corpus behind the session guard's base model |
+| `scripts/stability_snapshot.py X.Y.Z` | Records a release in `tests/stability/X.Y.Z`: its API, commands, terminal, REST routes, MCP tools, settings, migrations and `--json` keys, a golden backup and sealed values. It refuses a release already recorded |
+
+## Stability
+
+From 0.8.0 on, a change adds and never removes, renames or changes what a release offers
+([CONTRIBUTING.md](../CONTRIBUTING.md) lists the rules, and [Stability](stability.md) is the
+promise to developers). `tests/test_stability.py` and, in the manager's suite,
+`tests/manager/test_stability.py` compare the code with every release in `tests/stability/` and
+restore each golden backup, whole and damaged. A failure there names what was removed or
+changed: put it back, or add the new way beside it. A recorded release is never edited,
+regenerated or deleted.
 
 ## The manager's interface
 
@@ -99,8 +110,12 @@ them on every push to `main` and every night.
 ## Releasing
 
 1. Update `CHANGELOG.md` and `RELEASE_NOTES.md`, and add a step to `dbs/upgrade.py` for anything
-   a developer must change in their project.
+   a project may want to do.
 2. Set `version` in `pyproject.toml`.
-3. When `main` is green, publish a GitHub release whose tag is `v` and the version, with
+3. Record the release, so every later one keeps it:
+   `python scripts/stability_snapshot.py X.Y.Z`, and commit `tests/stability/X.Y.Z`.
+4. When `main` is green, publish a GitHub release whose tag is `v` and the version, with
    `RELEASE_NOTES.md` as its body. The **Publish to PyPI** workflow runs CI, checks the tag
    against the version, builds the interface, the sdist and the wheel, and uploads them.
+5. Once it is on PyPI, `python scripts/upgrade_rehearsal.py --from-version X.Y.Z` installs it,
+   fills a project and a manager, and upgrades both to the checkout without losing anything.

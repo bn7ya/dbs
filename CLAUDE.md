@@ -7,6 +7,47 @@ and repaired on restore. Created by Sudum Technology — Research and Developmen
 This project is under active development; treat it as our very tiny contribution to
 this world.
 
+These rules apply to every contributor, person or AI assistant. `AGENTS.md` and
+`.github/copilot-instructions.md` are exact copies of this file; edit this one and copy it.
+Before changing anything in `manager-ui/`, read `manager-ui/CLAUDE.md`: the interface's rules.
+
+## Stability: nothing breaks after 0.8.0
+
+From 0.8.0 on, every release installs over the one before it, and a developer loses nothing
+and changes nothing. Add; never remove, rename or change what a released version offers. When
+something must change, add the new way beside the old one and keep the old one working.
+Messages, help text and the interface's look may change; what code and scripts rely on may not.
+
+- **Backups always open.** Every backup written by 0.8.0 or later validates and restores,
+  with the same passphrase, in every later release. Never drop a format reader, never change
+  `MAGIC`, a released format's layout, the passphrase derived from `SECRET_KEY` or the KDF
+  bounds a read accepts. Nothing deletes or overwrites a backup.
+- **Python API.** The names exported by `dbs`, `dbs.transports` and `dbs.engine`, the classes
+  they return and `dbs.exceptions` keep their names, parameters, positions, defaults, fields
+  and exceptions. A new parameter is keyword-only with a default that keeps the old behaviour.
+- **Commands.** Every `manage.py dbs` command and its other names (`django_dbs`, `django-dbs`,
+  `dbs_*`), the console scripts `dbs`, `django_dbs` and `django-dbs`, every terminal verb of the
+  manager, their options, arguments, exit codes and `--json` keys stay. A new option or argument
+  is optional.
+- **Settings.** Every documented `DBS_*` setting and manager environment variable keeps its
+  name, meaning and default; a new one defaults to the old behaviour. The extras `guard`,
+  `manager`, `ssh` and `all` stay, empty.
+- **Data.** Migrations only add: a model, or a field that is nullable or has a default. Never
+  remove, rename or retype a field or model, and never edit or delete a released migration.
+  Audit rows are never rewritten, and a 0.8.0 hash chain still verifies.
+- **The manager.** Its REST routes, methods, request fields and response keys, its MCP tools
+  and their inputs, its data folder, sealing key, sealed credentials and backups, two-factor
+  secrets and recovery codes keep working, and it keeps backing up servers on 0.8.0.
+- **Exceptions.** A bug fix makes DBS do what its documentation says. A security fix may
+  refuse what was unsafe, never deletes data, and is named under *Security* in the changelog.
+  A Python or Django version is dropped only after its end of life, in a minor release whose
+  `requires-python` and Django pin keep pip from installing it where it cannot run. Nothing
+  else is an exception.
+- **Enforced.** `tests/stability/<version>/` records each release's surface and golden files;
+  `tests/test_stability.py` and `tests/manager/test_stability.py` fail on any removal or
+  change. Never edit, regenerate or delete a recorded release, and never weaken those tests to
+  pass. Record each new release with `python scripts/stability_snapshot.py X.Y.Z`.
+
 ## Coding criteria
 
 Follow these for every change:
@@ -156,6 +197,19 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   `scripts/container_fixture.sh ENGINE DIR`) over OpenSSH when `DBS_TEST_CONTAINER_ENGINE`
   names an engine. `scripts/upgrade_rehearsal.py` installs 0.7.0 from PyPI, fills a project and
   a manager, upgrades both to the checkout and checks that nothing was lost.
+- `tests/stability/` — what each release promised: `<version>/library.json` and `manager.json`
+  (the Python API, commands, terminal, REST routes, MCP tools, settings, migrations, JSON keys,
+  console scripts, extras, and vectors for the passphrase, credentials, audit chain and the
+  manager's sealed values) and `backup.dbs`, a golden backup. `scripts/stability_snapshot.py
+  VERSION` writes a new folder and refuses one that exists. `tests/stability/__init__.py`
+  collects the current surface and compares; `tests/test_stability.py` and
+  `tests/manager/test_stability.py` run it for every recorded release.
+- `CONTRIBUTING.md` — how a person contributes, and the stability promise in short.
+  `docs/stability.md` is the promise to developers. `.github/pull_request_template.md` asks
+  every pull request about it. `AGENTS.md` (Codex, opencode, Copilot's agent) and
+  `.github/copilot-instructions.md` (Copilot) are copies of this file;
+  `tests/test_agent_instructions.py` keeps them identical and the Stability section within
+  the first 4,000 characters, which is all Copilot's code review reads.
 - `README.md` — the short front page, also PyPI's: what DBS does, a quick start, links. Its images
   and links are absolute URLs so they work on PyPI. `docs/` holds the guides and the reference
   (`docs/README.md` is the index); links between them are relative, and every fact in them is
@@ -192,12 +246,14 @@ Changes to `dbs/security/` must preserve these:
 
 ## Upgrade path
 
-`dbs/upgrade.py` is the executable version of the changelog. When a change requires a
-developer to do something to their project — a new migration, a new or renamed setting, a
-changed default, a new `INSTALLED_APPS`/`MIDDLEWARE` entry, a new dependency, a
-`FORMAT_VERSION` bump — add a step to `dbs/upgrade.py` **in the same commit**, with a test.
-The changelog says what changed; `manage.py dbs upgrade` checks and repairs it. A release
-that needs manual steps and ships no upgrade step is incomplete.
+`dbs/upgrade.py` is the executable version of the changelog. Upgrading never needs a
+developer to edit their project: `pip install -U django-dbs` and `manage.py dbs upgrade`
+finish it, and what worked before keeps working without anything new. When a change adds
+something a project may want — a new migration, a new dependency, a `FORMAT_VERSION` bump, an
+optional setting or `INSTALLED_APPS`/`MIDDLEWARE` entry for a new feature — add a step to
+`dbs/upgrade.py` **in the same commit**, with a test. The changelog says what changed;
+`manage.py dbs upgrade` checks and repairs it. Renaming a setting or changing a default is
+never an upgrade step: it is not allowed (see Stability).
 
 Bump `FORMAT_VERSION` when the container layout changes; never change `MAGIC`. Old files
 must stay parseable so `dbs upgrade --backups` can find and convert them, and so a mismatch
@@ -269,7 +325,7 @@ version to read them before it offers giving them up.
 
 `pip install django-dbs` installs everything DBS uses: the library, scikit-learn for the
 guard, paramiko for SSH, and djangorestframework, waitress and keyring for the manager. There
-are no extras (the old names `guard`, `manager`, `ssh`, `all` stay empty for 0.8 only). Code
+are no extras (the old names `guard`, `manager`, `ssh`, `all` stay, empty). Code
 outside `dbs/security/`, `dbs/transports/` and `dbs/manager/` still imports none of those
 packages, so a project's web process stays light; a package that cannot be imported is
 reported with the `pip install --force-reinstall "django-dbs"` line, never a traceback. A new

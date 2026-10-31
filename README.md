@@ -14,7 +14,7 @@
   <a href="https://pypi.org/project/django-dbs/"><img src="https://img.shields.io/pypi/pyversions/django-dbs" alt="Python versions"></a>
   <a href="https://github.com/bn7ya/dbs/actions/workflows/ci.yml"><img src="https://github.com/bn7ya/dbs/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/bn7ya/dbs/blob/main/LICENSE"><img src="https://img.shields.io/pypi/l/django-dbs" alt="License"></a>
-  <a href="#status"><img src="https://img.shields.io/badge/status-active%20development-0058a4" alt="Status: active development"></a>
+  <a href="#status"><img src="https://img.shields.io/badge/status-active%20development%2C%20stable%20since%200.8.0-0058a4" alt="Status: active development, stable since 0.8.0"></a>
 </p>
 
 ---
@@ -106,7 +106,7 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 | [AI assistants](https://github.com/bn7ya/dbs/blob/main/docs/ai-assistants.md) | Instructions for coding assistants, and Claude through MCP |
 | [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.md) | The format, how it heals, the security model |
 | [Reference](https://github.com/bn7ya/dbs/tree/main/docs/reference) | [Commands](https://github.com/bn7ya/dbs/blob/main/docs/reference/commands.md), [settings](https://github.com/bn7ya/dbs/blob/main/docs/reference/settings.md), [Python API](https://github.com/bn7ya/dbs/blob/main/docs/reference/python-api.md) |
-| [Troubleshooting](https://github.com/bn7ya/dbs/blob/main/docs/troubleshooting.md) · [Upgrading](https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md) · [Development](https://github.com/bn7ya/dbs/blob/main/docs/development.md) | When something does not work, between releases, and working on DBS itself |
+| [Troubleshooting](https://github.com/bn7ya/dbs/blob/main/docs/troubleshooting.md) · [Upgrading](https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md) · [Stability](https://github.com/bn7ya/dbs/blob/main/docs/stability.md) · [Development](https://github.com/bn7ya/dbs/blob/main/docs/development.md) | When something does not work, between releases, what never changes, and working on DBS itself |
 
 ## What you need
 
@@ -119,13 +119,20 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 
 ## Status
 
-DBS 0.8 is in active development.
+DBS is in active development, and stable from 0.8.0: new releases add, and nothing you use
+breaks.
 
-- **Backups keep opening across releases.** Every change to the backup format ships a
-  converter, and nothing in DBS deletes or overwrites a backup.
-- **Upgrades are checked for you.** Commands and the Python API may still change between minor
-  releases. Each change is in the [changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md),
-  and `python manage.py dbs upgrade` checks a project against it and says what to do.
+- **Your backups keep opening.** Every backup written by 0.8.0 or later restores, with the same
+  passphrase, in every later release. Nothing in DBS deletes or overwrites a backup.
+- **Your project keeps working.** The Python API, commands and options, settings and their
+  defaults, the manager's REST API and MCP tools stay as they are; the test suite checks every
+  change against each recorded release.
+- **Upgrades are checked for you.** `python manage.py dbs upgrade` checks a project after each
+  upgrade, and the [changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md) lists every
+  change.
+
+The full promise is in [Stability](https://github.com/bn7ya/dbs/blob/main/docs/stability.md).
+To contribute, see [CONTRIBUTING.md](https://github.com/bn7ya/dbs/blob/main/CONTRIBUTING.md).
 
 Security issues: see [SECURITY.md](https://github.com/bn7ya/dbs/blob/main/SECURITY.md).
 

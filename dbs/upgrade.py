@@ -262,7 +262,7 @@ class RetiredExtras(Step):
         return self.warn(
             ", ".join(named)
             + " still name a django-dbs extra; plain django-dbs installs everything now "
-            "and the [guard], [manager], [ssh] and [all] names are going away",
+            "and the [guard], [manager], [ssh] and [all] names add nothing",
             'write "django-dbs" without the brackets',
         )
 

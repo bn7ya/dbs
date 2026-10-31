@@ -22,6 +22,12 @@ The full list of changes is in the
 documentation now lives in [`docs/`](https://github.com/bn7ya/dbs/tree/main/docs), starting with
 [Getting started](https://github.com/bn7ya/dbs/blob/main/docs/getting-started.md).
 
+**Stable from here on.** 0.8.0 is the line every later release keeps: your backups keep
+restoring with the same passphrase, and the Python API, commands, settings and their defaults,
+the manager's REST API and MCP tools keep working as they do today. New releases add; they do
+not remove or change. [Stability](https://github.com/bn7ya/dbs/blob/main/docs/stability.md)
+says exactly what is covered.
+
 ## Highlights
 
 ### Servers and applications
@@ -197,6 +203,17 @@ and in the panel's tab and navigation. The README is a short front page with a q
 the guides and the command, settings and Python API reference live in
 [`docs/`](https://github.com/bn7ya/dbs/tree/main/docs).
 
+### Stable from 0.8.0
+
+From this release on, DBS keeps what it offers. Every backup written by 0.8.0 or later restores,
+with the same passphrase, in every later release; the Python API, `manage.py dbs` and
+`django_dbs` commands and options, settings and their defaults, `--json` keys, the manager's
+REST API, MCP tools, data folder and sealed credentials stay as they are, and migrations only
+add. The repository records all of this for 0.8.0, together with a golden backup, and the test
+suite fails on anything a later change removes or changes. Contributors, people and AI
+assistants alike, follow the same rules, in
+[CONTRIBUTING.md](https://github.com/bn7ya/dbs/blob/main/CONTRIBUTING.md).
+
 ## Upgrading from 0.7.x
 
 ### A project
@@ -211,7 +228,7 @@ python manage.py dbs upgrade
 
 | Step | What it asks |
 |---|---|
-| `RetiredExtras` | A requirements file that names `django-dbs[guard]`, `[manager]`, `[ssh]` or `[all]`: write `django-dbs`. The extras still resolve, as empty names, for this release only. |
+| `RetiredExtras` | A requirements file that names `django-dbs[guard]`, `[manager]`, `[ssh]` or `[all]`: write `django-dbs`. The extras still resolve, as empty names, and always will. |
 | `ContribViewsRemoved` | `dbs.contrib` in `ROOT_URLCONF` or `INSTALLED_APPS`: remove it. Use the panel, `dbs backup --stream` or the manager. |
 | `CommandNames` | A `Makefile`, `Procfile`, `Dockerfile`, Compose file, shell script or workflow that runs `dbs-upgrade`: write `manage.py dbs upgrade`. |
 | `PanelJobProcess` | Whether the panel can start its job process: `DJANGO_SETTINGS_MODULE` set, an interpreter that runs, limits that parse. The remedy names `DBS_JOB_PYTHON` or `DBS_JOB_PROCESS = False`. |

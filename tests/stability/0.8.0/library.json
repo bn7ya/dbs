@@ -1,0 +1,2651 @@
+{
+ "backup": {
+  "authors": [
+   "Ada Lovelace",
+   "Grace Hopper",
+   "الحسن بن الهيثم"
+  ],
+  "books": [
+   {
+    "author": "Ada Lovelace",
+    "cover": "covers/golden.txt",
+    "cover_text": "0.8.0 cover",
+    "tags": [
+     "classic"
+    ],
+    "title": "Notes on the Analytical Engine"
+   },
+   {
+    "author": "Grace Hopper",
+    "cover": "",
+    "cover_text": null,
+    "tags": [
+     "classic",
+     "reference"
+    ],
+    "title": "A-0 System"
+   },
+   {
+    "author": "الحسن بن الهيثم",
+    "cover": "covers/golden_Yplg3X8.txt",
+    "cover_text": "صورة الغلاف",
+    "tags": [
+     "reference"
+    ],
+    "title": "كتاب المناظر"
+   }
+  ],
+  "damage": [
+   [
+    0,
+    152
+   ],
+   [
+    152,
+    69952
+   ]
+  ],
+  "file": "backup.dbs",
+  "format_version": 2,
+  "passphrase": "dbs-stability-golden-passphrase",
+  "records": 8,
+  "sha256": "716e744913e11c4ebed2b6a5244b6566fa09d89139941b56cd0c891cba5682e4",
+  "tags": [
+   "classic",
+   "reference"
+  ]
+ },
+ "commands": {
+  "names": [
+   "dbs",
+   "dbs_ai",
+   "dbs_audit",
+   "dbs_backup",
+   "dbs_connection",
+   "dbs_health",
+   "dbs_key",
+   "dbs_restore",
+   "dbs_schedule",
+   "dbs_security",
+   "dbs_upgrade",
+   "dbs_validate",
+   "django-dbs",
+   "django_dbs"
+  ],
+  "tree": {
+   "": {
+    "options": {},
+    "positionals": []
+   },
+   "ai": {
+    "options": {
+     "--agents": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--check": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--print": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--root": {
+      "choices": null,
+      "required": false,
+      "value": true
+     }
+    },
+    "positionals": []
+   },
+   "audit": {
+    "options": {},
+    "positionals": [
+     {
+      "required": false
+     }
+    ]
+   },
+   "backup": {
+    "options": {
+     "--allow-missing-files": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--block-size": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--database": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--kdf-memory": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--kdf-time": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--no-compress": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--no-verify": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--output-dir": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--passphrase": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--passphrase-stdin": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--prefix": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--progress-seconds": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--stream": {
+      "choices": null,
+      "required": false,
+      "value": false
+     }
+    },
+    "positionals": [
+     {
+      "required": false
+     }
+    ]
+   },
+   "connection": {
+    "options": {
+     "--json": {
+      "choices": null,
+      "required": false,
+      "value": false
+     }
+    },
+    "positionals": []
+   },
+   "health": {
+    "options": {
+     "--json": {
+      "choices": null,
+      "required": false,
+      "value": false
+     }
+    },
+    "positionals": []
+   },
+   "key": {
+    "options": {
+     "--show": {
+      "choices": null,
+      "required": false,
+      "value": false
+     }
+    },
+    "positionals": []
+   },
+   "restore": {
+    "options": {
+     "--database": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--dry-run": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--flush": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--no-data": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--no-files": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--passphrase": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--passphrase-stdin": {
+      "choices": null,
+      "required": false,
+      "value": false
+     }
+    },
+    "positionals": [
+     {
+      "required": true
+     }
+    ]
+   },
+   "schedule": {
+    "options": {
+     "--block-size": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--database": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--interval": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--kdf-memory": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--kdf-time": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--keep": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--no-compress": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--no-verify": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--once": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--output-dir": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--prefix": {
+      "choices": null,
+      "required": false,
+      "value": true
+     }
+    },
+    "positionals": []
+   },
+   "security": {
+    "options": {},
+    "positionals": [
+     {
+      "required": false
+     },
+     {
+      "required": false
+     }
+    ]
+   },
+   "upgrade": {
+    "options": {
+     "--backups": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--check": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--offline": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--self": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--system-python": {
+      "choices": null,
+      "required": false,
+      "value": false
+     },
+     "--to": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--yes": {
+      "choices": null,
+      "required": false,
+      "value": false
+     }
+    },
+    "positionals": []
+   },
+   "validate": {
+    "options": {
+     "--passphrase": {
+      "choices": null,
+      "required": false,
+      "value": true
+     },
+     "--passphrase-stdin": {
+      "choices": null,
+      "required": false,
+      "value": false
+     }
+    },
+    "positionals": [
+     {
+      "required": true
+     }
+    ]
+   }
+  }
+ },
+ "console_scripts": [
+  "dbs",
+  "django-dbs",
+  "django_dbs"
+ ],
+ "extras": [
+  "all",
+  "dev",
+  "guard",
+  "manager",
+  "ssh"
+ ],
+ "migrations": {
+  "dbs": [
+   "0001_initial",
+   "0002_panel",
+   "0003_audit_outcome",
+   "0004_schedule_lease",
+   "0005_pull_only_retention_chain"
+  ]
+ },
+ "outputs": {
+  "connection --json": [
+   "container",
+   "dbs_connection",
+   "dbs_version",
+   "env_path",
+   "file_roots",
+   "host_keys",
+   "hostname",
+   "manage_path",
+   "project_dir",
+   "python_path",
+   "remote_backup_dir",
+   "settings_module",
+   "ssh_user"
+  ],
+  "health --json": [
+   "checks",
+   "generated_at",
+   "last_backup_at",
+   "schedule",
+   "status"
+  ]
+ },
+ "python": {
+  "dbs": {
+   "BackupRegistry": {
+    "bases": [],
+    "init": [],
+    "kind": "class",
+    "members": {
+     "clear": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "get": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "model",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "is_empty": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "items": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "models": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "register": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "model",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "unregister": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "model",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     }
+    }
+   },
+   "BackupSummary": {
+    "bases": [],
+    "fields": [
+     "bytes_written",
+     "sha256",
+     "records",
+     "files",
+     "skipped_files",
+     "models",
+     "path",
+     "verified",
+     "compressed",
+     "payload_bytes",
+     "payload_sha256",
+     "format_version",
+     "blocks",
+     "block_size",
+     "nsym",
+     "interleave",
+     "correctable_bytes_per_codeword",
+     "burst_tolerance_bytes"
+    ],
+    "init": [
+     [
+      "bytes_written",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "sha256",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "records",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "files",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "skipped_files",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ],
+     [
+      "models",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ],
+     [
+      "path",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "verified",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "False"
+     ],
+     [
+      "compressed",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "True"
+     ],
+     [
+      "payload_bytes",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "payload_sha256",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "''"
+     ],
+     [
+      "format_version",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "2"
+     ],
+     [
+      "blocks",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "block_size",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "nsym",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "interleave",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "correctable_bytes_per_codeword",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "burst_tolerance_bytes",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "block_size": {
+      "kind": "attribute"
+     },
+     "blocks": {
+      "kind": "attribute"
+     },
+     "burst_tolerance_bytes": {
+      "kind": "attribute"
+     },
+     "compressed": {
+      "kind": "attribute"
+     },
+     "correctable_bytes_per_codeword": {
+      "kind": "attribute"
+     },
+     "format_version": {
+      "kind": "attribute"
+     },
+     "interleave": {
+      "kind": "attribute"
+     },
+     "nsym": {
+      "kind": "attribute"
+     },
+     "path": {
+      "kind": "attribute"
+     },
+     "payload_bytes": {
+      "kind": "attribute"
+     },
+     "payload_sha256": {
+      "kind": "attribute"
+     },
+     "verified": {
+      "kind": "attribute"
+     }
+    }
+   },
+   "FieldType": {
+    "bases": [
+     "Enum"
+    ],
+    "enum": {
+     "EXCLUDE": "'exclude'",
+     "FILE": "'file'",
+     "FILE_PATH": "'file_path'",
+     "VALUE": "'value'"
+    },
+    "kind": "class",
+    "members": {}
+   },
+   "ModelBackup": {
+    "bases": [],
+    "kind": "class",
+    "members": {
+     "file_roots": {
+      "kind": "attribute"
+     },
+     "get_queryset": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "model",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "overrides": {
+      "kind": "attribute"
+     }
+    }
+   },
+   "__version__": {
+    "kind": "value"
+   },
+   "backup_registry": {
+    "kind": "instance",
+    "type": "BackupRegistry"
+   },
+   "create_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "registry",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "models",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "using",
+      "KEYWORD_ONLY",
+      true,
+      "'default'"
+     ],
+     [
+      "block_size",
+      "KEYWORD_ONLY",
+      true,
+      "65536"
+     ],
+     [
+      "nsym",
+      "KEYWORD_ONLY",
+      true,
+      "16"
+     ],
+     [
+      "kdf_params",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "compress",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "verify",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "output",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "allow_missing_files",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "skipped_files",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ]
+    ]
+   },
+   "default_passphrase": {
+    "kind": "function",
+    "signature": []
+   },
+   "restore_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "data",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "using",
+      "KEYWORD_ONLY",
+      true,
+      "'default'"
+     ],
+     [
+      "load_data",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "write_files",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "dry_run",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "flush",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "registry",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ]
+    ]
+   },
+   "validate_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "data",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ]
+    ]
+   },
+   "write_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "output",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "registry",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "models",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "using",
+      "KEYWORD_ONLY",
+      true,
+      "'default'"
+     ],
+     [
+      "block_size",
+      "KEYWORD_ONLY",
+      true,
+      "65536"
+     ],
+     [
+      "nsym",
+      "KEYWORD_ONLY",
+      true,
+      "16"
+     ],
+     [
+      "interleave",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "kdf_params",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "compress",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "verify",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "allow_missing_files",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "skipped_files",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "workers",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ]
+    ]
+   }
+  },
+  "dbs.engine": {
+   "BackupSummary": {
+    "bases": [],
+    "fields": [
+     "bytes_written",
+     "sha256",
+     "records",
+     "files",
+     "skipped_files",
+     "models",
+     "path",
+     "verified",
+     "compressed",
+     "payload_bytes",
+     "payload_sha256",
+     "format_version",
+     "blocks",
+     "block_size",
+     "nsym",
+     "interleave",
+     "correctable_bytes_per_codeword",
+     "burst_tolerance_bytes"
+    ],
+    "init": [
+     [
+      "bytes_written",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "sha256",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "records",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "files",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "skipped_files",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ],
+     [
+      "models",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ],
+     [
+      "path",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "verified",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "False"
+     ],
+     [
+      "compressed",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "True"
+     ],
+     [
+      "payload_bytes",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "payload_sha256",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "''"
+     ],
+     [
+      "format_version",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "2"
+     ],
+     [
+      "blocks",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "block_size",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "nsym",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "interleave",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "correctable_bytes_per_codeword",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "burst_tolerance_bytes",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "block_size": {
+      "kind": "attribute"
+     },
+     "blocks": {
+      "kind": "attribute"
+     },
+     "burst_tolerance_bytes": {
+      "kind": "attribute"
+     },
+     "compressed": {
+      "kind": "attribute"
+     },
+     "correctable_bytes_per_codeword": {
+      "kind": "attribute"
+     },
+     "format_version": {
+      "kind": "attribute"
+     },
+     "interleave": {
+      "kind": "attribute"
+     },
+     "nsym": {
+      "kind": "attribute"
+     },
+     "path": {
+      "kind": "attribute"
+     },
+     "payload_bytes": {
+      "kind": "attribute"
+     },
+     "payload_sha256": {
+      "kind": "attribute"
+     },
+     "verified": {
+      "kind": "attribute"
+     }
+    }
+   },
+   "ValidationResult": {
+    "bases": [],
+    "fields": [
+     "ok",
+     "repair_report",
+     "decrypted_ok",
+     "stats",
+     "messages"
+    ],
+    "init": [
+     [
+      "ok",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "repair_report",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "decrypted_ok",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "stats",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ],
+     [
+      "messages",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "decrypted_ok": {
+      "kind": "attribute"
+     },
+     "repair_report": {
+      "kind": "attribute"
+     },
+     "summary": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     }
+    }
+   },
+   "create_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "registry",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "models",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "using",
+      "KEYWORD_ONLY",
+      true,
+      "'default'"
+     ],
+     [
+      "block_size",
+      "KEYWORD_ONLY",
+      true,
+      "65536"
+     ],
+     [
+      "nsym",
+      "KEYWORD_ONLY",
+      true,
+      "16"
+     ],
+     [
+      "kdf_params",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "compress",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "verify",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "output",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "allow_missing_files",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "skipped_files",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ]
+    ]
+   },
+   "restore_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "data",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "using",
+      "KEYWORD_ONLY",
+      true,
+      "'default'"
+     ],
+     [
+      "load_data",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "write_files",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "dry_run",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "flush",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "registry",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ]
+    ]
+   },
+   "validate_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "data",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ]
+    ]
+   },
+   "write_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "output",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "registry",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "models",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "using",
+      "KEYWORD_ONLY",
+      true,
+      "'default'"
+     ],
+     [
+      "block_size",
+      "KEYWORD_ONLY",
+      true,
+      "65536"
+     ],
+     [
+      "nsym",
+      "KEYWORD_ONLY",
+      true,
+      "16"
+     ],
+     [
+      "interleave",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "kdf_params",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "compress",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "verify",
+      "KEYWORD_ONLY",
+      true,
+      "True"
+     ],
+     [
+      "allow_missing_files",
+      "KEYWORD_ONLY",
+      true,
+      "False"
+     ],
+     [
+      "skipped_files",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ],
+     [
+      "workers",
+      "KEYWORD_ONLY",
+      true,
+      "None"
+     ]
+    ]
+   }
+  },
+  "dbs.engine.restore": {
+   "RestoreResult": {
+    "bases": [],
+    "fields": [
+     "records_loaded",
+     "files_written",
+     "repair_report",
+     "models",
+     "records_would_load",
+     "files_would_write",
+     "records_flushed",
+     "preexisting_models",
+     "files_refused"
+    ],
+    "init": [
+     [
+      "records_loaded",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "files_written",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "repair_report",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "models",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ],
+     [
+      "records_would_load",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "files_would_write",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "records_flushed",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "0"
+     ],
+     [
+      "preexisting_models",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ],
+     [
+      "files_refused",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "<factory>"
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "files_would_write": {
+      "kind": "attribute"
+     },
+     "files_written": {
+      "kind": "attribute"
+     },
+     "healed": {
+      "kind": "property"
+     },
+     "records_flushed": {
+      "kind": "attribute"
+     },
+     "records_loaded": {
+      "kind": "attribute"
+     },
+     "records_would_load": {
+      "kind": "attribute"
+     },
+     "repair_report": {
+      "kind": "attribute"
+     }
+    }
+   }
+  },
+  "dbs.exceptions": {
+   "BackupError": {
+    "bases": [
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "ConfigurationError": {
+    "bases": [
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "ConnectionLost": {
+    "bases": [
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "ContainerError": {
+    "bases": [
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "CorruptionError": {
+    "bases": [
+     "ContainerError",
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "init": [
+     [
+      "message",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "report",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ]
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "CryptoError": {
+    "bases": [
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "DBSError": {
+    "bases": [
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "HostKeyError": {
+    "bases": [
+     "ConfigurationError",
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "InvalidPassphrase": {
+    "bases": [
+     "CryptoError",
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "MissingSourceFiles": {
+    "bases": [
+     "BackupError",
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "init": [
+     [
+      "message",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "files",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "RemoteTimeout": {
+    "bases": [
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "RestoreError": {
+    "bases": [
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   }
+  },
+  "dbs.transports": {
+   "HostKey": {
+    "bases": [],
+    "fields": [
+     "key_type",
+     "key_base64"
+    ],
+    "init": [
+     [
+      "key_type",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "key_base64",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "fingerprint": {
+      "kind": "property"
+     },
+     "from_line": {
+      "kind": "method",
+      "signature": [
+       [
+        "line",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "line": {
+      "kind": "property"
+     }
+    }
+   },
+   "HostKeyError": {
+    "bases": [
+     "ConfigurationError",
+     "DBSError",
+     "Exception",
+     "BaseException"
+    ],
+    "kind": "class",
+    "members": {}
+   },
+   "RemoteBackup": {
+    "bases": [],
+    "fields": [
+     "name",
+     "size",
+     "modified"
+    ],
+    "init": [
+     [
+      "name",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "size",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "modified",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "modified": {
+      "kind": "attribute"
+     }
+    }
+   },
+   "RemoteResult": {
+    "bases": [],
+    "fields": [
+     "exit_status",
+     "stdout",
+     "stderr"
+    ],
+    "init": [
+     [
+      "exit_status",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "stdout",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "stderr",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "ok": {
+      "kind": "property"
+     }
+    }
+   },
+   "SSHSession": {
+    "bases": [],
+    "fields": [
+     "target",
+     "_client",
+     "_sftp",
+     "on_activity",
+     "_ticker"
+    ],
+    "init": [
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "_client",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "_sftp",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "on_activity",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "_ticker",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "answers": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "close": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "delete": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "remote_name",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "details": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "pattern_only",
+        "POSITIONAL_OR_KEYWORD",
+        true,
+        "True"
+       ]
+      ]
+     },
+     "ensure_dir": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "feed": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "command",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "source",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "stdin_line",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ],
+       [
+        "timeout",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ]
+      ]
+     },
+     "is_alive": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "names": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "pattern_only",
+        "POSITIONAL_OR_KEYWORD",
+        true,
+        "True"
+       ]
+      ]
+     },
+     "on_activity": {
+      "kind": "attribute"
+     },
+     "open_terminal": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "command",
+        "POSITIONAL_OR_KEYWORD",
+        true,
+        "None"
+       ],
+       [
+        "term",
+        "KEYWORD_ONLY",
+        true,
+        "'xterm-256color'"
+       ],
+       [
+        "cols",
+        "KEYWORD_ONLY",
+        true,
+        "80"
+       ],
+       [
+        "rows",
+        "KEYWORD_ONLY",
+        true,
+        "24"
+       ]
+      ]
+     },
+     "path_for": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "remote_name",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "pull": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "remote_name",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "pull_to": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "remote_name",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "local_path",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "push": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "data_or_path",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "remote_name",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "run": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "command",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "stdin_line",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ],
+       [
+        "timeout",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ]
+      ]
+     },
+     "sftp": {
+      "kind": "property"
+     },
+     "stream": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "command",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "sink",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "stdin_line",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ],
+       [
+        "timeout",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ],
+       [
+        "progress",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ],
+       [
+        "idle_timeout",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ],
+       [
+        "on_stderr_line",
+        "KEYWORD_ONLY",
+        true,
+        "None"
+       ]
+      ]
+     },
+     "sweep_partials": {
+      "kind": "method",
+      "signature": [
+       [
+        "self",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ],
+       [
+        "now",
+        "POSITIONAL_OR_KEYWORD",
+        true,
+        "None"
+       ]
+      ]
+     }
+    }
+   },
+   "SSHTarget": {
+    "bases": [],
+    "fields": [
+     "host",
+     "username",
+     "port",
+     "key_filename",
+     "key_passphrase",
+     "private_key",
+     "password",
+     "known_hosts",
+     "host_key",
+     "remote_dir",
+     "auto_add_host_key",
+     "use_agent",
+     "connect_timeout",
+     "keepalive_interval",
+     "io_timeout",
+     "command_timeout"
+    ],
+    "init": [
+     [
+      "host",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "username",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "port",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "22"
+     ],
+     [
+      "key_filename",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "key_passphrase",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "private_key",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "password",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "known_hosts",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "host_key",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "None"
+     ],
+     [
+      "remote_dir",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "'.'"
+     ],
+     [
+      "auto_add_host_key",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "False"
+     ],
+     [
+      "use_agent",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "True"
+     ],
+     [
+      "connect_timeout",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "30.0"
+     ],
+     [
+      "keepalive_interval",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "15.0"
+     ],
+     [
+      "io_timeout",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "30.0"
+     ],
+     [
+      "command_timeout",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "21600.0"
+     ]
+    ],
+    "kind": "class",
+    "members": {
+     "auto_add_host_key": {
+      "kind": "attribute"
+     },
+     "command_timeout": {
+      "kind": "attribute"
+     },
+     "connect_timeout": {
+      "kind": "attribute"
+     },
+     "from_dict": {
+      "kind": "method",
+      "signature": [
+       [
+        "data",
+        "POSITIONAL_OR_KEYWORD",
+        false,
+        null
+       ]
+      ]
+     },
+     "host_key": {
+      "kind": "attribute"
+     },
+     "host_key_policy": {
+      "kind": "property"
+     },
+     "io_timeout": {
+      "kind": "attribute"
+     },
+     "keepalive_interval": {
+      "kind": "attribute"
+     },
+     "key_filename": {
+      "kind": "attribute"
+     },
+     "key_passphrase": {
+      "kind": "attribute"
+     },
+     "known_hosts": {
+      "kind": "attribute"
+     },
+     "password": {
+      "kind": "attribute"
+     },
+     "port": {
+      "kind": "attribute"
+     },
+     "private_key": {
+      "kind": "attribute"
+     },
+     "remote_dir": {
+      "kind": "attribute"
+     },
+     "use_agent": {
+      "kind": "attribute"
+     }
+    }
+   },
+   "check_connection": {
+    "kind": "function",
+    "signature": [
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ]
+   },
+   "delete_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "remote_name",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ]
+   },
+   "fetch_host_key": {
+    "kind": "function",
+    "signature": [
+     [
+      "host",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "port",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "22"
+     ],
+     [
+      "timeout",
+      "KEYWORD_ONLY",
+      true,
+      "10.0"
+     ]
+    ]
+   },
+   "list_backup_details": {
+    "kind": "function",
+    "signature": [
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ]
+   },
+   "list_backups": {
+    "kind": "function",
+    "signature": [
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "pattern_only",
+      "POSITIONAL_OR_KEYWORD",
+      true,
+      "True"
+     ]
+    ]
+   },
+   "open_session": {
+    "kind": "function",
+    "signature": [
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ]
+   },
+   "pull_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "remote_name",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ]
+   },
+   "pull_backup_to": {
+    "kind": "function",
+    "signature": [
+     [
+      "remote_name",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "local_path",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ]
+   },
+   "push_backup": {
+    "kind": "function",
+    "signature": [
+     [
+      "data_or_path",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "remote_name",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ],
+     [
+      "target",
+      "POSITIONAL_OR_KEYWORD",
+      false,
+      null
+     ]
+    ]
+   }
+  }
+ },
+ "settings": {
+  "DBS_ANOMALY_DETECTOR": "the built-in one",
+  "DBS_ANOMALY_ENFORCE": "`True`",
+  "DBS_ANOMALY_MIN_ROWS": "`50`",
+  "DBS_BACKUP_DIR": "none",
+  "DBS_BACKUP_PREFIX": "`\"backup\"`",
+  "DBS_EXCLUDE_MODELS": "`[]`",
+  "DBS_FILE_ROOTS": "`[]`",
+  "DBS_GEOLOCATION": "`False`",
+  "DBS_GUARD_EVERYWHERE": "`False`",
+  "DBS_GUARD_POLL_SECONDS": "`15`",
+  "DBS_JOB_BOOTSTRAP": "`django.setup`",
+  "DBS_JOB_MEMORY_LIMIT": "`\"2G\"`",
+  "DBS_JOB_NICE": "`10`",
+  "DBS_JOB_PROCESS": "`True`",
+  "DBS_JOB_PYTHON": "the project's Python",
+  "DBS_JOB_TIME_LIMIT": "`\"6h\"`",
+  "DBS_KDF_MEMORY_COST": "`65536` (KiB)",
+  "DBS_KDF_PARALLELISM": "`4`",
+  "DBS_KDF_TIME_COST": "`3`",
+  "DBS_MANAGER_DATABASE_URL": "`postgres://…` or `mysql://…` instead of the local SQLite file (as `--database-url`)",
+  "DBS_MANAGER_HOME": "The data folder (as `--data-dir`)",
+  "DBS_MANAGER_HOST": "The name you browse to, behind a proxy",
+  "DBS_MANAGER_KEY_STORE": "`keychain` or `file`: where the sealing key lives",
+  "DBS_MANAGER_TERMINAL": "`admins` (the default), `master` or `off`: who may open a terminal (as `--terminal`)",
+  "DBS_MANAGER_TRUSTED_PROXY": "The proxy ranges, comma-separated (as `--trusted-proxy`)",
+  "DBS_MAX_PAYLOAD_BYTES": "4 GiB",
+  "DBS_MAX_UPLOAD_BYTES": "1 GiB",
+  "DBS_PASSPHRASE": "derived from `SECRET_KEY`",
+  "DBS_RESTORE_PATH_MAP": "`{}`",
+  "DBS_RESTORE_ROOTS": "`DBS_FILE_ROOTS`",
+  "DBS_SCHEDULER": "`\"thread\"`",
+  "DBS_SCHEDULE_INTERVAL": "`\"24h\"`",
+  "DBS_SCHEDULE_KEEP": "`5`",
+  "DBS_SECURITY_RETENTION_DAYS": "`90`",
+  "DBS_SETUP_WIZARD": "`True`",
+  "DBS_TRUSTED_NETWORKS": "`[]`",
+  "DBS_TRUSTED_PROXIES": "`[]`",
+  "DBS_TRUST_FORWARDED_FOR": "`False`"
+ },
+ "vectors": {
+  "audit_chain": [
+   {
+    "action": "backup.create",
+    "chain_hash": "01493e85190a3110d752c0d15899b6299943ef9a28eb9eaab99c3f3fe766dfc0",
+    "chain_index": 1,
+    "created_at": "2026-10-30T12:00:00+00:00",
+    "data": {
+     "models": [
+      "testapp.book"
+     ],
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+     "size": 4096
+    },
+    "detail": "",
+    "error_code": "",
+    "finished_at": "2026-10-30T12:00:03+00:00",
+    "remote_addr": "",
+    "started_at": "2026-10-30T12:00:00+00:00",
+    "status": "succeeded",
+    "subject": "",
+    "succeeded": true,
+    "target_name": "backup-20261030-120000.dbs"
+   },
+   {
+    "action": "restore.run",
+    "chain_hash": "e28eca2e11ebd08baa514f87c458d99289ec4c1b0e24d566ac8b632317b10b52",
+    "chain_index": 2,
+    "created_at": "2026-10-30T12:05:00+00:00",
+    "data": {
+     "records": 12
+    },
+    "detail": "تمت الاستعادة",
+    "error_code": "restore_failed",
+    "finished_at": null,
+    "remote_addr": "203.0.113.7",
+    "started_at": "2026-10-30T12:05:00+00:00",
+    "status": "failed",
+    "subject": "admin",
+    "succeeded": false,
+    "target_name": "backup-20261030-120000.dbs"
+   }
+  ],
+  "default_passphrase": "wR02_ad_vsQIHfKVFlXJ1NVTZ3X0xUblZJfoQqt06NM",
+  "field_secret": {
+   "plaintext": "kept since DBS 0.8.0 — محفوظ",
+   "token": "dbs1:57Padh5Ob6/cQBmg9eOInr4hJH6kWxyGUWpLSBd4dmKFPGqVULGwWcrhQDmojzguBN/8SY6JEBkSUFfJH8Qk"
+  },
+  "secret_key": "dbs-stability-golden-secret-key"
+ }
+}
