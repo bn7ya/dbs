@@ -14,6 +14,7 @@ from dbs.manager.applications.services.discovery_service import (
     COMPOSE_LABEL,
     PODMAN_COMPOSE_LABEL,
     json_rows,
+    rows_in_halves,
 )
 from dbs.manager.conf import data_dir
 from dbs.manager.relocation import catalogue, packages
@@ -160,32 +161,28 @@ def unreadable(side: Side, path: str) -> bool:
     return result is None or bool(result.stdout.strip()) or not result.ok
 
 
-def inspected(side: Side, engine: str) -> list[dict[str, Any]]:
+def inspected(
+    side: Side, engine: str, unread: list[str] | None = None
+) -> list[dict[str, Any]]:
     if not side.engines.get(engine, {}).get("usable"):
         return []
-    listed = side.run(Command((engine, "ps", "--all", "--no-trunc", "--format", "{{json .}}")))
+    listed = side.run(Command((engine, "ps", "--all", "--no-trunc", "--format", "{{.ID}}")))
     if listed is None or not listed.ok:
         return []
     ids = [
         identifier
-        for identifier in (_identifier(row) for row in json_rows(listed.stdout))
-        if identifier and catalogue.CONTAINER.match(identifier)
+        for identifier in listed.stdout.split()
+        if catalogue.CONTAINER.match(identifier)
     ][:CONTAINERS_INSPECTED]
-    if not ids:
-        return []
-    rows = side.run(Command((engine, "inspect", "--type", "container", *ids)))
-    if rows is None or not rows.ok:
-        return []
-    return [row for row in json_rows(rows.stdout) if isinstance(row, dict)]
-
-
-def _identifier(row: Any) -> str:
-    if not isinstance(row, dict):
-        return ""
-    for key in ("ID", "Id", "id"):
-        if isinstance(row.get(key), str):
-            return row[key]
-    return ""
+    left_out: list[str] = []
+    rows = rows_in_halves(
+        lambda batch: side.run(Command((engine, "inspect", "--type", "container", *batch))),
+        ids,
+        left_out,
+    )
+    if unread is not None:
+        unread.extend(left_out)
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -436,10 +433,13 @@ class Survey:
         self.applications = ApplicationRepository()
         self.source_services: list[dict[str, Any]] | None = None
         self.source_rows: dict[str, list[dict[str, Any]]] = {}
+        self.unread: dict[str, list[str]] = {}
 
     def rows(self, engine: str) -> list[dict[str, Any]]:
         if engine not in self.source_rows:
-            self.source_rows[engine] = inspected(self.source, engine)
+            self.source_rows[engine] = inspected(
+                self.source, engine, self.unread.setdefault(engine, [])
+            )
         return self.source_rows[engine]
 
     def services(self) -> list[dict[str, Any]]:
@@ -463,6 +463,15 @@ class Survey:
             "notes": [],
         }
         self.server_checks(inventory, plans, package_plan)
+        for engine, ids in self.unread.items():
+            for identifier in ids:
+                block(
+                    inventory,
+                    "container_unread",
+                    engine=engine,
+                    id=identifier,
+                    name=identifier[:12],
+                )
         inventory["needs_sudo"] = {
             "target": bool(package_plan.packages or package_plan.repositories)
             or any(plan["needs_root"] for plan in plans),

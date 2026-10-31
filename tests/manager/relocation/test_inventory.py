@@ -92,9 +92,10 @@ def answers(rows, database, *, target=False, engine_ready=True):
             if argv[1:3] == ["compose", "version"]:
                 return 0, "2.29.1\n", ""
             if argv[1] == "ps":
-                return 0, "\n".join(json.dumps({"ID": row["Id"]}) for row in rows) + "\n", ""
+                return 0, "".join(f"{row['Id']}\n" for row in rows), ""
             if argv[1] == "inspect":
-                return 0, json.dumps(rows), ""
+                assert argv[2:4] == ["--type", "container"]
+                return 0, json.dumps([row for row in rows if row["Id"] in argv[4:]], indent=4), ""
             if argv[1:3] == ["image", "inspect"] and argv[3] == "--format":
                 ref = argv[-1]
                 if target:
@@ -231,6 +232,65 @@ def test_a_volume_the_developer_leaves_out_is_not_selected(admin, survey):
     [plan] = found["applications"]
     static = next(volume for volume in plan["volumes"] if volume["name"] == "shop_static")
     assert (static["selected"], static["reason"]) == (False, "skipped")
+
+
+def padded(row, size):
+    return {
+        **row,
+        "Config": {**row["Config"], "Env": [*row["Config"]["Env"], "PADDING=" + "x" * size]},
+    }
+
+
+def shop(admin):
+    return make_application(
+        admin,
+        "shop",
+        kind="compose",
+        engine="docker",
+        compose_project="shop",
+        compose_service="web",
+        project_dir=PROJECT,
+        backup_passphrase="x",
+    )
+
+
+@pytest.mark.django_db
+def test_containers_that_describe_themselves_in_more_than_64_kib_are_inspected_in_halves(
+    admin, survey
+):
+    application = shop(admin)
+    rows = [padded(row, 40_000) for row in COMPOSE_ROWS]
+    surveyed = survey(application, rows, POSTGRES_IN_COMPOSE)
+
+    found = surveyed.collect([Choice(application=application, name="shop-new", folder=PROJECT)])
+
+    [plan] = found["applications"]
+    assert plan["services"] == ["db", "web"]
+    assert {image["ref"] for image in plan["images"]} == {"shop-web:latest", "postgres:16"}
+    assert {volume["name"] for volume in plan["volumes"]} == {"shop_static", "shop_pgdata"}
+    assert "container_unread" not in {item["code"] for item in blocked(found)}
+    inspects = [
+        run["argv"][4:]
+        for run in surveyed.source.remote.session.runs
+        if run["argv"][1:2] == ["inspect"]
+    ]
+    assert inspects == [[row["Id"] for row in rows], [rows[0]["Id"]], [rows[1]["Id"]]]
+
+
+@pytest.mark.django_db
+def test_a_container_that_alone_passes_64_kib_blocks_the_move_by_name(admin, survey):
+    application = shop(admin)
+    huge = padded(container("jitsi-web", "", "jitsi/web", "sha256:" + "3" * 64, []), 70_000)
+
+    found = survey(application, [*COMPOSE_ROWS, huge], POSTGRES_IN_COMPOSE).collect(
+        [Choice(application=application, name="shop-new", folder=PROJECT)]
+    )
+
+    [plan] = found["applications"]
+    assert plan["services"] == ["db", "web"]
+    assert [item for item in blocked(found) if item["code"] == "container_unread"] == [
+        {"code": "container_unread", "engine": "docker", "id": "jitsi-web-id", "name": "jitsi-web-id"}
+    ]
 
 
 @pytest.mark.django_db

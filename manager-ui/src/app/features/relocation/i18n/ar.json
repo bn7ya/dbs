@@ -110,6 +110,7 @@
       "container_exists_on_target": "توجد حاوية باسم {name} على الخادم الجديد.",
       "container_options_unsupported": "تستخدم الحاوية خيارات لا يستطيع النقل إعدادها من جديد. شغلها من ملف compose أولا.",
       "container_missing": "الحاوية {name} ليست على هذا الخادم.",
+      "container_unread": "وصف الحاوية {name} أطول من 64 كيلوبايت، فلا يستطيع النقل قراءة ما تحمله.",
       "compose_provider_unavailable": "لا يستطيع Podman على نظام الخادم الجديد تشغيل ملفات compose.",
       "epel_required": "يأتي podman-compose على RHEL من EPEL. فعل EPEL على الخادم الجديد أولا.",
       "passphrase_missing": "لا توجد عبارة مرور للنسخ الاحتياطي لهذا التطبيق بعد.",

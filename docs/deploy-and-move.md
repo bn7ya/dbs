@@ -116,7 +116,8 @@ keeps running, untouched, until you point the traffic at the new one.
    - **Blockers** stop the move until you fix them: an unsupported system, a different
      processor for images, no `sudo`, too little space, or a port, folder, file, image, volume,
      unit, site or container already on the new server; a name already taken; an application
-     without a stored passphrase.
+     without a stored passphrase; a container on the old server that describes itself in more
+     than 64 KiB, which the move cannot read.
    - **Notes** say what to check afterwards.
 4. **Move for real** with your password, the new server's name typed out, and the `sudo`
    password of the SSH user on the new server when it needs one.

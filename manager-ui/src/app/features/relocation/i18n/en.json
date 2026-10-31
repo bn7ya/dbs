@@ -110,6 +110,7 @@
       "container_exists_on_target": "A container named {name} is already on the new server.",
       "container_options_unsupported": "The container uses options the move cannot set up again. Run it from a compose file first.",
       "container_missing": "The container {name} is not on this server.",
+      "container_unread": "The container {name} describes itself in more than 64 KiB, so the move cannot read what it carries.",
       "compose_provider_unavailable": "Podman on the new server's system cannot run compose files.",
       "epel_required": "podman-compose on RHEL comes from EPEL. Enable EPEL on the new server first.",
       "passphrase_missing": "The application has no backup passphrase yet.",

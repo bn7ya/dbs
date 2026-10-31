@@ -13,6 +13,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A discovery report's `unread_containers` names each container (`engine`, `id`) that
   describes itself in more than 64 KiB on its own; discovery leaves it out, and the terminal
   says so under the candidates.
+- A server move's plan is blocked with `container_unread` (`engine`, `id`, `name`) for each
+  container on the old server that describes itself in more than 64 KiB on its own, since the
+  move cannot read what it carries.
 
 ### Fixed
 
@@ -22,6 +25,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   container ids only, inspects just the fields it reads, one line per container, and inspects
   again in halves when an answer is cut. A container removed between listing and inspecting no
   longer hides the others.
+- A server move planned from such a server read none of its containers: a Compose
+  application's plan carried no images or volumes, and a container application was said to be
+  missing. The move's survey now lists container ids only and inspects again in halves when an
+  answer is cut, and so does starting a moved container.
 
 ## [0.8.0] - 2026-10-30
 

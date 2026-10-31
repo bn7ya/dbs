@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import posixpath
 import re
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
@@ -34,6 +35,7 @@ from dbs.manager.servers.services.server_service import (
     require_account_password,
 )
 from dbs.manager.permissions import Capability, requires
+from dbs.transports import RemoteResult
 
 SEARCH_ROOTS = ("~", "/srv", "/var/www", "/opt")
 SEARCH_DEPTH = 2
@@ -618,21 +620,27 @@ def listed_containers(
         identifier for identifier in listed.stdout.split() if CONTAINER_ID.match(identifier)
     ][:CONTAINERS_INSPECTED]
     left_out: list[str] = []
-    rows = inspected_rows(remote, engine, ids, left_out)
+    rows = rows_in_halves(
+        lambda batch: quiet(
+            remote.run,
+            [engine, "inspect", "--type", "container", "--format", INSPECTED_FIELDS, *batch],
+        ),
+        ids,
+        left_out,
+    )
     if unread is not None:
         unread.extend({"engine": engine, "id": identifier} for identifier in left_out)
     return [summary(engine, row) for row in rows if isinstance(row, dict)]
 
 
-def inspected_rows(
-    remote: RemoteHost, engine: str, ids: list[str], left_out: list[str]
+def rows_in_halves(
+    inspect: Callable[[list[str]], RemoteResult | None],
+    ids: list[str],
+    left_out: list[str],
 ) -> list[Any]:
     if not ids:
         return []
-    inspected = quiet(
-        remote.run,
-        [engine, "inspect", "--type", "container", "--format", INSPECTED_FIELDS, *ids],
-    )
+    inspected = inspect(ids)
     if inspected is None:
         return []
     if not inspected.stdout_truncated:
@@ -641,8 +649,8 @@ def inspected_rows(
         left_out.extend(ids)
         return []
     half = len(ids) // 2
-    return inspected_rows(remote, engine, ids[:half], left_out) + inspected_rows(
-        remote, engine, ids[half:], left_out
+    return rows_in_halves(inspect, ids[:half], left_out) + rows_in_halves(
+        inspect, ids[half:], left_out
     )
 
 
