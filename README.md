@@ -17,6 +17,13 @@
   <a href="#status"><img src="https://img.shields.io/badge/status-active%20development%2C%20stable%20since%200.8.0-0058a4" alt="Status: active development, stable since 0.8.0"></a>
 </p>
 
+<p align="center">
+  <strong>0.8.0 is out:</strong>
+  <a href="#whats-new-in-080">what's new</a> ·
+  <a href="https://github.com/bn7ya/dbs/blob/v0.8.0/RELEASE_NOTES.md">release notes</a> ·
+  <a href="https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md">upgrading</a>
+</p>
+
 ---
 
 ## What DBS does
@@ -80,6 +87,36 @@ takes a first backup.
 The [getting started guide](https://github.com/bn7ya/dbs/blob/main/docs/getting-started.md)
 walks through each step.
 
+## What's new in 0.8.0
+
+- **Servers and applications.** A server is an SSH machine, and each Django project on it is an
+  application, found from its folder: on the server itself, in Compose or in a container, under
+  Docker or Podman.
+- **How it runs.** The application wizard asks how the project is deployed, compares your
+  answers with what it finds, and gives the next step for anything missing.
+- **Move a whole server**, even onto one with nothing installed. The manager installs what is
+  missing with `sudo`, carries the code, images, volumes and `.env`, and restores the data from
+  a fresh backup. The old server keeps running untouched.
+- **Deploy in place** from a fixed catalogue of steps, after a safety backup. Plans get a first
+  run, a time zone and a pause, and the manager has a console and a terminal in the browser.
+- **Lighter on your site.** Panel backups and restores run in a process of their own, large
+  tables are read in pages, and a broken transfer resumes where it stopped.
+- **One install, stable from here.** `pip install django-dbs` brings everything, and the manager
+  answers to `django-dbs`, `django_dbs` and `dbs`. What 0.8.0 offers stays in every later
+  release; see [Stability](https://github.com/bn7ya/dbs/blob/main/docs/stability.md).
+
+**Upgrading from 0.7.x:**
+
+```bash
+pip install --upgrade django-dbs
+python manage.py dbs upgrade
+```
+
+On the manager's machine, `pipx upgrade django-dbs`; it migrates itself the next time any
+`django_dbs` command runs. The
+[release notes](https://github.com/bn7ya/dbs/blob/v0.8.0/RELEASE_NOTES.md) and the
+[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md) have every detail.
+
 ## How it works, in brief
 
 - **Encryption:** Argon2id turns the passphrase into a key, and AES-256-GCM encrypts the data.
@@ -119,8 +156,8 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 
 ## Status
 
-DBS is in active development, and stable from 0.8.0: new releases add, and nothing you use
-breaks.
+0.8.0 is the current release. DBS is in active development, and stable from 0.8.0: new releases
+add, and nothing you use breaks.
 
 - **Your backups keep opening.** Every backup written by 0.8.0 or later restores, with the same
   passphrase, in every later release. Nothing in DBS deletes or overwrites a backup.
