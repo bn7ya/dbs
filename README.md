@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <strong>0.8.0 is out:</strong>
+  <strong>0.8.1 is out:</strong>
   <a href="#whats-new-in-080">what's new</a> ·
-  <a href="https://github.com/bn7ya/dbs/blob/v0.8.0/RELEASE_NOTES.md">release notes</a> ·
+  <a href="https://github.com/bn7ya/dbs/blob/v0.8.1/RELEASE_NOTES.md">release notes</a> ·
   <a href="https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md">upgrading</a>
 </p>
 
@@ -105,6 +105,11 @@ walks through each step.
   answers to `django-dbs`, `django_dbs` and `dbs`. What 0.8.0 offers stays in every later
   release; see [Stability](https://github.com/bn7ya/dbs/blob/main/docs/stability.md).
 
+**0.8.1** fixes the manager finding no application on a server that runs many containers: it
+now reads everything a command prints there. Upgrade the machine the manager runs on; the
+[0.8.1 release notes](https://github.com/bn7ya/dbs/blob/v0.8.1/RELEASE_NOTES.md) say what else
+it fixes.
+
 **Upgrading from 0.7.x:**
 
 ```bash
@@ -156,7 +161,7 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 
 ## Status
 
-0.8.0 is the current release. DBS is in active development, and stable from 0.8.0: new releases
+0.8.1 is the current release. DBS is in active development, and stable from 0.8.0: new releases
 add, and nothing you use breaks.
 
 - **Your backups keep opening.** Every backup written by 0.8.0 or later restores, with the same

@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-12
+
+The DBS manager reads everything a command prints on a server, so it finds the applications on
+a server that runs many containers. Upgrade the machine the manager runs on; a server may stay
+on 0.8.0.
+
 ### Added
 
 - `RemoteResult.stdout_truncated` is true when a command printed more standard output than
