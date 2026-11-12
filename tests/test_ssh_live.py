@@ -20,6 +20,8 @@ from dbs.transports.ssh import (  # noqa: E402
 
 PASSWORD = "login-secret"
 PASSPHRASE = "backup-pass-phrase"
+WINDOW_AND_HALF = 3 * 1024 * 1024
+HANG_UP_WAIT = 10
 
 
 class Handler(paramiko.ServerInterface):
@@ -58,10 +60,20 @@ class Handler(paramiko.ServerInterface):
 
 
 class LoopbackServer:
-    def __init__(self, host_key, authorized_key, *, exits=True):
+    def __init__(
+        self,
+        host_key,
+        authorized_key,
+        *,
+        exits=True,
+        prints=b"served\n",
+        complains=b"",
+    ):
         self.host_key = host_key
         self.authorized_key = authorized_key
         self.exits = exits
+        self.prints = prints
+        self.complains = complains
         self.released = threading.Event()
         self.record = {}
         self._socket = socket.socket()
@@ -87,11 +99,13 @@ class LoopbackServer:
                 return
             if handler.exec_ready.wait(10):
                 self.record["stdin"] = channel.makefile("r").readline()
-                channel.sendall(b"served\n")
+                channel.sendall(self.prints)
+                channel.sendall_stderr(self.complains)
                 if not self.exits:
                     self.released.wait(30)
                 channel.send_exit_status(0)
             channel.close()
+            transport.join(HANG_UP_WAIT)
         except Exception:
             pass
         finally:
@@ -320,6 +334,68 @@ def test_the_passphrase_reaches_the_server_on_stdin_not_in_argv(tmp_path, host_k
     assert server.record["stdin"] == PASSPHRASE + "\n"
     assert PASSPHRASE not in server.record["command"]
     assert "--passphrase-stdin" in server.record["command"]
+
+
+def password_target(server, tmp_path, host_key):
+    return SSHTarget(
+        host="127.0.0.1",
+        port=server.port,
+        username="deploy",
+        password=PASSWORD,
+        use_agent=False,
+        known_hosts=known_hosts_file(tmp_path, server.port, host_key),
+        connect_timeout=10,
+    )
+
+
+def test_a_command_that_prints_more_than_the_channel_window_is_read_whole(
+    tmp_path, host_key
+):
+    printed = b"x" * WINDOW_AND_HALF
+    server = LoopbackServer(host_key, authorized_key=None, prints=printed)
+    try:
+        with open_session(password_target(server, tmp_path, host_key)) as session:
+            result = session.run("docker inspect", timeout=30)
+    finally:
+        server.close()
+
+    assert result.exit_status == 0
+    assert result.stdout == printed.decode()
+    assert result.stdout_truncated is False
+
+
+def test_standard_error_longer_than_the_channel_window_does_not_stall_a_command(
+    tmp_path, host_key
+):
+    complaint = b"e" * WINDOW_AND_HALF
+    server = LoopbackServer(host_key, authorized_key=None, complains=complaint)
+    try:
+        with open_session(password_target(server, tmp_path, host_key)) as session:
+            result = session.run("docker compose build", timeout=30)
+    finally:
+        server.close()
+
+    assert result.exit_status == 0
+    assert result.stdout == "served\n"
+    assert result.stderr == complaint.decode()
+
+
+def test_output_past_the_bound_is_read_to_its_end_and_cut(
+    tmp_path, host_key, monkeypatch
+):
+    monkeypatch.setattr("dbs.transports.ssh.MAX_COMMAND_OUTPUT", 1024 * 1024)
+    server = LoopbackServer(
+        host_key, authorized_key=None, prints=b"a" * 1024 * 1024 + b"b" * WINDOW_AND_HALF
+    )
+    try:
+        with open_session(password_target(server, tmp_path, host_key)) as session:
+            result = session.run("docker inspect", timeout=30)
+    finally:
+        server.close()
+
+    assert result.exit_status == 0
+    assert result.stdout == "a" * 1024 * 1024
+    assert result.stdout_truncated is True
 
 
 def test_a_command_that_never_exits_is_stopped_at_its_timeout(tmp_path, host_key):

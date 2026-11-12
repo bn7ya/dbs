@@ -302,6 +302,7 @@ def test_discovery_without_a_folder_lists_the_folders_that_hold_a_project(
         "engines": {},
         "candidates": [],
         "folders": [str(project["app"]), str(project["blog"])],
+        "unread_containers": [],
     }
     assert hosts.runs("10.0.0.5") == []
 

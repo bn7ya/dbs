@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dbs.manager.applications.services.discovery_service import FIND_PROJECT
+from dbs.manager.applications.services.discovery_service import (
+    FIND_PROJECT,
+    INSPECTED_FIELDS,
+    json_rows,
+)
 from dbs.manager.servers.services.pythons import VERSION_PROBE
 
 FIXTURES = Path(__file__).parent / "fixtures"
+TEMPLATE_JSON_FIELD = re.compile(r"\{\{json \.([\w.]+)\}\}")
 HOST_MARK = "${HOST}"
 SERVER_HOST = "10.0.0.5"
 VERSION_FORMATS = {"docker": "{{.Server.Version}}", "podman": "{{.Version}}"}
@@ -86,8 +92,8 @@ class Engines:
                 [engine, "compose", "version", "--short"], (0, f"{compose}\n", "")
             )
         self.answer(
-            [engine, "ps", "--all", "--no-trunc", "--format", "{{json .}}"],
-            (0, fixture(ps, self.root), ""),
+            [engine, "ps", "--all", "--no-trunc", "--format", "{{.ID}}"],
+            (0, listed_ids(fixture(ps, self.root)), ""),
         )
         self.answer([engine, "inspect"], self.inspecting(rows))
         self.answer([engine, "exec"], self.exec)
@@ -106,12 +112,17 @@ class Engines:
 
     def inspecting(self, rows: list[dict]):
         def inspect(argv, stdin_line):
-            assert argv[2:4] == ["--type", "container"]
-            asked = argv[4:]
+            assert argv[2:6] == ["--type", "container", "--format", INSPECTED_FIELDS]
+            asked = argv[6:]
             self.inspected.append(asked)
+            by_id = {row["Id"]: row for row in rows}
             return (
                 0,
-                json.dumps([row for row in rows if row["Id"] in asked], indent=4),
+                "".join(
+                    rendered(INSPECTED_FIELDS, by_id[identifier]) + "\n"
+                    for identifier in asked
+                    if identifier in by_id
+                ),
                 "",
             )
 
@@ -125,6 +136,22 @@ class Engines:
         if inside is None:
             return 1, "", f"Error: no container named {name} is running"
         return inside.answer(command)
+
+
+def listed_ids(ps_output: str) -> str:
+    return "".join(
+        f"{row.get('ID') or row['Id']}\n" for row in json_rows(ps_output)
+    )
+
+
+def rendered(template: str, row: dict) -> str:
+    def value(match: re.Match) -> str:
+        found = row
+        for name in match.group(1).split("."):
+            found = found.get(name) if isinstance(found, dict) else None
+        return json.dumps(found)
+
+    return TEMPLATE_JSON_FIELD.sub(value, template)
 
 
 def split_exec(argv: list[str]) -> tuple[str, list[str]]:

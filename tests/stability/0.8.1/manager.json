@@ -1,0 +1,4994 @@
+{
+ "data_folder": {
+  "backups_directory": "backups",
+  "database_file": "manager.sqlite3",
+  "instance_file": "manager.json",
+  "key_file": "keys/secret.key",
+  "keychain_service": "django-dbs-manager"
+ },
+ "mcp": {
+  "add_application": {
+   "additionalProperties": false,
+   "properties": {
+    "candidate": {
+     "description": "Which candidate from discover_applications. Defaults to 1.",
+     "minimum": 1,
+     "type": "integer"
+    },
+    "deployment": {
+     "additionalProperties": false,
+     "description": "How the application is deployed, as the person describes it. Leave a question out when unsure; discovery finds it.",
+     "properties": {
+      "database": {
+       "enum": [
+        "",
+        "postgresql",
+        "mysql",
+        "mariadb",
+        "sqlite",
+        "other"
+       ],
+       "type": "string"
+      },
+      "database_runs": {
+       "enum": [
+        "",
+        "compose",
+        "this_server",
+        "elsewhere",
+        "file"
+       ],
+       "type": "string"
+      },
+      "engine": {
+       "enum": [
+        "",
+        "docker",
+        "podman"
+       ],
+       "type": "string"
+      },
+      "process_manager": {
+       "enum": [
+        "",
+        "systemd",
+        "systemd_user",
+        "supervisor",
+        "other"
+       ],
+       "type": "string"
+      },
+      "runs_in": {
+       "enum": [
+        "",
+        "host",
+        "compose",
+        "container"
+       ],
+       "type": "string"
+      },
+      "settings_from": {
+       "enum": [
+        "",
+        "folder_env",
+        "compose_env_file",
+        "image",
+        "environment"
+       ],
+       "type": "string"
+      },
+      "source": {
+       "enum": [
+        "",
+        "git",
+        "copied",
+        "image"
+       ],
+       "type": "string"
+      },
+      "web_server": {
+       "enum": [
+        "",
+        "nginx",
+        "other",
+        "none"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "env_location": {
+     "description": "Whether env_path is on the server or inside the container.",
+     "enum": [
+      "host",
+      "container"
+     ],
+     "type": "string"
+    },
+    "env_path": {
+     "description": "The .env file to keep versions of.",
+     "type": "string"
+    },
+    "file_roots": {
+     "description": "Folders the Files tab may open.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "folder": {
+     "description": "The application's folder on the server, such as /srv/shop.",
+     "type": "string"
+    },
+    "name": {
+     "description": "A name for the application.",
+     "type": "string"
+    },
+    "remote_backup_dir": {
+     "description": "Where the application writes backups.",
+     "type": "string"
+    },
+    "server": {
+     "description": "The server's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "server",
+    "folder",
+    "name"
+   ],
+   "type": "object"
+  },
+  "add_plan": {
+   "additionalProperties": false,
+   "properties": {
+    "anchor_at": {
+     "description": "When the first run happens, with its UTC offset; later runs keep its beat.",
+     "format": "date-time",
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    },
+    "enabled": {
+     "type": "boolean"
+    },
+    "interval_minutes": {
+     "description": "Run every this many minutes; null runs only when asked.",
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "keep": {
+     "description": "How many to keep here, 1 to 5.",
+     "maximum": 5,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "keep_remote": {
+     "description": "How many to keep on the server, 0 to 5.",
+     "maximum": 5,
+     "minimum": 0,
+     "type": "integer"
+    },
+    "kind": {
+     "enum": [
+      "dbs",
+      "archive",
+      "collect"
+     ],
+     "type": "string"
+    },
+    "name": {
+     "type": "string"
+    },
+    "paths": {
+     "description": "Folders to archive, or the folder to collect from.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "pattern": {
+     "description": "Which file names to collect.",
+     "type": "string"
+    },
+    "time_zone": {
+     "description": "The time zone whose clock a daily plan keeps, as Europe/Berlin.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application",
+    "name",
+    "kind"
+   ],
+   "type": "object"
+  },
+  "add_server": {
+   "additionalProperties": false,
+   "properties": {
+    "auth_method": {
+     "enum": [
+      "password",
+      "key_file",
+      "generate_key"
+     ],
+     "type": "string"
+    },
+    "confirmation": {
+     "description": "The id fingerprint_host returned, once a person confirmed the fingerprint.",
+     "type": "string"
+    },
+    "host": {
+     "type": "string"
+    },
+    "key_file": {
+     "description": "A private key file path here.",
+     "type": "string"
+    },
+    "key_passphrase": {
+     "description": "Unlocks key_file.",
+     "type": "string"
+    },
+    "name": {
+     "description": "A name for the server.",
+     "type": "string"
+    },
+    "password": {
+     "description": "The SSH password.",
+     "type": "string"
+    },
+    "port": {
+     "maximum": 65535,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "username": {
+     "description": "The SSH account.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "name",
+    "host",
+    "username",
+    "confirmation",
+    "auth_method"
+   ],
+   "type": "object"
+  },
+  "browse_server": {
+   "additionalProperties": false,
+   "properties": {
+    "path": {
+     "description": "An absolute path on the server.",
+     "type": "string"
+    },
+    "server": {
+     "description": "The server's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "server"
+   ],
+   "type": "object"
+  },
+  "capture_passphrase": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application"
+   ],
+   "type": "object"
+  },
+  "check_applications": {
+   "additionalProperties": false,
+   "properties": {
+    "all": {
+     "description": "Use every one instead of naming them.",
+     "type": "boolean"
+    },
+    "applications": {
+     "description": "The applications by name or id. Leave empty and set all to use every application.",
+     "items": {
+      "description": "The application's name or id.",
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "check_servers": {
+   "additionalProperties": false,
+   "properties": {
+    "all": {
+     "description": "Use every one instead of naming them.",
+     "type": "boolean"
+    },
+    "servers": {
+     "description": "The servers by name or id. Leave empty and set all to use every server.",
+     "items": {
+      "description": "The server's name or id.",
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "compare_env_versions": {
+   "additionalProperties": false,
+   "properties": {
+    "other": {
+     "description": "A .env version's id, from list_env_versions.",
+     "type": "string"
+    },
+    "version": {
+     "description": "A .env version's id, from list_env_versions.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "version",
+    "other"
+   ],
+   "type": "object"
+  },
+  "discover_applications": {
+   "additionalProperties": false,
+   "properties": {
+    "deployment": {
+     "additionalProperties": false,
+     "description": "How the application is deployed, as the person describes it. Leave a question out when unsure; discovery finds it.",
+     "properties": {
+      "database": {
+       "enum": [
+        "",
+        "postgresql",
+        "mysql",
+        "mariadb",
+        "sqlite",
+        "other"
+       ],
+       "type": "string"
+      },
+      "database_runs": {
+       "enum": [
+        "",
+        "compose",
+        "this_server",
+        "elsewhere",
+        "file"
+       ],
+       "type": "string"
+      },
+      "engine": {
+       "enum": [
+        "",
+        "docker",
+        "podman"
+       ],
+       "type": "string"
+      },
+      "process_manager": {
+       "enum": [
+        "",
+        "systemd",
+        "systemd_user",
+        "supervisor",
+        "other"
+       ],
+       "type": "string"
+      },
+      "runs_in": {
+       "enum": [
+        "",
+        "host",
+        "compose",
+        "container"
+       ],
+       "type": "string"
+      },
+      "settings_from": {
+       "enum": [
+        "",
+        "folder_env",
+        "compose_env_file",
+        "image",
+        "environment"
+       ],
+       "type": "string"
+      },
+      "source": {
+       "enum": [
+        "",
+        "git",
+        "copied",
+        "image"
+       ],
+       "type": "string"
+      },
+      "web_server": {
+       "enum": [
+        "",
+        "nginx",
+        "other",
+        "none"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "folder": {
+     "description": "The application's folder on the server, such as /srv/shop.",
+     "type": "string"
+    },
+    "server": {
+     "description": "The server's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "server"
+   ],
+   "type": "object"
+  },
+  "download_backup": {
+   "additionalProperties": false,
+   "properties": {
+    "backup": {
+     "description": "The backup's id, from list_backups.",
+     "type": "string"
+    },
+    "path": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "backup",
+    "path"
+   ],
+   "type": "object"
+  },
+  "fingerprint_host": {
+   "additionalProperties": false,
+   "properties": {
+    "host": {
+     "type": "string"
+    },
+    "port": {
+     "maximum": 65535,
+     "minimum": 1,
+     "type": "integer"
+    }
+   },
+   "required": [
+    "host"
+   ],
+   "type": "object"
+  },
+  "get_activity": {
+   "additionalProperties": false,
+   "properties": {
+    "entry": {
+     "description": "The entry's number.",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "entry"
+   ],
+   "type": "object"
+  },
+  "get_application": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application"
+   ],
+   "type": "object"
+  },
+  "get_plan": {
+   "additionalProperties": false,
+   "properties": {
+    "plan": {
+     "description": "The plan's id, from list_plans.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "plan"
+   ],
+   "type": "object"
+  },
+  "get_server": {
+   "additionalProperties": false,
+   "properties": {
+    "server": {
+     "description": "The server's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "server"
+   ],
+   "type": "object"
+  },
+  "list_activity": {
+   "additionalProperties": false,
+   "properties": {
+    "action": {
+     "description": "For example backup.take.",
+     "type": "string"
+    },
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    },
+    "limit": {
+     "maximum": 200,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "server": {
+     "description": "Only this server's activity and its applications'.",
+     "type": "string"
+    },
+    "status": {
+     "enum": [
+      "queued",
+      "running",
+      "succeeded",
+      "failed"
+     ],
+     "type": "string"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "list_applications": {
+   "additionalProperties": false,
+   "properties": {
+    "search": {
+     "description": "Part of a name.",
+     "type": "string"
+    },
+    "server": {
+     "description": "The server's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "list_backups": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "list_env_versions": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application"
+   ],
+   "type": "object"
+  },
+  "list_files": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    },
+    "path": {
+     "description": "An absolute path on the server.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application"
+   ],
+   "type": "object"
+  },
+  "list_plans": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "list_servers": {
+   "additionalProperties": false,
+   "properties": {
+    "search": {
+     "description": "Part of a name or host.",
+     "type": "string"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "manager_overview": {
+   "additionalProperties": false,
+   "properties": {},
+   "required": [],
+   "type": "object"
+  },
+  "pull_env": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application"
+   ],
+   "type": "object"
+  },
+  "rehearse_deploy": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application"
+   ],
+   "type": "object"
+  },
+  "rehearse_redeploy": {
+   "additionalProperties": false,
+   "properties": {
+    "backup": {
+     "description": "The old application's backup to restore. Defaults to its newest.",
+     "type": "string"
+    },
+    "env_version": {
+     "description": "A .env version's id, from list_env_versions.",
+     "type": "string"
+    },
+    "flush": {
+     "type": "boolean"
+    },
+    "source_application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    },
+    "target_application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "source_application",
+    "target_application"
+   ],
+   "type": "object"
+  },
+  "rehearse_restore": {
+   "additionalProperties": false,
+   "properties": {
+    "backup": {
+     "description": "The backup's id, from list_backups.",
+     "type": "string"
+    },
+    "mode": {
+     "enum": [
+      "merge",
+      "replace"
+     ],
+     "type": "string"
+    },
+    "target_application": {
+     "description": "Rehearse into this application instead.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "backup",
+    "mode"
+   ],
+   "type": "object"
+  },
+  "rehearse_revert": {
+   "additionalProperties": false,
+   "properties": {
+    "move": {
+     "description": "The move's or deploy's activity number.",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "move"
+   ],
+   "type": "object"
+  },
+  "rehearse_server_move": {
+   "additionalProperties": false,
+   "properties": {
+    "applications": {
+     "description": "The applications to move by name or id. Leave empty to move every application of the server.",
+     "items": {
+      "description": "The application's name or id.",
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "source": {
+     "description": "The server's name or id.",
+     "type": "string"
+    },
+    "target": {
+     "description": "The server's name or id.",
+     "type": "string"
+    },
+    "target_folders": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "description": "An application's name mapped to the absolute folder it goes to. Defaults to the same folder.",
+     "type": "object"
+    }
+   },
+   "required": [
+    "source",
+    "target"
+   ],
+   "type": "object"
+  },
+  "run_plan": {
+   "additionalProperties": false,
+   "properties": {
+    "plan": {
+     "description": "The plan's id, from list_plans.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "plan"
+   ],
+   "type": "object"
+  },
+  "take_backups": {
+   "additionalProperties": false,
+   "properties": {
+    "all": {
+     "description": "Use every one instead of naming them.",
+     "type": "boolean"
+    },
+    "applications": {
+     "description": "The applications by name or id. Leave empty and set all to use every application.",
+     "items": {
+      "description": "The application's name or id.",
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [],
+   "type": "object"
+  },
+  "update_application": {
+   "additionalProperties": false,
+   "properties": {
+    "application": {
+     "description": "The application's name or id.",
+     "type": "string"
+    },
+    "deployment": {
+     "additionalProperties": false,
+     "description": "How the application is deployed, as the person describes it. Leave a question out when unsure; discovery finds it.",
+     "properties": {
+      "database": {
+       "enum": [
+        "",
+        "postgresql",
+        "mysql",
+        "mariadb",
+        "sqlite",
+        "other"
+       ],
+       "type": "string"
+      },
+      "database_runs": {
+       "enum": [
+        "",
+        "compose",
+        "this_server",
+        "elsewhere",
+        "file"
+       ],
+       "type": "string"
+      },
+      "engine": {
+       "enum": [
+        "",
+        "docker",
+        "podman"
+       ],
+       "type": "string"
+      },
+      "process_manager": {
+       "enum": [
+        "",
+        "systemd",
+        "systemd_user",
+        "supervisor",
+        "other"
+       ],
+       "type": "string"
+      },
+      "runs_in": {
+       "enum": [
+        "",
+        "host",
+        "compose",
+        "container"
+       ],
+       "type": "string"
+      },
+      "settings_from": {
+       "enum": [
+        "",
+        "folder_env",
+        "compose_env_file",
+        "image",
+        "environment"
+       ],
+       "type": "string"
+      },
+      "source": {
+       "enum": [
+        "",
+        "git",
+        "copied",
+        "image"
+       ],
+       "type": "string"
+      },
+      "web_server": {
+       "enum": [
+        "",
+        "nginx",
+        "other",
+        "none"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "env_location": {
+     "description": "Whether env_path is on the server or inside the container.",
+     "enum": [
+      "host",
+      "container"
+     ],
+     "type": "string"
+    },
+    "env_path": {
+     "description": "The .env file to keep versions of.",
+     "type": "string"
+    },
+    "file_roots": {
+     "description": "Folders the Files tab may open.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "name": {
+     "type": "string"
+    },
+    "remote_backup_dir": {
+     "description": "Where the application writes backups.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "application"
+   ],
+   "type": "object"
+  },
+  "update_plan": {
+   "additionalProperties": false,
+   "properties": {
+    "anchor_at": {
+     "description": "When the first run happens, with its UTC offset; later runs keep its beat.",
+     "format": "date-time",
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "enabled": {
+     "type": "boolean"
+    },
+    "interval_minutes": {
+     "description": "Run every this many minutes; null runs only when asked.",
+     "type": [
+      "integer",
+      "null"
+     ]
+    },
+    "keep": {
+     "description": "How many to keep here, 1 to 5.",
+     "maximum": 5,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "keep_remote": {
+     "description": "How many to keep on the server, 0 to 5.",
+     "maximum": 5,
+     "minimum": 0,
+     "type": "integer"
+    },
+    "name": {
+     "type": "string"
+    },
+    "paths": {
+     "description": "Folders to archive, or the folder to collect from.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "pattern": {
+     "description": "Which file names to collect.",
+     "type": "string"
+    },
+    "plan": {
+     "description": "The plan's id, from list_plans.",
+     "type": "string"
+    },
+    "time_zone": {
+     "description": "The time zone whose clock a daily plan keeps, as Europe/Berlin.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "plan"
+   ],
+   "type": "object"
+  },
+  "update_server": {
+   "additionalProperties": false,
+   "properties": {
+    "host": {
+     "type": "string"
+    },
+    "name": {
+     "type": "string"
+    },
+    "port": {
+     "maximum": 65535,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "server": {
+     "description": "The server's name or id.",
+     "type": "string"
+    },
+    "username": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "server"
+   ],
+   "type": "object"
+  },
+  "verify_backup": {
+   "additionalProperties": false,
+   "properties": {
+    "backup": {
+     "description": "The backup's id, from list_backups.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "backup"
+   ],
+   "type": "object"
+  }
+ },
+ "migrations": {
+  "dbs_manager": [
+   "0001_initial",
+   "0002_cache_table",
+   "0003_server_runtime",
+   "0004_backupfile_failure",
+   "0005_accounts_security",
+   "0006_plan_retention_limits",
+   "0007_server_connection_state",
+   "0008_application",
+   "0009_split_servers",
+   "0010_application_cleanup",
+   "0011_plan_schedule",
+   "0012_application_deployment"
+  ]
+ },
+ "routes": {
+  "^(?P<path>.*)$": [],
+  "^api(?:/(?P<path>.*))?$": [],
+  "api/about/": [
+   "get"
+  ],
+  "api/accounts/": [
+   "get",
+   "post"
+  ],
+  "api/accounts/<int>/": [
+   "get",
+   "patch"
+  ],
+  "api/accounts/<int>/master/": [
+   "post"
+  ],
+  "api/accounts/<int>/password/expire/": [
+   "post"
+  ],
+  "api/accounts/<int>/two-factor/reset/": [
+   "post"
+  ],
+  "api/activity/": [
+   "get"
+  ],
+  "api/activity/<int>/": [
+   "get"
+  ],
+  "api/applications/": [
+   "get",
+   "post"
+  ],
+  "api/applications/<uuid>/": [
+   "delete",
+   "get",
+   "patch"
+  ],
+  "api/applications/<uuid>/check/": [
+   "post"
+  ],
+  "api/applications/<uuid>/deploy-steps/": [
+   "put"
+  ],
+  "api/applications/<uuid>/deploy/": [
+   "post"
+  ],
+  "api/applications/<uuid>/passphrase/": [
+   "post"
+  ],
+  "api/applications/<uuid>/passphrase/capture/": [
+   "post"
+  ],
+  "api/applications/discover/": [
+   "post"
+  ],
+  "api/auth/csrf/": [
+   "get"
+  ],
+  "api/auth/login/": [
+   "post"
+  ],
+  "api/auth/logout/": [
+   "post"
+  ],
+  "api/auth/me/": [
+   "get"
+  ],
+  "api/auth/password/": [
+   "post"
+  ],
+  "api/auth/recovery-codes/": [
+   "post"
+  ],
+  "api/auth/two-factor/": [
+   "post"
+  ],
+  "api/auth/two-factor/enrollment/": [
+   "post"
+  ],
+  "api/auth/two-factor/enrollment/confirm/": [
+   "post"
+  ],
+  "api/backups/": [
+   "get"
+  ],
+  "api/backups/<uuid>/": [
+   "delete"
+  ],
+  "api/backups/<uuid>/download/": [
+   "get",
+   "post"
+  ],
+  "api/backups/<uuid>/restore/": [
+   "post"
+  ],
+  "api/backups/<uuid>/undo-delete/": [
+   "post"
+  ],
+  "api/backups/<uuid>/verify/": [
+   "post"
+  ],
+  "api/backups/plans/": [
+   "get",
+   "post"
+  ],
+  "api/backups/plans/<uuid>/": [
+   "delete",
+   "get",
+   "patch"
+  ],
+  "api/backups/plans/<uuid>/pause/": [
+   "post"
+  ],
+  "api/backups/plans/<uuid>/reschedule/": [
+   "post"
+  ],
+  "api/backups/plans/<uuid>/resume/": [
+   "post"
+  ],
+  "api/backups/plans/<uuid>/run/": [
+   "post"
+  ],
+  "api/backups/take/": [
+   "post"
+  ],
+  "api/backups/upload/": [
+   "post"
+  ],
+  "api/console/": [
+   "post"
+  ],
+  "api/dashboard/": [
+   "get"
+  ],
+  "api/envfiles/": [
+   "get"
+  ],
+  "api/envfiles/<uuid>/": [
+   "get"
+  ],
+  "api/envfiles/<uuid>/compare/": [
+   "get"
+  ],
+  "api/envfiles/<uuid>/push/": [
+   "post"
+  ],
+  "api/envfiles/<uuid>/reveal/": [
+   "post"
+  ],
+  "api/envfiles/pull/": [
+   "post"
+  ],
+  "api/files/<uuid>/": [
+   "delete",
+   "get"
+  ],
+  "api/files/<uuid>/download/": [
+   "get",
+   "post"
+  ],
+  "api/files/<uuid>/folders/": [
+   "post"
+  ],
+  "api/files/<uuid>/upload/": [
+   "post"
+  ],
+  "api/health/": [
+   "get"
+  ],
+  "api/redeploy/": [
+   "post"
+  ],
+  "api/redeploy/<int>/revert/": [
+   "post"
+  ],
+  "api/servers/": [
+   "get",
+   "post"
+  ],
+  "api/servers/<uuid>/": [
+   "delete",
+   "get",
+   "patch"
+  ],
+  "api/servers/<uuid>/browse/": [
+   "get"
+  ],
+  "api/servers/<uuid>/check/": [
+   "post"
+  ],
+  "api/servers/<uuid>/host-key/": [
+   "post"
+  ],
+  "api/servers/<uuid>/merge/": [
+   "post"
+  ],
+  "api/servers/<uuid>/move/": [
+   "post"
+  ],
+  "api/servers/<uuid>/public-key/": [
+   "get"
+  ],
+  "api/servers/fingerprint/": [
+   "post"
+  ],
+  "api/servers/host-keys/": [
+   "get"
+  ],
+  "api/servers/host-keys/<str>/confirm/": [
+   "post"
+  ],
+  "api/servers/host-keys/<str>/reject/": [
+   "post"
+  ],
+  "api/setup/": [
+   "get",
+   "post"
+  ],
+  "api/terminals/": [
+   "get",
+   "post"
+  ],
+  "api/terminals/<str>/": [
+   "delete"
+  ],
+  "api/terminals/<str>/input/": [
+   "post"
+  ],
+  "api/terminals/<str>/output/": [
+   "get"
+  ],
+  "api/terminals/<str>/resize/": [
+   "post"
+  ],
+  "static/dbs_manager/<path>": []
+ },
+ "terminal": {
+  "": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--version": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "account": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "account disable": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "account enable": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "account list": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "account reset-2fa": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "account role": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "activity": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "activity list": {
+   "options": {
+    "--action": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--app": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--limit": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--server": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--status": {
+     "choices": [
+      "failed",
+      "queued",
+      "running",
+      "succeeded"
+     ],
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "activity show": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "app add": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--backup-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--backup-passphrase": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--candidate": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--compose-file": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--compose-project": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--compose-service": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--container": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--deployment": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--engine": {
+     "choices": [
+      "docker",
+      "podman"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--env-location": {
+     "choices": [
+      "container",
+      "host"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--env-path": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--file-root": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--folder": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--kind": {
+     "choices": [
+      "compose",
+      "container",
+      "host"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--manage": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--project-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--python": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--server": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "--settings": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--workdir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app capture-passphrase": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app check": {
+   "options": {
+    "--all": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": false
+    }
+   ]
+  },
+  "app deploy": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--confirm-name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--real": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app deploy-steps": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--set": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app discover": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--deployment": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--folder": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app edit": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--backup-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--compose-file": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--compose-project": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--compose-service": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--container": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--deployment": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--engine": {
+     "choices": [
+      "docker",
+      "podman"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--env-location": {
+     "choices": [
+      "container",
+      "host"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--env-path": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--file-root": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--kind": {
+     "choices": [
+      "compose",
+      "container",
+      "host"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--manage": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--project-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--python": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--settings": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--workdir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app list": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--search": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--server": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "app passphrase": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app remove": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--yes": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "app show": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "backup": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "backup delete": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "backup download": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--output": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-o": {
+     "choices": null,
+     "required": false,
+     "value": true
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "backup list": {
+   "options": {
+    "--app": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "backup restore": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--confirm-name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--mode": {
+     "choices": [
+      "merge",
+      "replace"
+     ],
+     "required": true,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--real": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--to": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "backup take": {
+   "options": {
+    "--all": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": false
+    }
+   ]
+  },
+  "backup undo-delete": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "backup upload": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "backup verify": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "createuser": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--role": {
+     "choices": [
+      "admin",
+      "master",
+      "operator",
+      "viewer"
+     ],
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "env": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "env compare": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "env list": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "env pull": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "env push": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "env reveal": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "export": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--passphrase-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--with-backups": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": false
+    }
+   ]
+  },
+  "files": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "files delete": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--yes": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "files download": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--output": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-o": {
+     "choices": null,
+     "required": false,
+     "value": true
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "files list": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": false
+    }
+   ]
+  },
+  "files mkdir": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "files upload": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "import": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--passphrase-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--replace": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--yes": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "mcp": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "password": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "paths": {
+   "options": {
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "plan": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "plan add": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--disabled": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--every": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--first-run": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--keep": {
+     "choices": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--keep-remote": {
+     "choices": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--kind": {
+     "choices": [
+      "archive",
+      "collect",
+      "dbs"
+     ],
+     "required": true,
+     "value": true
+    },
+    "--manual": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--path": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--pattern": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--time-zone": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": true
+    }
+   ]
+  },
+  "plan edit": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--disable": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--enable": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--every": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--first-run": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--keep": {
+     "choices": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--keep-remote": {
+     "choices": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--manual": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--path": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--pattern": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--time-zone": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "plan list": {
+   "options": {
+    "--app": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "plan pause": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "plan remove": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "plan reschedule": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--at": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "plan resume": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "plan run": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "plan show": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "redeploy": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "redeploy revert": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--confirm-name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--real": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "redeploy start": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--backup": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--confirm-name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--env": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--flush": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--from": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--real": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--to": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "run": {
+   "options": {
+    "--allow-insecure-http": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--host": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--no-browser": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--port": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--terminal": {
+     "choices": [
+      "admins",
+      "master",
+      "off"
+     ],
+     "required": false,
+     "value": true
+    },
+    "--trusted-proxy": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "server": {
+   "options": {
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "server add": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--generate-key": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--host": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "--host-key": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--key-file": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--key-passphrase": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--port": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--ssh-password": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--ssh-password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--user": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "--yes": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server browse": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    },
+    {
+     "required": false
+    }
+   ]
+  },
+  "server check": {
+   "options": {
+    "--all": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": false
+    }
+   ]
+  },
+  "server confirm-host-key": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server edit": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--host": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--key-file": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--key-passphrase": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--port": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--ssh-password": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--ssh-password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--user": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server host-key": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--host-key": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--yes": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server list": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--search": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": []
+  },
+  "server merge": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--into": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server move": {
+   "options": {
+    "--app": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--confirm-name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--name": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--no-plans": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--no-sudo-password": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--real": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--resume": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--skip-volume": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--source-sudo-password": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--sudo-password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--to": {
+     "choices": null,
+     "required": true,
+     "value": true
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server public-key": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server remove": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--yes": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  },
+  "server show": {
+   "options": {
+    "--as": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--data-dir": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--database-url": {
+     "choices": null,
+     "required": false,
+     "value": true
+    },
+    "--help": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--json": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "--password-stdin": {
+     "choices": null,
+     "required": false,
+     "value": false
+    },
+    "-h": {
+     "choices": null,
+     "required": false,
+     "value": false
+    }
+   },
+   "positionals": [
+    {
+     "required": true
+    }
+   ]
+  }
+ },
+ "vectors": {
+  "env_fingerprint": {
+   "content": "DEBUG=0\nDATABASE_URL=postgres://shop@db/shop\n",
+   "fingerprint": "e7064a0805615eaea33b1611724e1e701833806cc9001ac38b07f211ed856dfb"
+  },
+  "plaintext": "kept since DBS 0.8.0 — محفوظ",
+  "sealed": {
+   "dbs.manager.envfiles.services.vault_contexts.CONTENT": {
+    "context": "envfiles.content",
+    "token": "011448accac78a8bf85ce95fbf738723188c9cb053e201b053f0e0c46798369049a4fb0a05a97a6d8cdd92fd12e32949d77005b399eb68423d750838d77b5e2c674e8c96"
+   },
+   "dbs.manager.servers.services.vault_contexts.BACKUP_PASSPHRASE": {
+    "context": "servers.backup_passphrase",
+    "token": "011448acca4e1947c992f5e09027ae261148ce919955deb35cc79ff22c94d1371b04b7fe84b375601ae970f902021a21de7be079cb8da1c9933bb3d11135fd63a8002d32"
+   },
+   "dbs.manager.servers.services.vault_contexts.KEY_PASSPHRASE": {
+    "context": "servers.key_passphrase",
+    "token": "011448acca18f86c42fc4c59a1a38f6526a01c1f761d8d2af0675b4558a9cc34bdeb815d368003cbe4e3c5e86d5a45ef881be703d936611309e7cc922d92056cddb70405"
+   },
+   "dbs.manager.servers.services.vault_contexts.PASSWORD": {
+    "context": "servers.password",
+    "token": "011448accacab6d0f29605e5e27bd53c273d634d87d0ef7594e0988cb55101d5726ba06c99a9b14ea28bb4ad62de4fccc8735f14a23ef3c147809b4515050060af3f52f6"
+   },
+   "dbs.manager.servers.services.vault_contexts.PRIVATE_KEY": {
+    "context": "servers.private_key",
+    "token": "011448accab7030da67b3b8a8ab4cdb65e395d63619f518d6f8797a1b6dfefdab88ae594af9aa68b17cfb6ea5546ba1940a87b9942f3c393cccacdede9b84b1fab4405ef"
+   }
+  },
+  "sealed_file": {
+   "content": "DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. DBS keeps what it sealed. ",
+   "context": "backups.file",
+   "source": "dbs.manager.backups.services.vault_contexts.SEALED_FILE",
+   "token": "4442534d5345414c011448acca001000003f9b606cfef51593a760ed52a940b971a0e59d86b7744b35a38328f34f6edd7a2334bb1d8c67e68df86dd33e6fe4540aead1264ae84a154816e794a9ad7360fe60badbe8e6f458b9e3d66a8d6f08880752ab712d1cef32c58cd78b819468776eb10e9fdba60c72a586abf59f7d5daa3b0683b5779ffe61dfd080db145e68ffe1bb50f295cf32a822cd5d804978808ff38400a589255390c9258e9f0b372351048f754252f93fbbad4a57a9eb8898e43bf1359da6cbf55d04a9112e074899fbe1c44d5100ed742494573bb48e331be94f12ff27a94e5256c1c48f1a9b993ea8a4cea06452d7ea25e97f1761fa9f9f12d6857b15da95c8857028d79fe97349314f7c191da4e5af554ab91f09e8e2394c35dffb35c976174708571ca805d3526951daa6ee23d225f5db8dc8e4f6d68ab3d6862d701bcd9005586141cfd139ce8fc929c00dd1458b896274b3fb18f1d3ce6c1565620292317fd364fdb46a6a1a9e789f4107b19c803f521924abdd66d9c87227be8300f221d558c04f801790c53c4d2704d70649504de1a9b8da3d5b83ca409f93bb4b8b28af27560f34508275aaf69d9f5790565cd96ac892221323930a263ffc45c8b52d7e9638c5e374abcaa2d06180456e3705a9853a18338a3c988ffef8e45f06671be49150c6ae097a539b539eb425cb5b91f77c4fd41b3952ae502f74417adc599ac7809eff83b1e7f9abd71ce84952e321ad212dfdc275ae965df6ea72e16ae22f0483bf45c7446afcf5fb3660b19c9fb0199c1f96938ad0fd7c914ec3741bd79261bc4a63cd4f1ce330776e05df6ec9238b3cc3899e0ef045986f0d87fd1280725908e5ff2a7f75dcafa6cec74ada3230997b1cc790e9c04d753fb4405383148794daa581e2caaca6b0bca2cdda349f27c0ca0b86e502ce2cb9f864379da03772f2f9326f3f539cc90e822b003f1414a8daeaa8c9a3895c4be836e2372859d909b014d1deb912c7fc738b20e04b82827b119f3d65b932494b78f7f45909db39adb18bb452a13c7e9517e51e4b1bcfb4cabbc9f502d4af1b96b08e49eb84115f33667f000cf9353a022c151256b8aeb7d441cf8b96b80589cbaa9eb26e370f703d8d0069d94c7a6272303ebe5f686c2eecc779933ffd247be329702b609333437b0b5105e628b8819dccfa38fba42df68eb6ad46815c76938d44eafa7a0e5e3fb00d12f22790340882ecf4420e2a82a5ead218c30ebd41e71ff92e7e17012aee1b61c9ba6998f5f990f7af17863041447566eedfca4934da08e5500e34208cb6c459083e11ef4f384b96bee5b2029190e1501d1bfc87bc156db18bcfa87d26d2dfed076c49eab506717fb33033c3f51d1809f93576148ad9615742a651989ac3712c22d71c8efe267bd5e6a8954990c57404b0bf3b7abe507cc8c1c70d0de7311103a4d9637b86df6efe9d1cba65e97c68ced91764865836addb0e54b75775200c00f0594f975ee3abcdab402d9fe8add7e791d010b944e706c964cfac11feb30d5f8d9e9d422543c1469ff6a1d3bf595bb7ba6c17c0f4090eae9301a167e88a545fa614f632b67b701ef3f9d0686f192048922e6a18d75b0ef4c4fdef995dcedb7df7b4c92ff114c894cc272d1f8e6499797b4d4d5de9f3fa07d648ea4f5e39653571eaeabaaf1fa7f5c7586c39eff4979358254941d4927cb1ac42c3757e7f00360158b7fdf0e0dd9244ffbbca51f5690582644cb55a06fe933254259c8506dc1eec6513f491ff37b3d77286b9805eb78f2b15ef2bab6e43761609cbd3dcf6299a71bba3f93feeae9540a86a5d450ff52269e3f4eb9b2d1d1f62e4820003f5c14c622929987f7c82e10b637b8a56e8fe91011a53bec63758b1b13fd1074b6ab07ca3d8408f25948a3f94006182fe6aa367231bcc8e9bc5afae97821a72962135260c155ffc03fa14e07a61f8fe497631059babd13c9f93c648ea17a2cd7954d00c934283a1e7b2d117698d2008ba0db675d17699eb2ab10625b9ec54fa4237d829461ea1441dd533b73aaeba0d5a6e50ae9a5bbbce3101094d3d64b3a6614e936a14641324c8543b3881ba05f96cbf7190d4f2b7fe39aeb880bda13055b868f4db9f2a60e2809ced0067cd8548daf946af4681153111b8892d72eb05f7b242d943e162a3c9fe96952cebad29384105205795596516e6327de82e7f61d9316c1f8a334db1dc0a7efb6de82f091efe91c368e60206b527877645d41ff995d6717fe2d5f42c94154c702b85fa18c5ec7d83a3c38e8a6e29295baf8791b7236067cfec357dbf974a73484a378222156677f33b0168cb195040e6b0b224017a753e8a5a939ca2c43148faa6694060aaddbb2fece0c5e2aa60168f3135c8f6fcbca3cb506583ed1318ca54cf69cfb32ee5be9ce639c627f41f3be8db3f3b7b9743c81f6bb54e16fc7edd8a9922248bfd46ddda044d06f3aa33d8cd233b09102d4355b9009af5ea23395ceede064302f44008e9910483922e81b193754847321ccd4f003e4090221c527bdd9cd7de809baa5fd22fc8714dc55e11694d1cd53629669a06e27e762fd166b01c80b87936d1a51fb4628584ebea6c34fd079b77fa8c95b1fa49c43a72b21c17a327a6c563e6e7142ed4eaf92486f76b97166789c3fbc9ba14914134bc2f8a26ea6699584985c5f689e9a6a79c744b5d8b09ce818349a593f06ff161d7b108d4e25d475489a1f817db82255e0921c96f737cab0ce948522e1dfcfc6528d206d8b696852f01d2a321ff56bf6c445b199ccff644ba8c4538dc695285000f3ffbaf78538ba8e5edbe4074c0ab5246a113b1aae5d8330b5e71faf1c003b2ae5c4ac7256f43a33a7ebab2b3f5d4b89eb9abff099cae367eae290fb003ae25590e0eb7511722aca21c835e660bf92299ddf7b511eff749cba63a859eb1532841a06cec61d989e6b9311252e66f76be1ee3e1c90b88773818278081c65853a178ca2d6f0e3dcb67152cad5f7867f8267ddcfb596b4b23e5d1aa27ff256eed82bf8947c06186cea4afe6c2e11123d7b57b949b0003d9cb998529e97e635f055f4e35c51f9ef2afd4ae604a68ef15f48e59d9b78e23bdef6896d2bc08715610734b4ef0245bb2fa7895a44bd9164ab0b61047c897aa0b27468a99198634374acd530ded9adb2cf439d9bb8e80c98effeaef87a795dfa56e2edf707b70e7cb1645d5808612d310849ca1bc9beed7a886abff52519d294ea4ef4109ab959bc929041ff968a4b986affa6ad02c2026572d05712b064a0b51b6c16af790a54e9d6f5bb3ff8d832ebf8fe0001e2f2efcbc762877817d079127dfc2cfec26fec48de4ebeb4c4fb8acc3fd28d702a1b254c034a75ad771d467daa543ce01b41b96bac44020edc9a2830a74e2714496f33e222f220d3da458c7ebbd80389a03a38270bd1b494159ec8b853bef4b4ff40378cddd734dc67855c5e95803096837e2c598b3576a5062d9ea16aa3d2cc38370d1b249c45cfca556d7ce9c478e2612c40417ef912396e326102a591ca9d55a5627ae7237d24d5c56535ac075335486c829990726cc8fffe6e74488bca47ef1e924329502d20bc6514887c463ace2399c09290d71c1c9ca0030266e12de57e2bbaccb834495ab1a53e0b8c5fa2f7359a5d26b7b325fe79f11da51291c392285d89ccb728197c7b8e3d7c57e27d3112b78377ac079b48e9665f8d28d90421c044c874f8d97fa6f6ad7df69bf5192ccc187bb9c56e5550fcbb3214756d7420c7a0ecb77f56c238f6464c96df0ee5ced9799bbcec10551777ad0047c9318279e8fd5bce2c2917ae5ceec0e2074ff79c96b900a0469c234eaf9194eb2dd56f437caac00a8284b0e629f1b5e38c1772ce7e3edb9ebf7aececbb0981fd0c1ff5e4de2a225093d0cd8c85b0f024c2cc00af318e2e95123c908fe7e12d66a82d1cee68c4d8d55427d8aab117fb8b556661d0d29aa7ecac29023b85ecc08752ea30d62bfb15ddc79451f3a5776f8cb5b100e03450ed3ed07d7a742e0f9b396ee406e690d613a3206c0242b5ca61f67fd13d667aab078eae2bf61db728b8e7f6d401af75c6dba7cfcb8ced52581d605bc3c336b2a9f3525babf5ecf972df790028d1f1afb85ffa20a50a52a3c93c126e2d2a2fd69b66d966f75aa78e5d62a8c6f4257e2b63cb65d760c010ddf63c455a9eb1f291595989019f780b6abdee82c160ba317ff5d594a6ba1efc4bc5f89ce6136a340c94559746c175c93c50148f59dff6e434d8231a276d8863361ce4da975047b32f03616589f0a191d38101f70623fcae3476dbddd0c97bdb552211e9987570e6079e1a2b3542a0c7170202257be4ed4d1e6d6613f4192503d3e5e78b589ffbc691db2fb5774b37adf1f8fc06b946cca35be423c242cc035b991e8c80c687b4f8219107d335695fff161148d9257dc5b04a72678e63796db6a79b8523a6aa767a54dcb120456d61ababa888c90395aa79bdfdea8550aa087e09bdee5ae397e1e5377c7a61cbee8be693218e16184dd6163b25097bc2e8bcffd6348975e8b0238cdec0fe5ed99e91c0687584a9f7169db56c028a1adb8d5561113933cc72de6f76547670ba75f02765b37ef7a90cb06496d28cb0ad951bf78f20e651a968b12e98785687e4aa73b1b891d18d3bdd8f47820182d0b4b9941749e118e0dfa92c228a2a77faff7a688a8acb89944305eddfcd24041e0db59537421304d1c2f41bc5ad7eb9c9a97369fb55e64371a4609cd3315a77eb082f2113d22fc2b60e821aa3389b3818e742f65aa9edad9da2876086801959c83d829b1e57b51ec67c9606b99fa07f20828d231e1459342a2890f0c06e0379a65bbde86f38eb8a011530999e82b4407ac7f9667f55a71008a2ce8d25a093550091b564cb44e0617098a1669d52429191b7969d0d6612c8433eeb9f1aae80fc8953f3871ea6b103530c9619efd659e74dd256f2fef778344a364d0c64ccab9b0a09ec15e29bf27a476997ea83208bac91f2dde72e349ddee76ba8d5a4ed71fa5ecebc1467fa994379811191aad3f4254014ca2bc59fe6fef3f341079be827c28b1038969dc125abdb0f7925fae997632f9fc984772b84ca8a5c459f02f93f0dc5e0670b5a131814639984f8040e4ff551139d2b483e8f5603b4470836f47bc5e78ecebee9adf7f5735c8192c261d4d65998c0f2332155fa061237b27bac4e545669e9f5555f32c52a3141d86dd1cfdcfe799e3de8dec638528f7a59e45eda7b20e2cf8d71507c096c76b16ee173a5d9cf9c7f8d0e535975d2124b55895664f68025fb02f94324c8b4c995dc0487b2172a7a7770a13a40ada5832a36b973537b578d6b0549527c50caac8ec5454ed4d221751d43ccb63bcf88472b20d5ec6db76e79d9200d1b036db8a6afce5f6ba6d638362df417002ce62db6ee1c71012fe806b53fa68abef0b348e8037dd7ecb449b1ca35905b6abff0661f77a1893b536cbc1ad544b49b74d15c18b99088e26f8dc01b5c02a0229bdfef143955c60f1dd4e374e1042389dc3a0c91f1c5df7b126ef1d405335784e19a1a8fec9c3587a7fc715b401406c8b0eb8e45275a93aaf1244f12351c75bc05d00528a97071085a996411ede3a1d92532cc91a9f7143b56382f3491b5c2141a7b4178e5561f0af3a3db362b44b03ac51c4809f575b52fe30a90c09f8c753c7153bb8872af2836726ef4d3d6cb2f0decd35f8f7f859792ec368d01bbf9788b3bb68fb2b1c1e11295a700af49946f4002adce4250d4f7e5f7fa982530800ded2cc58953710e10837a5e78209334115a7f074c67234bd26e619692e0b27f1483c631a120bbae3f013f4f6df0dfeaa23a2479209864c6d4fceefa269db864e78370c2981e62f99a7d46d84b27b9bae91875bd8168f70aeecfbcae0c528a7f4920e1a6b7eeac5abd6b8551e70ef23463527842c79639955fd83ad4c2a02a2757141359d4ea558080710dd199423ac014356938b6b8780b69c4e35fd2109685601d5e4f354e215dd355f49dc18cea22020cd199d3f0a9dfc94f67c5bd2f5d2842a630888fd23f7e9d88cbbe7ad01b9c36576ade56f583d17098e4445d6d6a8de4a497ae1a1ab3b23088912f6489da268ece1196947d86191a540302ebf44f8644fd9d84ea51d2807ff4956f36b71ad5f450877575f85b0b0835ea8e56cc0d226e7b3fce250284c3de67a79a209d51e0d5efa53f3fe5e9364c8772193ec4db0fd5398d26f5f987ca547cb4d713be08c308160f30c5cfc56ba6ed46922ce43d314f0d0d29246e80a5489fa673288723908cfdebb0f24fb848ee63268068bf0cd4ba91df68cd502b87e3d339d4209db7f1898c320319e6f566022fece40fd7d1722624422270474e3f13837effc682f2118d17805249d4d3853864abee5a03144fe1fcfeb208966543d946ae13184421a9c020f517375470793c4bca57757b2a98e721949c2a6b86066a9dbf74ae6359918de6732182350421ab5b099a3f27824b823733a92652c52cc2b10aa1c0442bb28c76471cfdefb2674ad0b00fc2cfcf61ed02190384908805d104789c6fb7fbc01d49efa4aede9747078ffa10dd5f389f2d922a0efa55e5c802e10485e01e12935aeceb4440fff7e3a19d30390ee66576c573479ca82e76e953442e386f2cd924b7748eb7f710ece3db62e006712c0e31b0332f0904c726c7c161633bb73329477f0fbad5e7cbd65c8cff34d5c2650c654b4fe4f419d5586f5e5512a17dbce73761a5532de3e48940c57566e4c9fb1b55a9d9db55929966dfa0fc9f07fc71a86f3ed3e274f9a9061c21706169f5266e577510b03f69da79f713308d1cda5d712c73631bce91eb8d5de33dc291cca90c82b411f3407d384aa47fe8363a3fc19ddfc569df136bdbf78f6ddfb0bffa167fecf3af068f9681ec9ff49b4329e527909bc10f5c898b18c260e493c889644accbab650884f8a8b4f0310531b43545d487990eb072e45a964462f2acf8eca16618bad6bdf4b32c964abc4e4dd5285f9d411d500f3dc371aafc549466489250194074e24b2ca6f0a6c112311e984a2a71dba86cd4f40926336f519a877ca7a0884d8300ce0353855dbc28dc5397cf886d91c2b51608f7766c8e841bbe03810aff9bd3c11685760a0d124ad26a2497950b64a66ba64bd4694c866a0ce55d86212f1b760b345f10b6cf6748b1379e206ab200241111e7523693ee6f33cb7264c0c5c5f025e5b07c3b64cabe53d34772de84d674c289120fbc8b318f4181a8c6ea8c62f06e1cdf06c920e8c61292e709cd24838744e4b80c9cc0303f92e93f8367b1eab7210714786df8f29643bbf29a7e0cb9a81e281c19390896ca8ef71c7b06a4fafc0438bd2272c4a728d4fd896d5536bc22130522653cc7c589fc852cafd7049d88e92a2bdddbe2a5838b6c46e54b5a7a3697606b454253cb40f5344e0ad30b310b8d769ffe340e6dd0998b"
+  },
+  "secret_key": "dbs-stability-golden-secret-key",
+  "two_factor": {
+   "account_id": 7,
+   "recovery_code": "abcde-fghjk",
+   "recovery_digest": "5aa54dc6b3ed9ac492b8c85d96268553e26ef3df72d39c56f4dc704c867263f7",
+   "sealed_secret": "011448acca9fc0e23e458ce3b0321f9a3813cecca8be64aa0a058a79433cdaf6f95b8d553d01c159dbcd88a294e99388afd672f3ea022891a1bbdf07263d00fd52",
+   "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+  }
+ }
+}

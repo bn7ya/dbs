@@ -6,6 +6,7 @@ import sys
 
 import pytest
 
+from dbs.exceptions import DBSError
 from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.applications.services import discovery_service
 from dbs.manager.applications.services.facts import DATABASE_FACTS
@@ -266,9 +267,143 @@ def test_containers_are_listed_in_full_and_inspected_by_id(
     discovered(api, server, site["shop"])
 
     argvs = ran(hosts)
-    assert ["docker", "ps", "--all", "--no-trunc", "--format", "{{json .}}"] in argvs
+    assert ["docker", "ps", "--all", "--no-trunc", "--format", "{{.ID}}"] in argvs
     [asked] = docker.inspected
     assert asked == [row["Id"] for row in docker.rows]
+
+
+def padded(row, size):
+    row["Config"]["Env"] = [*row["Config"]["Env"], "PADDING=" + "x" * size]
+
+
+@pytest.mark.django_db
+def test_containers_whose_details_pass_what_a_command_keeps_are_inspected_in_halves(
+    api, server, site, docker, commands_keep_64_kib
+):
+    for row in docker.rows:
+        padded(row, 10_000)
+
+    report = discovered(api, server, site["shop"])
+
+    ids = [row["Id"] for row in docker.rows]
+    assert docker.inspected == [ids, ids[:3], ids[3:]]
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+        "worker",
+    ]
+    assert report["unread_containers"] == []
+
+
+@pytest.mark.django_db
+def test_a_container_that_alone_passes_what_a_command_keeps_is_named_and_the_others_still_found(
+    api, server, site, docker, commands_keep_64_kib
+):
+    [redis] = [row for row in docker.rows if row["Name"] == "/redis"]
+    padded(redis, 70_000)
+
+    report = discovered(api, server, site["shop"])
+
+    assert docker.inspected[-1] == [redis["Id"]]
+    assert report["unread_containers"] == [{"engine": "docker", "id": redis["Id"]}]
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+        "worker",
+    ]
+
+
+@pytest.mark.django_db
+def test_a_container_gone_between_listing_and_inspecting_leaves_the_rest_found(
+    api, server, site, docker, hosts
+):
+    [worker] = [row for row in docker.rows if row["Name"] == "/shop-worker-1"]
+    docker.rows.remove(worker)
+    inspect = docker.inspecting(docker.rows)
+
+    def gone(argv, stdin_line):
+        status, stdout, stderr = inspect(argv, stdin_line)
+        return 1, stdout, f"Error response from daemon: No such container: {worker['Id']}"
+
+    docker.answer(["docker", "inspect"], gone)
+
+    report = discovered(api, server, site["shop"])
+
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+    ]
+
+
+def stranger(number):
+    return {
+        "Id": f"{number:064x}",
+        "Name": f"/stranger-{number}",
+        "Image": "sha256:" + "0" * 64,
+        "State": {"Running": True},
+        "Config": {"Image": "busybox", "Labels": {}, "WorkingDir": "/", "Env": []},
+        "Mounts": [],
+    }
+
+
+def listed_first(docker, strangers):
+    docker.rows[:0] = strangers
+    docker.answer(
+        ["docker", "ps", "--all", "--no-trunc", "--format", "{{.ID}}"],
+        (0, "".join(f"{row['Id']}\n" for row in docker.rows), ""),
+    )
+
+
+@pytest.mark.django_db
+def test_an_application_listed_after_forty_other_containers_is_found(
+    api, server, site, docker
+):
+    listed_first(docker, [stranger(number) for number in range(40)])
+
+    report = discovered(api, server, site["shop"])
+
+    assert [len(asked) for asked in docker.inspected] == [30, 17]
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+        "worker",
+    ]
+
+
+@pytest.mark.django_db
+def test_an_inspect_that_fails_leaves_the_containers_of_the_others_found(
+    api, server, site, docker
+):
+    listed_first(docker, [stranger(number) for number in range(30)])
+    inspect = docker.inspecting(docker.rows)
+
+    def first_fails(argv, stdin_line):
+        if docker.rows[0]["Id"] in argv:
+            raise DBSError("the channel closed")
+        return inspect(argv, stdin_line)
+
+    docker.answer(["docker", "inspect"], first_fails)
+
+    report = discovered(api, server, site["shop"])
+
+    assert [each["compose_service"] for each in report["candidates"]] == [
+        "backend",
+        "db",
+        "worker",
+    ]
+
+
+@pytest.mark.django_db
+def test_a_search_inspects_a_bounded_number_of_containers(
+    api, server, site, docker, monkeypatch
+):
+    monkeypatch.setattr(discovery_service, "CONTAINERS_LISTED", 35)
+    listed_first(docker, [stranger(number) for number in range(40)])
+
+    report = discovered(api, server, site["shop"])
+
+    assert [len(asked) for asked in docker.inspected] == [30, 5]
+    assert report["candidates"] == []
 
 
 @pytest.mark.django_db

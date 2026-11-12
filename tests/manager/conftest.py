@@ -45,5 +45,10 @@ def run_jobs(django_capture_on_commit_callbacks):
 
 
 @pytest.fixture
+def commands_keep_64_kib(monkeypatch):
+    monkeypatch.setattr("dbs.transports.ssh.MAX_COMMAND_OUTPUT", 64 * 1024)
+
+
+@pytest.fixture
 def anonymous():
     return APIClient()

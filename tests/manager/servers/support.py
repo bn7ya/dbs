@@ -71,6 +71,7 @@ class Result:
     exit_status: int
     stdout: str = ""
     stderr: str = ""
+    stdout_truncated: bool = False
 
     @property
     def ok(self) -> bool:

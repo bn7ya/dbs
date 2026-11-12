@@ -35,6 +35,7 @@ from ..tee import (
 logger = logging.getLogger("dbs")
 
 MAX_CAPTURED_OUTPUT = 64 * 1024
+MAX_COMMAND_OUTPUT = 16 * 1024 * 1024
 STREAM_CHUNK = 256 * 1024
 STDERR_WAIT = 5.0
 STDERR_LINE_MAX = 4096
@@ -103,9 +104,12 @@ class RemoteBackup:
 
 @dataclass
 class RemoteResult:
+    """What a remote command left: its exit status, its standard output and standard error as kept, and ``stdout_truncated``, true when it printed more standard output than was kept."""
+
     exit_status: int
     stdout: str
     stderr: str
+    stdout_truncated: bool = False
 
     @property
     def ok(self) -> bool:
@@ -404,8 +408,14 @@ def _upload_source(data_or_path):
     yield data_or_path, size
 
 
-def _decode(stream) -> str:
-    return stream.read(MAX_CAPTURED_OUTPUT).decode("utf-8", "replace")
+def _captured(stream) -> tuple[str, bool]:
+    kept = bytearray()
+    truncated = False
+    while chunk := stream.read(STREAM_CHUNK):
+        room = MAX_COMMAND_OUTPUT - len(kept)
+        kept += chunk[:room]
+        truncated = truncated or len(chunk) > room
+    return bytes(kept).decode("utf-8", "replace"), truncated
 
 
 @dataclass
@@ -663,7 +673,7 @@ class SSHSession:
                 _close_quietly(channel)
         out.join(STDERR_WAIT)
         err.join(STDERR_WAIT)
-        return RemoteResult(status, out.text(), err.text())
+        return RemoteResult(status, out.text(), err.text(), out.truncated)
 
     def open_terminal(
         self,
@@ -716,25 +726,31 @@ class SSHSession:
         except (_paramiko().SSHException, OSError) as exc:
             raise self._failure(exc) from exc
         deadline = _Deadline(stdout.channel, limit)
+        tail = _StderrTail(stderr, MAX_COMMAND_OUTPUT)
+        finished = False
         try:
             if stdin_line is not None:
                 stdin.write(stdin_line + "\n")
                 stdin.flush()
             stdin.channel.shutdown_write()
-            out = _decode(stdout)
-            err = _decode(stderr)
+            tail.start()
+            out, truncated = _captured(stdout)
             status = stdout.channel.recv_exit_status()
+            finished = True
         except (socket.timeout, OSError) as exc:
             if deadline.passed or isinstance(exc, socket.timeout):
                 raise RemoteTimeout(f"Remote command timed out after {limit}s.") from exc
             raise self._failure(exc) from exc
         finally:
             deadline.cancel()
+            if not finished:
+                _close_quietly(stdout.channel)
+        tail.join(STDERR_WAIT)
         if deadline.passed:
             raise RemoteTimeout(f"Remote command timed out after {limit}s.")
         if status == CLOSED_WITHOUT_STATUS and not self.is_alive():
             raise self._lost()
-        return RemoteResult(status, out, err)
+        return RemoteResult(status, out, tail.text(), truncated)
 
     def _failure(self, exc: BaseException) -> DBSError:
         if not self.is_alive():
@@ -1064,6 +1080,7 @@ class _StderrTail:
         self._on_line = on_line
         self._on_activity = on_activity
         self.last_activity = time.monotonic()
+        self.truncated = False
         self._thread = threading.Thread(target=self._read, daemon=True)
 
     def start(self) -> None:
@@ -1086,7 +1103,10 @@ class _StderrTail:
                 if self._on_activity is not None:
                     self._on_activity(0)
                 self._kept += chunk
-                del self._kept[: max(len(self._kept) - self._limit, 0)]
+                overflow = max(len(self._kept) - self._limit, 0)
+                if overflow:
+                    self.truncated = True
+                    del self._kept[:overflow]
                 if self._on_line is not None:
                     self._lines(chunk)
         except Exception:
