@@ -1,4 +1,5 @@
 import pytest
+from django.db import connection
 
 from dbs import __version__
 from dbs.manager.menu import plain
@@ -20,7 +21,7 @@ def test_the_manager_page_says_where_everything_is_kept(menu, data_dir):
 
     assert __version__ in menu.line_with("Version")
     assert str(data_dir)[-30:] in menu.line_with("Data folder")
-    assert "sqlite" in menu.line_with("Database")
+    assert connection.vendor in menu.line_with("Database")
     for label in ("Backups", "Secret key", "Log", "Last export"):
         assert menu.line_with(label)
 

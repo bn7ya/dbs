@@ -1,6 +1,7 @@
 import sys
 
 import pytest
+from django.db import connection
 
 from dbs import audit
 from dbs.manager.activity.repositories import ActivityRepository
@@ -60,6 +61,37 @@ def test_a_job_started_from_the_menu_runs_in_it_as_a_typed_command_runs_its_own(
     run(menu, "backup", "take", **{"--all": True})
 
     assert seen == [True] and not conf.jobs_inline()
+
+
+@pytest.fixture
+def renewed(monkeypatch):
+    calls = []
+    monkeypatch.setattr(running, "close_old_connections", lambda: calls.append(True))
+    return calls
+
+
+@pytest.mark.django_db
+def test_a_command_never_drops_a_connection_that_holds_a_transaction(
+    menu, handler, renewed
+):
+    handler(lambda session: 0)
+
+    assert connection.in_atomic_block
+    run(menu, "server", "list")
+
+    assert renewed == []
+
+
+@RUNS_JOBS
+def test_between_transactions_a_connection_past_its_age_is_renewed_before_a_command(
+    menu, handler, renewed
+):
+    handler(lambda session: 0)
+
+    assert not connection.in_atomic_block
+    run(menu, "server", "list")
+
+    assert renewed == [True]
 
 
 @pytest.mark.django_db

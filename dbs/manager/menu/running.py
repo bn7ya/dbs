@@ -67,7 +67,8 @@ def _handled(
 ) -> Outcome:
     session = MenuSession(args, app.user, app, transcript, answers)
     watcher = Watcher(app, screen) if screen is not None and app.live else None
-    close_old_connections()
+    if not connection.in_atomic_block:
+        close_old_connections()
     app.running = True
     try:
         if watcher is not None:
