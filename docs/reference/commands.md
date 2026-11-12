@@ -83,7 +83,7 @@ and backs up only while the panel's schedule is on. With any of them it runs tha
 |---|---|
 | `dbs health [--json]` | Grades the last backup's age, the last validation, the newest file, the backup folder, disk space, the passphrase, panel jobs and the scheduler, each `ok`, `info`, `warn` or `error` |
 | `dbs audit [verify]` | Walks the audit trail's hash chain and prints the first broken link, or the head of the chain |
-| `dbs connection [--json]` | What the DBS manager reads from this project: folders, Python, `manage.py`, settings module, backup folder, file roots, `.env` path, version and, on a server, its host, SSH user and host key fingerprints. In a container (`"container": true`) those last three come back empty. Never a passphrase |
+| `dbs connection [--json]` | What the DBS manager reads from this project: folders, Python, `manage.py`, settings module, backup folder, file roots, `.env` path (the `.env` beside `manage.py`, else beside the settings module, else in the folder above the project), version and, on a server, its host, SSH user and host key fingerprints. In a container (`"container": true`) those last three come back empty. Never a passphrase |
 | `dbs key [--show]` | Where the passphrase comes from; `--show` prints it |
 | `dbs security [ACTION] [USER]` | `status` (the default), `unlock USER`, `policy`, `retrain`, `reset-baseline USER`, `events`, `purge`. `purge` removes telemetry only, never audit rows |
 | `dbs ai` | `--agents`, `--check`, `--print`, `--root DIR`; see [AI assistants](../ai-assistants.md) |

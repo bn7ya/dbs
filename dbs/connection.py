@@ -46,6 +46,21 @@ def manage_path(directory):
     return invoked if os.path.basename(invoked) == "manage.py" else ""
 
 
+def settings_folder():
+    module = sys.modules.get(os.environ.get("DJANGO_SETTINGS_MODULE", ""))
+    file = getattr(module, "__file__", None)
+    return os.path.dirname(os.path.abspath(file)) if file else ""
+
+
+def env_path(directory):
+    near = dict.fromkeys((directory, settings_folder(), os.path.dirname(directory)))
+    for folder in filter(None, near):
+        candidate = os.path.join(folder, ".env")
+        if os.path.isfile(candidate):
+            return candidate
+    return ""
+
+
 def python_path():
     executable = sys.executable or ""
     if os.path.basename(executable).startswith("python"):
@@ -80,7 +95,6 @@ def details():
     from .schedule_runner import backup_directory
 
     directory = project_dir()
-    env_file = os.path.join(directory, ".env")
     contained = in_container()
     return {
         "dbs_connection": FORMAT,
@@ -93,7 +107,7 @@ def details():
         "settings_module": os.environ.get("DJANGO_SETTINGS_MODULE", ""),
         "remote_backup_dir": backup_directory() or "",
         "file_roots": [str(root) for root in setting("DBS_FILE_ROOTS", None) or ()],
-        "env_path": env_file if os.path.isfile(env_file) else "",
+        "env_path": env_path(directory),
         "dbs_version": __version__,
         "host_keys": [] if contained else host_keys(),
     }

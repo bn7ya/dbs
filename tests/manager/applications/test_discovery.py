@@ -691,6 +691,87 @@ def test_two_containers_and_the_host_project_of_one_folder_are_ranked_together(
     ]
 
 
+def env_on_host(path):
+    return {"path": str(path), "location": "host", "source": "folder"}
+
+
+@pytest.mark.django_db
+def test_env_files_beside_the_settings_and_above_the_project_are_offered_after_its_own(
+    api, server, site, docker
+):
+    package = site["blog"] / "blog"
+    package.mkdir()
+    package.chmod(0o755)
+    (package / ".env").write_text("SECRET_KEY=y\n")
+    (site["srv"] / ".env").write_text("SECRET_KEY=y\n")
+
+    host = candidate(discovered(api, server, site["blog"]), kind="host")
+
+    assert host["env"] == [
+        env_on_host(site["blog"] / ".env"),
+        env_on_host(package / ".env"),
+        env_on_host(site["srv"] / ".env"),
+    ]
+
+
+@pytest.mark.django_db
+def test_a_project_with_no_env_file_of_its_own_takes_the_one_in_the_folder_above(
+    api, server, site, docker
+):
+    (site["blog"] / ".env").unlink()
+    (site["srv"] / ".env").write_text("SECRET_KEY=y\n")
+
+    host = candidate(discovered(api, server, site["blog"]), kind="host")
+
+    assert host["env"] == [env_on_host(site["srv"] / ".env")]
+    assert settings_of(host)["env_path"] == str(site["srv"] / ".env")
+
+
+@pytest.mark.django_db
+def test_a_project_below_the_folder_searched_is_offered_the_env_file_of_that_folder(
+    api, server, site, hosts
+):
+    stack = site["srv"] / "stack"
+    project = stack / "backend"
+    project.mkdir(parents=True)
+    for folder in (stack, project):
+        folder.chmod(0o755)
+    (project / "manage.py").write_text(manage_py("config.settings"))
+    (stack / ".env").write_text("SECRET_KEY=z\n")
+
+    host = candidate(discovered(api, server, stack), kind="host")
+
+    assert host["project_dir"] == str(project)
+    assert host["env"] == [env_on_host(stack / ".env")]
+
+
+@pytest.mark.django_db
+def test_an_env_file_above_the_project_in_a_folder_others_can_write_near_is_not_offered(
+    api, server, site, docker
+):
+    (site["srv"] / ".env").write_text("SECRET_KEY=y\n")
+    site["root"].chmod(0o777)
+
+    report = discovered(api, server, site["blog"])
+
+    assert report["trusted"] is True
+    assert candidate(report, kind="host")["env"] == [env_on_host(site["blog"] / ".env")]
+
+
+@pytest.mark.parametrize(
+    "module, folder",
+    [
+        ("config.settings.production", "/srv/shop/config/settings"),
+        ("shop.settings", "/srv/shop/shop"),
+        ("settings", ""),
+        ("", ""),
+        ("shop..settings", ""),
+    ],
+)
+def test_the_settings_folder_is_read_from_a_plain_module_name_only(module, folder):
+    assert discovery_service.settings_folder("/srv/shop", module) == folder
+
+
 @pytest.mark.django_db
 def test_podman_compose_labels_are_read_as_well(api, server, site, podman, hosts):
     report = discovered(api, server, site["wiki"])

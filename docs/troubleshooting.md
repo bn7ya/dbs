@@ -84,7 +84,7 @@ Compose working folder or a bind mount from the folder. Discovery inspects the f
 containers the engine lists; a container that describes itself in more than 16 MiB is left out
 and named in `unread_containers`. On 0.8.0 the manager read only the first 64 KiB of what
 `inspect` printed, so a server with more than a handful of containers showed no application:
-upgrade the manager's machine to 0.8.1.
+upgrade the manager's machine to 0.8.1 or later.
 
 **The manager says django-dbs is "Not found" on a server that has it.** The manager runs the
 Python saved for that application over a non-interactive SSH sign-in, which loads no

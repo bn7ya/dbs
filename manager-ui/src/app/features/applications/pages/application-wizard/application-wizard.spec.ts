@@ -24,7 +24,7 @@ import type { CheckedApplication, Discovery } from '../../data/applications.type
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
 import { ApplicationWizardStore } from '../../state/application-wizard.store';
-import { APPLICATION, CHECKED, DISCOVERY, HOST, NO_FOLDER, SERVER_ID } from '../../testing/applications.fixtures';
+import { APPLICATION, CHECKED, DISCOVERY, HOST, HOST_CANDIDATE, NO_FOLDER, SERVER_ID } from '../../testing/applications.fixtures';
 import { ApplicationWizardPage } from './application-wizard';
 
 const ROUTES: Routes = [
@@ -216,6 +216,12 @@ describe('ApplicationWizardPage', () => {
     expect(page).toContain('/srv/shop/backups');
     expect(page).toContain('named in the compose file');
     expect(page).toContain('No Python here can import django-dbs.');
+  });
+
+  it('says where to enter a .env file that was not found beside the project', async () => {
+    await toDiscovery('/srv/shop', { ...DISCOVERY, candidates: [{ ...HOST_CANDIDATE, env: [] }] });
+
+    expect(html().textContent).toContain('If it is in another folder, enter its full path in the next step');
   });
 
   it('asks for the account password when the server wants it, and searches again with it', async () => {

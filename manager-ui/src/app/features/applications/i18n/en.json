@@ -187,6 +187,7 @@
       "backupDir": "Backup folder",
       "onHost": "On the server:",
       "env": ".env files",
+      "envNotFound": "Not found. If it is in another folder, enter its full path in the next step, under Show more settings.",
       "notFound": "Not found"
     },
     "problems": {
@@ -255,7 +256,7 @@
       },
       "envPath": {
         "label": ".env file",
-        "hint": "Full path to the project's .env file, if it has one.",
+        "hint": "Full path to the project's .env file, if it has one. It does not have to be beside manage.py.",
         "pickHint": "Choose one of the .env files found, or type its full path.",
         "placeholder": "/srv/app/.env",
         "option": "{location}, {source}"
@@ -403,7 +404,7 @@
       "settings_from": {
         "label": "Where do its settings come from?",
         "hint": "Where SECRET_KEY, the database password and the like are read from.",
-        "folder_env": "A .env file in the project folder",
+        "folder_env": "A .env file on the server",
         "compose_env_file": "A file Compose names with env_file",
         "image": "Inside the image",
         "environment": "Environment variables, with no file"
