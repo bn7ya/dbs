@@ -6,6 +6,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-12
+
+A project's `.env` is found when it is not beside `manage.py`. Upgrade the machine the manager
+runs on; a server may stay on 0.8.0 or 0.8.1.
+
 ### Changed
 
 - A project's `.env` no longer has to be beside `manage.py` to be found. `dbs connection`
