@@ -421,7 +421,7 @@ Type `django_dbs` alone in a terminal, or `django-dbs` or `dbs`, and the manager
 as a menu. There is no browser to open and no command line to remember:
 
 ```text
- DBS manager 0.8.2                                                             sara · admin
+ DBS manager 0.8.3                                                             sara · admin
 ┌────────────────────┬─────────────────────────────────────────────────────────────────────┐
 │▸ Dashboard         │ Dashboard                                                           │
 │  Servers           │                                                                     │

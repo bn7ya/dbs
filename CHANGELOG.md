@@ -6,6 +6,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-12
+
+The DBS manager opens as a menu when `django_dbs` is typed alone in a terminal. Upgrade the
+machine the manager runs on; a server may stay on 0.8.0, 0.8.1 or 0.8.2.
+
 ### Added
 
 - **The menu.** `django_dbs` typed alone in a terminal, or `django-dbs` or `dbs`, opens the
