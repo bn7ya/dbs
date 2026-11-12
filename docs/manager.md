@@ -226,7 +226,7 @@ From a terminal, the answers are `--deployment KEY=VALUE` (repeat it) on `app di
    the first 30, and keeps those that belong to the folder: a Compose project whose working
    folder is in it, or a container with a bind mount from it. Replicas of one Compose service
    are one application, counted. A container whose name or Compose labels could be read as an
-   option is left out. The manager keeps 64 KiB of what a command prints, so containers whose
+   option is left out. The manager keeps 16 MiB of what a command prints, so containers whose
    details pass that together are inspected again in halves; one that passes it alone is left
    out and named in `unread_containers`.
 4. **Python and `manage.py`.** In each running container it tries the virtualenvs on the

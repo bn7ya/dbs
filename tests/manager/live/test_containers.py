@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import shlex
@@ -19,7 +20,7 @@ from dbs.manager.backups.services import BackupService
 from dbs.manager.backups.storage import BackupStorage
 from dbs.manager.envfiles.services import EnvFileService
 from dbs.manager.redeploy.services import RedeployService
-from dbs.manager.servers.services import ServerService
+from dbs.manager.servers.services import ServerConnectionService, ServerService
 from dbs.manager.servers.services.server_service import fetch_host_key
 from dbs.manager.shell.service import ShellService, finish
 from dbs.models import AuditEvent
@@ -35,6 +36,8 @@ KEY = os.environ.get("DBS_TEST_SSH_KEY", "")
 KNOWN_HOSTS = os.environ.get("DBS_TEST_SSH_KNOWN_HOSTS", "")
 PASSPHRASE = "live-container-passphrase"
 IMAGE = "localhost/dbs-live-shop"
+LONG_FILE = "/tmp/dbs-live-long.env"
+LONG_FILE_LINES = 12000
 VOLUME = "shop_data"
 
 CONFIGURED = bool(ENGINE and FOLDER and HOST and USER and KEY and KNOWN_HOSTS)
@@ -224,6 +227,26 @@ def test_the_env_file_beside_the_compose_project_is_kept_in_versions(
 
     assert pulled.created is True
     assert pulled.version.key_names == ["SHOP_SECRET_KEY"]
+
+
+def test_a_file_longer_than_64_kib_inside_the_container_is_read_whole(
+    admin, application
+):
+    written = in_application(
+        f"import hashlib; data = b'KEY=value\\n' * {LONG_FILE_LINES}; "
+        f"open({LONG_FILE!r}, 'wb').write(data); print(hashlib.sha256(data).hexdigest())"
+    )
+    connections = ServerConnectionService(admin)
+    try:
+        with connections.open(application) as remote:
+            data = remote.read_in_container(
+                connections.dbs_profile(application), LONG_FILE, 256 * 1024
+            )
+    finally:
+        on_server(f"{ENGINE} compose exec -T web rm -f {LONG_FILE}")
+
+    assert len(data) == len(b"KEY=value\n") * LONG_FILE_LINES
+    assert hashlib.sha256(data).hexdigest() == written
 
 
 def test_a_deploy_restarts_the_service_and_migrates(admin, application):

@@ -347,11 +347,13 @@ class FakeExec:
         self.stderr_every = 0.0
         self._quiet_until = None
         self._offsets = {1: 0, 2: 0}
+        self._resolving = threading.Lock()
 
     def resolve(self):
-        if self._outcome is None:
-            self._outcome = self._registry.handle(self.command, self)
-        return self._outcome
+        with self._resolving:
+            if self._outcome is None:
+                self._outcome = self._registry.handle(self.command, self)
+            return self._outcome
 
     def take(self, index, size=-1):
         produced = self.resolve()[index]

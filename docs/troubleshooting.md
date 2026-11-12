@@ -81,7 +81,7 @@ and `container_not_running` that the application's container is stopped.
 write to, or whose parent another account can write to, is reported and left alone; let only
 its owner write there and search again. A container belongs to a folder only through its
 Compose working folder or a bind mount from the folder. Discovery inspects the first 30
-containers the engine lists; a container that describes itself in more than 64 KiB is left out
+containers the engine lists; a container that describes itself in more than 16 MiB is left out
 and named in `unread_containers`.
 
 **The manager says django-dbs is "Not found" on a server that has it.** The manager runs the

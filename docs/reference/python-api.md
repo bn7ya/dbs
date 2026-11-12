@@ -112,8 +112,9 @@ connection. The single-shot helpers each open their own: `push_backup`, `pull_ba
 
 **`SSHSession`** sends a keepalive every 15 seconds and notices a dropped connection. `run()`
 returns a `RemoteResult` (`exit_status`, `stdout`, `stderr`, `ok`, `stdout_truncated`) and
-stops a command after `command_timeout`. It keeps the first 64 KiB of standard output, and
-`stdout_truncated` is true when the command printed more. `stream()` takes an `idle_timeout`, after which a command with no output on
-either stream is stopped, and an `on_stderr_line` callback that sees each line of standard
-error as it arrives. It also has `details()`, `names()`, `push()`, `pull()`, `pull_to()`,
-`delete()` and `ensure_dir()`.
+stops a command after `command_timeout`. It reads everything the command prints and keeps up
+to 16 MiB of standard output and of standard error; `stdout_truncated` is true when the
+command printed more standard output than that. `stream()` takes an `idle_timeout`, after
+which a command with no output on either stream is stopped, and an `on_stderr_line` callback
+that sees each line of standard error as it arrives. It also has `details()`, `names()`,
+`push()`, `pull()`, `pull_to()`, `delete()` and `ensure_dir()`.

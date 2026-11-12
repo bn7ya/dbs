@@ -255,8 +255,8 @@ def shop(admin):
 
 
 @pytest.mark.django_db
-def test_containers_that_describe_themselves_in_more_than_64_kib_are_inspected_in_halves(
-    admin, survey
+def test_containers_whose_details_pass_what_a_command_keeps_are_inspected_in_halves(
+    admin, survey, commands_keep_64_kib
 ):
     application = shop(admin)
     rows = [padded(row, 40_000) for row in COMPOSE_ROWS]
@@ -278,7 +278,9 @@ def test_containers_that_describe_themselves_in_more_than_64_kib_are_inspected_i
 
 
 @pytest.mark.django_db
-def test_a_container_that_alone_passes_64_kib_blocks_the_move_by_name(admin, survey):
+def test_a_container_that_alone_passes_what_a_command_keeps_blocks_the_move_by_name(
+    admin, survey, commands_keep_64_kib
+):
     application = shop(admin)
     huge = padded(container("jitsi-web", "", "jitsi/web", "sha256:" + "3" * 64, []), 70_000)
 

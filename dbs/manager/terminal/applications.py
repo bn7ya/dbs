@@ -284,7 +284,7 @@ def _print_report(session: TerminalSession, report: dict[str, Any]) -> None:
     for unread in report.get("unread_containers") or []:
         session.out.line(
             f"Left out {unread['engine']} container {unread['id'][:12]}: "
-            "it describes itself in more than 64 KiB."
+            "it describes itself in more than 16 MiB."
         )
 
 

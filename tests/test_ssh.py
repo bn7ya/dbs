@@ -317,26 +317,55 @@ def test_run_captures_status_and_streams(fake_ssh):
     assert fake_ssh.commands[0]["get_pty"] is False
 
 
-def test_run_keeps_the_first_64_kib_of_output_and_says_the_rest_was_cut(fake_ssh):
-    fake_ssh.on_exec(lambda command, session: (0, "a" * MAX_CAPTURED_OUTPUT + "b", ""))
+def test_run_returns_output_longer_than_64_kib_whole(fake_ssh):
+    printed = "a" * (3 * MAX_CAPTURED_OUTPUT) + "b"
+    fake_ssh.on_exec(lambda command, session: (0, printed, ""))
     fake_ssh.make_remote_dir(REMOTE_DIR)
 
     with open_session(target()) as session:
         result = session.run("docker inspect")
 
     assert result.ok is True
-    assert result.stdout == "a" * MAX_CAPTURED_OUTPUT
-    assert result.stdout_truncated is True
+    assert result.stdout == printed
+    assert result.stdout_truncated is False
 
 
-def test_run_output_of_exactly_64_kib_is_whole(fake_ssh):
-    fake_ssh.on_exec(lambda command, session: (0, "a" * MAX_CAPTURED_OUTPUT, ""))
+def test_run_returns_standard_error_longer_than_64_kib_whole(fake_ssh):
+    complaint = "e" * (3 * MAX_CAPTURED_OUTPUT) + "!"
+    fake_ssh.on_exec(lambda command, session: (1, "", complaint))
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target()) as session:
+        result = session.run("docker compose build")
+
+    assert result.exit_status == 1
+    assert result.stderr == complaint
+
+
+def test_run_keeps_the_start_of_output_past_its_bound_and_says_the_rest_was_cut(
+    fake_ssh, monkeypatch
+):
+    monkeypatch.setattr("dbs.transports.ssh.MAX_COMMAND_OUTPUT", 1000)
+    fake_ssh.on_exec(lambda command, session: (0, "a" * 1000 + "b" * 500, ""))
     fake_ssh.make_remote_dir(REMOTE_DIR)
 
     with open_session(target()) as session:
         result = session.run("docker inspect")
 
-    assert result.stdout == "a" * MAX_CAPTURED_OUTPUT
+    assert result.ok is True
+    assert result.stdout == "a" * 1000
+    assert result.stdout_truncated is True
+
+
+def test_run_output_exactly_at_its_bound_is_whole(fake_ssh, monkeypatch):
+    monkeypatch.setattr("dbs.transports.ssh.MAX_COMMAND_OUTPUT", 1000)
+    fake_ssh.on_exec(lambda command, session: (0, "a" * 1000, ""))
+    fake_ssh.make_remote_dir(REMOTE_DIR)
+
+    with open_session(target()) as session:
+        result = session.run("docker inspect")
+
+    assert result.stdout == "a" * 1000
     assert result.stdout_truncated is False
 
 

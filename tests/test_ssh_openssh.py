@@ -23,6 +23,7 @@ KEY = os.environ.get("DBS_TEST_SSH_KEY", "")
 PASSWORD = os.environ.get("DBS_TEST_SSH_PASSWORD", "")
 KNOWN_HOSTS = os.environ.get("DBS_TEST_SSH_KNOWN_HOSTS", "")
 PASSPHRASE = "openssh-live-passphrase"
+THREE_MEGABYTES = 3_000_000
 
 CONFIGURED = bool(HOST and USER and KEY and KNOWN_HOSTS)
 SETUP = "Set DBS_TEST_SSH_HOST, _PORT, _USER, _KEY and _KNOWN_HOSTS to an OpenSSH server."
@@ -130,6 +131,25 @@ def test_a_fed_file_arrives_whole_after_its_first_line():
 
     assert result.ok
     assert result.stdout.split() == ["first", hashlib.sha256(payload).hexdigest(), "-"]
+
+
+def test_a_command_that_prints_three_megabytes_is_read_whole():
+    with open_session(target()) as session:
+        result = session.run(f"head -c {THREE_MEGABYTES} /dev/zero | tr '\\0' x", timeout=60)
+
+    assert result.ok
+    assert result.stdout == "x" * THREE_MEGABYTES
+    assert result.stdout_truncated is False
+
+
+def test_three_megabytes_of_standard_error_do_not_stall_a_command():
+    with open_session(target()) as session:
+        result = session.run(
+            f"head -c {THREE_MEGABYTES} /dev/zero | tr '\\0' x >&2; echo done", timeout=60
+        )
+
+    assert result.stdout.strip() == "done"
+    assert result.stderr == "x" * THREE_MEGABYTES
 
 
 def test_a_command_that_never_exits_is_stopped_at_its_timeout():

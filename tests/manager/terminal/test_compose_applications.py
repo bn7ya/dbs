@@ -226,7 +226,7 @@ def test_discover_names_a_container_whose_details_were_cut_off(
     assert ran.out.splitlines()[-2:] == [
         "Found no Django project here.",
         f"Left out docker container {CONTAINER_ID}: "
-        "it describes itself in more than 64 KiB.",
+        "it describes itself in more than 16 MiB.",
     ]
     shown = terminal("app", "discover", "web-1", "--folder", FOLDER, "--json")
     assert shown.json()["unread_containers"] == [

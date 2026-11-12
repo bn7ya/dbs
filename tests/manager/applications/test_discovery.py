@@ -276,8 +276,8 @@ def padded(row, size):
 
 
 @pytest.mark.django_db
-def test_containers_that_describe_themselves_in_more_than_64_kib_are_inspected_in_halves(
-    api, server, site, docker
+def test_containers_whose_details_pass_what_a_command_keeps_are_inspected_in_halves(
+    api, server, site, docker, commands_keep_64_kib
 ):
     for row in docker.rows:
         padded(row, 10_000)
@@ -295,8 +295,8 @@ def test_containers_that_describe_themselves_in_more_than_64_kib_are_inspected_i
 
 
 @pytest.mark.django_db
-def test_a_container_that_alone_passes_64_kib_is_named_and_the_others_still_found(
-    api, server, site, docker
+def test_a_container_that_alone_passes_what_a_command_keeps_is_named_and_the_others_still_found(
+    api, server, site, docker, commands_keep_64_kib
 ):
     [redis] = [row for row in docker.rows if row["Name"] == "/redis"]
     padded(redis, 70_000)

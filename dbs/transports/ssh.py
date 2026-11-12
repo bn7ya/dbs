@@ -35,6 +35,7 @@ from ..tee import (
 logger = logging.getLogger("dbs")
 
 MAX_CAPTURED_OUTPUT = 64 * 1024
+MAX_COMMAND_OUTPUT = 16 * 1024 * 1024
 STREAM_CHUNK = 256 * 1024
 STDERR_WAIT = 5.0
 STDERR_LINE_MAX = 4096
@@ -103,7 +104,7 @@ class RemoteBackup:
 
 @dataclass
 class RemoteResult:
-    """What a remote command left: its exit status, its standard output and standard error as kept, and ``stdout_truncated``, true when standard output went past the 64 KiB kept."""
+    """What a remote command left: its exit status, its standard output and standard error as kept, and ``stdout_truncated``, true when it printed more standard output than was kept."""
 
     exit_status: int
     stdout: str
@@ -408,9 +409,13 @@ def _upload_source(data_or_path):
 
 
 def _captured(stream) -> tuple[str, bool]:
-    data = stream.read(MAX_CAPTURED_OUTPUT + 1)
-    kept = data[:MAX_CAPTURED_OUTPUT].decode("utf-8", "replace")
-    return kept, len(data) > MAX_CAPTURED_OUTPUT
+    kept = bytearray()
+    truncated = False
+    while chunk := stream.read(STREAM_CHUNK):
+        room = MAX_COMMAND_OUTPUT - len(kept)
+        kept += chunk[:room]
+        truncated = truncated or len(chunk) > room
+    return bytes(kept).decode("utf-8", "replace"), truncated
 
 
 @dataclass
@@ -721,25 +726,31 @@ class SSHSession:
         except (_paramiko().SSHException, OSError) as exc:
             raise self._failure(exc) from exc
         deadline = _Deadline(stdout.channel, limit)
+        tail = _StderrTail(stderr, MAX_COMMAND_OUTPUT)
+        finished = False
         try:
             if stdin_line is not None:
                 stdin.write(stdin_line + "\n")
                 stdin.flush()
             stdin.channel.shutdown_write()
+            tail.start()
             out, truncated = _captured(stdout)
-            err, _ = _captured(stderr)
             status = stdout.channel.recv_exit_status()
+            finished = True
         except (socket.timeout, OSError) as exc:
             if deadline.passed or isinstance(exc, socket.timeout):
                 raise RemoteTimeout(f"Remote command timed out after {limit}s.") from exc
             raise self._failure(exc) from exc
         finally:
             deadline.cancel()
+            if not finished:
+                _close_quietly(stdout.channel)
+        tail.join(STDERR_WAIT)
         if deadline.passed:
             raise RemoteTimeout(f"Remote command timed out after {limit}s.")
         if status == CLOSED_WITHOUT_STATUS and not self.is_alive():
             raise self._lost()
-        return RemoteResult(status, out, err, truncated)
+        return RemoteResult(status, out, tail.text(), truncated)
 
     def _failure(self, exc: BaseException) -> DBSError:
         if not self.is_alive():
