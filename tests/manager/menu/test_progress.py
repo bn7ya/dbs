@@ -11,6 +11,11 @@ from dbs.manager.menu.results import ResultScreen
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def no_job_left_by_another_test(monkeypatch):
+    monkeypatch.setattr(heartbeat, "_running", {})
+
+
 @pytest.fixture
 def job(admin):
     entry = ActivityService(admin).record(
