@@ -32,7 +32,8 @@ This project uses django-dbs for backups.
   Podman), added from a folder with `django_dbs app add NAME --server S --folder F`. An
   application's backup passphrase is stored once and never changed. Deploy steps come only
   from its fixed catalogue; its terminal is admin only, and Claude's MCP tools never reach it
-  or deploy for real.
+  or deploy for real. `django_dbs` typed alone in a terminal is a menu for a person; from a
+  script or an assistant's shell it prints its help, so use the commands.
 
 - Run `python manage.py dbs upgrade --check` before other work, and `dbs upgrade` after
   upgrading the package. It applies pending migrations and reports anything else needed.

@@ -65,7 +65,8 @@ In scope:
 - **The DBS manager**: `django_dbs run` and its web interface and REST API, the console at
   `/console`, the browser terminal, the discovery of applications in a folder, the commands it
   runs in containers, its deploy steps, its command line (`django_dbs server`, `app`, `backup`,
-  `plan`, `activity`, `env`, `files`, `redeploy`), and its MCP server (`django_dbs mcp`). The
+  `plan`, `activity`, `env`, `files`, `redeploy`), the menu those commands open as when
+  `django_dbs` is typed alone in a terminal, and its MCP server (`django_dbs mcp`). The
   manager holds the SSH credentials for every server it manages, so anything that exposes them,
   lets someone act with them without signing in, or turns a request into a command line it did
   not build itself is treated as critical.

@@ -113,7 +113,9 @@ manager-ui/
   public/                   logo.svg and favicon.svg, copied into the bundle as they are
   e2e/                      Playwright journeys; e2e/support/ is what they share
   src/
-    styles/_tokens.scss     the --app-* tokens: one light, blue scheme
+    styles/_tokens.scss     the --app-* tokens: one light, blue scheme (the terminal menu
+                            mirrors the colours in dbs/manager/menu/kit/palette.py; a test
+                            keeps the two equal, so change both)
     styles/_material.scss   the one Material theme and its overrides
     styles/_layout.scss     page, dialog and nav widths, breakpoints
     styles/_reset.scss  _base.scss  _typography.scss  _dialog.scss  _table.scss

@@ -23,7 +23,8 @@ it was written breaks the chain there. It prints the first broken link, or the h
 chain to keep somewhere else. No DBS command deletes audit rows.</p>
 <p>The standalone manager, outside any project; <code>django-dbs</code> and <code>dbs</code>
 are the same command:</p>
-<pre><code>django_dbs run [--port] [--host] [--trusted-proxy CIDR] [--no-browser] [--terminal admins|master|off]
+<pre><code>django_dbs                    # alone in a terminal: the menu
+django_dbs run [--port] [--host] [--trusted-proxy CIDR] [--no-browser] [--terminal admins|master|off]
 django_dbs createuser NAME --role admin|operator|viewer
 django_dbs account list|role|disable|enable|reset-2fa
 django_dbs password NAME

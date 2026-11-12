@@ -358,7 +358,7 @@ too. If it cannot reconnect, the run ends as *kept on the server*, not failed, a
 collects the backup. A stream stops only when nothing arrives for 15 minutes (30 for a 0.7
 server, which reports no progress), and a backup has a day in all.
 
-**Storage.** **Backups** in the menu lists every application's backups in one place, beside
+**Storage.** **Backups** in the sidebar lists every application's backups in one place, beside
 the space they take in the manager, in all and per application. They live in the data folder's
 `backups` folder; `django_dbs paths` prints where.
 
@@ -415,11 +415,89 @@ follows a one-time link that lasts a minute. Deleting a backup or removing an ap
 for it too. The manager reads or replaces no `.env` in a folder, or a folder it links into,
 that another account can write to (`env_folder_shared`).
 
+## The menu
+
+Type `django_dbs` alone in a terminal, or `django-dbs` or `dbs`, and the manager opens there
+as a menu. There is no browser to open and no command line to remember:
+
+```text
+ DBS manager 0.8.3                                                             sara · admin
+┌────────────────────┬─────────────────────────────────────────────────────────────────────┐
+│▸ Dashboard         │ Dashboard                                                           │
+│  Servers           │                                                                     │
+│  Applications      │ Servers 2   Applications 2   Stored here 0 B   Failures in 7 days 0 │
+│  Backups           │                                                                     │
+│  Activity          │  ! Export the manager's data: open Manager, then Export.            │
+│  Accounts          │                                                                     │
+│  Manager           │   Name    Where          State           Last backup  Next run      │
+│  All commands      │ ▸ db-1    10.0.0.9       ○ Not seen yet                             │
+│                    │   web-1   10.0.0.5       ○ Not seen yet                             │
+│                    │     blog  on the server  ○ Not checked   none yet     no plan       │
+│                    │     shop  on the server  ○ Not checked   none yet     no plan       │
+│                    │                                                                     │
+│                    │                                                                     │
+│                    │                                                                     │
+│                    │                                                                     │
+│                    │                                                                     │
+└────────────────────┴─────────────────────────────────────────────────────────────────────┘
+ ↑↓ Move   Enter Open   a Add a server   r Refresh   Esc Back   ? Keys
+```
+
+- **Keys.** The arrow keys move, Enter opens or runs what is selected, Esc or Backspace goes
+  back, Tab moves between the sections and the page, `/` filters a list and `?` lists the
+  keys. `q` or Ctrl+C leaves the menu.
+- **Sections.** Dashboard, Servers, Applications, Backups, Activity, Accounts and Manager.
+  Opening a server, an application, a backup or a plan lists what can be done with it, and an
+  account is offered only what its role allows.
+- **Forms.** An action opens a form with a field for each thing its command takes. A server,
+  an application, a backup, a plan or a `.env` version is chosen from a list, and a path in
+  the file explorer. The form shows the `django_dbs` command it will run, which is the line to
+  put in a script.
+- **Secrets.** A server's SSH password, the passphrase of its key file and an application's
+  backup passphrase each have a field in their form. What is typed there shows as dots, is
+  used for that one command and is then forgotten; the command line the form shows only says
+  that one is given.
+- **The file explorer.** An application's **Files** opens its allowed folders: Enter opens a
+  folder and Backspace goes up, `d` downloads the selected file, `u` uploads one, `n` makes a
+  folder and `x` deletes. The same explorer chooses a folder on a server while an application
+  is added, and a file or a folder on your own computer for an upload, a download or a key
+  file.
+- **Questions.** What a command asks at a prompt is asked in a dialog: your account password,
+  a sudo password for a server move, yes or no, and the name typed out before a real restore,
+  deploy, move or removal. A host key's fingerprint stays on the screen while the menu asks whether to trust
+  it.
+- **While a command runs** the page shows what it prints, its step, whether its connection is
+  alive and how much it has moved. Ctrl+C stops the command, as it stops the typed one, and
+  the menu stays open. On a result, `p` prints it plainly in the terminal, where it can be
+  selected and copied.
+- **All commands** lists every `django_dbs` command and opens any of them as a form.
+
+The menu is the commands with another face. It runs the same code on the same data folder,
+within the same role, with the same passwords and confirmations, and **Activity** records what
+it did under the account that acted. It acts as the only account, asks which one when there
+are several (`django_dbs menu --as NAME` names it), and on a new installation makes the first
+account, the master. `run`, `export` and the account commands, opened from **All commands**,
+run as themselves in the terminal and come back to the menu; `import` and `mcp` are named
+with the line to type.
+
+It opens only in a terminal. In a script or a pipe, `django_dbs` alone prints its help and
+exits 2, as it always has, and `django_dbs --help` is unchanged. `django_dbs menu` opens it by
+name and takes `--data-dir` and `--database-url` like any other command.
+
+The menu paints its own light look in the interface's colours where the terminal shows 256
+colours or more, and keeps the terminal's own colours where it shows fewer; with `NO_COLOR`
+set it uses none. It needs a window of at least 64 columns by 18 rows, and it reads in
+English. It does not take the mouse, so the terminal's own selection keeps working. It is
+tested on Linux, and macOS runs the same code. On Windows it needs Windows Terminal or another
+console that understands escape sequences; where the console does not, the command prints its
+help as before.
+
 ## The same manager from a terminal
 
-Everything the interface does is also a `django_dbs` command. Both call the same code on the
-same data folder, so an application added in a terminal appears in the browser, and
-**Activity** records both under the account that acted.
+Everything the interface does is also a `django_dbs` command, and [the menu](#the-menu) runs
+these same commands from forms. All of them call the same code on the same data folder, so an
+application added in a terminal appears in the browser, and **Activity** records each under
+the account that acted.
 
 ```bash
 django_dbs server add web-1 --host shop.example.com --user deploy --ssh-password
@@ -459,7 +537,7 @@ Every command and option is in the [command reference](reference/commands.md#the
 
 ## The console
 
-**Console** in the menu runs one `django_dbs` command line at a time, as the account you are
+**Console** in the sidebar runs one `django_dbs` command line at a time, as the account you are
 signed in with: `app list`, `backup take shop`, `plan pause 3f2c…`. It takes the `server`,
 `app`, `backup`, `plan`, `activity`, `env`, `files` and `redeploy` commands, `help` lists them,
 and a leading `django_dbs`, `django-dbs` or `dbs` is ignored. A line is at most 2,000

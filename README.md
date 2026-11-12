@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <strong>0.8.2 is out:</strong>
+  <strong>0.8.3 is out:</strong>
   <a href="#whats-new-in-080">what's new</a> ·
-  <a href="https://github.com/bn7ya/dbs/blob/v0.8.2/RELEASE_NOTES.md">release notes</a> ·
+  <a href="https://github.com/bn7ya/dbs/blob/v0.8.3/RELEASE_NOTES.md">release notes</a> ·
   <a href="https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md">upgrading</a>
 </p>
 
@@ -78,6 +78,9 @@ pipx install django-dbs
 django_dbs run
 ```
 
+Or type `django_dbs` alone in a terminal: the same manager opens there as a menu you move
+through with the arrow keys, with a form for every command and a file explorer.
+
 Create the master account on the page that opens, add a server, then add an application by
 answering *How it runs* and choosing its folder. The manager finds the project, checks it and
 takes a first backup.
@@ -114,6 +117,10 @@ it fixes.
 module, or in the folder above the project. The
 [0.8.2 release notes](https://github.com/bn7ya/dbs/blob/v0.8.2/RELEASE_NOTES.md) say where it
 looks and how to name a `.env` kept anywhere else.
+
+**0.8.3** opens the manager as a menu when `django_dbs` is typed alone in a terminal: arrow
+keys, a form for every command and a file explorer, with nothing new to install. The
+[0.8.3 release notes](https://github.com/bn7ya/dbs/blob/v0.8.3/RELEASE_NOTES.md) show it.
 
 **Upgrading from 0.7.x:**
 
@@ -166,7 +173,7 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 
 ## Status
 
-0.8.2 is the current release. DBS is in active development, and stable from 0.8.0: new releases
+0.8.3 is the current release. DBS is in active development, and stable from 0.8.0: new releases
 add, and nothing you use breaks.
 
 - **Your backups keep opening.** Every backup written by 0.8.0 or later restores, with the same

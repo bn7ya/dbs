@@ -56,7 +56,7 @@ server. `DBS_TEST_MOVE_PROJECT` names a host project to move, and
 | `scripts/upgrade_rehearsal.py` | Installs django-dbs 0.7.0 from PyPI in a new virtualenv, fills a project and a manager, upgrades both to this checkout and checks that nothing was lost; `--from-version` and `--keep` change where it starts and whether its folder stays |
 | `scripts/stress_roundtrip.py` | Damages backups at random and checks they still restore (`DBS_STRESS_FLIPS` sets how many bytes) |
 | `scripts/minimum_requirements.py` | Prints the lowest version of every dependency, for the lowest-dependencies CI job |
-| `scripts/check_wheel.py dist/*.whl` | Checks a built wheel holds the manager's interface, its templates, the migrations and the console scripts |
+| `scripts/check_wheel.py dist/*.whl` | Checks a built wheel holds the manager's interface, its templates, the menu and the logo it draws, the migrations and the console scripts |
 | `scripts/train_base_model.py` | Regenerates the synthetic corpus behind the session guard's base model |
 | `scripts/stability_snapshot.py X.Y.Z` | Records a release in `tests/stability/X.Y.Z`: its API, commands, terminal, REST routes, MCP tools, settings, migrations and `--json` keys, a golden backup and sealed values. It refuses a release already recorded |
 
@@ -106,6 +106,30 @@ set -a; . ../e2e.env; set +a; npx playwright test
 `E2E_FIXTURE_SUDO=1` lets the test account use `sudo` with its password, which the real server
 move needs; without it, that one scenario is skipped. The **Interface journeys** workflow runs
 them on every push to `main` and every night.
+
+## The menu
+
+`dbs/manager/menu/` is what `django_dbs` opens when it is typed alone in a terminal. It holds
+no logic of its own: a form is built from a command's parser, and running it calls the same
+handler a typed command calls, with a session that asks in dialogs. Adding a command to
+`dbs/manager/terminal/parsers.py` puts it in **All commands**; `tests/manager/menu/test_parity.py`
+then asks `menu/meanings.py` to say what each new argument names (a server, an application, a
+file on this computer and so on), so its field gets the right list. A secret a handler asks
+for with `session.secret("…")` is listed there too, so the form has a masked field that
+answers it.
+
+`menu/kit/` reads keys and draws, with Python's standard library only, and imports nothing of
+Django or the manager. Its colours are the interface's tokens, and a test keeps them equal to
+`manager-ui/src/styles/_tokens.scss`. The logo is drawn from `dbs/static/dbs/logo.svg`.
+
+```bash
+python -m pytest tests/manager/menu --ds=tests.manager.settings
+```
+
+Most of those tests drive the menu through a stand-in terminal: keys go in and the screen
+comes back as text, so a page is asserted the way a developer reads it.
+`test_on_a_terminal.py` starts the real command on a pseudo-terminal, which Linux and macOS
+have and Windows does not; the Windows console is tested through a stand-in for it.
 
 ## Releasing
 
