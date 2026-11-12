@@ -6,6 +6,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- A project's `.env` no longer has to be beside `manage.py` to be found. `dbs connection`
+  names the `.env` beside `manage.py`, else the one beside the settings module, else the one
+  in the folder above the project. For a project on the server itself, discovery offers the
+  `.env` files in those three places, the project's own first, and the other two only where
+  no other account can write to the folder or its parent. An application's `env_path` took
+  the full path of a `.env` in any folder already, and still does; where discovery found
+  none, the application wizard now says where to enter it.
+
 ## [0.8.1] - 2026-11-12
 
 The DBS manager reads everything a command prints on a server, so it finds the applications on

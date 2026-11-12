@@ -112,7 +112,7 @@ export const COPY = {
   databaseSqlite: { en: 'SQLite', ar: 'SQLite' },
   databaseOnThisServer: { en: 'Installed on this server', ar: 'مثبتة على هذا الخادم' },
   databaseInAFile: { en: 'In a file of the project', ar: 'في ملف داخل المشروع' },
-  settingsFolderEnv: { en: 'A .env file in the project folder', ar: 'ملف .env في مجلد المشروع' },
+  settingsFolderEnv: { en: 'A .env file on the server', ar: 'ملف .env على الخادم' },
   settingsComposeEnvFile: { en: 'A file Compose names with env_file', ar: 'ملف يسميه Compose في env_file' },
   keptBySystemdUser: { en: 'A systemd user service', ar: 'خدمة systemd للمستخدم' },
   saidFound: {

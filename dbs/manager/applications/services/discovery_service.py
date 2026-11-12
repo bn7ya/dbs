@@ -256,6 +256,7 @@ class Discovery:
         if not project:
             return None
         found_pythons = pythons.candidates(self.remote, project)
+        settings = settings_module(self.remote, project)
         runnable = project == folder or pythons.trusted_with_parent(self.remote, project)
         usable = (
             pythons.with_dbs(self.remote, found_pythons, host_profile(project))
@@ -276,11 +277,11 @@ class Discovery:
             "python_path": usable.python_path if usable else found_pythons[0],
             "python_paths": found_pythons,
             "manage_path": MANAGE,
-            "settings_module": settings_module(self.remote, project),
+            "settings_module": settings,
             "remote_backup_dir": "",
             "mounts": [],
             "file_roots": [],
-            "env": host_env(self.remote, project, listing),
+            "env": host_env(self.remote, project, listing, settings),
             "dbs_version": usable.dbs_version if usable else None,
         }
         if usable is not None:
@@ -530,12 +531,30 @@ def folder_listing(remote: RemoteHost, folder: str) -> dict[str, Any]:
     }
 
 
-def host_env(remote: RemoteHost, project: str, listing: dict[str, Any]) -> list[dict[str, Any]]:
+def host_env(
+    remote: RemoteHost, project: str, listing: dict[str, Any], settings: str
+) -> list[dict[str, Any]]:
     names = listing["env_files"] if listing.get("manage") else folder_listing(remote, project)["env_files"]
-    return [
-        {"path": posixpath.join(project, name), "location": "host", "source": "folder"}
-        for name in names
-    ]
+    found = [posixpath.join(project, name) for name in names]
+    for folder in folders_near(project, settings):
+        if pythons.trusted_with_parent(remote, folder):
+            found += [
+                posixpath.join(folder, name)
+                for name in folder_listing(remote, folder)["env_files"]
+            ]
+    return [{"path": path, "location": "host", "source": "folder"} for path in found]
+
+
+def folders_near(project: str, settings: str) -> list[str]:
+    near = dict.fromkeys((settings_folder(project, settings), posixpath.dirname(project)))
+    return [folder for folder in near if folder and folder != project]
+
+
+def settings_folder(project: str, settings: str) -> str:
+    packages = settings.split(".")[:-1]
+    if not packages or not all(name.isidentifier() for name in packages):
+        return ""
+    return posixpath.join(project, *packages)
 
 
 def nested_project(remote: RemoteHost, folder: str) -> str:

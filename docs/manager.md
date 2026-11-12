@@ -190,7 +190,7 @@ question may stay on *Not sure*:
 | Which container engine? | `engine` | `docker`, `podman` |
 | Which database? | `database` | `postgresql`, `mysql`, `mariadb`, `sqlite`, `other` |
 | Where does the database run? | `database_runs` | `compose` (beside it), `this_server`, `elsewhere` (another machine or a managed service), `file` |
-| Where do its settings come from? | `settings_from` | `folder_env` (a `.env` in the folder), `compose_env_file`, `image`, `environment` |
+| Where do its settings come from? | `settings_from` | `folder_env` (a `.env` on the server), `compose_env_file`, `image`, `environment` |
 | Where does its code come from? | `source` | `git`, `copied`, `image` |
 | What keeps it running? | `process_manager` | `systemd`, `systemd_user`, `supervisor`, `other` (on the server only) |
 | Which web server is in front of it? | `web_server` | `nginx`, `other`, `none` (on the server only) |
@@ -244,8 +244,12 @@ From a terminal, the answers are `--deployment KEY=VALUE` (repeat it) on `app di
    and file roots are on the server. A backup folder on no mount is reported
    (`backup_dir_not_mounted`).
 7. **`.env` candidates.** The `.env` django-dbs names, the compose files' `env_file` entries
-   and the `.env` beside them, each marked as on the server or inside the container. Their
-   contents are not read here.
+   and the `.env` beside them, each marked as on the server or inside the container. For a
+   project on the server itself, also the `.env` files beside `manage.py`, then those beside
+   its settings module and in the folder above the project, where no other account can write
+   to that folder or its parent. The first candidate is filled in. The `.env` does not have
+   to be in any of these places: under *Show more settings*, type its full path or browse to
+   it. Their contents are not read here.
 
 Each place it found is offered with what it found and its problems (`container_not_running`,
 `dbs_missing`, `dbs_too_old`, `backup_dir_not_mounted`), best first. Pick one, check the

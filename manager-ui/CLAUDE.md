@@ -416,7 +416,8 @@ role cannot take are left out with `*appCan`.
   `folders`, says when `trusted: false` means nothing was run, and offers the candidates as a
   `mat-radio-group`, best first, each with `CandidateFacts` (running, replicas, django-dbs and
   compatibility, folders on the host and inside the container, Python, settings module, the backup
-  folder and its host path, the `.env` candidates, and `problems` in words); review (the name, and
+  folder and its host path, the `.env` candidates or, with none, where to enter its path, and
+  `problems` in words); review (the name, and
   `SettingsFields` with `RuntimeFields` behind "Show more settings", opened by itself on an error),
   where the application is created with `discovered`; check; the optional passphrase capture with
   its warning; and a test backup followed with `JobWatcher` and `JobConnection`. Steps before

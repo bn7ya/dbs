@@ -3,6 +3,8 @@
 import base64
 import hashlib
 import json
+import sys
+import types
 from io import StringIO
 
 import pytest
@@ -51,6 +53,53 @@ def test_the_details_name_everything_the_manager_needs(settings, tmp_path, on_a_
     assert info["dbs_version"] == __version__
     assert info["remote_backup_dir"] == str(tmp_path)
     assert info["settings_module"] == "tests.settings"
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    folder = tmp_path / "srv" / "shop"
+    package = folder / "config"
+    package.mkdir(parents=True)
+    module = types.ModuleType("shop_config.settings")
+    module.__file__ = str(package / "settings.py")
+    monkeypatch.setitem(sys.modules, "shop_config.settings", module)
+    monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "shop_config.settings")
+    monkeypatch.setattr(connection, "project_dir", lambda: str(folder))
+    return folder
+
+
+def test_a_project_with_no_env_file_names_none(project):
+    assert connection.details()["env_path"] == ""
+
+
+@pytest.mark.parametrize("place", [".", "config", ".."])
+def test_the_env_file_is_named_beside_manage_py_beside_the_settings_or_in_the_folder_above(
+    project, place
+):
+    env_file = (project / place).resolve() / ".env"
+    env_file.write_text("SECRET_KEY=x\n")
+
+    assert connection.details()["env_path"] == str(env_file)
+
+
+def test_the_env_file_beside_manage_py_is_named_before_any_other(project):
+    for place in (".", "config", ".."):
+        (project / place / ".env").write_text("SECRET_KEY=x\n")
+
+    assert connection.details()["env_path"] == str(project / ".env")
+
+
+def test_the_env_file_beside_the_settings_is_named_before_the_one_above(project):
+    for place in ("config", ".."):
+        (project / place / ".env").write_text("SECRET_KEY=x\n")
+
+    assert connection.details()["env_path"] == str(project / "config" / ".env")
+
+
+def test_a_folder_named_env_is_not_an_env_file(project):
+    (project / ".env").mkdir()
+
+    assert connection.details()["env_path"] == ""
 
 
 def test_the_details_never_carry_a_secret(settings):

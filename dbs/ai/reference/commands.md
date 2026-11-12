@@ -69,9 +69,11 @@ chain. Also `manage.py dbs_audit`. No DBS command deletes audit rows.
 ## `dbs connection [--json]`
 Prints what the DBS manager reads from this project: project directory, Python, manage.py,
 settings module, backup directory, file roots, `.env` path and version, and on a server the
-host, SSH user and host key fingerprints. `"container": true` says it runs in a container,
-whose hostname, user and host keys say nothing about the server, so they come back empty. The
-manager's discovery runs it itself; nobody pastes it anywhere. Never a passphrase.
+host, SSH user and host key fingerprints. The `.env` it names is the one beside `manage.py`,
+else beside the settings module, else in the folder above the project. `"container": true`
+says it runs in a container, whose hostname, user and host keys say nothing about the server,
+so they come back empty. The manager's discovery runs it itself; nobody pastes it anywhere.
+Never a passphrase.
 
 ## `dbs key [--show]`
 Reports where the passphrase comes from; `--show` prints it. Archive the output before

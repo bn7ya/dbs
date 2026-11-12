@@ -24,6 +24,10 @@ DBS_BACKUP_DIR=/var/backups/myproject
 # DBS_SCHEDULER=thread
 ```
 
+The `.env` does not have to be next to `manage.py`. `manage.py dbs connection` names the one
+beside `manage.py`, else the one beside the settings module, else the one in the folder above
+the project, and the [DBS manager](manager.md) takes the full path of a `.env` in any folder.
+
 Read them in `settings.py` with the tool you already use (`django-environ`,
 `python-dotenv`), or with the standard library:
 
