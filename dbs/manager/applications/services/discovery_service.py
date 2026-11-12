@@ -51,7 +51,8 @@ COMPOSE_FILES = (
 )
 CONTAINER_FILES = ("Dockerfile", "Containerfile")
 ENV_SUFFIX = ".env"
-CONTAINERS_INSPECTED = 30
+CONTAINERS_LISTED = 1000
+CONTAINERS_PER_INSPECT = 30
 INSPECTED_FIELDS = (
     '{"Name":{{json .Name}},"Image":{{json .Image}},'
     '"State":{"Running":{{json .State.Running}}},'
@@ -618,9 +619,9 @@ def listed_containers(
         return []
     ids = [
         identifier for identifier in listed.stdout.split() if CONTAINER_ID.match(identifier)
-    ][:CONTAINERS_INSPECTED]
+    ][:CONTAINERS_LISTED]
     left_out: list[str] = []
-    rows = rows_in_halves(
+    rows = rows_in_batches(
         lambda batch: quiet(
             remote.run,
             [engine, "inspect", "--type", "container", "--format", INSPECTED_FIELDS, *batch],
@@ -633,13 +634,24 @@ def listed_containers(
     return [summary(engine, row) for row in rows if isinstance(row, dict)]
 
 
+def rows_in_batches(
+    inspect: Callable[[list[str]], RemoteResult | None],
+    ids: list[str],
+    left_out: list[str],
+) -> list[Any]:
+    rows: list[Any] = []
+    for start in range(0, len(ids), CONTAINERS_PER_INSPECT):
+        rows += rows_in_halves(
+            inspect, ids[start : start + CONTAINERS_PER_INSPECT], left_out
+        )
+    return rows
+
+
 def rows_in_halves(
     inspect: Callable[[list[str]], RemoteResult | None],
     ids: list[str],
     left_out: list[str],
 ) -> list[Any]:
-    if not ids:
-        return []
     inspected = inspect(ids)
     if inspected is None:
         return []

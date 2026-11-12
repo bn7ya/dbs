@@ -8,27 +8,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `RemoteResult.stdout_truncated`: `SSHSession.run()` and `feed()` keep 64 KiB of standard
-  output, and now say when a command printed more.
+- `RemoteResult.stdout_truncated` is true when a command printed more standard output than
+  `SSHSession.run()` (16 MiB) or `feed()` (64 KiB) keeps.
 - A discovery report's `unread_containers` names each container (`engine`, `id`) that
-  describes itself in more than 64 KiB on its own; discovery leaves it out, and the terminal
+  describes itself in more than 16 MiB on its own; discovery leaves it out, and the terminal
   says so under the candidates.
 - A server move's plan is blocked with `container_unread` (`engine`, `id`, `name`) for each
-  container on the old server that describes itself in more than 64 KiB on its own, since the
+  container on the old server that describes itself in more than 16 MiB on its own, since the
   move cannot read what it carries.
 
 ### Fixed
 
+- `SSHSession.run()` kept the first 64 KiB of a command's standard output and of its standard
+  error, and returned that as though it were everything. It now reads all of it and keeps up
+  to 16 MiB of each.
 - Discovery found no application on a server whose containers, inspected together, came to
-  more than 64 KiB, such as a few containers with long environments: the answer was cut, could
-  not be read, and the folder was reported as holding no Django project. Discovery now lists
-  container ids only, inspects just the fields it reads, one line per container, and inspects
-  again in halves when an answer is cut. A container removed between listing and inspecting no
-  longer hides the others.
+  more than 64 KiB, which a handful of containers do: the answer was cut, could not be read,
+  and the folder was reported as holding no Django project.
+- Discovery inspected the 30 containers the engine listed first, the newest, so an application
+  with older containers was not found. It now lists container ids only and inspects every
+  container, 30 at a time and up to 1,000, reading just the fields it uses.
+- A container removed between listing and inspecting hid every other container. The ones the
+  engine still described are kept, and an `inspect` that fails leaves the rest found.
 - A server move planned from such a server read none of its containers: a Compose
   application's plan carried no images or volumes, and a container application was said to be
-  missing. The move's survey now lists container ids only and inspects again in halves when an
-  answer is cut, and so does starting a moved container.
+  missing. The move's survey reads every container the same way, up to 1,000 where it stopped
+  at 60, and so does starting a moved container.
+- A `.env` longer than 48 KiB that lives inside a container was kept as its first 48 KiB, with
+  no error, in the versions the manager stores, the copy it takes before replacing the file
+  among them. It is read whole.
+- A command that printed more than about 2 MiB, such as a long build in a deploy step, stood
+  still until its time limit, because nothing read what it printed. Its output is read as it
+  arrives.
 
 ## [0.8.0] - 2026-10-30
 

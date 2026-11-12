@@ -296,6 +296,29 @@ def test_a_container_that_alone_passes_what_a_command_keeps_blocks_the_move_by_n
 
 
 @pytest.mark.django_db
+def test_an_application_listed_after_sixty_five_other_containers_is_still_planned(
+    admin, survey
+):
+    application = shop(admin)
+    strangers = [
+        container(f"stranger-{number}", "", "busybox", "sha256:" + "3" * 64, [])
+        for number in range(65)
+    ]
+    surveyed = survey(application, [*strangers, *COMPOSE_ROWS], POSTGRES_IN_COMPOSE)
+
+    found = surveyed.collect([Choice(application=application, name="shop-new", folder=PROJECT)])
+
+    [plan] = found["applications"]
+    assert plan["services"] == ["db", "web"]
+    inspects = [
+        run["argv"][4:]
+        for run in surveyed.source.remote.session.runs
+        if run["argv"][1:2] == ["inspect"]
+    ]
+    assert [len(asked) for asked in inspects] == [30, 30, 7]
+
+
+@pytest.mark.django_db
 def test_a_database_elsewhere_is_shared_and_never_restored(admin, survey):
     application = make_application(
         admin,

@@ -12,9 +12,10 @@ from dbs.manager.applications.repositories import ApplicationRepository
 from dbs.manager.applications.services import facts as found_facts
 from dbs.manager.applications.services.discovery_service import (
     COMPOSE_LABEL,
+    CONTAINERS_LISTED,
     PODMAN_COMPOSE_LABEL,
     json_rows,
-    rows_in_halves,
+    rows_in_batches,
 )
 from dbs.manager.conf import data_dir
 from dbs.manager.relocation import catalogue, packages
@@ -32,7 +33,6 @@ from dbs.transports import RemoteResult
 OS_RELEASE_BYTES = 64 * 1024
 COMPOSE_BYTES = 256 * 1024
 ENV_BYTES = 256 * 1024
-CONTAINERS_INSPECTED = 60
 SPACE_MARGIN = 1.1
 PYTHON_VERSION = "import sys; print('%d.%d' % sys.version_info[:2])"
 ID_LINE = re.compile(r"uid=(\d+)\(([^)]*)\)\s+gid=(\d+)")
@@ -173,9 +173,9 @@ def inspected(
         identifier
         for identifier in listed.stdout.split()
         if catalogue.CONTAINER.match(identifier)
-    ][:CONTAINERS_INSPECTED]
+    ][:CONTAINERS_LISTED]
     left_out: list[str] = []
-    rows = rows_in_halves(
+    rows = rows_in_batches(
         lambda batch: side.run(Command((engine, "inspect", "--type", "container", *batch))),
         ids,
         left_out,
