@@ -57,6 +57,15 @@ folder that is not on your `PATH`, common with Windows user installs and `pip in
 pip prints that folder in a warning during the install. Add it to `PATH`, or run
 `python -m dbs.manager run`.
 
+**`django_dbs` alone prints its help instead of opening the menu.** The
+[menu](manager.md#the-menu) opens only where a person can use it: standard input and output are
+both a terminal, and `TERM` is set and is not `dumb`. Through a pipe, in a script or under a
+scheduler it prints the help and exits 2. `django_dbs menu` says so when it cannot open.
+
+**The menu says "Make this window larger".** It needs 64 columns by 18 rows. Its colours
+follow what the terminal announces: `COLORTERM=truecolor` for exact colours, a `TERM` that
+names 256 colours for the nearest ones, the terminal's own otherwise, and none with `NO_COLOR`.
+
 **`django_dbs` says the installation cannot import a package.** Repair it with
 `pip install --force-reinstall "django-dbs"`.
 

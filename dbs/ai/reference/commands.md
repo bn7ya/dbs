@@ -113,7 +113,9 @@ Also reachable as `manage.py dbs_upgrade`.
 
 ## `django-dbs` (the manager, outside any project)
 Installed with `pip install django-dbs` under three equal names: `django-dbs`, `django_dbs`
-and `dbs`.
+and `dbs`. Typed alone in a terminal it opens a menu for a person (`menu [--as NAME]` opens it
+by name): arrow keys, a form for every command below and a file explorer. Without a terminal,
+as in a script or an assistant's shell, it prints its help and exits 2; use the commands.
 
 `run [--port] [--host] [--trusted-proxy CIDR] [--allow-insecure-http]
 [--terminal admins|master|off] [--no-browser]`, `export [FILE] [--with-backups]`,

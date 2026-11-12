@@ -123,6 +123,10 @@ opens your browser on a one-time setup page:
 
 The next `django_dbs run` opens the sign-in page.
 
+To stay in the terminal instead, type `django_dbs` alone. The same manager opens there as
+[a menu](manager.md#the-menu) you move through with the arrow keys: it makes the first account
+on a new installation, and every step below is a form in it.
+
 ### Add a server
 
 **Servers → Add a server** walks you through it:

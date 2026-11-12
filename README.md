@@ -78,6 +78,9 @@ pipx install django-dbs
 django_dbs run
 ```
 
+Or type `django_dbs` alone in a terminal: the same manager opens there as a menu you move
+through with the arrow keys, with a form for every command and a file explorer.
+
 Create the master account on the page that opens, add a server, then add an application by
 answering *How it runs* and choosing its folder. The manager finds the project, checks it and
 takes a first backup.

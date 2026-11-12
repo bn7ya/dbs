@@ -84,8 +84,8 @@ def password_stdin_option(parser):
     )
 
 
-def build_parser():
-    parser = argparse.ArgumentParser(
+def build_parser(parser_class=argparse.ArgumentParser):
+    parser = parser_class(
         prog=prog(), description="Run and maintain the standalone DBS manager."
     )
     parser.add_argument(
@@ -228,6 +228,21 @@ def build_parser():
     database_option(restore)
     restore.set_defaults(handler=command_import)
 
+    menu = commands.add_parser(
+        "menu",
+        help="Work with the manager from menus, with the arrow keys. Typing "
+        "the command alone in a terminal opens it too.",
+    )
+    menu.add_argument(
+        "--as",
+        dest="account",
+        metavar="NAME",
+        help="The account to act as. Defaults to the only account, or asks.",
+    )
+    data_dir_option(menu)
+    database_option(menu)
+    menu.set_defaults(handler=command_menu)
+
     parsers.register(commands, parsers.Surface(extend=location))
     return parser
 
@@ -245,8 +260,10 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     if getattr(args, "handler", None) is None:
-        parser.print_help()
-        return 2
+        if not menu_can_open():
+            parser.print_help()
+            return 2
+        args.handler = command_menu
     try:
         if isinstance(args.handler, str):
             return command_terminal(args)
@@ -260,6 +277,23 @@ def main(argv=None):
     except KeyboardInterrupt:
         print(f"{prog()}: stopped.", file=sys.stderr)
         return 130
+
+
+def menu_can_open():
+    from .menu import entry
+
+    return entry.available(os.environ, sys.stdin, sys.stdout)
+
+
+def command_menu(args):
+    from .menu import entry
+
+    if not menu_can_open():
+        raise CommandFailed(
+            f"the menu needs a terminal. In a script, use the commands: {prog()} --help"
+        )
+    setup_django(resolve(args), getattr(args, "database_url", None))
+    return entry.opened(getattr(args, "account", None))
 
 
 def command_terminal(args):
@@ -335,17 +369,6 @@ def read_password(from_stdin):
     return password
 
 
-def checked_password(password, user):
-    from django.contrib.auth.password_validation import validate_password
-    from django.core.exceptions import ValidationError
-
-    try:
-        validate_password(password, user=user)
-    except ValidationError as exc:
-        raise CommandFailed(" ".join(exc.messages)) from exc
-    return password
-
-
 def refused(exc):
     from .adapters.problems import problem
 
@@ -389,19 +412,10 @@ def command_createuser(args):
 
 def command_password(args):
     setup_django(resolve(args), args.database_url)
-    from dbs import audit
+    from .adapters import accounts
 
-    from .accounts.repositories import UserRepository
-
-    users = UserRepository()
-    user = users.find_by_username(args.name)
-    if user is None:
-        raise CommandFailed(f"there is no account named {args.name!r}.")
-    password = checked_password(read_password(args.password_stdin), user)
-    if user.check_password(password):
-        raise CommandFailed("choose a password the account has not been using.")
-    users.set_password(user, password)
-    audit.record("account.password", target=user.get_username())
+    user = accounts.named(args.name)
+    accounts.set_password(user, read_password(args.password_stdin))
     print(f"Changed the password of {user.get_username()}; it lasts 30 days.")
     return 0
 

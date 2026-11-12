@@ -159,6 +159,14 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   plan|activity|env|files|redeploy`). Like the REST views, each verb validates with the slice's
   serializer and calls the slice's service; neither adapter holds business logic.
   `parsers.py` imports no Django, so `--help` stays instant.
+- `dbs/manager/menu/` — what `django_dbs` opens when typed alone in a terminal (`django_dbs
+  menu`): sections, forms and a file explorer, moved through with the arrow keys. `commands.py`
+  reads the parser into forms and `meanings.py` says what each argument names; `running.py`
+  calls the same handler a typed command calls, on the main thread, with `session.py` asking
+  in dialogs; `screens/sections.py` declares each section as a list command and its actions.
+  `kit/` reads keys and draws with the standard library only and imports nothing of Django or
+  the manager; its colours are the interface's tokens and its logo is drawn from
+  `dbs/static/dbs/logo.svg`.
 - `dbs/manager/redeploy/` — moving an application onto another, deploying one in place from
   the step catalogue (`catalogue.py`, `deploy.py`), and putting either back from its safety
   backup; `restoring.py` holds the migrate and restore steps a server move shares.
@@ -319,6 +327,13 @@ version to read them before it offers giving them up.
   (`database_is_the_sources`). A carried `.env`, unit or site that names the old folder gets the
   new one. The MCP server only rehearses a move; the console never takes a sudo password, so it
   moves for real only where none is needed.
+- The menu holds no business logic and adds no dependency. Every action runs a terminal
+  handler through the parser, so a role, a password, a typed name and an audit row are the
+  command's own. It opens for the bare command only when standard input and output are a
+  terminal; otherwise the bare command prints its help and returns 2, as 0.8.0 did. It never
+  draws text it was given without `kit.text.safe`, never takes the mouse, never shows a
+  secret in the command line a form displays or keeps one after its command has run, and
+  always gives the terminal back.
 - The built interface is generated at release time and never committed.
 
 ## Install constraint

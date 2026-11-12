@@ -289,6 +289,8 @@ in a project's `INSTALLED_APPS`.
   manage them from a shell.
 - Everything the interface does is a `django_dbs` command (`server`, `app`, `backup`, `plan`,
   `activity`, `env`, `files`, `redeploy`); `django_dbs AREA VERB --help` lists the options.
+  `django_dbs` typed alone in a terminal opens the same commands as a menu for a person; from
+  a script or an assistant's shell it only prints its help, so use the commands.
   Actions guarded by the account password read it with `--password-stdin`; never put a
   password or passphrase in an argument.
 

@@ -39,6 +39,8 @@ installed; it rehearses unless `--real`. Everything the
 interface does is also `django_dbs server|app|backup|plan|activity|env|files|redeploy VERB`;
 `createuser`, `account` and `password` manage its accounts. The interface also has a
 console for these commands and, for admins, a terminal on a server or in a container.
+`django_dbs` typed alone in a terminal opens the commands as a menu for a person; without a
+terminal it prints its help and exits 2.
 
 ## Commands
 - `manage.py dbs backup OUTPUT` - write an encrypted backup; refuses a path that exists

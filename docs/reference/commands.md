@@ -108,7 +108,9 @@ phrase, and the message offers installing the older version that reads it first.
 ## The manager: `django_dbs`
 
 `django_dbs`, `django-dbs` and `dbs` are one command, and `python -m dbs.manager COMMAND` is the
-same when the script is not on your `PATH`. Every command takes `--data-dir PATH`, and every one
+same when the script is not on your `PATH`. Typed alone in a terminal it opens
+[the menu](../manager.md#the-menu), where every command below is a form; in a script or a pipe
+it prints its help and exits 2. Every command takes `--data-dir PATH`, and every one
 but `paths` takes `--database-url URL`. `django_dbs AREA VERB --help` lists each command's
 options.
 
@@ -117,6 +119,7 @@ options.
 | Command | |
 |---|---|
 | `run` | `--port`, `--host`, `--trusted-proxy CIDR`, `--allow-insecure-http`, `--terminal admins\|master\|off`, `--no-browser`; see [Start it](../manager.md#start-it) |
+| `menu [--as NAME]` | [The menu](../manager.md#the-menu), as typing the command alone in a terminal opens it. It needs a terminal |
 | `paths` | Where the data folder, database, backups, log and sealing key are |
 | `createuser NAME [--role ROLE] [--password-stdin]` | Add an account. The first is always the master; later ones are `admin`, `operator` or `viewer` |
 | `password NAME [--password-stdin]` | Set a new password |

@@ -13,6 +13,10 @@ REQUIRED = (
     re.compile(r"dbs/manager/templates/dbs_manager/missing_ui\.html$"),
     re.compile(r"dbs/migrations/0004_schedule_lease\.py$"),
     re.compile(r"dbs/management/commands/django-dbs\.py$"),
+    re.compile(r"dbs/manager/menu/entry\.py$"),
+    re.compile(r"dbs/manager/menu/kit/terminal\.py$"),
+    re.compile(r"dbs/manager/menu/screens/sections\.py$"),
+    re.compile(r"dbs/static/dbs/logo\.svg$"),
 )
 COMMANDS = ("django-dbs", "django_dbs", "dbs")
 FORBIDDEN = (b"kit.fontawesome.com", b"primeng")

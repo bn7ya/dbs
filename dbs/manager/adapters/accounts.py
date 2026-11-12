@@ -4,7 +4,10 @@ import sys
 from typing import Any
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
+from dbs import audit
 from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.adapters import AdapterError
@@ -25,6 +28,24 @@ def acting(name: str | None) -> Any:
         names = ", ".join(user.get_username() for user in active)
         raise AdapterError(f"pick the account to act as with --as NAME ({names}).")
     return active[0]
+
+
+def named(name: str) -> Any:
+    user = UserRepository().find_by_username(name)
+    if user is None:
+        raise AdapterError(f"there is no account named {name!r}.")
+    return user
+
+
+def set_password(user: Any, password: str) -> None:
+    try:
+        validate_password(password, user=user)
+    except ValidationError as exc:
+        raise AdapterError(" ".join(exc.messages)) from exc
+    if user.check_password(password):
+        raise AdapterError("choose a password the account has not been using.")
+    UserRepository().set_password(user, password)
+    audit.record("account.password", target=user.get_username())
 
 
 def expiry_warning(user: Any) -> str:

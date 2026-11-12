@@ -6,6 +6,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The menu.** `django_dbs` typed alone in a terminal, or `django-dbs` or `dbs`, opens the
+  manager there as a menu moved through with the arrow keys, in the interface's light look and
+  colours, under the DBS logo. Its sections are Dashboard, Servers, Applications, Backups,
+  Activity, Accounts and Manager; opening a server, an application, a backup or a plan lists
+  what can be done with it, within the account's role. Each action is a form with a field for
+  everything its command takes, where a server, an application, a backup, a plan or a `.env`
+  version is chosen from a list, and the form shows the command it runs. **All commands** opens
+  any `django_dbs` command the same way. A file explorer browses an application's allowed
+  folders, downloads, uploads, makes folders and deletes, and chooses a folder on a server or a
+  file on this computer wherever a path is asked for. A server's SSH password, a key file's
+  passphrase and a backup passphrase are typed in their form, shown as dots and used once; the
+  account password and confirmations are asked in dialogs. A running command shows its step and
+  its connection, and Ctrl+C stops the command and not the menu. It runs the commands' own code,
+  so roles, passwords, typed names and **Activity** are the same. On a new installation it makes
+  the first account.
+- `django_dbs menu [--as NAME]` opens the menu by name.
+
+### Changed
+
+- Typed alone in a terminal, `django_dbs` now opens the menu and exits 0 when it is left; it
+  printed its help and exited 2. In a script, a pipe or anywhere that is not a terminal it
+  still prints the help and exits 2, and `django_dbs --help` is unchanged. A script that ran
+  the bare command with a terminal attached and waited for it to return would now wait in the
+  menu.
+
 ## [0.8.2] - 2026-11-12
 
 A project's `.env` is found when it is not beside `manage.py`. Upgrade the machine the manager
