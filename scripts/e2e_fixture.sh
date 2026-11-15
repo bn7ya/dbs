@@ -19,7 +19,7 @@ if [ -z "$directory" ]; then
     exit 2
 fi
 if ! id "$account" >/dev/null 2>&1; then
-    echo "$account does not exist; start scripts/openssh_test_server.sh first." >&2
+    echo "$account does not exist; scripts/vm_fixture.py prepares a guest that has it." >&2
     exit 2
 fi
 
@@ -35,7 +35,7 @@ password=${DBS_TEST_SSH_PASSWORD:-dbs-ssh-password}
 app="$directory/app"
 target="$directory/target"
 existing="$directory/existing"
-wheels="$directory/wheelhouse"
+wheels=${DBS_FIXTURE_WHEELHOUSE:-"$directory/wheelhouse"}
 container_name=e2e-shop
 
 as_account() {
@@ -50,8 +50,10 @@ if [ "${E2E_FIXTURE_SUDO:-}" = 1 ]; then
     mv "$rules.new" "$rules"
 fi
 
-rm -rf "$wheels"
-python3 -m pip wheel --quiet --no-deps --wheel-dir "$wheels" "$repository"
+if [ -z "${DBS_FIXTURE_WHEELHOUSE:-}" ]; then
+    rm -rf "$wheels"
+    python3 -m pip wheel --quiet --no-deps --wheel-dir "$wheels" "$repository"
+fi
 
 project() {
     folder=$1
@@ -75,7 +77,8 @@ project() {
 
 project "$app" e2e-app-secret
 python3 -m venv "$app/.venv"
-"$app/.venv/bin/pip" install --quiet --disable-pip-version-check "$wheels"/django_dbs-*.whl
+"$app/.venv/bin/pip" install --quiet --disable-pip-version-check --find-links "$wheels" \
+    "$wheels"/django_dbs-*.whl
 project "$target" e2e-target-secret
 cp -RP "$app/.venv" "$target/.venv"
 
@@ -96,7 +99,7 @@ fi
 
 fingerprint=$(ssh-keyscan -p "$port" -t ed25519 "$host" 2>/dev/null | ssh-keygen -lf - | cut -d' ' -f2)
 if [ -z "$fingerprint" ]; then
-    echo "No SSH server answers on $host:$port; start scripts/openssh_test_server.sh first." >&2
+    echo "No SSH server answers on $host:$port." >&2
     exit 1
 fi
 

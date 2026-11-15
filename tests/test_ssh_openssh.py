@@ -26,7 +26,10 @@ PASSPHRASE = "openssh-live-passphrase"
 THREE_MEGABYTES = 3_000_000
 
 CONFIGURED = bool(HOST and USER and KEY and KNOWN_HOSTS)
-SETUP = "Set DBS_TEST_SSH_HOST, _PORT, _USER, _KEY and _KNOWN_HOSTS to an OpenSSH server."
+SETUP = (
+    "Set DBS_TEST_SSH_HOST, _PORT, _USER, _KEY and _KNOWN_HOSTS to an OpenSSH server; "
+    "python scripts/vm_fixture.py ssh boots a guest and prints them."
+)
 
 if os.environ.get("DBS_TEST_SSH_REQUIRED") and not CONFIGURED:
     pytest.fail(f"DBS_TEST_SSH_REQUIRED is set. {SETUP}", pytrace=False)
@@ -154,8 +157,8 @@ def test_three_megabytes_of_standard_error_do_not_stall_a_command():
 
 def test_a_command_that_never_exits_is_stopped_at_its_timeout():
     with open_session(target()) as session:
-        with pytest.raises(DBSError, match="timed out after 1"):
-            session.run("sleep 30", timeout=1)
+        with pytest.raises(DBSError, match="timed out after 5"):
+            session.run("sleep 60", timeout=5)
 
 
 @pytest.mark.django_db
