@@ -483,6 +483,26 @@ def applications(commands, surface: Surface) -> None:
         "--confirm-name", help="The application's name, instead of typing it."
     )
 
+    update = _verb(
+        verbs,
+        "update-dbs",
+        "Update django-dbs in an application on its server: check it, back it up, "
+        "install the release, finish the upgrade, restart it and check it again. "
+        "Rehearses unless --real.",
+        "terminal.redeploy:update_dbs",
+        surface,
+    )
+    update.add_argument("application", help="The application's name or id.")
+    update.add_argument(
+        "--to",
+        metavar="VERSION",
+        help="The django-dbs release to install, instead of this manager's own.",
+    )
+    update.add_argument("--real", action="store_true", help="Update for real.")
+    update.add_argument(
+        "--confirm-name", help="The application's name, instead of typing it."
+    )
+
     steps = _verb(
         verbs,
         "deploy-steps",

@@ -483,7 +483,12 @@ role cannot take are left out with `*appCan`.
   Deploy needs the password and the application's name typed out. `JobProgress` lists the job's
   steps with `StepsList` and `JobConnection`, and the git HEAD and image before and after. A deploy
   that stopped after a step ran offers "Restore the safety backup", rehearsed or real, saying it
-  puts the data back only. *Move to another application* picks the target from every other
+  puts the data back only. *Update django-dbs* (`UpdateDbs`, the same store) installs the
+  release this manager runs in an application on a host: Rehearse with `applications.check`, the
+  real run with `applications.update`, the password and the typed name; it lists the job's steps,
+  says when the application already runs the release or still needs a restart, and offers the
+  safety backup of an update that stopped. An application in a container is told to build its
+  image again. *Move to another application* picks the target from every other
   application, the backup to restore if this one does not answer (the newest, or none), the `.env`
   version and whether to replace the data; a real move types the target's name, and a move that
   stopped after changing the target offers "Revert the new application".
@@ -569,6 +574,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/applications/{id}/passphrase/capture/` | `{}` → `{captured}` |
 | PUT | `/api/applications/{id}/deploy-steps/` | `{steps: DeployStep[], account_password}` → `Application`; field errors under `steps.N` |
 | POST | `/api/applications/{id}/deploy/` | `{rehearsal, password?, confirm_name?}` → 202 `{activity}`; `no_deploy_steps` (409) without steps |
+| POST | `/api/applications/{id}/update-dbs/` | `{rehearsal, to?, password?, confirm_name?}` → 202 `{activity}`; the job's `detail` holds `version`, `from_version`, `to_version`, `already_current`, `restart_needed`; `update_needs_rebuild` (409) for an application in a container |
 | GET | `/api/backups/?application=&page=&page_size=` | → page of `BackupFile` (`id, application, application_name, server, server_name, kind, name, size, sha256, validation, validated_at, failure, remote_path, taken_by, plan, plan_name, created_at`); without `application` every application's |
 | POST | `/api/backups/take/` | `{application}` → 202 `{activity}` |
 | POST | `/api/backups/upload/` | multipart `application`, `file` → 201 `BackupFile` |

@@ -48,6 +48,10 @@ export class RedeployApi {
     return this.http.post<JobStarted>(`/api/applications/${application}/deploy/`, request);
   }
 
+  updateDbs(application: string, request: RunRequest): Observable<JobStarted> {
+    return this.http.post<JobStarted>(`/api/applications/${application}/update-dbs/`, request);
+  }
+
   move(request: MoveRequest): Observable<JobStarted> {
     return this.http.post<JobStarted>('/api/redeploy/', request);
   }

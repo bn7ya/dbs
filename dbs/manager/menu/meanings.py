@@ -95,6 +95,7 @@ COMMON = {
     "--pattern": Meaning(TEXT),
     "--every": Meaning(TEXT),
     "--keep": Meaning(TEXT),
+    "--to": Meaning(TEXT),
     "--keep-remote": Meaning(TEXT),
     "--first-run": Meaning(TEXT),
     "--time-zone": Meaning(TEXT),

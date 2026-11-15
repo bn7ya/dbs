@@ -41,6 +41,7 @@ class Capability:
     APPLICATIONS_MANAGE = "applications.manage"
     APPLICATIONS_CHECK = "applications.check"
     APPLICATIONS_PASSPHRASE = "applications.passphrase"
+    APPLICATIONS_UPDATE = "applications.update"
     BACKUPS_TAKE = "backups.take"
     BACKUPS_VERIFY = "backups.verify"
     BACKUPS_DOWNLOAD = "backups.download"
@@ -70,6 +71,7 @@ MINIMUM_ROLE = {
     Capability.APPLICATIONS_MANAGE: Role.ADMIN,
     Capability.APPLICATIONS_CHECK: Role.OPERATOR,
     Capability.APPLICATIONS_PASSPHRASE: Role.ADMIN,
+    Capability.APPLICATIONS_UPDATE: Role.ADMIN,
     Capability.BACKUPS_TAKE: Role.OPERATOR,
     Capability.BACKUPS_VERIFY: Role.OPERATOR,
     Capability.BACKUPS_DOWNLOAD: Role.OPERATOR,
@@ -95,6 +97,7 @@ MINIMUM_ROLE = {
 REHEARSALS = {
     Capability.BACKUPS_RESTORE: ("rehearse", Capability.BACKUPS_REHEARSE),
     Capability.REDEPLOY_RUN: ("rehearsal", Capability.REDEPLOY_REHEARSE),
+    Capability.APPLICATIONS_UPDATE: ("rehearsal", Capability.APPLICATIONS_CHECK),
     Capability.RELOCATION_RUN: ("rehearsal", Capability.RELOCATION_REHEARSE),
 }
 

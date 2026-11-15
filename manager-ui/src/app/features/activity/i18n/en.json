@@ -67,7 +67,8 @@
         "passphrase_reveal": "Show backup passphrase",
         "passphrase_capture": "Save backup passphrase",
         "discover": "Find applications",
-        "deploy_steps": "Change deploy steps"
+        "deploy_steps": "Change deploy steps",
+        "dbs_update": "Update django-dbs"
       },
       "backup": {
         "take": "Back up application",
@@ -192,6 +193,14 @@
         "install_sites": "Server move: install the nginx sites",
         "final_check": "Server move: check the moved application",
         "copy_plans": "Server move: copy the backup plans"
+      },
+      "dbs_update": {
+        "check": "Update: check the application",
+        "safety_backup": "Update: safety backup",
+        "install": "Update: install the release",
+        "upgrade": "Update: finish the upgrade",
+        "restart": "Update: restart",
+        "final_check": "Update: final check"
       }
     }
   }

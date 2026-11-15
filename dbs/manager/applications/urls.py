@@ -9,7 +9,7 @@ from dbs.manager.applications.views import (
     PassphraseCaptureView,
     PassphraseView,
 )
-from dbs.manager.redeploy.views import DeployView
+from dbs.manager.redeploy.views import DeployView, UpdateDbsView
 
 app_name = "applications"
 
@@ -20,6 +20,7 @@ urlpatterns = [
     path("<uuid:pk>/check/", CheckView.as_view(), name="check"),
     path("<uuid:pk>/deploy/", DeployView.as_view(), name="deploy"),
     path("<uuid:pk>/deploy-steps/", DeployStepsView.as_view(), name="deploy-steps"),
+    path("<uuid:pk>/update-dbs/", UpdateDbsView.as_view(), name="update-dbs"),
     path("<uuid:pk>/passphrase/", PassphraseView.as_view(), name="passphrase"),
     path(
         "<uuid:pk>/passphrase/capture/",

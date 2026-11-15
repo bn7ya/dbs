@@ -25,7 +25,7 @@ from dbs.manager.envfiles.exceptions import EnvPathMissing
 from dbs.manager.envfiles.repositories import EnvVersionRepository
 from dbs.manager.envfiles.services import EnvFileService
 from dbs.manager.redeploy import deploy as deploys
-from dbs.manager.redeploy import restoring
+from dbs.manager.redeploy import restoring, updating
 from dbs.manager.redeploy.catalogue import KINDS, validated
 from dbs.manager.redeploy.deploy import DEPLOY
 from dbs.manager.redeploy.exceptions import (
@@ -36,8 +36,13 @@ from dbs.manager.redeploy.exceptions import (
     SameApplication,
     SourceUnreachable,
     TargetNotReady,
+    UpdateNeedsRebuild,
+    UpdateNotApplied,
+    UpdateWouldDowngrade,
 )
+from dbs.manager.redeploy.updating import UPDATE
 from dbs.manager.runner import get_runner
+from dbs.manager.servers import versions
 from dbs.manager.servers.exceptions import (
     HostKeyChanged,
     PassphraseMissing,
@@ -77,8 +82,13 @@ UNREACHABLE = (HostKeyChanged, SSHAuthFailed, SSHUnreachable)
 NO_OP = ["true"]
 NOT_FOUND = "Choose one of the source application's own files."
 PASSWORD_REQUIRED = "Enter your own password to redeploy for real."
-PREFIXES = {RUN: "redeploy.", REVERT: f"{REVERT}_", DEPLOY: "deploy."}
-CHANGING = {RUN: CHANGING_STEPS, DEPLOY: deploys.CHANGING_STEPS}
+PREFIXES = {RUN: "redeploy.", REVERT: f"{REVERT}_", DEPLOY: "deploy.", UPDATE: "dbs_update."}
+CHANGING = {
+    RUN: CHANGING_STEPS,
+    DEPLOY: deploys.CHANGING_STEPS,
+    UPDATE: updating.CHANGING_STEPS,
+}
+HOST = "host"
 
 Detail = dict[str, Any]
 Step = Callable[[Detail, Application, AuditEvent], Optional[Detail]]
@@ -161,6 +171,34 @@ class RedeployService:
         if not rehearsal:
             self._confirm(DEPLOY, target, detail, password, confirm_name)
         return self._queue(DEPLOY, target, detail)
+
+    @requires(Capability.APPLICATIONS_UPDATE)
+    def update_dbs(
+        self,
+        application: UUID,
+        *,
+        to: str = "",
+        rehearsal: bool = True,
+        password: str = "",
+        confirm_name: str = "",
+    ) -> AuditEvent:
+        target = self.applications.get(application)
+        wanted = updating.target_version(to)
+        if target.kind != HOST:
+            raise UpdateNeedsRebuild()
+        if not target.has_backup_passphrase:
+            raise PassphraseMissing()
+        detail: Detail = {
+            "target_application": str(target.pk),
+            "rehearsal": rehearsal,
+            "version": wanted,
+            "steps": _planned(
+                updating.STEPS, updating.REHEARSAL_STEPS if rehearsal else updating.STEPS
+            ),
+        }
+        if not rehearsal:
+            self._confirm(UPDATE, target, detail, password, confirm_name)
+        return self._queue(UPDATE, target, detail)
 
     @requires(Capability.REDEPLOY_RUN)
     def revert(
@@ -263,6 +301,15 @@ class RedeployService:
                 "env": self._push_recorded_env,
                 "restore": self._restore_safety_backup,
             }
+        if action == UPDATE:
+            return {
+                "check": self._update_check,
+                "safety_backup": self._update_safety_backup,
+                "install": self._update_install,
+                "upgrade": self._update_upgrade,
+                "restart": self._update_restart,
+                "final_check": self._update_final_check,
+            }
         return {
             "check": self._check,
             "source_backup": self._source_backup,
@@ -301,6 +348,90 @@ class RedeployService:
         file = BackupRunService().back_up(job, target, keep_remote=0)
         detail["safety_backup"] = str(file.pk)
         return {"backup": str(file.pk)}
+
+    def _update_check(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail:
+        checked = self._check(detail, target, job)
+        installed = ApplicationService(job.actor).get(target.pk).last_check_report["dbs_version"]
+        detail["from_version"] = installed
+        if versions.parse(installed) > versions.parse(detail["version"]):
+            raise UpdateWouldDowngrade()
+        detail["already_current"] = versions.parse(installed) == versions.parse(
+            detail["version"]
+        )
+        return {**checked, "installed": installed, "wanted": detail["version"]}
+
+    def _update_safety_backup(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail | None:
+        if detail["already_current"]:
+            return None
+        return self._deploy_safety_backup(detail, target, job)
+
+    def _update_install(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail | None:
+        if detail["already_current"]:
+            return None
+        place = deploys.place_of(target)
+        command = (
+            updating.rehearsal_command(place)
+            if detail["rehearsal"]
+            else updating.install_command(place, detail["from_version"], detail["version"])
+        )
+        connections = ServerConnectionService(job.actor)
+        with connections.open(target) as remote:
+            deploys.ran(remote, connections.dbs_profile(target), command, updating.INSTALL_SECONDS)
+        return {"would_install" if detail["rehearsal"] else "installed": detail["version"]}
+
+    def _update_upgrade(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail | None:
+        if detail["already_current"]:
+            return None
+        connections = ServerConnectionService(job.actor)
+        with connections.open(target) as remote:
+            deploys.ran(
+                remote,
+                connections.dbs_profile(target),
+                updating.upgrade_command(),
+                updating.UPGRADE_SECONDS,
+            )
+        return {"upgraded": True}
+
+    def _update_restart(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail | None:
+        if detail["already_current"]:
+            return None
+        steps = updating.restart_steps(target)
+        if not steps:
+            detail["restart_needed"] = True
+            return None
+        connections = ServerConnectionService(job.actor)
+        with connections.open(target) as remote:
+            for step in steps:
+                deploys.run_step(
+                    remote,
+                    connections.dbs_profile(target),
+                    step,
+                    deploys.place_of(target),
+                    rehearsal=False,
+                )
+        return {"restarted": len(steps)}
+
+    def _update_final_check(
+        self, detail: Detail, target: Application, job: AuditEvent
+    ) -> Detail | None:
+        if detail["already_current"]:
+            return None
+        checked = self._check(detail, target, job)
+        installed = ApplicationService(job.actor).get(target.pk).last_check_report["dbs_version"]
+        detail["to_version"] = installed
+        if versions.parse(installed) != versions.parse(detail["version"]):
+            raise UpdateNotApplied()
+        return {**checked, "installed": installed}
 
     def _deploy_step(
         self, detail: Detail, target: Application, job: AuditEvent

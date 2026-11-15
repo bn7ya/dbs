@@ -24,6 +24,9 @@ import {
   REVERTED,
   REVERT_ID,
   SOURCE,
+  UPDATED,
+  UPDATE_ID,
+  UPDATE_STOPPED,
 } from '../testing/redeploy.fixtures';
 import { DeployStore } from './deploy.store';
 
@@ -150,6 +153,65 @@ describe('DeployStore', () => {
       expect(store.saveError()?.code).toBe('invalid_password');
       expect(store.stepsRefused()).toBe(false);
       expect(toasts).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updating django-dbs', () => {
+    it('updates, follows the job to its end, and reads the releases and the restart still owed', async () => {
+      watched.set(UPDATE_ID, UPDATED);
+      await open();
+
+      store.updateDbs(FOR_REAL);
+      const request = http.expectOne(`/api/applications/${SOURCE}/update-dbs/`);
+      expect(request.request.body).toEqual(FOR_REAL);
+      expect(store.updating.busy()).toBe(true);
+      request.flush({ activity: UPDATE_ID }, { status: 202, statusText: 'Accepted' });
+
+      expect(store.updating.job()?.status).toBe('succeeded');
+      expect(store.updateOutcome()).toEqual({
+        revertable: false,
+        alreadyCurrent: false,
+        restartNeeded: true,
+        version: '0.9.0',
+        from: '0.8.1',
+      });
+    });
+
+    it('holds a refusal as an ApiError', async () => {
+      await open();
+
+      store.updateDbs(REHEARSAL);
+      http
+        .expectOne(`/api/applications/${SOURCE}/update-dbs/`)
+        .flush({ error: { code: 'update_needs_rebuild', message: 'Server prose' } }, { status: 409, statusText: 'Conflict' });
+
+      expect(store.updating.error()?.code).toBe('update_needs_rebuild');
+      expect(store.updating.busy()).toBe(false);
+    });
+
+    it('restores the safety backup of an update that stopped, and forgets that restore on the next update', async () => {
+      watched.set(UPDATE_ID, UPDATE_STOPPED).set(REVERT_ID, REVERTED);
+      await open();
+      store.revertUpdate(FOR_REAL);
+      http.expectNone(() => true);
+
+      store.updateDbs(FOR_REAL);
+      http
+        .expectOne(`/api/applications/${SOURCE}/update-dbs/`)
+        .flush({ activity: UPDATE_ID }, { status: 202, statusText: 'Accepted' });
+      expect(store.updateOutcome().revertable).toBe(true);
+
+      store.revertUpdate(FOR_REAL);
+      const revert = http.expectOne(`/api/redeploy/${UPDATE_ID}/revert/`);
+      expect(revert.request.body).toEqual(FOR_REAL);
+      revert.flush({ activity: REVERT_ID }, { status: 202, statusText: 'Accepted' });
+      expect(store.undoingUpdate.job()?.status).toBe('succeeded');
+
+      store.updateDbs(REHEARSAL);
+      http
+        .expectOne(`/api/applications/${SOURCE}/update-dbs/`)
+        .flush({ activity: UPDATE_ID }, { status: 202, statusText: 'Accepted' });
+      expect(store.undoingUpdate.job()).toBeNull();
     });
   });
 

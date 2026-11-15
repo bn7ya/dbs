@@ -77,6 +77,7 @@ def test_each_role_holds_every_capability_of_the_roles_below_it():
         Capability.SERVERS_MANAGE,
         Capability.APPLICATIONS_MANAGE,
         Capability.APPLICATIONS_PASSPHRASE,
+        Capability.APPLICATIONS_UPDATE,
         Capability.BACKUPS_UPLOAD,
         Capability.BACKUPS_DELETE,
         Capability.BACKUPS_RESTORE,

@@ -7,6 +7,7 @@ export type Capability =
   | 'applications.manage'
   | 'applications.check'
   | 'applications.passphrase'
+  | 'applications.update'
   | 'backups.take'
   | 'backups.verify'
   | 'backups.download'

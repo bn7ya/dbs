@@ -38,6 +38,10 @@ class DeploySerializer(RevertSerializer):
     pass
 
 
+class UpdateDbsSerializer(RevertSerializer):
+    to = serializers.CharField(required=False, allow_blank=True, max_length=20)
+
+
 class DeployStepsSerializer(serializers.Serializer):
     steps = serializers.ListField(child=serializers.DictField(), allow_empty=True)
     account_password = _password()

@@ -57,3 +57,29 @@ class NotRevertable(APIException):
         "Only a move for real that stopped after it changed the new application, with "
         "its .env or data recorded first, can be reverted."
     )
+
+
+class UpdateNeedsRebuild(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "update_needs_rebuild"
+    default_detail = (
+        "This application runs in a container, where an installed package is gone when "
+        "the container is created again. Put the django-dbs version in the image's "
+        "requirements and build the image again."
+    )
+
+
+class UpdateWouldDowngrade(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "update_would_downgrade"
+    default_detail = "The application already runs a newer django-dbs than the one named."
+
+
+class UpdateNotApplied(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "update_not_applied"
+    default_detail = (
+        "The application still runs the django-dbs it had: the install changed nothing. "
+        "A source checkout is updated with git, and a Python outside a virtual "
+        "environment is not changed."
+    )

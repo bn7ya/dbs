@@ -6,7 +6,7 @@ import { apiErrorOf } from '@core/http/api-error';
 import type { ApiError } from '@core/http/api.types';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { Toaster } from '@shared/toaster/toaster';
-import { deployOutcomeOf } from '../data/job-detail';
+import { deployOutcomeOf, updateOutcomeOf } from '../data/job-detail';
 import { RedeployApi } from '../data/redeploy.api';
 import type { RunRequest } from '@shared/confirmed-run/confirmed-run.types';
 import type { DeployStep } from '../data/redeploy.types';
@@ -104,5 +104,27 @@ export class DeployStore {
       return;
     }
     this.reverting.start(request.rehearsal, this.api.revert(job.id, request));
+  }
+
+  readonly updating = new JobRun();
+  readonly undoingUpdate = new JobRun();
+
+  readonly updateOutcome = computed(() => updateOutcomeOf(this.updating.job()?.detail ?? {}));
+
+  updateDbs(request: RunRequest): void {
+    const application = this.applicationId();
+    if (application === null || this.updating.busy()) {
+      return;
+    }
+    this.undoingUpdate.forget();
+    this.updating.start(request.rehearsal, this.api.updateDbs(application, request));
+  }
+
+  revertUpdate(request: RunRequest): void {
+    const job = this.updating.job();
+    if (job === null) {
+      return;
+    }
+    this.undoingUpdate.start(request.rehearsal, this.api.revert(job.id, request));
   }
 }

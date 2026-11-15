@@ -5,12 +5,13 @@ import { routeParam } from '@core/routing/route-param';
 import { Dialogs } from '@shared/dialogs/dialogs';
 import { DeployHere } from '../../components/deploy-here/deploy-here';
 import { MoveApplication } from '../../components/move-application/move-application';
+import { UpdateDbs } from '../../components/update-dbs/update-dbs';
 import { DeployStore } from '../../state/deploy.store';
 import { MoveStore } from '../../state/move.store';
 
 @Component({
   selector: 'app-redeploy-page',
-  imports: [DeployHere, MoveApplication],
+  imports: [DeployHere, MoveApplication, UpdateDbs],
   providers: [Dialogs],
   templateUrl: './redeploy.html',
   styleUrl: './redeploy.scss',

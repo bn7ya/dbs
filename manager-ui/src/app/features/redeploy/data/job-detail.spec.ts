@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEPLOYED, DEPLOY_STOPPED, MOVED_FROM_CHOSEN, REHEARSED_WITHOUT_SOURCE, TARGET } from '../testing/redeploy.fixtures';
-import { deployOutcomeOf, failedStepOf, isRehearsal, jobStepsOf, moveOutcomeOf } from './job-detail';
+import {
+  ALREADY_CURRENT,
+  DEPLOYED,
+  DEPLOY_STOPPED,
+  MOVED_FROM_CHOSEN,
+  REHEARSED_WITHOUT_SOURCE,
+  TARGET,
+  UPDATED,
+  UPDATE_STOPPED,
+} from '../testing/redeploy.fixtures';
+import { deployOutcomeOf, failedStepOf, isRehearsal, jobStepsOf, moveOutcomeOf, updateOutcomeOf } from './job-detail';
 
 describe('the detail of a redeploy job', () => {
   it('lists the steps it names, each deploy step with its place in the list', () => {
@@ -39,6 +48,25 @@ describe('the detail of a redeploy job', () => {
       after: { git_head: 'f6e5d4c3b2a1', image: 'sha256:fedcba9876543210' },
     });
     expect(deployOutcomeOf({ before: { git_head: 7, image: 'sha256:1' } }).before).toEqual({ image: 'sha256:1' });
+  });
+
+  it('reads what an update of django-dbs did: the releases, a restart still owed, and what can be put back', () => {
+    expect(updateOutcomeOf(UPDATED.detail)).toEqual({
+      revertable: false,
+      alreadyCurrent: false,
+      restartNeeded: true,
+      version: '0.9.0',
+      from: '0.8.1',
+    });
+    expect(updateOutcomeOf(UPDATE_STOPPED.detail).revertable).toBe(true);
+    expect(updateOutcomeOf(ALREADY_CURRENT.detail).alreadyCurrent).toBe(true);
+    expect(updateOutcomeOf({ version: 9, from_version: null })).toEqual({
+      revertable: false,
+      alreadyCurrent: false,
+      restartNeeded: false,
+      version: '',
+      from: '',
+    });
   });
 
   it('reads where a move went, and whether it used the chosen backup or found the source silent', () => {
