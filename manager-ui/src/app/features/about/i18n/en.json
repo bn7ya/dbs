@@ -24,6 +24,31 @@
         "exportWithBackups": "Copy the export command with backups",
         "import": "Copy the import command"
       }
+    },
+    "update": {
+      "title": "Update DBS",
+      "body": "Install a newer django-dbs for this manager. The manager restarts when the install is done, so it waits until no job runs and no terminal is open.",
+      "look": "Look for a newer release",
+      "looking": "Looking…",
+      "newest": "django-dbs {version} is the newest release.",
+      "available": "django-dbs {version} is available. This manager runs {current}.",
+      "unreachable": "The newest release is not known: PyPI did not answer from this manager's computer.",
+      "install": "Install {version}",
+      "restarting": "django-dbs {version} is installed and the manager is restarting. Reload this page in a moment.",
+      "reload": "Reload",
+      "password": {
+        "title": "Update DBS",
+        "body": "Enter your password to install django-dbs {version}. The manager restarts when it is done.",
+        "submit": "Install and restart"
+      }
     }
+  },
+  "errors": {
+    "update_busy": "A job is running or a terminal is open. The update restarts the manager, so wait until they are done.",
+    "update_from_terminal": "This manager cannot restart itself here. Stop it and run django_dbs update in a terminal on its computer.",
+    "update_source_checkout": "This manager runs from a source checkout. Update it with git.",
+    "update_system_python": "This manager is installed in a Python outside a virtual environment. Update it with the tool that installed it.",
+    "update_unreachable": "PyPI did not answer from this manager's computer.",
+    "update_failed": "The install failed and nothing changed. Run django_dbs update in a terminal on the manager's computer to see why."
   }
 }

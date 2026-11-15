@@ -27,7 +27,8 @@ export type Capability =
   | 'relocation.rehearse'
   | 'relocation.run'
   | 'shell.open'
-  | 'console.run';
+  | 'console.run'
+  | 'manager.update';
 
 export interface Identity {
   readonly id: number;

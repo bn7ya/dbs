@@ -9,16 +9,21 @@ from django.conf import settings
 from django.db import connection
 from django.utils import timezone
 
-from dbs.manager import conf
+from dbs.manager import conf, selfupdate
+from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
 from dbs.manager.applications.services import ApplicationService
+from dbs.manager.dashboard.exceptions import UpdateBusy, UpdateFromTerminal, UpdateRefused
+from dbs.manager.permissions import Capability, requires
 from dbs.manager.servers.services import ServerService
 from dbs.manager.servers.versions import local_version
+from dbs.manager.shell.sessions import SHELLS
 
 EXPORT = "manager.export"
+UPDATE = "manager.update"
 FAILURE_WINDOW = timedelta(days=7)
 RECENT_FAILURES = 10
 LOW_DISK_BYTES = 1024**3
@@ -140,3 +145,40 @@ def describe_database() -> str:
     host = database.get("HOST") or "localhost"
     port = f":{database['PORT']}" if database.get("PORT") else ""
     return f"{connection.vendor}://{host}{port}/{database['NAME']}"
+
+
+class ManagerUpdateService:
+    def __init__(self, user: Any) -> None:
+        self.user = user
+
+    @requires(Capability.MANAGER_UPDATE)
+    def status(self) -> dict[str, Any]:
+        return {**selfupdate.status(), "busy": self.busy()}
+
+    @requires(Capability.MANAGER_UPDATE)
+    def update(self, *, password: str, to: str = "") -> dict[str, Any]:
+        AccountService(self.user).confirm_password(password)
+        if not selfupdate.RESTART.armed:
+            raise UpdateFromTerminal()
+        if self.busy():
+            raise UpdateBusy()
+        try:
+            planned = selfupdate.plan(to)
+        except selfupdate.Refused as refused:
+            raise UpdateRefused(refused.code, str(refused)) from refused
+        if not planned.needed:
+            return {"version": planned.current, "updated": False, "restarting": False}
+        with ActivityService(self.user).track(UPDATE, target=planned.target) as entry:
+            entry.detail = {"from": planned.current, "to": planned.target}
+            try:
+                selfupdate.install(planned)
+            except selfupdate.Refused as refused:
+                raise UpdateRefused(refused.code, str(refused)) from refused
+        return {
+            "version": planned.target,
+            "updated": True,
+            "restarting": selfupdate.RESTART.request(),
+        }
+
+    def busy(self) -> bool:
+        return bool(ActivityRepository().unfinished_ids()) or bool(SHELLS.every())

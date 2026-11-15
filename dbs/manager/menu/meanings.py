@@ -34,7 +34,7 @@ HIDDEN = frozenset(
         "--confirm-name",
     }
 )
-NAMED_ONLY = frozenset({("import",), ("mcp",), ("menu",)})
+NAMED_ONLY = frozenset({("import",), ("mcp",), ("menu",), ("update",)})
 NAMED_BECAUSE = {
     (
         "import",
@@ -43,6 +43,10 @@ NAMED_BECAUSE = {
     ("mcp",): "This is the server Claude starts by itself. Add it to Claude with:\n"
     "claude mcp add dbs -- django_dbs mcp",
     ("menu",): "You are in the menu.",
+    (
+        "update",
+    ): "An update replaces the program this menu is running. Close the menu and "
+    "stop the manager, then type the command.",
 }
 
 

@@ -4,7 +4,7 @@ from dbs.manager import spa
 from dbs.manager.accounts.views import SetupView
 from dbs.manager.common.views import HealthView
 from dbs.manager.console.views import ConsoleView
-from dbs.manager.dashboard.views import AboutView, DashboardView
+from dbs.manager.dashboard.views import AboutUpdateView, AboutView, DashboardView
 from dbs.manager.redeploy.views import RedeployView, RevertView
 
 api_patterns = [
@@ -22,6 +22,7 @@ api_patterns = [
     path("console/", ConsoleView.as_view(), name="console"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("about/", AboutView.as_view(), name="about"),
+    path("about/update/", AboutUpdateView.as_view(), name="about-update"),
     path("redeploy/", RedeployView.as_view(), name="redeploy"),
     path(
         "redeploy/<int:move_id>/revert/", RevertView.as_view(), name="redeploy-revert"

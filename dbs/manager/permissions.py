@@ -62,6 +62,7 @@ class Capability:
     RELOCATION_RUN = "relocation.run"
     SHELL_OPEN = "shell.open"
     CONSOLE_RUN = "console.run"
+    MANAGER_UPDATE = "manager.update"
 
 
 MINIMUM_ROLE = {
@@ -92,6 +93,7 @@ MINIMUM_ROLE = {
     Capability.RELOCATION_RUN: Role.ADMIN,
     Capability.SHELL_OPEN: Role.ADMIN,
     Capability.CONSOLE_RUN: Role.VIEWER,
+    Capability.MANAGER_UPDATE: Role.MASTER,
 }
 
 REHEARSALS = {

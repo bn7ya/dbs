@@ -525,7 +525,11 @@ role cannot take are left out with `*appCan`.
   an increasing `seq` a retry reuses; resizes are debounced and clamped to 20–500 × 5–200. Close,
   and leaving the page, `DELETE` it.
 - **about** (`/about`, from the account menu) — the version, data folder, database, backups folder
-  and last export, then the export, export with backups and import commands with copy buttons.
+  and last export, then the export, export with backups and import commands with copy buttons. For the
+  master (`manager.update`), `ManagerUpdate` looks for a newer django-dbs only when asked (`GET
+  /api/about/update/`), says when PyPI did not answer, why this manager cannot be updated from here
+  (`refusal`, or a running job or open terminal), and installs the release behind `PasswordPrompt`;
+  the manager then restarts, and the card offers to reload the page.
 
 ## API the interface calls
 
@@ -551,6 +555,8 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/accounts/{id}/master/` | `{password, code}` → `Account`, the new master |
 | GET | `/api/dashboard/` | → `{servers: [{id, name, host, check_status, checked_at, connection_state, last_seen_at, applications: [{id, name, kind, engine, check_status, checked_at, last_backup: {id, name, size, created_at, validation} \| null, next_plan_run, failures_7d, storage_bytes, health}]}], storage_bytes, disk: {total_bytes, free_bytes, low} \| null, last_export_at, recent_failures, key_store}` |
 | GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at, key_store}` |
+| GET | `/api/about/update/` | → `{current, latest \| null, newer, refusal \| null, busy}`; master only. `refusal` is `update_source_checkout`, `update_system_python` or `update_from_terminal` |
+| POST | `/api/about/update/` | `{password, to?}` → `{version, updated, restarting}`; `update_busy` (409) while a job runs or a terminal is open; the manager restarts after answering |
 | GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` (`id, name, host, port, username, engines, application_count, last_check_status, last_checked_at, connection_state, last_seen_at, last_connection_error`) |
 | POST | `/api/servers/` | `{name, host, port?, username, host_key, auth_method?: key\|password, private_key?, key_passphrase?, password?, generate_key?}` → `Server`, plus `public_key` and `authorized_keys_hint` when the key was generated |
 | GET/PATCH | `/api/servers/{id}/` | `{name, host, port?, username, auth_method, private_key?, key_passphrase?, password?, account_password?}` → `Server` (`…ServerSummary`, `auth_method, has_private_key, has_key_passphrase, has_password, host_key, host_key_type, host_key_fingerprint, last_check_error, last_check_report, timeout_on_host, created_at, updated_at`) |

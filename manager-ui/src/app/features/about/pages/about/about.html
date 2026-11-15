@@ -49,6 +49,8 @@
       </dl>
     </section>
 
+    <app-manager-update *appCan="'manager.update'" />
+
     <section class="about__section" [attr.aria-labelledby]="copyHeading">
       <h2 [id]="copyHeading">{{ 'about.copy.title' | t }}</h2>
       <p class="text-secondary">{{ 'about.copy.body' | t }}</p>

@@ -1,0 +1,50 @@
+<section class="manager-update" [attr.aria-labelledby]="headingId">
+  <h2 [id]="headingId">{{ 'about.update.title' | t }}</h2>
+  <p class="text-secondary">{{ 'about.update.body' | t }}</p>
+
+  @if (installed(); as done) {
+    @if (done.restarting) {
+      <app-notice severity="success">{{ 'about.update.restarting' | t: { version: done.version } }}</app-notice>
+      <div>
+        <button matButton="outlined" type="button" (click)="reload()">{{ 'about.update.reload' | t }}</button>
+      </div>
+    } @else {
+      <app-notice severity="info">{{ 'about.update.newest' | t: { version: done.version } }}</app-notice>
+    }
+  } @else {
+    <div>
+      <button
+        matButton="outlined"
+        type="button"
+        [disabled]="looking()"
+        [attr.aria-busy]="looking()"
+        (click)="look()"
+      >
+        {{ (looking() ? 'about.update.looking' : 'about.update.look') | t }}
+      </button>
+    </div>
+
+    @if (lookError(); as failure) {
+      <app-notice severity="danger">{{ failure | errorText }}</app-notice>
+    } @else if (found(); as update) {
+      @if (update.latest === null) {
+        <app-notice severity="warning">{{ 'about.update.unreachable' | t }}</app-notice>
+      } @else if (!update.newer) {
+        <app-notice severity="success">{{ 'about.update.newest' | t: { version: update.current } }}</app-notice>
+      } @else {
+        <p>{{ 'about.update.available' | t: { version: update.latest, current: update.current } }}</p>
+        @if (update.refusal; as refusal) {
+          <app-notice severity="warning">{{ refusal | errorText }}</app-notice>
+        } @else if (update.busy) {
+          <app-notice severity="warning">{{ 'update_busy' | errorText }}</app-notice>
+        } @else {
+          <div>
+            <button matButton="filled" type="button" (click)="install(update.latest)">
+              {{ 'about.update.install' | t: { version: update.latest } }}
+            </button>
+          </div>
+        }
+      }
+    }
+  }
+</section>

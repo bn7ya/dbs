@@ -28,6 +28,7 @@ export const EVERY_CAPABILITY: readonly Capability[] = [
   'relocation.run',
   'shell.open',
   'console.run',
+  'manager.update',
 ];
 
 export const OPERATOR_CAPABILITIES: readonly Capability[] = [
