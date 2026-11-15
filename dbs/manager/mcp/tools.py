@@ -110,6 +110,7 @@ FOLDER = {
     "description": "The application's folder on the server, such as /srv/shop.",
 }
 PORT = {"type": "integer", "minimum": 1, "maximum": 65535}
+NEW_PORT = {**PORT, "default": DEFAULT_PORT, "description": "Its SSH port, 22 unless given."}
 SETTINGS = {
     "remote_backup_dir": {
         "type": "string",
@@ -270,7 +271,7 @@ class Toolbox:
                 "confirm. Show them the fingerprint and ask them to confirm it on the "
                 "manager's Servers page, or by running the confirm_with command in a "
                 "terminal. Only their confirmation lets add_server pin it.",
-                dict(host=TEXT, port=PORT),
+                dict(host=TEXT, port=NEW_PORT),
                 self.fingerprint_host,
                 required=("host",),
             ),
@@ -287,7 +288,7 @@ class Toolbox:
                 dict(
                     name={"type": "string", "description": "A name for the server."},
                     host=TEXT,
-                    port=PORT,
+                    port=NEW_PORT,
                     username={"type": "string", "description": "The SSH account."},
                     confirmation={
                         "type": "string",

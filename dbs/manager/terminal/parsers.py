@@ -11,6 +11,7 @@ PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
 ACTIVITY_LIMIT = 20
 KEEP_LIMIT = 10000
+DEFAULT_SSH_PORT = 22
 
 LOCAL_HANDLERS = frozenset(
     {
@@ -246,7 +247,12 @@ def servers(commands, surface: Surface) -> None:
     )
     add.add_argument("name", help="A name for this server.")
     add.add_argument("--host", required=True, help="Its address.")
-    add.add_argument("--port", type=int, default=None, help="Its SSH port.")
+    add.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_SSH_PORT,
+        help=f"Its SSH port, {DEFAULT_SSH_PORT} unless given.",
+    )
     add.add_argument("--user", dest="username", required=True, help="The SSH account.")
     _ssh_auth(add).add_argument(
         "--generate-key",

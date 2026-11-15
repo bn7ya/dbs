@@ -23,6 +23,7 @@ from dbs.manager.servers.services import (
     ServerService,
 )
 from dbs.manager.terminal import CommandFailed
+from dbs.manager.terminal.parsers import DEFAULT_SSH_PORT
 from dbs.manager.terminal.session import TerminalSession
 
 SHOWN_FIELDS = (
@@ -69,7 +70,6 @@ BROWSE_COLUMNS = (
     ("MODIFIED", "modified"),
     ("NAME", "name"),
 )
-DEFAULT_PORT = 22
 
 
 def list_servers(session: TerminalSession) -> int:
@@ -90,7 +90,7 @@ def show(session: TerminalSession) -> int:
 def add(session: TerminalSession) -> int:
     args = session.args
     service = ServerService(session.user)
-    port = args.port or DEFAULT_PORT
+    port = args.port or DEFAULT_SSH_PORT
     host_key = args.host_key or _offered_key(session, service, args.host, port)
     body: dict[str, Any] = {
         "name": args.name,

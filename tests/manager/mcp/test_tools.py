@@ -190,6 +190,29 @@ def settled(model):
 
 
 @pytest.mark.django_db
+def test_a_new_server_is_reached_on_port_22_unless_one_is_given(mcp):
+    ports = {
+        tool["name"]: tool["inputSchema"]["properties"]["port"]
+        for tool in tool_list(mcp)
+        if "port" in tool["inputSchema"]["properties"]
+    }
+
+    assert ports["fingerprint_host"]["default"] == 22
+    assert ports["add_server"]["default"] == 22
+    assert "default" not in ports["update_server"]
+    assert all((port["minimum"], port["maximum"]) == (1, 65535) for port in ports.values())
+
+
+@pytest.mark.django_db
+def test_plans_take_keeps_up_to_ten_thousand_and_never_fewer(mcp):
+    tools = {tool["name"]: tool["inputSchema"]["properties"] for tool in tool_list(mcp)}
+
+    for name in ("add_plan", "update_plan"):
+        assert (tools[name]["keep"]["minimum"], tools[name]["keep"]["maximum"]) == (1, 10000)
+        assert tools[name]["keep_remote"]["maximum"] == 10000
+
+
+@pytest.mark.django_db
 def test_every_tool_has_a_closed_schema_and_destroys_nothing(mcp):
     for tool in tool_list(mcp):
         schema = tool["inputSchema"]

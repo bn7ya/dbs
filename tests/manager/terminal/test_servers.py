@@ -135,6 +135,32 @@ def adding(terminal, *options, stdin=""):
 
 
 @pytest.mark.django_db
+def test_a_server_added_without_a_port_is_reached_on_22(terminal, admin, offered, remote):
+    ran = adding(terminal, "--ssh-password-stdin", "--yes", stdin=f"{SSH_PASSWORD}\n")
+
+    assert ran.code == 0, ran.err
+    assert ServerRepository().active().get(name="web-1").port == 22
+
+
+def test_the_help_of_server_add_names_the_port_it_uses(capsys):
+    from dbs.manager.cli import build_parser
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["server", "add", "--help"])
+
+    assert "Its SSH port, 22 unless given." in " ".join(capsys.readouterr().out.split())
+
+
+def test_changing_a_server_leaves_its_port_alone_unless_one_is_given():
+    from dbs.manager.cli import build_parser
+
+    added = build_parser().parse_args(["server", "add", "web-1", "--host", "h", "--user", "u"])
+    edited = build_parser().parse_args(["server", "edit", "web-1"])
+
+    assert (added.port, edited.port) == (22, None)
+
+
+@pytest.mark.django_db
 def test_list_says_how_to_add_the_first_server(terminal, admin):
     ran = terminal("server", "list")
 
