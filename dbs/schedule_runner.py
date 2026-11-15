@@ -27,7 +27,7 @@ INTERRUPTED_TWICE = (
     "Two scheduled backups in a row stopped before they finished; the next one runs "
     "at the usual time."
 )
-VERIFYING_ACTIONS = ("backup.create", "backup.validate")
+VERIFYING_ACTIONS = ("backup.create", "backup.checkpoint", "backup.validate")
 VERIFICATION_FAILURES = ("CorruptionError", "ContainerError")
 THREAD = "thread"
 COMMAND = "command"
@@ -85,7 +85,7 @@ def discard_reservation(path):
         pass
 
 
-def write_reserved(output, passphrase, *, verify=True, **options):
+def write_reserved(output, passphrase, *, verify=True, writer=None, **options):
     from .engine.backup import verify_written, write_backup
 
     written = {}
@@ -95,7 +95,11 @@ def write_reserved(output, passphrase, *, verify=True, **options):
 
     try:
         with create_new_file(output, check if verify else None, reserved=True) as fh:
-            written["summary"] = write_backup(fh, passphrase, verify=False, **options)
+            written["summary"] = (
+                writer(fh)
+                if writer is not None
+                else write_backup(fh, passphrase, verify=False, **options)
+            )
     except FileExistsError:
         raise BackupError(
             f"{output} already exists. DBS never replaces a backup file; choose a new name."

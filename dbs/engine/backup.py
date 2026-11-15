@@ -227,6 +227,29 @@ def _verifiable_start(output):
     return None
 
 
+def write_selection(
+    output,
+    passphrase: str,
+    selection: list,
+    *,
+    using: str,
+    header: dict,
+    compress: bool = True,
+) -> BackupSummary:
+    return _stream_selection(
+        output,
+        passphrase,
+        selection,
+        using=using,
+        writer_options=_writer_options(DEFAULT_BLOCK_SIZE, DEFAULT_NSYM, None, None, None),
+        compress=compress,
+        allow_missing_files=False,
+        skipped_files=None,
+        files=False,
+        header=header,
+    )
+
+
 def _stream_backup(
     output,
     passphrase: str,
@@ -239,7 +262,31 @@ def _stream_backup(
     allow_missing_files: bool,
     skipped_files: list | None,
 ) -> BackupSummary:
-    selection = introspect.backup_plan(registry or backup_registry, models)
+    return _stream_selection(
+        output,
+        passphrase,
+        introspect.backup_plan(registry or backup_registry, models),
+        using=using,
+        writer_options=writer_options,
+        compress=compress,
+        allow_missing_files=allow_missing_files,
+        skipped_files=skipped_files,
+    )
+
+
+def _stream_selection(
+    output,
+    passphrase: str,
+    selection: list,
+    *,
+    using: str,
+    writer_options: dict,
+    compress: bool,
+    allow_missing_files: bool,
+    skipped_files: list | None,
+    files: bool = True,
+    header: dict | None = None,
+) -> BackupSummary:
     logger.info("backup started: %d models", len(selection))
     skipped: list[str] = []
     try:
@@ -250,6 +297,8 @@ def _stream_backup(
                 using=using,
                 skipped=skipped,
                 allow_missing_files=allow_missing_files,
+                files=files,
+                header=header,
             )
     finally:
         if skipped_files is not None:
@@ -280,15 +329,24 @@ def _stream_backup(
     )
 
 
-def _produce(emit, selection, *, using: str, skipped: list, allow_missing_files: bool) -> dict:
+def _produce(
+    emit,
+    selection,
+    *,
+    using: str,
+    skipped: list,
+    allow_missing_files: bool,
+    files: bool = True,
+    header: dict | None = None,
+) -> dict:
     connection = connections[using]
     pin_snapshot = connection.vendor in SNAPSHOT_VENDORS and not connection.in_atomic_block
     with transaction.atomic(using=using):
         if pin_snapshot:
             read_from_one_snapshot(connection)
         emit(frames.PAYLOAD_MAGIC)
-        emit(frames.json_frame(frames.HEADER, _header(connection, selection)))
-        sources = _listed_files(selection, using, skipped)
+        emit(frames.json_frame(frames.HEADER, {**_header(connection, selection), **(header or {})}))
+        sources = _listed_files(selection, using, skipped) if files else []
         if skipped and not allow_missing_files:
             raise MissingSourceFiles(_missing_files_message(skipped), skipped)
         if len(sources) > frames.MAX_FILES:
@@ -300,7 +358,7 @@ def _produce(emit, selection, *, using: str, skipped: list, allow_missing_files:
                     frames.MANIFEST, [frames.manifest_item(source.entry) for source in batch]
                 )
             )
-        files = _emit_files(emit, sources, skipped, allow_missing_files)
+        written = _emit_files(emit, sources, skipped, allow_missing_files)
         stats_models, records = _emit_records(emit, selection, using)
     if skipped:
         logger.warning(
@@ -311,7 +369,7 @@ def _produce(emit, selection, *, using: str, skipped: list, allow_missing_files:
     stats = {
         "models": stats_models,
         "records": records,
-        "files": files,
+        "files": written,
         "skipped_files": list(skipped),
     }
     emit(frames.json_frame(frames.TRAILER, {"stats": stats}))

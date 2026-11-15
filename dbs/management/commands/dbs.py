@@ -7,6 +7,7 @@ SUBCOMMANDS = {
     "backup": ("dbs_backup", "Create a redundant, encrypted DBS backup file."),
     "restore": ("dbs_restore", "Restore a backup into the database and file storage."),
     "validate": ("dbs_validate", "Check a backup's structure, blocks and decryption."),
+    "checkpoints": ("dbs_checkpoints", "List the checkpoints kept around migrations and restores."),
     "schedule": ("dbs_schedule", "Run backups on a repeating interval."),
     "connection": ("dbs_connection", "Show what a DBS manager needs to reach this project."),
     "health": ("dbs_health", "Report the health of this project's backups."),
@@ -51,7 +52,7 @@ class Command(BaseCommand):
             "Encrypted, redundant, self-healing backups for this Django project.\n"
         )
         for name, (_, description) in SUBCOMMANDS.items():
-            self.stdout.write(f"  manage.py dbs {name:<9} {description}")
+            self.stdout.write(f"  manage.py dbs {name:<11} {description}")
         self.stdout.write(
             "\nThe same commands answer to manage.py django_dbs and manage.py django-dbs."
         )

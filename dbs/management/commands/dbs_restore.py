@@ -4,9 +4,8 @@ import os
 
 from django.core.management.base import BaseCommand, CommandError
 
-from dbs import audit
+from dbs import audit, checkpoints
 from dbs._cli import resolve_read_passphrase
-from dbs.engine import restore_backup
 from dbs.exceptions import DBSError
 from dbs.io import file_digest
 from dbs.keys import with_passphrase
@@ -25,6 +24,8 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Read, decrypt and rehearse the restore in a rolled-back transaction, then change nothing.")
         parser.add_argument("--flush", action="store_true", help="Delete existing rows of the backed-up models before loading, so the restore replaces instead of merges.")
         parser.add_argument("--another-application", action="store_true", help="Load a backup that records another application than this project, which is refused otherwise.")
+        parser.add_argument("--no-schema", action="store_true", help="Load a checkpoint's rows into the tables as they are, instead of rebuilding the tables it was taken from.")
+        parser.add_argument("--no-checkpoint", action="store_true", help="Restore without the backups DBS keeps before and after a restore.")
 
     def handle(self, *args, **options):
         passphrase = resolve_read_passphrase(
@@ -48,15 +49,18 @@ class Command(BaseCommand):
             entry.data.update(size=size, sha256=digest)
             try:
                 result = with_passphrase(
-                    lambda secret: restore_backup(
+                    lambda secret: checkpoints.restore(
                         options["input"],
                         secret,
                         using=options["database"],
+                        checkpoint=not options.get("no_checkpoint", False),
+                        stdout=self.stdout,
                         load_data=not options["no_data"],
                         write_files=not options["no_files"],
                         dry_run=options["dry_run"],
                         flush=options["flush"],
                         another_application=options.get("another_application", False),
+                        schema=False if options.get("no_schema") else None,
                     ),
                     passphrase,
                 )
@@ -68,6 +72,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING("Corruption detected and repaired: " + result.repair_report.summary())
             )
+        if result.tables_rebuilt:
+            self.describe_rebuild(result, options["dry_run"])
         if options["dry_run"]:
             if result.records_flushed:
                 self.stdout.write(
@@ -90,7 +96,7 @@ class Command(BaseCommand):
                     "DBS_RESTORE_PATH_MAP."
                 )
             return
-        if options["flush"]:
+        if options["flush"] and not result.tables_rebuilt:
             self.stdout.write(
                 f"Flushed {result.records_flushed} existing rows from the backed-up models before loading."
             )
@@ -109,16 +115,48 @@ class Command(BaseCommand):
         )
 
 
+    def describe_rebuild(self, result, dry_run):
+        would = "would be" if dry_run else "were"
+        self.stdout.write(
+            f"{len(result.tables_rebuilt)} tables {would} rebuilt as the checkpoint's "
+            "migrations describe them."
+        )
+        if result.migrations_unapplied:
+            self.stdout.write(
+                f"No longer applied ({len(result.migrations_unapplied)}): "
+                + ", ".join(result.migrations_unapplied)
+            )
+        if result.migrations_recorded:
+            self.stdout.write(
+                f"Recorded as applied again ({len(result.migrations_recorded)}): "
+                + ", ".join(result.migrations_recorded)
+            )
+        if result.raw_sql_migrations:
+            self.stdout.write(
+                self.style.WARNING(
+                    "These migrations ran raw SQL, which rebuilding the tables does not "
+                    "repeat: " + ", ".join(result.raw_sql_migrations)
+                )
+            )
+
+
 def restore_summary(result, dry_run):
+    rebuilt = (
+        {"schema": True, "unapplied": list(result.migrations_unapplied)}
+        if result.tables_rebuilt
+        else {}
+    )
     if dry_run:
         return {
             "records": result.records_would_load,
             "files": result.files_would_write,
             "files_refused": len(result.files_refused),
             "healed": bool(result.healed),
+            **rebuilt,
         }
     return {
         "records": result.records_loaded,
         "files": result.files_written,
         "healed": bool(result.healed),
+        **rebuilt,
     }

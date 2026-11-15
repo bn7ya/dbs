@@ -19,6 +19,7 @@ class ValidationResult:
     stats: dict = field(default_factory=dict)
     messages: list = field(default_factory=list)
     application: str = ""
+    checkpoint: dict = field(default_factory=dict)
 
     def summary(self) -> str:
         lines = []
@@ -30,6 +31,10 @@ class ValidationResult:
             lines.append("Decryption + payload hash: FAILED")
         if self.application:
             lines.append(f"Application: {self.application}")
+        if self.checkpoint:
+            moment, what = str(self.checkpoint.get("role", "")).partition("-")[::2]
+            steps = ", ".join(self.checkpoint.get("plan") or ())
+            lines.append(f"Checkpoint {moment} a {what}" + (f" ({steps})" if steps else ""))
         lines.extend(self.messages)
         verdict = "VALID" if self.ok else "INVALID"
         return f"[{verdict}] " + " | ".join(lines)
@@ -98,6 +103,7 @@ def _validate_stream(handle, passphrase: str | None) -> ValidationResult:
         with read_frames(reader, source, check_spares=True) as payload:
             result.stats = _read_through(payload)
             result.application = recorded_application(payload.header)
+            result.checkpoint = dict(payload.header.get("checkpoint") or {})
     except DBSError as exc:
         result.messages.append(str(exc))
     else:

@@ -140,10 +140,27 @@ def checked_header(value) -> dict:
         and all(_is_text(app) and _is_text(name) for app, name in migrations.items())
     ):
         raise malformed("its header records migrations in an unknown shape")
-    for name in ("created", "django_version", "application"):
+    for name in ("created", "django_version", "application", "schema"):
         if not _optional_text(value.get(name)):
             raise malformed(f"its header's {name} is not text")
+    applied = value.get("applied")
+    if applied is not None and not (
+        isinstance(applied, list) and all(_is_migration(row) for row in applied)
+    ):
+        raise malformed("its header lists applied migrations in an unknown shape")
+    checkpoint = value.get("checkpoint")
+    if checkpoint is not None and not (
+        isinstance(checkpoint, dict)
+        and _is_text(checkpoint.get("role"))
+        and isinstance(checkpoint.get("plan"), list)
+        and all(_is_text(step) for step in checkpoint["plan"])
+    ):
+        raise malformed("its header describes a checkpoint in an unknown shape")
     return value
+
+
+def _is_migration(row) -> bool:
+    return isinstance(row, list) and len(row) == 2 and all(_is_text(part) for part in row)
 
 
 def checked_entry(value) -> FileEntry:

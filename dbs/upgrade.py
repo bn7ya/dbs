@@ -1003,6 +1003,40 @@ class ApplicationName(Step):
         )
 
 
+class MigrationCheckpoints(Step):
+    name = "migration checkpoints"
+    since = "0.9.0"
+
+    def check(self):
+        from django.core.management import get_commands
+
+        from . import checkpoints
+        from .retention import maximum_keep
+
+        if not checkpoints.enabled():
+            return self.ok(
+                f"migrate and dbs restore keep no checkpoints ({checkpoints.SETTING} is off)"
+            )
+        if not checkpoints.directory():
+            return self.warn(
+                "migrate and dbs restore keep no checkpoint of the database before and "
+                "after they change it, because DBS_BACKUP_DIR is not set",
+                'DBS_BACKUP_DIR = BASE_DIR / "backups"  # or '
+                f"{checkpoints.SETTING} = False to say none is wanted",
+            )
+        owner = get_commands().get("migrate")
+        flag = (
+            "migrate --no-checkpoint skips one"
+            if owner == checkpoints.OWN_APP
+            else f"{owner} provides migrate, so only the setting skips them"
+        )
+        return self.ok(
+            "migrate and dbs restore keep a checkpoint of the database before and after "
+            f"they change it, {maximum_keep()} at most; {flag}, and "
+            f"{checkpoints.SETTING} = False switches them off"
+        )
+
+
 STEPS = (
     InstalledApp,
     Migrations,
@@ -1029,6 +1063,7 @@ STEPS = (
     KeepAtMostFive,
     MaximumBackups,
     ApplicationName,
+    MigrationCheckpoints,
     AuditChain,
     ContribViewsRemoved,
     CommandNames,

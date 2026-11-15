@@ -10,6 +10,7 @@ settings. `DBS_PASSPHRASE` is also read straight from the environment.
 | `DBS_BACKUP_DIR` | none | Where backups are kept (at most `DBS_MAX_BACKUPS`), restored from in the panel and checked by health. The schedule, *Take a backup*, `dbs backup --stream` and health need it |
 | `DBS_MAX_BACKUPS` | `5` | The most backups the backup folder keeps, from 1 to 10,000. The schedule, `dbs schedule --keep` and `dbs backup --stream` keep up to it |
 | `DBS_BACKUP_PREFIX` | `"backup"` | The file name prefix, so several projects can share a folder |
+| `DBS_MIGRATION_CHECKPOINTS` | `True` | Keep a backup of the database before and after every `migrate` that applies something and every `dbs restore`, in `DBS_BACKUP_DIR`. `False` keeps none; so does a project with no `DBS_BACKUP_DIR` |
 | `DBS_APPLICATION` | the project's package | The name every backup records as the application it belongs to. A restore refuses a backup that records another name. Unset, it is the first part of `ROOT_URLCONF`; set it before the first backup when that name is one other projects share, such as `config` |
 | `DBS_SCHEDULER` | `"thread"` | Where the panel's schedule runs: `"thread"` (in the web workers), `"command"` (`dbs schedule`) or `"off"` |
 | `DBS_SCHEDULE_INTERVAL` | `"24h"` | Seeds the panel's first schedule, and the default interval of `dbs schedule` with plan flags |

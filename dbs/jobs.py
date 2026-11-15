@@ -327,7 +327,7 @@ def _take_backup(job, runner, output, stem, database, passphrase, note, actor):
 
 
 def _restore(job, runner, path, passphrase, dry_run, flush, owned):
-    from .engine import restore_backup
+    from . import checkpoints
     from .io import file_digest
     from .keys import with_passphrase
 
@@ -336,7 +336,9 @@ def _restore(job, runner, path, passphrase, dry_run, flush, owned):
             size, digest = file_digest(path)
             job.data.update(size=size, sha256=digest)
             result = with_passphrase(
-                lambda secret: restore_backup(path, secret, dry_run=dry_run, flush=flush),
+                lambda secret: checkpoints.restore(
+                    path, secret, stdout=NoOutput(), dry_run=dry_run, flush=flush
+                ),
                 passphrase or None,
             )
             job.data.update(restore_outcome(result, dry_run))
@@ -346,6 +348,11 @@ def _restore(job, runner, path, passphrase, dry_run, flush, owned):
         if owned:
             _remove(path)
         runner.release()
+
+
+class NoOutput:
+    def write(self, text):
+        return len(text)
 
 
 def restore_outcome(result, dry_run):
