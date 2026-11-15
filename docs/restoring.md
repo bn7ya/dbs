@@ -43,6 +43,31 @@ run.
 `--no-data` restores only the files, `--no-files` only the rows, and `--database ALIAS`
 restores into another database.
 
+### A backup belongs to its application
+
+Every backup written by 0.9.0 or later records the application it belongs to: the name in
+`DBS_APPLICATION`, or the project's package (the first part of `ROOT_URLCONF`) when that is not
+set. A restore, a dry run included, refuses a backup that records another name, and one that
+records this name but holds none of this project's own models. Two projects that share a
+`SECRET_KEY` can each decrypt the other's backups; neither can restore them by accident.
+
+```
+Restore failed: This backup belongs to the application 'shop', and this project is 'depot'.
+```
+
+The same project on another server, in another folder or on another database is the same
+application, so moving it and restoring it elsewhere need nothing. When a backup really is meant
+for another application, such as after renaming the project's package, say so:
+
+```bash
+python manage.py dbs restore backup.dbs --another-application
+```
+
+or set `DBS_APPLICATION` to the name the backups record. Set it before the first backup when the
+package has a name other projects share, such as `config`; `manage.py dbs upgrade --check` says
+when it does. A backup written before 0.9.0 records no application and restores as it always
+did. `manage.py dbs validate FILE --passphrase` names the application a backup records.
+
 ### Signals during a restore
 
 Rows are saved the way `loaddata` saves them, with `raw=True`. A `post_save` receiver with side

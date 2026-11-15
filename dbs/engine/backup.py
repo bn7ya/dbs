@@ -24,6 +24,7 @@ from ..container.stream import MAX_WINDOW_BYTES, StreamLayout, layout_problem
 from ..crypto.kdf import KDFParams
 from ..exceptions import BackupError, CorruptionError, MissingSourceFiles
 from ..files import SkippedFile, list_instance_files, list_root_files, read_chunks
+from ..identity import HEADER_KEY, application_name
 from ..introspect import _label
 from ..io import create_new_file
 from ..registry import backup_registry
@@ -286,18 +287,7 @@ def _produce(emit, selection, *, using: str, skipped: list, allow_missing_files:
         if pin_snapshot:
             read_from_one_snapshot(connection)
         emit(frames.PAYLOAD_MAGIC)
-        emit(
-            frames.json_frame(
-                frames.HEADER,
-                {
-                    "version": frames.PAYLOAD_VERSION,
-                    "created": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "django_version": django.get_version(),
-                    "migrations": migration_state(connection),
-                    "order": [_label(model) for model, _config in selection],
-                },
-            )
-        )
+        emit(frames.json_frame(frames.HEADER, _header(connection, selection)))
         sources = _listed_files(selection, using, skipped)
         if skipped and not allow_missing_files:
             raise MissingSourceFiles(_missing_files_message(skipped), skipped)
@@ -326,6 +316,20 @@ def _produce(emit, selection, *, using: str, skipped: list, allow_missing_files:
     }
     emit(frames.json_frame(frames.TRAILER, {"stats": stats}))
     return stats
+
+
+def _header(connection, selection) -> dict:
+    header = {
+        "version": frames.PAYLOAD_VERSION,
+        "created": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "django_version": django.get_version(),
+        "migrations": migration_state(connection),
+        "order": [_label(model) for model, _config in selection],
+    }
+    application = application_name()
+    if application:
+        header[HEADER_KEY] = application
+    return header
 
 
 def _listed_files(selection, using: str, skipped: list) -> list:

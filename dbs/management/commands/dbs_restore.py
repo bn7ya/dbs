@@ -24,6 +24,7 @@ class Command(BaseCommand):
         parser.add_argument("--no-files", action="store_true", help="Do not write files back.")
         parser.add_argument("--dry-run", action="store_true", help="Read, decrypt and rehearse the restore in a rolled-back transaction, then change nothing.")
         parser.add_argument("--flush", action="store_true", help="Delete existing rows of the backed-up models before loading, so the restore replaces instead of merges.")
+        parser.add_argument("--another-application", action="store_true", help="Load a backup that records another application than this project, which is refused otherwise.")
 
     def handle(self, *args, **options):
         passphrase = resolve_read_passphrase(
@@ -55,6 +56,7 @@ class Command(BaseCommand):
                         write_files=not options["no_files"],
                         dry_run=options["dry_run"],
                         flush=options["flush"],
+                        another_application=options.get("another_application", False),
                     ),
                     passphrase,
                 )

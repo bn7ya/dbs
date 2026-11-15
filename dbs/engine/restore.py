@@ -16,8 +16,9 @@ from ..container.blocks import BlockPlan, RepairReport
 from ..container.format import STREAM_FORMAT_VERSION, read_container
 from ..crypto import decrypt_payload
 from ..crypto.envelope import EnvelopeMaterial
-from ..exceptions import ContainerError, CorruptionError, RestoreError
+from ..exceptions import ContainerError, CorruptionError, ForeignBackup, RestoreError
 from ..files import StagedFiles, plan_entries, plan_restore, refusal_message
+from ..identity import foreign_reason
 from ..introspect import backup_plan, excluded_fields, topological_order
 from ..registry import ModelBackup, backup_registry
 from ..serialize import (
@@ -166,6 +167,15 @@ def open_stream(handle, passphrase: str, *, check_spares: bool = False):
         yield reader, payload
 
 
+def refuse_foreign(header: dict, labels: list) -> None:
+    reason = foreign_reason(header, labels)
+    if reason:
+        raise ForeignBackup(
+            f"{reason} Restore it in the application it was taken from, or pass "
+            "another_application=True (--another-application) to load it here."
+        )
+
+
 def _decompress_bounded(body: bytes) -> bytes:
     limit = setting("DBS_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES)
     decompressor = zlib.decompressobj()
@@ -190,6 +200,7 @@ def restore_backup(
     dry_run: bool = False,
     flush: bool = False,
     registry=None,
+    another_application: bool = False,
 ) -> RestoreResult:
     """Restore database rows and files from the backup in ``data``.
 
@@ -204,7 +215,9 @@ def restore_backup(
     any row loads; files are staged beside their targets and moved into place
     when the rows commit. ``dry_run`` runs the same checks, lists refused files
     in ``files_refused`` and rehearses the load in a transaction it rolls back,
-    changing nothing.
+    changing nothing. A backup that records another application than this
+    project raises ``ForeignBackup`` before anything is read further, in a dry
+    run too, unless ``another_application`` is true.
     """
     return restore_translated(
         data,
@@ -216,6 +229,7 @@ def restore_backup(
         dry_run=dry_run,
         flush=flush,
         registry=registry,
+        another_application=another_application,
     )
 
 
@@ -230,6 +244,7 @@ def restore_translated(
     dry_run: bool = False,
     flush: bool = False,
     registry=None,
+    another_application: bool = False,
 ) -> RestoreResult:
     options = {
         "using": using,
@@ -239,6 +254,7 @@ def restore_translated(
         "flush": flush,
         "registry": registry or backup_registry,
         "translation": translation,
+        "another_application": another_application,
     }
     with opened(data) as handle:
         if read_format_version(handle) == STREAM_FORMAT_VERSION:
@@ -257,6 +273,7 @@ def _restore_v1(
     flush: bool,
     registry,
     translation,
+    another_application: bool,
 ) -> RestoreResult:
     result = _read_v1_payload(data, passphrase)
     out = RestoreResult(repair_report=result.repair_report)
@@ -266,6 +283,8 @@ def _restore_v1(
         **result.document,
         "order": translation.labels(result.document.get("order") or []),
     }
+    if not another_application:
+        refuse_foreign(result.document, document["order"])
     translated = [
         found for record in result.records for found in translation.records(record)
     ]
@@ -341,12 +360,15 @@ def _restore_stream(
     flush: bool,
     registry,
     translation,
+    another_application: bool,
 ) -> RestoreResult:
     out = RestoreResult()
     with open_stream(handle, passphrase) as (reader, payload):
         header = payload.read_header()
-        _warn_on_environment_drift(header, connections[using])
         order = translation.labels(header["order"])
+        if not another_application:
+            refuse_foreign(header, order)
+        _warn_on_environment_drift(header, connections[using])
         backup_models = _models_named(order)
         out.preexisting_models = [
             model._meta.label_lower

@@ -975,6 +975,34 @@ class MaximumBackups(Step):
         )
 
 
+class ApplicationName(Step):
+    name = "application name"
+    since = "0.9.0"
+
+    def check(self):
+        from .identity import SETTING, SHARED_NAMES, application_name, is_named_by_setting
+
+        name = application_name()
+        if not name:
+            return self.warn(
+                "backups cannot record which application they belong to, because this "
+                "project has no ROOT_URLCONF or settings module to name it after",
+                f'{SETTING} = "a-name-of-its-own"',
+            )
+        if not is_named_by_setting() and name.lower() in SHARED_NAMES:
+            return self.warn(
+                f"backups record the application {name!r}, after the project's package, "
+                "a name other projects share; a backup of one of them would not be told "
+                "apart by its name",
+                f'{SETTING} = "a-name-of-its-own"  # before the next backup: a restore '
+                "refuses a backup that records another name",
+            )
+        return self.ok(
+            f"backups record the application {name!r}, and a restore refuses a backup "
+            "that records another"
+        )
+
+
 STEPS = (
     InstalledApp,
     Migrations,
@@ -1000,6 +1028,7 @@ STEPS = (
     PulledBackups,
     KeepAtMostFive,
     MaximumBackups,
+    ApplicationName,
     AuditChain,
     ContribViewsRemoved,
     CommandNames,

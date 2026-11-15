@@ -140,7 +140,7 @@ def checked_header(value) -> dict:
         and all(_is_text(app) and _is_text(name) for app, name in migrations.items())
     ):
         raise malformed("its header records migrations in an unknown shape")
-    for name in ("created", "django_version"):
+    for name in ("created", "django_version", "application"):
         if not _optional_text(value.get(name)):
             raise malformed(f"its header's {name} is not text")
     return value

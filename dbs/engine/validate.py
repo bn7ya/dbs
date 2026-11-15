@@ -6,6 +6,7 @@ from ..container import StreamReader, read_format_version, repair_copies
 from ..container.blocks import BlockPlan, RepairReport
 from ..container.format import STREAM_FORMAT_VERSION, read_container
 from ..exceptions import DBSError
+from ..identity import recorded_application
 from .frames import malformed
 from .inputs import opened, stream_source, whole
 
@@ -17,6 +18,7 @@ class ValidationResult:
     decrypted_ok: bool | None = None
     stats: dict = field(default_factory=dict)
     messages: list = field(default_factory=list)
+    application: str = ""
 
     def summary(self) -> str:
         lines = []
@@ -26,6 +28,8 @@ class ValidationResult:
             lines.append("Decryption + payload hash: OK")
         elif self.decrypted_ok is False:
             lines.append("Decryption + payload hash: FAILED")
+        if self.application:
+            lines.append(f"Application: {self.application}")
         lines.extend(self.messages)
         verdict = "VALID" if self.ok else "INVALID"
         return f"[{verdict}] " + " | ".join(lines)
@@ -93,6 +97,7 @@ def _validate_stream(handle, passphrase: str | None) -> ValidationResult:
     try:
         with read_frames(reader, source, check_spares=True) as payload:
             result.stats = _read_through(payload)
+            result.application = recorded_application(payload.header)
     except DBSError as exc:
         result.messages.append(str(exc))
     else:

@@ -135,6 +135,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 DBS_SCHEDULER = "off"
+DBS_APPLICATION = "dbs-manager"
 DBS_EXCLUDE_MODELS = ["-dbs.auditevent", "-dbs.backuprecord"]
 DBS_MANAGER_JOBS_INLINE = False
 DBS_MANAGER_TERMINAL = os.environ.get(TERMINAL_ENV, "").strip().lower() or "admins"
