@@ -8,7 +8,7 @@ from django.db import models
 
 from .crypto.secrets import encrypt_secret, is_encrypted, looks_sealed
 from .naming import DEFAULT_PREFIX
-from .retention import MAXIMUM_KEEP
+from .retention import KEEP_LIMIT, MAXIMUM_KEEP, bounded_keep, default_keep
 
 SECRET_PLACEHOLDER = "<unreadable>"
 
@@ -170,7 +170,7 @@ class BackupSchedule(models.Model):
     interval = models.CharField(max_length=16, default="24h")
     keep = models.PositiveIntegerField(
         default=MAXIMUM_KEEP,
-        validators=[MinValueValidator(1), MaxValueValidator(MAXIMUM_KEEP)],
+        validators=[MinValueValidator(1), MaxValueValidator(KEEP_LIMIT)],
     )
     database = models.CharField(max_length=64, default="default")
     next_run_at = models.DateTimeField(null=True, blank=True)
@@ -202,18 +202,14 @@ class BackupSchedule(models.Model):
             pk=1,
             defaults={
                 "interval": str(setting("DBS_SCHEDULE_INTERVAL", "24h")),
-                "keep": cls.seed_keep(setting("DBS_SCHEDULE_KEEP", MAXIMUM_KEEP)),
+                "keep": cls.seed_keep(setting("DBS_SCHEDULE_KEEP", default_keep())),
             },
         )
         return schedule
 
     @staticmethod
     def seed_keep(value):
-        try:
-            keep = int(value)
-        except (TypeError, ValueError):
-            return MAXIMUM_KEEP
-        return min(max(keep, 1), MAXIMUM_KEEP)
+        return bounded_keep(value)
 
     @property
     def interval_seconds(self):

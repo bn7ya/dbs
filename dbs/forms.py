@@ -9,7 +9,7 @@ from django.db import connections
 
 from .exceptions import ConfigurationError
 from .models import BackupSchedule, SecurityLevel
-from .retention import MAXIMUM_KEEP
+from .retention import MAXIMUM_SETTING, maximum_keep
 from .security.guard import MINIMUM_PREFIX
 
 
@@ -162,8 +162,13 @@ class BackupScheduleForm(forms.ModelForm):
         fields = ("enabled", "interval", "keep", "database")
         help_texts = {
             "interval": "How often to back up: 30m, 6h, 1d.",
-            "keep": f"How many backups to keep in DBS_BACKUP_DIR, at most {MAXIMUM_KEEP}.",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["keep"].help_text = (
+            f"How many backups to keep in DBS_BACKUP_DIR, at most {maximum_keep()}."
+        )
 
     def clean_interval(self):
         from .scheduling import parse_interval
@@ -182,9 +187,11 @@ class BackupScheduleForm(forms.ModelForm):
         keep = self.cleaned_data["keep"]
         if keep < 1:
             raise forms.ValidationError("Keep at least one backup.")
-        if keep > MAXIMUM_KEEP:
+        maximum = maximum_keep()
+        if keep > maximum:
             raise forms.ValidationError(
-                f"The server keeps at most {MAXIMUM_KEEP} backups in DBS_BACKUP_DIR."
+                f"The server keeps at most {maximum} backups in DBS_BACKUP_DIR "
+                f"({MAXIMUM_SETTING})."
             )
         return keep
 

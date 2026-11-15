@@ -17,7 +17,7 @@ from dbs.engine import write_backup
 from dbs.engine.backup import verify_written
 from dbs.exceptions import DBSError
 from dbs.naming import DEFAULT_PREFIX, backup_filename, is_backup_name
-from dbs.retention import MAXIMUM_KEEP
+from dbs.retention import maximum_keep
 from dbs.schedule_runner import keep_at_most
 from dbs.tee import Progress, TeeSink, sweep_partials
 
@@ -207,7 +207,7 @@ class Command(BaseCommand):
             if kept.stream_lost:
                 entry.data["kept_on_server"] = True
             audit.record_backup(kept.path, kept.size, kept.sha256, options["database"])
-        keep_at_most(directory, prefix, MAXIMUM_KEEP, kept.name)
+        keep_at_most(directory, prefix, maximum_keep(), kept.name)
 
         if kept.stream_lost:
             silence(output)

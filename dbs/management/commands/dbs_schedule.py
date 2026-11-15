@@ -12,7 +12,7 @@ from dbs.crypto.kdf import KDFParams
 from dbs import schedule_runner
 from dbs.exceptions import ConfigurationError, DBSError
 from dbs.naming import DEFAULT_PREFIX
-from dbs.retention import MAXIMUM_KEEP, server_keep
+from dbs.retention import default_keep, server_keep
 from dbs.scheduling import install_stop_handlers, parse_interval, run_schedule
 
 logger = logging.getLogger("dbs")
@@ -28,7 +28,7 @@ class Command(BaseCommand):
         parser.add_argument("--interval", default=None, help="How often to back up: 90s, 30m, 6h, 1d.")
         parser.add_argument("--output-dir", default=None, help="Directory the backups are written to.")
         parser.add_argument("--prefix", default=None, help="Filename prefix for this project.")
-        parser.add_argument("--keep", type=int, default=None, help=f"How many backups to retain, 1 to {MAXIMUM_KEEP}.")
+        parser.add_argument("--keep", type=int, default=None, help="How many backups to retain, 1 to DBS_MAX_BACKUPS (5 unless set).")
         parser.add_argument("--database", default="default", help="Database alias to back up.")
         parser.add_argument("--no-compress", action="store_true", help="Disable zlib compression.")
         parser.add_argument("--no-verify", action="store_true", help="Skip the verify-after-write check.")
@@ -103,7 +103,7 @@ class Command(BaseCommand):
         if options["keep"] is not None:
             source, value = "--keep", options["keep"]
         else:
-            source, value = "DBS_SCHEDULE_KEEP", setting("DBS_SCHEDULE_KEEP", MAXIMUM_KEEP)
+            source, value = "DBS_SCHEDULE_KEEP", setting("DBS_SCHEDULE_KEEP", default_keep())
         try:
             return server_keep(value)
         except ConfigurationError as exc:

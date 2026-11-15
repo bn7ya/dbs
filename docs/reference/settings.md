@@ -7,11 +7,12 @@ settings. `DBS_PASSPHRASE` is also read straight from the environment.
 
 | Setting | Default | |
 |---|---|---|
-| `DBS_BACKUP_DIR` | none | Where backups are kept (at most five), restored from in the panel and checked by health. The schedule, *Take a backup*, `dbs backup --stream` and health need it |
+| `DBS_BACKUP_DIR` | none | Where backups are kept (at most `DBS_MAX_BACKUPS`), restored from in the panel and checked by health. The schedule, *Take a backup*, `dbs backup --stream` and health need it |
+| `DBS_MAX_BACKUPS` | `5` | The most backups the backup folder keeps, from 1 to 10,000. The schedule, `dbs schedule --keep` and `dbs backup --stream` keep up to it |
 | `DBS_BACKUP_PREFIX` | `"backup"` | The file name prefix, so several projects can share a folder |
 | `DBS_SCHEDULER` | `"thread"` | Where the panel's schedule runs: `"thread"` (in the web workers), `"command"` (`dbs schedule`) or `"off"` |
 | `DBS_SCHEDULE_INTERVAL` | `"24h"` | Seeds the panel's first schedule, and the default interval of `dbs schedule` with plan flags |
-| `DBS_SCHEDULE_KEEP` | `5` | Seeds the panel's first schedule, and how many `dbs schedule` keeps: 1 to 5 |
+| `DBS_SCHEDULE_KEEP` | `5` | Seeds the panel's first schedule, and how many `dbs schedule` keeps: 1 to `DBS_MAX_BACKUPS` |
 
 ## What to back up
 

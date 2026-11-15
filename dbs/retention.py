@@ -8,12 +8,15 @@ import time
 from dataclasses import dataclass
 from typing import Iterable
 
+from .conf import setting
 from .exceptions import ConfigurationError, ContainerError
 from .naming import is_backup_name, parse_backup_moment, sorted_backups
 
 logger = logging.getLogger("dbs")
 
 MAXIMUM_KEEP = 5
+KEEP_LIMIT = 10000
+MAXIMUM_SETTING = "DBS_MAX_BACKUPS"
 PASSED = "passed"
 FAILED = "failed"
 UNKNOWN = "unknown"
@@ -33,15 +36,45 @@ def utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
-def server_keep(keep) -> int:
+def whole_number(value):
+    if isinstance(value, bool):
+        return None
     try:
-        count = int(keep)
+        return int(value)
     except (TypeError, ValueError):
-        count = 0
-    if not 1 <= count <= MAXIMUM_KEEP:
+        return None
+
+
+def is_valid_maximum(value) -> bool:
+    count = whole_number(value)
+    return count is not None and 1 <= count <= KEEP_LIMIT
+
+
+def maximum_keep() -> int:
+    count = whole_number(setting(MAXIMUM_SETTING, MAXIMUM_KEEP))
+    if count is None:
+        return MAXIMUM_KEEP
+    return min(max(count, 1), KEEP_LIMIT)
+
+
+def default_keep() -> int:
+    return min(MAXIMUM_KEEP, maximum_keep())
+
+
+def bounded_keep(value) -> int:
+    count = whole_number(value)
+    if count is None:
+        return default_keep()
+    return min(max(count, 1), maximum_keep())
+
+
+def server_keep(keep) -> int:
+    maximum = maximum_keep()
+    count = whole_number(keep) or 0
+    if not 1 <= count <= maximum:
         raise ConfigurationError(
-            f"Keep between 1 and {MAXIMUM_KEEP} backups, not {keep}: the server keeps at "
-            f"most {MAXIMUM_KEEP} backups in its backup folder."
+            f"Keep between 1 and {maximum} backups, not {keep}: the server keeps at "
+            f"most {maximum} backups in its backup folder ({MAXIMUM_SETTING})."
         )
     return count
 

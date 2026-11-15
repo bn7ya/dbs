@@ -93,6 +93,7 @@ def report(now=None):
 
 
 def _schedule_facts(schedule):
+    from .retention import maximum_keep
     from .schedule_runner import mode
 
     return {
@@ -100,6 +101,7 @@ def _schedule_facts(schedule):
         "interval_seconds": int(schedule.interval_seconds),
         "keep": int(schedule.keep),
         "mode": mode(),
+        "max_backups": maximum_keep(),
     }
 
 
