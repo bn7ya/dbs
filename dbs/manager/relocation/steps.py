@@ -715,7 +715,10 @@ class Move:
         requirements = self.staged(("\n".join(lines) + "\n").encode(), "requirements.txt")
         interpreter = packages.python_command(self.system(), python.get("version", ""))
         try:
-            self.target_root.run(catalogue.make_venv(interpreter, python["target_venv"]))
+            self.target_root.run(
+                catalogue.make_venv(interpreter, python["target_venv"]),
+                timeout=settings.BACKUP_EXEC_TIMEOUT,
+            )
             venv_python = posixpath.join(python["target_venv"], "bin", "python")
             self.target_root.run(
                 catalogue.pip_install(venv_python, requirements, plan["folder"]["target"]),
