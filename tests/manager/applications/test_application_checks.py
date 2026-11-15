@@ -86,6 +86,7 @@ def test_an_application_with_everything_in_place_is_ok(
         "dbs_error": "",
         "python_suggestion": None,
         "backup_command": True,
+        "max_backups": None,
         "env_file": True,
         "roots": {MEDIA_ROOT: True},
         "remote_backup_dir": True,
@@ -174,6 +175,7 @@ def test_a_probe_that_fails_marks_only_its_own_item(api, monkeypatch, applicatio
         "dbs_error": "ModuleNotFoundError: No module named 'dbs'",
         "python_suggestion": None,
         "backup_command": False,
+        "max_backups": None,
         "env_file": True,
         "roots": {MEDIA_ROOT: True},
         "remote_backup_dir": False,
@@ -226,6 +228,7 @@ def test_what_is_not_configured_is_not_looked_at(api, admin, monkeypatch, server
         "dbs_error": "",
         "python_suggestion": None,
         "backup_command": None,
+        "max_backups": None,
         "env_file": None,
         "roots": {},
         "remote_backup_dir": True,
@@ -385,3 +388,57 @@ def test_the_check_names_what_it_found_and_what_disagrees(
     ]
     assert report["problems"] == []
     assert report["facts"]["git"] is None
+
+
+CONNECTION_ARGV = (PYTHON, "manage.py", "dbs", "connection", "--json")
+
+
+def reporting_limit(version, connection):
+    remote = remote_with(version)
+    if connection is not None:
+        remote.answers[CONNECTION_ARGV] = connection
+    return remote
+
+
+@pytest.mark.django_db
+def test_the_check_keeps_how_many_backups_the_server_allows(api, monkeypatch, application):
+    details = json.dumps({"dbs_connection": 2, "max_backups": 40})
+    remote = reporting_limit("0.9.0", Result(0, details + "\n"))
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+
+    report = api.post(check(application.pk)).json()["last_check_report"]
+
+    assert report["max_backups"] == 40
+
+
+@pytest.mark.django_db
+def test_a_server_before_the_limit_could_be_set_is_not_asked(api, monkeypatch, application):
+    remote = reporting_limit("0.8.3", None)
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+
+    report = api.post(check(application.pk)).json()["last_check_report"]
+
+    assert report["max_backups"] is None
+    assert list(CONNECTION_ARGV) not in [run["argv"] for run in remote.runs]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "answer",
+    [
+        Result(1, "", "CommandError: no such command\n"),
+        Result(0, "not json\n"),
+        Result(0, json.dumps({"dbs_connection": 2}) + "\n"),
+        Result(0, json.dumps({"max_backups": 20000}) + "\n"),
+        Result(0, json.dumps(["max_backups"]) + "\n"),
+    ],
+)
+def test_a_limit_the_server_does_not_report_usably_is_left_unknown(
+    api, monkeypatch, application, answer
+):
+    remote = reporting_limit("0.9.0", answer)
+    monkeypatch.setattr(CONNECT, connecting_to(remote))
+
+    body = api.post(check(application.pk)).json()
+
+    assert body["last_check_report"]["max_backups"] is None

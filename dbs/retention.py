@@ -50,11 +50,15 @@ def is_valid_maximum(value) -> bool:
     return count is not None and 1 <= count <= KEEP_LIMIT
 
 
-def maximum_keep() -> int:
-    count = whole_number(setting(MAXIMUM_SETTING, MAXIMUM_KEEP))
+def keep_limit(value) -> int:
+    count = whole_number(value)
     if count is None:
         return MAXIMUM_KEEP
     return min(max(count, 1), KEEP_LIMIT)
+
+
+def maximum_keep() -> int:
+    return keep_limit(setting(MAXIMUM_SETTING, MAXIMUM_KEEP))
 
 
 def default_keep() -> int:

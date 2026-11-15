@@ -65,15 +65,36 @@ def test_keeping_more_asks_nothing(terminal, plan):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    "option", [("--keep", "0"), ("--keep", "6"), ("--keep-remote", "6")]
+    "option",
+    [("--keep", "0"), ("--keep", "10001"), ("--keep", "many"), ("--keep-remote", "10001")],
 )
-def test_the_terminal_keeps_one_to_five(terminal, capsys, plan, option):
+def test_the_terminal_keeps_one_to_ten_thousand(terminal, capsys, plan, option):
     with pytest.raises(SystemExit) as stopped:
         terminal("plan", "add", "shop", "weekly", "--kind", "dbs", *option)
 
     assert stopped.value.code == 2
-    assert "invalid choice" in capsys.readouterr().err
+    assert "is not a number from" in capsys.readouterr().err
     assert BackupPlan.objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("option", [("--keep", "6"), ("--keep-remote", "6")])
+def test_the_terminal_keeps_no_more_than_the_limits_allow(terminal, plan, option):
+    ran = terminal("plan", "add", "shop", "weekly", "--kind", "dbs", *option)
+
+    assert ran.code != 0
+    assert "at most 5" in ran.err
+    assert BackupPlan.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_the_terminal_keeps_more_once_the_manager_allows_it(terminal, settings, plan):
+    settings.BACKUP_KEEP_MAX = 40
+
+    ran = terminal("plan", "add", "shop", "weekly", "--kind", "dbs", "--keep", "40")
+
+    assert ran.code == 0, ran.err
+    assert BackupPlan.objects.get(name="weekly").keep == 40
 
 
 @pytest.fixture

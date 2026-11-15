@@ -1,6 +1,7 @@
 from .backup_file import BackupFile
 from .backup_plan import (
-    PLAN_KEEP_MAX,
+    PLAN_KEEP_DEFAULT,
+    PLAN_KEEP_LIMIT,
     PLAN_KEEP_MIN,
     PLAN_KEEP_REMOTE_MIN,
     PLAN_PATH_MAX_LENGTH,
@@ -11,7 +12,8 @@ from .backup_plan import (
 )
 
 __all__ = [
-    "PLAN_KEEP_MAX",
+    "PLAN_KEEP_DEFAULT",
+    "PLAN_KEEP_LIMIT",
     "PLAN_KEEP_MIN",
     "PLAN_KEEP_REMOTE_MIN",
     "PLAN_PATHS_MAX",

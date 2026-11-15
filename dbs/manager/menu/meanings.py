@@ -94,6 +94,8 @@ COMMON = {
     "--path": Meaning(TEXT),
     "--pattern": Meaning(TEXT),
     "--every": Meaning(TEXT),
+    "--keep": Meaning(TEXT),
+    "--keep-remote": Meaning(TEXT),
     "--first-run": Meaning(TEXT),
     "--time-zone": Meaning(TEXT),
     "--output": Meaning(LOCAL_TARGET),

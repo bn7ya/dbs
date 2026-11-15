@@ -153,14 +153,16 @@ PLAN_FIELDS = {
     "keep": {
         "type": "integer",
         "minimum": 1,
-        "maximum": 5,
-        "description": "How many to keep here, 1 to 5.",
+        "maximum": 10000,
+        "description": "How many to keep here, from 1 to the manager's limit: 5 unless "
+        "DBS_MANAGER_MAX_BACKUPS is set.",
     },
     "keep_remote": {
         "type": "integer",
         "minimum": 0,
-        "maximum": 5,
-        "description": "How many to keep on the server, 0 to 5.",
+        "maximum": 10000,
+        "description": "How many to keep on the server, from 0 to the server's limit: 5 "
+        "unless its DBS_MAX_BACKUPS is set.",
     },
     "enabled": {"type": "boolean"},
     "anchor_at": {

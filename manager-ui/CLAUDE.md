@@ -443,7 +443,8 @@ role cannot take are left out with `*appCan`.
   broke says the backup is kept on the server and collected next time, one that resumed after it
   broke says so; a quarantined file shows its reason and is never offered for restore. The schedule
   tab lists the plans (django-dbs, folders, or files collected from one folder): how often or
-  manual, keeping 1 to 5 here and 0 to 5 on the server, on or paused, the next run in the plan's
+  manual, keeping here up to the manager's limit and on the server up to the server's (`GET
+  /api/backups/plans/limits/`, 5 each unless raised), on or paused, the next run in the plan's
   time zone with the reader's own time beside it when it differs (`NextRun`), and the last run. Run
   now needs `plans.run`; the row's menu (Pause or Resume, Reschedule, Edit, Delete) needs
   `plans.manage`. `PlanForm` adds a first run (`MomentFields`: a `mat-datepicker` and a
@@ -577,7 +578,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, application_name?, target_application?}` → 202 `{activity}` |
 | DELETE | `/api/backups/{id}/` | `{account_password}` → 204 |
 | POST | `/api/backups/{id}/undo-delete/` | → `BackupFile` |
-| GET/POST | `/api/backups/plans/?application=` | `PlanCreate` (`application, name, kind, paths?, pattern?, interval_minutes\|null, keep 1–5, keep_remote 0–5, enabled?, anchor_at?, time_zone?, account_password?`) → `BackupPlan` (`…, anchor_at, time_zone, next_run_at, last_run_at, last_status, last_error_code`) |
+| GET/POST | `/api/backups/plans/?application=` | `PlanCreate` (`application, name, kind, paths?, pattern?, interval_minutes\|null, keep, keep_remote (within `/api/backups/plans/limits/?application=` → `{keep: {min, max}, keep_remote: {min, max}}`), enabled?, anchor_at?, time_zone?, account_password?`) → `BackupPlan` (`…, anchor_at, time_zone, next_run_at, last_run_at, last_status, last_error_code`) |
 | PATCH/DELETE | `/api/backups/plans/{id}/` | `PlanUpdate` (`account_password` when it keeps fewer; `anchor_at` and `time_zone` move the beat) → `BackupPlan` |
 | POST | `/api/backups/plans/{id}/run/` | → 202 `{activity}` |
 | POST | `/api/backups/plans/{id}/reschedule/` | `{next_run_at}` (within a year) → `BackupPlan`; later runs follow from it |

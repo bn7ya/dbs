@@ -5,7 +5,7 @@ import type { Observable } from 'rxjs';
 import type { Page } from '@core/http/api.types';
 import type { JobStarted } from '@core/jobs/job.types';
 import type { UnfinishedJob } from './backups.types';
-import type { BackupPlan, PlanCreate, PlanListQuery, PlanUpdate, Reschedule } from './plans.types';
+import type { BackupPlan, PlanCreate, PlanLimits, PlanListQuery, PlanUpdate, Reschedule } from './plans.types';
 
 const UNFINISHED_RUNS_PAGE_SIZE = 100;
 
@@ -22,6 +22,11 @@ export class PlansApi {
       .set('page', query.page)
       .set('page_size', query.page_size);
     return this.http.get<Page<BackupPlan>>(`${this.base}/`, { params });
+  }
+
+  limits(application: string): Observable<PlanLimits> {
+    const params = new HttpParams().set('application', application);
+    return this.http.get<PlanLimits>(`${this.base}/limits/`, { params });
   }
 
   create(plan: PlanCreate): Observable<BackupPlan> {

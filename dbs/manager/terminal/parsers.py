@@ -10,8 +10,7 @@ RESTORE_MODES = ("merge", "replace")
 PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
 ACTIVITY_LIMIT = 20
-KEEP_CHOICES = range(1, 6)
-KEEP_REMOTE_CHOICES = range(0, 6)
+KEEP_LIMIT = 10000
 
 LOCAL_HANDLERS = frozenset(
     {
@@ -25,6 +24,21 @@ LOCAL_HANDLERS = frozenset(
         "terminal.envfiles:reveal",
     }
 )
+
+
+def _within(low: int) -> Callable[[str], int]:
+    def count(text: str) -> int:
+        try:
+            value = int(text)
+        except ValueError:
+            value = low - 1
+        if not low <= value <= KEEP_LIMIT:
+            raise argparse.ArgumentTypeError(
+                f"{text!r} is not a number from {low} to {KEEP_LIMIT}"
+            )
+        return value
+
+    return count
 
 
 def _nothing(parser: argparse.ArgumentParser) -> None:
@@ -585,18 +599,17 @@ def _plan_fields(parser) -> None:
     parser.add_argument("--manual", action="store_true", help="Run only when asked.")
     parser.add_argument(
         "--keep",
-        type=int,
-        choices=KEEP_CHOICES,
+        type=_within(1),
         metavar="N",
-        help="How many to keep here, 1 to 5. Keeping fewer asks for your password.",
+        help="How many to keep here, from 1 to the manager's limit (5 unless "
+        "DBS_MANAGER_MAX_BACKUPS is set). Keeping fewer asks for your password.",
     )
     parser.add_argument(
         "--keep-remote",
-        type=int,
-        choices=KEEP_REMOTE_CHOICES,
+        type=_within(0),
         metavar="N",
-        help="How many to leave on the server, 0 to 5. Keeping fewer asks for your "
-        "password.",
+        help="How many to leave on the server, from 0 to the server's limit (5 unless "
+        "its DBS_MAX_BACKUPS is set). Keeping fewer asks for your password.",
     )
     parser.add_argument(
         "--first-run",

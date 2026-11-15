@@ -5,6 +5,7 @@ from dbs.manager.backups.views import (
     BackupListView,
     DownloadView,
     PlanDetailView,
+    PlanLimitsView,
     PlanListView,
     PlanPauseView,
     PlanRescheduleView,
@@ -24,6 +25,7 @@ urlpatterns = [
     path("take/", TakeView.as_view(), name="take"),
     path("upload/", UploadView.as_view(), name="upload"),
     path("plans/", PlanListView.as_view(), name="plan-list"),
+    path("plans/limits/", PlanLimitsView.as_view(), name="plan-limits"),
     path("plans/<uuid:pk>/", PlanDetailView.as_view(), name="plan-detail"),
     path("plans/<uuid:pk>/run/", PlanRunView.as_view(), name="plan-run"),
     path(

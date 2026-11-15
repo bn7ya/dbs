@@ -40,6 +40,16 @@ class PlanListView(ListAPIView):
         return Response(BackupPlanSerializer(plan).data, status=status.HTTP_201_CREATED)
 
 
+class PlanLimitsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        query = PlanFilterSerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        limits = BackupPlanService(request.user).limits(query.validated_data["application"])
+        return Response(limits)
+
+
 class PlanDetailView(APIView):
     permission_classes = [IsAuthenticated]
 

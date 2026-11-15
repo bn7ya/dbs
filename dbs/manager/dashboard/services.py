@@ -92,6 +92,7 @@ class DashboardService:
             "backups_dir": str(settings.BACKUP_STORAGE_DIR),
             "last_export_at": self.last_export_at(),
             "key_store": key_store(),
+            "max_backups": conf.backup_keep_max(),
         }
 
     def last_export_at(self):

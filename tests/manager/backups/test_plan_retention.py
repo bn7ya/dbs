@@ -66,7 +66,7 @@ def test_a_plan_keeps_one_to_five_here_and_up_to_five_there(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    ("field", "value"), [("keep", 0), ("keep", 6), ("keep_remote", 6)]
+    ("field", "value"), [("keep", 0), ("keep", 10001), ("keep_remote", 10001)]
 )
 def test_the_model_refuses_retention_out_of_range(make_plan, field, value):
     plan = make_plan()

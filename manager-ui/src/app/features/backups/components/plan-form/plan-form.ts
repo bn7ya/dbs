@@ -23,7 +23,9 @@ import {
   PLAN_SCHEDULES,
   scheduleOf,
   type BackupPlan,
+  type KeepRange,
   type PlanKind,
+  type PlanLimits,
   type PlanSchedule,
   type PlanSettings,
 } from '../../data/plans.types';
@@ -47,9 +49,9 @@ const FIELD_OF: Readonly<Record<keyof Draft, DraftField>> = {
   enabled: 'enabled',
 };
 
-const KEEP_MAX = 5;
-const KEEP_MIN = 1;
-const KEEP_REMOTE_MIN = 0;
+const KEEP_DEFAULT = 5;
+
+const RANGE_ERRORS: ReadonlySet<string> = new Set(['keep_range', 'keep_remote_range']);
 
 const SCHEDULES = Object.keys(PLAN_SCHEDULES) as PlanSchedule[];
 
@@ -101,9 +103,7 @@ export class PlanForm {
   readonly separators = [ENTER, COMMA];
   readonly kinds = KINDS;
 
-  readonly keepMin = KEEP_MIN;
-  readonly keepRemoteMin = KEEP_REMOTE_MIN;
-  readonly keepMax = KEEP_MAX;
+  readonly limits = this.store.limits;
 
   private readonly zones = timeZoneNames(this.localZone, this.editing?.time_zone ?? '');
 
@@ -120,7 +120,7 @@ export class PlanForm {
           firstDay: null,
           firstTime: null,
           timeZone: this.localZone,
-          keep: KEEP_MAX,
+          keep: Math.min(KEEP_DEFAULT, this.store.limits().keep.max),
           keep_remote: 0,
           enabled: true,
         },
@@ -152,7 +152,19 @@ export class PlanForm {
 
   private readonly edited = signal<ReadonlySet<DraftField>>(new Set());
 
-  private readonly problems = computed(() => problemsIn(this.draft()));
+  // A plan saved under a wider limit keeps its number until it is changed.
+  private readonly allowed = computed<PlanLimits>(() => {
+    const limits = this.limits();
+    return {
+      keep: { min: limits.keep.min, max: Math.max(limits.keep.max, this.editing?.keep ?? 0) },
+      keep_remote: {
+        min: limits.keep_remote.min,
+        max: Math.max(limits.keep_remote.max, this.editing?.keep_remote ?? 0),
+      },
+    };
+  });
+
+  private readonly problems = computed(() => problemsIn(this.draft(), this.allowed()));
 
   // The reader's own mistake first, then the backend's, unless the field changed since.
   private readonly shown = computed(() => {
@@ -222,7 +234,14 @@ export class PlanForm {
 
   errorFor(field: DraftField): string {
     const code = this.error(field);
-    return code === null ? '' : errorText(this.locale, code);
+    if (code === null) {
+      return '';
+    }
+    if (RANGE_ERRORS.has(code)) {
+      const range = field === 'keep' ? this.allowed().keep : this.allowed().keep_remote;
+      return this.locale.translate(`errors.${code}`, { min: range.min, max: range.max });
+    }
+    return errorText(this.locale, code);
   }
 
   update<K extends keyof Draft>(field: K, value: Draft[K]): void {
@@ -287,7 +306,7 @@ export class PlanForm {
   }
 }
 
-function problemsIn(draft: Draft): ReadonlyMap<DraftField, string> {
+function problemsIn(draft: Draft, limits: PlanLimits): ReadonlyMap<DraftField, string> {
   const problems = new Map<DraftField, string>();
   if (draft.kind === 'archive') {
     if (draft.paths.length === 0) {
@@ -323,7 +342,7 @@ function problemsIn(draft: Draft): ReadonlyMap<DraftField, string> {
   }
   if (draft.keep === null) {
     problems.set('keep', 'required');
-  } else if (!inRange(draft.keep, KEEP_MIN)) {
+  } else if (!inRange(draft.keep, limits.keep)) {
     problems.set('keep', 'keep_range');
   }
   if (draft.kind === 'collect') {
@@ -331,7 +350,7 @@ function problemsIn(draft: Draft): ReadonlyMap<DraftField, string> {
   }
   if (draft.keep_remote === null) {
     problems.set('keep_remote', 'required');
-  } else if (!inRange(draft.keep_remote, KEEP_REMOTE_MIN)) {
+  } else if (!inRange(draft.keep_remote, limits.keep_remote)) {
     problems.set('keep_remote', 'keep_remote_range');
   }
   return problems;
@@ -346,8 +365,8 @@ function isAbsolutePath(path: string): boolean {
   return trimmed.startsWith('/') && !trimmed.split('/').includes('..');
 }
 
-function inRange(value: number, min: number): boolean {
-  return Number.isInteger(value) && value >= min && value <= KEEP_MAX;
+function inRange(value: number, range: KeepRange): boolean {
+  return Number.isInteger(value) && value >= range.min && value <= range.max;
 }
 
 function draftOf(plan: BackupPlan): Draft {

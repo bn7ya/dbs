@@ -5,7 +5,9 @@ from uuid import UUID
 
 from django.db.models import Min, QuerySet
 
-from dbs.manager.backups.models import PLAN_KEEP_MAX, PLAN_KEEP_MIN, BackupPlan
+from dbs.manager.backups.limits import keep_max, keep_remote_max
+from dbs.manager.backups.models import PLAN_KEEP_MIN, BackupPlan
+from dbs.retention import MAXIMUM_KEEP
 from dbs.manager.common.repositories import BaseRepository
 
 
@@ -33,9 +35,13 @@ class BackupPlanRepository(BaseRepository):
 
     def keep_within_limits(self) -> None:
         plans = self.all_including_deleted()
-        plans.filter(keep__gt=PLAN_KEEP_MAX).update(keep=PLAN_KEEP_MAX)
+        plans.filter(keep__gt=keep_max()).update(keep=keep_max())
         plans.filter(keep__lt=PLAN_KEEP_MIN).update(keep=PLAN_KEEP_MIN)
-        plans.filter(keep_remote__gt=PLAN_KEEP_MAX).update(keep_remote=PLAN_KEEP_MAX)
+        beyond = plans.filter(keep_remote__gt=MAXIMUM_KEEP).select_related("application")
+        for plan in beyond:
+            limit = keep_remote_max(plan.application)
+            if plan.keep_remote > limit:
+                plans.filter(pk=plan.pk).update(keep_remote=limit)
 
     def lock_scheduled_by(self, moment: datetime) -> QuerySet[BackupPlan]:
         return (

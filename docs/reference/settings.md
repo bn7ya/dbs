@@ -82,3 +82,4 @@ The manager is not configured through Django settings. It reads environment vari
 | `DBS_MANAGER_HOST` | The name you browse to, behind a proxy |
 | `DBS_MANAGER_TRUSTED_PROXY` | The proxy ranges, comma-separated (as `--trusted-proxy`) |
 | `DBS_MANAGER_TERMINAL` | `admins` (the default), `master` or `off`: who may open a terminal (as `--terminal`) |
+| `DBS_MANAGER_MAX_BACKUPS` | The most backups the manager keeps of a plan, and of an application's one-off backups: 5 unless set, from 1 to 10,000 |

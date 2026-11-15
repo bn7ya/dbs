@@ -24,6 +24,7 @@ from dbs.manager.backups.exceptions import (
     BackupQuarantined,
     BackupRunning,
 )
+from dbs.manager.backups.limits import keep_max, keep_remote_max
 from dbs.manager.backups.locks import TakeLock
 from dbs.manager.backups.models import BackupFile, BackupPlan
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
@@ -45,8 +46,6 @@ from dbs.models import AuditEvent
 if TYPE_CHECKING:
     from dbs.manager.servers.gateways import RemoteFile, RemoteHost
 
-KEEP_MAX = 5
-TAKE_KEEP = KEEP_MAX
 TAKE_KEEP_REMOTE = 0
 KEPT_ON_SERVER = "kept_on_server"
 FALLBACK_PREFIX = "backup"
@@ -149,7 +148,7 @@ class BackupRunService:
         outcome = self._back_up(
             job, application, prefix=take_prefix(application), keep_remote=TAKE_KEEP_REMOTE, plan=None
         )
-        self._retain_dbs(job, application, None, TAKE_KEEP, outcome)
+        self._retain_dbs(job, application, None, keep_max(), outcome)
         return self._reported(job, outcome)
 
     def _run_plan(self, job: AuditEvent, plan_id: UUID) -> Detail:
@@ -171,10 +170,12 @@ class BackupRunService:
                 job,
                 application,
                 prefix=plan_prefix(application, plan),
-                keep_remote=min(plan.keep_remote, KEEP_MAX),
+                keep_remote=min(plan.keep_remote, keep_remote_max(application)),
                 plan=plan,
             )
-            self._retain_dbs(job, application, plan, min(plan.keep, KEEP_MAX), backed_up)
+            self._retain_dbs(
+                job, application, plan, min(plan.keep, keep_max()), backed_up
+            )
             return {**run_detail(plan), **self._reported(job, backed_up)}
         self._retain(job, plan)
         return {**run_detail(plan), **outcome}
@@ -361,7 +362,7 @@ class BackupRunService:
             raise
 
     def _retain(self, job: AuditEvent, plan: BackupPlan) -> None:
-        stale = list(self.files.alive_for_plan(plan.pk)[min(plan.keep, KEEP_MAX) :])
+        stale = list(self.files.alive_for_plan(plan.pk)[min(plan.keep, keep_max()) :])
         self._expire(job, plan.application, plan, stale)
 
     def _retain_dbs(
@@ -382,7 +383,8 @@ class BackupRunService:
         quarantined = sorted(
             self.files.quarantined(application.pk, plan_id), key=moment_of, reverse=True
         )
-        self._expire(job, application, plan, [*good[max(keep, 1) :], *quarantined[KEEP_MAX:]])
+        beyond = quarantined[keep_max() :]
+        self._expire(job, application, plan, [*good[max(keep, 1) :], *beyond])
 
     def _expire(
         self,

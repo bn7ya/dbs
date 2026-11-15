@@ -7,6 +7,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from dbs.conf import setting
+from dbs.retention import MAXIMUM_KEEP, keep_limit
 
 from .paths import HOME_ENV
 
@@ -15,6 +16,7 @@ DATABASE_URL_ENV = "DBS_MANAGER_DATABASE_URL"
 HOST_ENV = "DBS_MANAGER_HOST"
 TRUSTED_PROXY_ENV = "DBS_MANAGER_TRUSTED_PROXY"
 TERMINAL_ENV = "DBS_MANAGER_TERMINAL"
+MAX_BACKUPS_ENV = "DBS_MANAGER_MAX_BACKUPS"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
@@ -31,10 +33,12 @@ __all__ = [
     "INSTANCE_LEASE",
     "LEASE_SECONDS",
     "LOCAL_HOSTS",
+    "MAX_BACKUPS_ENV",
     "SETTINGS_MODULE",
     "SETUP_LEASE",
     "TERMINAL_ENV",
     "TRUSTED_PROXY_ENV",
+    "backup_keep_max",
     "data_dir",
     "inline_jobs",
     "is_loopback",
@@ -46,6 +50,10 @@ INLINE = ContextVar("dbs_manager_jobs_inline", default=False)
 
 def data_dir():
     return Path(setting("DBS_MANAGER_DATA_DIR", "."))
+
+
+def backup_keep_max() -> int:
+    return keep_limit(setting("BACKUP_KEEP_MAX", MAXIMUM_KEEP))
 
 
 def jobs_inline():
