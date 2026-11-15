@@ -23,7 +23,10 @@ codes and `--json` keys. A new option or argument is optional.
 
 **Settings.** Every setting and environment variable in the
 [settings reference](reference/settings.md) keeps its name, meaning and default. A new setting
-defaults to what DBS did before it existed. `pip install "django-dbs[guard]"`, `[manager]`,
+defaults to what DBS did before it existed. There is one exception, made on purpose in 0.9.0:
+`DBS_MIGRATION_CHECKPOINTS` is on, so `migrate` and `dbs restore` keep a backup of the database
+before and after they change it wherever `DBS_BACKUP_DIR` is set. `False` gives back what 0.8
+did. `pip install "django-dbs[guard]"`, `[manager]`,
 `[ssh]` and `[all]` keep installing, though plain `django-dbs` already brings everything.
 
 **Your data.** DBS's migrations only add tables and columns; they never drop, rename or retype

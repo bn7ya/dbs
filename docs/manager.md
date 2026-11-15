@@ -7,7 +7,7 @@ SSH and:
 - **finds an application from a folder**, whether it runs on the server itself, in a Compose
   service or in a container, under Docker or Podman;
 - **pulls its DBS backups**, on demand or on a plan, resumes a transfer that broke, and keeps
-  the newest five of each;
+  the newest five of each, or as many as you allow;
 - **backs up folders** as encrypted archives and **collects files** the server already makes;
 - **browses files** inside the folders you allow, and **keeps every version of a `.env`**,
   encrypted, ready to put one back;
@@ -162,7 +162,8 @@ application cannot be removed (`server_has_applications`).
 
 **Add a server** walks you through it:
 
-1. **Address:** the server's name or address, its SSH port and user.
+1. **Address:** the server's name or address, its SSH port (22 unless you give another) and
+   user.
 2. **Host key:** the manager shows the fingerprint the server presents and the command to
    compare it on the server. Nothing connects until you confirm it.
 3. **Sign-in:** let the manager create a key (it shows the one line to add to the server's
@@ -340,11 +341,12 @@ The manager pulls; the server never pushes. Every DBS backup run, on demand or f
    arrive;
 3. **verifies** each one: the size and SHA-256 the server reported, then a full decryption;
 4. **removes the server's copies** it recorded and verified, keeping the newest `keep_remote`
-   of them (0 to 5, none by default). With `keep_remote` at 0, nothing from the run stays on
+   of them (0 to the application's `DBS_MAX_BACKUPS`, none by default). With `keep_remote` at 0, nothing from the run stays on
    the server or in the container once the backup is verified.
 
-The manager keeps at most five good backups per application and plan, and never deletes the
-newest one that passed verification. A file that fails verification is quarantined: kept under
+The manager keeps at most five good backups per application and plan, or the number in
+`DBS_MANAGER_MAX_BACKUPS` (1 to 10,000), and never deletes the newest one that passed
+verification. A file that fails verification is quarantined: kept under
 a name that is not a backup name, with the reason, never restored and never counted. The five
 newest quarantined files stay for you to inspect. A restore or move refuses a quarantined
 backup (`backup_quarantined`).
@@ -366,7 +368,10 @@ the space they take in the manager, in all and per application. They live in the
 
 A plan takes a DBS backup (`dbs`), a folder archive (`archive`) or a file collection
 (`collect`) on a schedule: every hour, 3, 6 or 12 hours, every day or every week, or only when
-you run it. It keeps 1 to 5 backups in the manager and 0 to 5 on the server.
+you run it. It keeps 1 to 5 backups in the manager and 0 to 5 on the server. Start the manager
+with `DBS_MANAGER_MAX_BACKUPS` set to keep more in the manager, up to 10,000; a server keeps as
+many as its project's `DBS_MAX_BACKUPS` allows, which the manager reads when it checks the
+application. The plan form shows both limits.
 
 - **First run.** A plan starts at the moment you choose, and later runs keep its beat.
 - **Time zone.** A daily or weekly plan keeps its local time in the time zone you name, such as
@@ -421,7 +426,7 @@ Type `django_dbs` alone in a terminal, or `django-dbs` or `dbs`, and the manager
 as a menu. There is no browser to open and no command line to remember:
 
 ```text
- DBS manager 0.8.3                                                             sara · admin
+ DBS manager 0.9.0                                                             sara · admin
 ┌────────────────────┬─────────────────────────────────────────────────────────────────────┐
 │▸ Dashboard         │ Dashboard                                                           │
 │  Servers           │                                                                     │
@@ -524,7 +529,8 @@ Commands act as a manager account: the only one, or the one named with `--as NAM
 that account's role. An action the interface protects with your password asks for it here too,
 or reads it with `--password-stdin`. Secrets are typed at a prompt or read from standard input,
 never passed as arguments. From a script, confirmations take `--yes`; a real restore, deploy,
-server move or revert takes `--confirm-name NAME` instead, the name a person would type.
+server move, update or revert takes `--confirm-name NAME` instead, the name a person would
+type.
 Downloads are saved readable by you alone. While your password has expired, every command says
 so on standard error.
 
@@ -582,6 +588,50 @@ seconds for output, `POST …/input/` sends keystrokes (at most 64 KiB at a time
 backups, set up plans and rehearse restores, deploys and moves, as one account and within its
 role. It never sees a secret and cannot do any of those for real. See
 [AI assistants](ai-assistants.md#claude-and-the-dbs-manager).
+
+## Updating DBS
+
+The manager installs a release of DBS in two places: in an application, on its server, and for
+itself, on its own computer.
+
+**In an application.** The application's **Deploy** page has *Update django-dbs*, and a
+terminal has `django_dbs app update-dbs APP`. It installs the release the manager itself runs,
+or the one `--to X.Y.Z` names. A rehearsal comes first and changes nothing: it checks the
+application, says which release it runs and that its Python can install packages. For real,
+an admin gives the account password and types the application's name, and the manager:
+
+1. **checks** the application and reads the release it runs; a newer one than the release
+   named is refused (`update_would_downgrade`), and the same one ends there;
+2. **takes a safety backup**, kept in the manager;
+3. **installs** the release with `manage.py dbs upgrade --self --to X.Y.Z --yes`, or with
+   `python -m pip install django-dbs==X.Y.Z` in an application older than 0.8.0;
+4. **finishes the upgrade** with `manage.py dbs upgrade`, which applies DBS's own migrations;
+5. **restarts** the application with the restart steps among its
+   [deploy steps](deploy-and-move.md); with none, it says the web process needs a restart;
+6. **checks again** that the application now runs the release (`update_not_applied` when it
+   does not, as for a source checkout).
+
+It stops at the first step that fails, and **Activity** records it as *Update django-dbs*. An
+application in a container is refused (`update_needs_rebuild`): a package installed there is
+gone when the container is created again, so put the release in the image's requirements and
+build the image. Claude's tools do not update an application.
+
+**The manager itself.** The master sees *Update DBS* on the **About** page: it looks for a
+newer release on PyPI, asks for the account password, installs it and restarts the manager on
+the same address, so its migrations and its recovery run as at any start. It waits until no
+job runs and no terminal is open (`update_busy`). In a terminal on the manager's computer:
+
+```bash
+django_dbs update --check      # is a newer release there?
+django_dbs update              # show the pinned pip command, ask, install
+django_dbs update --to 0.9.0 --yes
+```
+
+Stop the manager first, then start it again. The command leaves a source checkout to git, and
+a Python outside a virtual environment alone unless you add `--system-python`; `--offline`
+skips PyPI and needs `--to`. Where the manager cannot restart itself, on Windows or when
+something other than `django_dbs run` started it, the page says to use the command
+(`update_from_terminal`). `pipx upgrade django-dbs` still works as before.
 
 ## Moving the manager itself
 

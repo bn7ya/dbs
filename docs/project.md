@@ -9,7 +9,7 @@ backup. For the first steps, see [Getting started](getting-started.md).
 | Requirement | Why |
 |---|---|
 | A **stable `SECRET_KEY`** | The backup passphrase is derived from it, and a project's backup passphrase must never change. Rotate `SECRET_KEY` only with the old value kept in `SECRET_KEY_FALLBACKS`. |
-| **`DBS_BACKUP_DIR`**, writable by the project | Where backups are kept, at most five, and where the panel restores and checks them from. The DBS manager collects its copies from here. |
+| **`DBS_BACKUP_DIR`**, writable by the project | Where backups are kept, at most five unless `DBS_MAX_BACKUPS` says otherwise, and where the panel restores and checks them from. `migrate` and `dbs restore` keep their [checkpoints](restoring.md#checkpoints) here too. The DBS manager collects its copies from here. |
 | `django.contrib.admin`, mounted | The panel lives inside the admin. |
 | A superuser | The panel is for superusers only. |
 | Python 3.9+ and Django 4.2 to 6.x | |
@@ -122,7 +122,7 @@ python manage.py dbs backup --stream > /mnt/elsewhere/backup.dbs
 `DBS_BACKUP_PREFIX` (`backup` by default) or `--prefix`. Messages go to standard error, and
 its last line is a JSON summary: `{"name", "size", "sha256"}`. If standard output breaks
 mid-way, the backup still finishes on the server, the command exits 0 and the summary adds
-`"kept_on_server": true`. At most five streamed backups are kept per prefix.
+`"kept_on_server": true`. At most `DBS_MAX_BACKUPS` streamed backups (5 unless set) are kept per prefix.
 
 `--progress-seconds N` adds a first line on standard error naming the backup and its partial
 file, `{"progress": {"name", "partial", "moment"}}`, then `{"progress": {"bytes": n}}` every N

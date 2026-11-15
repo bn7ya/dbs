@@ -44,6 +44,26 @@ network to the trusted list. See [the session guard](session-guard.md).
 the old root to a new one with `DBS_RESTORE_PATH_MAP`. `--dry-run` lists every file a restore
 would refuse.
 
+**`migrate` stops: "DBS could not keep a checkpoint of the database before this migration".**
+From 0.9.0, `migrate` keeps a backup of the database in `DBS_BACKUP_DIR` before it applies
+anything, and does not start when that backup cannot be written: the folder is full or not
+writable, or no passphrase is there. The message says which. Fix it, or migrate without one
+with `migrate --no-checkpoint`; `DBS_MIGRATION_CHECKPOINTS = False` switches them off for the
+project. `makemigrations` checks the same before it writes a migration. See
+[Checkpoints](restoring.md#checkpoints).
+
+**A migration turned out to be wrong.** `python manage.py dbs checkpoints` lists the database
+as it was before and after each migration, and `python manage.py dbs restore PATH --flush`
+puts one back: tables, rows and migration records. See
+[Going back to before a migration](restoring.md#going-back-to-before-a-migration).
+
+**A restore says "This is a checkpoint".** Restoring a checkpoint replaces tables, so it asks
+for `--flush`. `--no-schema` loads its rows into the tables as they are instead.
+
+**A restore says the backup belongs to another application.** The backup records another
+project's name; see [A backup belongs to its application](restoring.md#a-backup-belongs-to-its-application).
+When it really is meant for this project, pass `--another-application`.
+
 **The project will not start after upgrading: `dbs.contrib` is gone.** Delete
 `include("dbs.contrib.urls")` from your URLconf and `"dbs.contrib"` from `INSTALLED_APPS`.
 Take and restore backups at `/admin/dbs/` or from the DBS manager. `manage.py dbs upgrade`
@@ -117,12 +137,23 @@ the master account for a higher one.
 
 **A command says it needs a secret typed, or a confirmation.** It ran without a terminal, as
 from cron. Pass your password on standard input with `--password-stdin` (and the SSH password
-with `--ssh-password-stdin`). Confirm with `--yes`, or, for a real restore, deploy, server move
-or revert, with `--confirm-name NAME`; the message names the one the command takes.
+with `--ssh-password-stdin`). Confirm with `--yes`, or, for a real restore, deploy, update,
+server move or revert, with `--confirm-name NAME`; the message names the one the command takes.
 
 **The terminal tab is missing or refuses to open.** It is for admins, and asks for your
 password every time; `django_dbs run --terminal master` limits it to the master and
 `--terminal off` switches it off. `too_many_terminals` means four are open, or two of yours.
+
+**Updating django-dbs in an application is refused.** `update_needs_rebuild`: the application
+runs in a container, so put the release in the image's requirements and build the image.
+`update_would_downgrade`: it already runs a newer release than the one named.
+`update_not_applied`: the install changed nothing, as for a source checkout or a Python
+outside a virtual environment.
+
+**The About page will not update the manager.** `update_busy`: a job is running or a terminal
+is open, and the update restarts the manager. `update_from_terminal`: the manager cannot
+restart itself here, so stop it and run `django_dbs update` on its computer. See
+[Updating DBS](manager.md#updating-dbs).
 
 **A server move refuses with `database_is_the_sources`.** The moved application's settings
 still name the old application's database. A carried `.env` gets the new folder written into

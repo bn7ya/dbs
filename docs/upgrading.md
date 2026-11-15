@@ -31,6 +31,36 @@ roots and path map, the backup format, and each release's own steps below.
 - `--backups DIR` reads old backups and converts any written in an older format into a new
   file beside the original. Nothing in DBS ever deletes or overwrites a backup.
 
+## From 0.8.x
+
+```bash
+pip install --upgrade django-dbs
+python manage.py dbs upgrade
+```
+
+Backups keep container format 2, so a 0.8 project reads 0.9 backups and the other way round.
+`dbs upgrade` applies one small migration, which lets the panel's schedule keep more than five
+backups, and reports these:
+
+| Step | What it says, and what to do |
+|---|---|
+| migration checkpoints | **`migrate` now keeps a backup of the database before and after the migrations it applies, and `dbs restore` before and after a restore**, in `DBS_BACKUP_DIR`. A project with no `DBS_BACKUP_DIR` migrates as before and is told so. `DBS_MIGRATION_CHECKPOINTS = False` switches them off, and `migrate --no-checkpoint` skips one. See [Checkpoints](restoring.md#checkpoints) |
+| application name | Backups now record the application they belong to, and a restore refuses one that records another. When the project's package has a name other projects share, such as `config`, the step prints the `DBS_APPLICATION` line to add before the next backup |
+| maximum backups | The backup folder keeps at most five backups unless `DBS_MAX_BACKUPS` says otherwise, from 1 to 10,000. A value outside that is reported |
+
+Nothing else changes in a project: every setting, command, option and Python name of 0.8 works
+as it did. A deploy that runs `migrate` on a large database now also writes two backups of it;
+give that step the time, or pass `--no-checkpoint`.
+
+**The manager** migrates itself the next time any `django_dbs` command starts. Plans keep what
+they kept; `DBS_MANAGER_MAX_BACKUPS` lets one keep more than five. It keeps backing up servers
+on 0.8, which keep their limit of five; a server on 0.9 reports its own `DBS_MAX_BACKUPS`.
+From 0.9.0 the manager also updates DBS for you: see [Updating DBS](manager.md#updating-dbs).
+
+**Going back to 0.8.** `pip install "django-dbs==0.8.3"`. Backups written by 0.9 restore there
+as backups; a checkpoint does not put its tables back, and nothing checks which application a
+backup belongs to.
+
 ## From 0.7.x
 
 ```bash

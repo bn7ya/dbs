@@ -668,23 +668,26 @@ page and enrolls it in two-factor sign-in, keeping the key in the data dir (`E2E
 supplies it for a manager set up beforehand). The `ltr` (`en-US`) and `rtl` (`ar`) projects depend on
 it and run the same scenarios, two workers side by side.
 
-**The fixture.** `scripts/openssh_test_server.sh` starts OpenSSH on 127.0.0.1:2222 for the account
-`dbs-ssh`; `scripts/e2e_fixture.sh DIRECTORY [docker|podman]` (as root) then prepares, for that
-account, two host projects copied from `tests/containers/project` — `DIRECTORY/app` and
-`DIRECTORY/target`, each with its `.venv` holding the checkout's django-dbs, a migrated SQLite
-database, a `.env` (which the settings read: database path, backup folder), `media/uploads` with
-`a.txt` and `b.bin`, and a `backups` folder — plus `DIRECTORY/existing` with two `.sql.gz` dumps for a
-collect plan and, with an engine, the Compose project `DIRECTORY/e2e-shop` (service `web`) from
-`scripts/container_fixture.sh`. It prints the variables `e2e/support/config.ts` reads, so
-`scripts/e2e_fixture.sh /srv/e2e docker > e2e.env` and `set -a; . ./e2e.env` before
-`npx playwright test` is the whole setup; the defaults already match `/srv/e2e`. With
-`E2E_FIXTURE_SUDO=1` the fixture also lets the account use `sudo` with its password
-(`/etc/sudoers.d/dbs-e2e`) and prints `E2E_SSH_SUDO_PASSWORD`, which the real server move needs;
-it is off by default, so a developer's own machine never gives the test account `sudo` unasked.
+**The fixture.** The journeys' servers are one virtual machine. `python scripts/vm_fixture.py e2e`
+boots the guest `e2e` with `scripts/vm.py` (QEMU, a pinned Ubuntu 24.04 cloud image, the account
+`dbs-ssh` with a key, a password and `sudo` that asks for it, its SSH forwarded to 127.0.0.1),
+installs Docker in it, carries the checkout's wheel and runs
+`scripts/e2e_fixture.sh /srv/e2e docker` inside it. That prepares, for the account, two host
+projects copied from `tests/containers/project` — `/srv/e2e/app` and `/srv/e2e/target`, each with
+its `.venv` holding the checkout's django-dbs, a migrated SQLite database, a `.env` (which the
+settings read: database path, backup folder), `media/uploads` with `a.txt` and `b.bin`, and a
+`backups` folder — plus `/srv/e2e/existing` with two `.sql.gz` dumps for a collect plan and the
+Compose project `/srv/e2e/e2e-shop` (service `web`) from `scripts/container_fixture.sh`. It prints
+the variables `e2e/support/config.ts` reads, so `python scripts/vm_fixture.py e2e --mount DIR >
+e2e.env` and `set -a; . ./e2e.env` before `npx playwright test` is the whole setup. `--mount DIR`
+mounts the guest's files there with `sshfs` and prints `E2E_SSH_FS=DIR`; without it `E2E_SSH_FS`
+is empty and the checks that read a server file are skipped. The journeys run as the developer,
+never as root: every server file is read and changed through the mount, as `dbs-ssh`.
+`python scripts/vm_fixture.py down` stops the guest.
 
 | Variable | Default | What |
 |---|---|---|
-| `E2E_SSH_HOST`, `E2E_SSH_PORT`, `E2E_SSH_USER`, `E2E_SSH_PASSWORD` | `127.0.0.1`, `2222`, `dbs-ssh`, `dbs-ssh-password` | the SSH account; journeys sign in with its password |
+| `E2E_SSH_HOST`, `E2E_SSH_PORT`, `E2E_SSH_USER`, `E2E_SSH_PASSWORD` | `127.0.0.1`, `2222`, `dbs-ssh`, `dbs-ssh-password` | the SSH account; journeys sign in with its password. The fixture prints the guest's forwarded port |
 | `E2E_SSH_FINGERPRINT` | any `SHA256:` | the host key the wizard must show |
 | `E2E_SSH_PROJECT_DIR`, `E2E_SSH_PYTHON` | `/srv/e2e/app`, its `.venv/bin/python` | the main application |
 | `E2E_SSH_REMOTE_BACKUP_DIR`, `E2E_SSH_ENV_PATH`, `E2E_SSH_MEDIA_DIR` | its `backups`, `.env`, `media` | what discovery and the tabs find |
@@ -692,7 +695,7 @@ it is off by default, so a developer's own machine never gives the test account 
 | `E2E_SSH_TARGET_PROJECT_DIR`, `E2E_SSH_TARGET_PYTHON`, `E2E_SSH_TARGET_REMOTE_BACKUP_DIR` | `/srv/e2e/target`, … | the second application; empty skips `06` and `07` |
 | `E2E_CONTAINER_ENGINE`, `E2E_CONTAINER_FOLDER` | empty | the Compose project; empty skips `09` |
 | `E2E_SSH_SUDO_PASSWORD` | empty | the account's `sudo` password; empty skips the real move in `10` |
-| `E2E_SSH_FS` | `/` | where the SSH server's files are reachable from the runner; empty skips the checks that read them |
+| `E2E_SSH_FS` | `/` | where the SSH server's files are reachable from the runner (the `sshfs` mount of the guest); empty skips the checks that read them |
 | `E2E_SCREENSHOT_DIR` | `test-results/journeys` | a full-page screenshot of each step worth seeing, per project |
 
 **Scenarios.** Each file follows a developer through one piece of real work, start to end:
@@ -722,5 +725,6 @@ shared file or hold a scarce resource take a lock (`acquireLock('envfile')`, `ac
 `tsconfig.e2e.json` type-checks the journeys during `npm run lint`.
 
 **CI.** `.github/workflows/e2e.yml` runs on a push to `main`, on demand and nightly: it builds the
-interface, starts OpenSSH, runs the fixture with Docker and `E2E_FIXTURE_SUDO=1` and then the scenarios as root, so `E2E_SSH_FS`
-can read and restore the SSH account's files, and uploads the HTML report and `test-results/`.
+interface, boots the guest with `scripts/vm_fixture.py e2e --mount`, runs the scenarios against it,
+so `E2E_SSH_FS` can read and restore the SSH account's files through the mount, and uploads the
+HTML report and `test-results/`.

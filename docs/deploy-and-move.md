@@ -34,6 +34,11 @@ django_dbs app deploy shop                            # a rehearsal
 django_dbs app deploy shop --real                     # asks for your password and the name
 ```
 
+In an application on django-dbs 0.9.0 or later, the `migrate` step also keeps the
+[checkpoints](restoring.md#checkpoints) of the database before and after the migrations it
+applies, in the application's backup folder. On a large database give the step the time for
+two backups with `timeout_minutes`.
+
 **The rehearsal** only reads: `git fetch --dry-run` and `git status --porcelain`,
 `compose config --quiet`, `pip --version` and a check that the requirements file is there,
 `migrate --plan` and `collectstatic --dry-run`. It takes no backup and changes nothing.

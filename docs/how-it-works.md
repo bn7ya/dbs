@@ -16,9 +16,16 @@ The passphrase is derived from the project's `SECRET_KEY`, so there is nothing t
 nothing to forget, as long as `SECRET_KEY` never changes (see
 [Passphrases](restoring.md#passphrases)).
 
-On a server, backups wait in `DBS_BACKUP_DIR`, at most five. The [DBS manager](manager.md)
-connects over SSH, pulls them to its own machine, verifies them and keeps at most five per
-application and plan. The server never pushes anything and never contacts the manager.
+On a server, backups wait in `DBS_BACKUP_DIR`, at most five unless `DBS_MAX_BACKUPS` sets
+another limit. The [DBS manager](manager.md) connects over SSH, pulls them to its own machine,
+verifies them and keeps at most five per application and plan, or as many as
+`DBS_MANAGER_MAX_BACKUPS` allows. The server never pushes anything and never contacts the manager.
+
+Every backup records the application it belongs to, and a restore refuses one that belongs to
+another. Around every `migrate` and every restore DBS also keeps a
+[checkpoint](restoring.md#checkpoints): the same kind of file, holding the tables Django's
+migrations manage and the list of migrations applied, so the database can go back to how it
+was before a migration that turned out to be wrong.
 
 ## A backup, step by step
 

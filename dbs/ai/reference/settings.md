@@ -15,11 +15,14 @@ Every setting is optional; DBS works with none of them set.
 
 | Setting | Purpose |
 |---|---|
-| `DBS_BACKUP_DIR` | Where backups are kept (at most five), restored from in the panel, and checked by health |
+| `DBS_BACKUP_DIR` | Where backups are kept (at most `DBS_MAX_BACKUPS`), restored from in the panel, and checked by health. `migrate` and `dbs restore` keep their checkpoints here |
+| `DBS_MAX_BACKUPS` | The most backups the folder keeps, 1 to 10,000 (default 5). The schedule, `dbs schedule --keep`, `dbs backup --stream` and the checkpoints keep up to it |
+| `DBS_MIGRATION_CHECKPOINTS` | `True` by default: a backup of the database before and after every `migrate` that applies something and every `dbs restore`. `False` keeps none |
+| `DBS_APPLICATION` | The name a backup records as its application (default: the project's package, the first part of `ROOT_URLCONF`). A restore refuses a backup that records another |
 | `DBS_SCHEDULER` | `"thread"` (default), `"command"` or `"off"`: where the panel's schedule runs |
 | `DBS_BACKUP_PREFIX` | Default backup filename prefix |
 | `DBS_SCHEDULE_INTERVAL` | Seeds the panel's first schedule; default for `dbs schedule` flags (default `24h`) |
-| `DBS_SCHEDULE_KEEP` | Seeds the panel's first schedule; default local retention, 1 to 5 (default 5) |
+| `DBS_SCHEDULE_KEEP` | Seeds the panel's first schedule; default local retention, 1 to `DBS_MAX_BACKUPS` (default 5) |
 
 ## Panel jobs
 

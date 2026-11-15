@@ -21,7 +21,7 @@ Writes the backup to standard output and keeps the same bytes in `DBS_BACKUP_DIR
 `--output-dir`) as `PREFIX-YYYYMMDD-HHMMSSZ.dbs`. Messages go to standard error; the last
 line is a JSON summary `{name, size, sha256}`. When standard output breaks, the backup still
 finishes on the server, the command exits 0 and the summary adds `kept_on_server: true`. At
-most five streamed backups per prefix are kept. `--progress-seconds N` writes a first line
+most `DBS_MAX_BACKUPS` streamed backups (5 unless set) per prefix are kept. `--progress-seconds N` writes a first line
 `{"progress": {"name", "partial", "moment"}}` naming the backup and its partial file, then
 `{"progress": {"bytes": n}}` every N seconds. The DBS manager takes backups this way, with
 the passphrase on `--passphrase-stdin`, and uses the first line to resume a transfer whose
@@ -29,7 +29,7 @@ connection broke.
 
 ## `dbs restore INPUT`
 `--passphrase`, `--passphrase-stdin`, `--database`, `--no-data`, `--no-files`,
-`--dry-run`, `--flush`.
+`--dry-run`, `--flush`, `--another-application`, `--no-schema`, `--no-checkpoint`.
 
 Merging is the default: an existing row only takes the fields the backup carries. `--flush`
 deletes the rows the backup covers first so the restore replaces. `--dry-run` performs the
@@ -37,13 +37,31 @@ real load inside a transaction it rolls back, writes no files, never touches a s
 names every file a restore would refuse and exits non-zero when there is one. Always suggest
 a dry run before a restore onto anything that matters.
 
+A restore that loads rows writes a checkpoint of the database before it starts and another
+when it has finished (`--no-checkpoint` skips them). A backup that records another application
+is refused unless `--another-application` is passed. A checkpoint needs `--flush`: it drops
+the tables Django's migrations manage, builds them as the checkpoint's migrations describe
+them, loads its rows and sets the migration records back; `--no-schema` loads its rows into
+the tables as they are.
+
+## `dbs checkpoints`
+`--database`, `--json`.
+
+Lists the checkpoints in `DBS_BACKUP_DIR`, oldest first: when each was taken, whether it stands
+before or after a migration or a restore, the migrations beside it, its path and size.
+
+## `migrate` and `makemigrations`
+Django's own commands, each with one more option, `--no-checkpoint`. `migrate` writes a
+checkpoint before and after the migrations it applies and does not start when the first
+cannot be written; `makemigrations` checks that one can be kept before it writes a migration.
+
 ## `dbs validate INPUT`
 `--passphrase` takes an optional value; given bare it uses the derived passphrase.
 `--passphrase-stdin` reads it from standard input. Without either, only structure and block
 integrity are checked. A wrong passphrase is reported as an error, not a traceback.
 
 ## `dbs schedule`
-`--interval`, `--output-dir`, `--prefix`, `--keep` (1 to 5), `--database`, `--once`, plus the
+`--interval`, `--output-dir`, `--prefix`, `--keep` (1 to `DBS_MAX_BACKUPS`), `--database`, `--once`, plus the
 `dbs backup` cost flags.
 
 With none of the plan flags (`--interval`, `--output-dir`, `--prefix`, `--keep`) it follows
@@ -54,7 +72,7 @@ it runs that plan; so does a project that still sets `DBS_SCHEDULE_INTERVAL` whi
 panel's schedule is off.
 
 `SIGTERM` stops the loop immediately. Run one fixed-plan scheduler per output directory.
-Retention keeps at most five, only touches files matching `prefix-YYYYMMDD-HHMMSSZ.dbs`, and
+Retention keeps at most `DBS_MAX_BACKUPS`, only touches files matching `prefix-YYYYMMDD-HHMMSSZ.dbs`, and
 always keeps the newest backup that passed verification.
 
 ## `dbs health [--json]`
@@ -120,17 +138,20 @@ as in a script or an assistant's shell, it prints its help and exits 2; use the 
 `run [--port] [--host] [--trusted-proxy CIDR] [--allow-insecure-http]
 [--terminal admins|master|off] [--no-browser]`, `export [FILE] [--with-backups]`,
 `import FILE [--replace] [--yes]`, `createuser NAME [--role admin|operator|viewer]`,
-`password NAME`, `account list|role|disable|enable|reset-2fa`, `paths`. Each takes
-`--data-dir`, and all but `paths` take `--database-url`.
+`password NAME`, `account list|role|disable|enable|reset-2fa`, `paths`,
+`update [--check] [--to X.Y.Z] [--yes] [--system-python] [--offline]` (installs a newer
+django-dbs for the manager; stop the manager first). Each takes `--data-dir`, and all but
+`paths` take `--database-url`.
 
 Everything the manager's interface does is also a command, on the same data:
 - `server list|show|add|edit|remove|check|merge|browse|public-key|host-key|confirm-host-key`
   — a server is an SSH machine: address, user, credentials, host key, container engines
-- `app list|show|discover|add|edit|remove|check|passphrase|capture-passphrase|deploy|deploy-steps`
+- `app list|show|discover|add|edit|remove|check|passphrase|capture-passphrase|deploy|deploy-steps|update-dbs`
   — an application is one Django project on a server
 - `backup list [--app]|take APP…|--all|verify|restore|download|upload|delete|undo-delete`
-- `plan list|show|add|edit|remove|run|reschedule|pause|resume` (`--keep 1-5`,
-  `--keep-remote 0-5`, `--every MINUTES`, `--first-run WHEN`, `--time-zone ZONE`)
+- `plan list|show|add|edit|remove|run|reschedule|pause|resume` (`--keep N`, 1 to the
+  manager's `DBS_MANAGER_MAX_BACKUPS`, 5 unless set; `--keep-remote N`, 0 to the application's
+  `DBS_MAX_BACKUPS`; `--every MINUTES`, `--first-run WHEN`, `--time-zone ZONE`)
 - `activity list [--server] [--app]|show`, `env list|pull|compare|reveal|push`,
   `files list|download|upload|mkdir|delete`
 - `redeploy start --from APP --to APP [--backup ID] [--env ID] [--flush] [--real]`,
@@ -140,10 +161,10 @@ Each takes `--as NAME` (the account to act as; defaults to the only one), `--jso
 API's output) and `--password-stdin` (for actions that need the account password). Accounts
 have roles (master, admin, operator, viewer) and a command refuses what the role does not
 allow. Secrets are prompted for or read from stdin, never passed as arguments; confirmations
-need `--yes` from a script, and a real `backup restore`, `app deploy`, `server move`,
-`redeploy start` or `redeploy revert` needs `--confirm-name NAME` instead, the name a person
-would type. `server add` confirms the host key, signs in and checks which
-engines answer. `server confirm-host-key ID` is for a person at a real terminal: never run it
+need `--yes` from a script, and a real `backup restore`, `app deploy`, `app update-dbs`,
+`server move`, `redeploy start` or `redeploy revert` needs `--confirm-name NAME` instead, the
+name a person would type. `server add` reaches port 22 unless `--port` names another, confirms
+the host key, signs in and checks which engines answer. `server confirm-host-key ID` is for a person at a real terminal: never run it
 on their behalf.
 
 `app discover SERVER --folder F` lists the places a folder's application runs, best first:
@@ -177,6 +198,12 @@ none is needed, `--source-sudo-password` to read what the old server's SSH user 
 `migrate`, `collectstatic`, each with `timeout_minutes` 1 to 120 — at most twelve, with the
 account password. `app deploy APP` rehearses (read-only checks); `--real` checks the
 application, takes a safety backup, records the `.env`, runs the steps and checks again.
+
+`app update-dbs APP [--to X.Y.Z]` rehearses installing a django-dbs release in a host
+application (the manager's own release unless `--to`); `--real` checks it, takes a safety
+backup, installs the release, runs `manage.py dbs upgrade`, runs the application's restart
+steps and checks the version. An application in a container is refused: the release goes in
+its image.
 
 `django_dbs mcp [--as NAME]` is an MCP server over stdio for Claude
 (`claude mcp add dbs -- django_dbs mcp`). Its tools read everything but secrets, add and

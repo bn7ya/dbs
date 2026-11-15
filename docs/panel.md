@@ -8,7 +8,7 @@ Once `dbs` is installed beside `django.contrib.admin` and migrated, the panel is
 | **Dashboard** | The schedule, health, recent backups and the session guard at a glance |
 | **Take a backup** | Writes a backup to `DBS_BACKUP_DIR` in the background, then offers it for download |
 | **Restore** | Restores an uploaded `.dbs` file, starting with a dry run that changes nothing |
-| **Schedule** | Turns scheduled backups on, sets how often and how many to keep, 1 to 5 |
+| **Schedule** | Turns scheduled backups on, sets how often and how many to keep, 1 to `DBS_MAX_BACKUPS` |
 | **Health** | Whether the last backup is recent, valid and still on disk; disk space, the passphrase and how panel jobs run |
 | **Audit** | Every backup, restore, validation, prune, download and change made in the panel, sealed in a hash chain |
 | **Security** | The session guard: its level, trusted networks and recent verdicts |
@@ -28,7 +28,8 @@ you sign in from and how strict the [session guard](session-guard.md) should be.
 ## Backup frequency
 
 Open **Schedule**, tick *enabled*, and choose an interval (`30m`, `6h`, `1d`, at least five
-minutes) and how many backups to keep, from 1 to 5 (5 by default). A project with several
+minutes) and how many backups to keep, from 1 to 5 (5 by default), or up to `DBS_MAX_BACKUPS` where
+the project sets it. A project with several
 databases picks the one to back up. That is all: the schedule runs inside your web workers.
 
 On the first request a worker serves, a small background thread starts and checks once a
@@ -54,7 +55,8 @@ on too. Turn one of them off, or plan fewer backups in the manager.
 
 ## What is kept
 
-The server keeps at most five backups in `DBS_BACKUP_DIR`. After each scheduled or panel
+The server keeps at most five backups in `DBS_BACKUP_DIR`, or the number in `DBS_MAX_BACKUPS`
+(1 to 10,000). After each scheduled or panel
 backup, retention removes the oldest of this project's backups beyond the schedule's number,
 and only those:
 
@@ -70,7 +72,10 @@ and only those:
   verification never takes one of the places.
 
 Unfinished temporary files older than an hour are cleared from the folder. `dbs backup PATH`
-removes nothing, and `dbs backup --stream` keeps at most five per prefix.
+removes nothing, and `dbs backup --stream` keeps at most `DBS_MAX_BACKUPS` per prefix.
+[Checkpoints](restoring.md#checkpoints), the backups kept around a migration or a restore, are
+counted on their own: the schedule never removes one, and they never take a scheduled backup's
+place.
 
 ## Taking a backup and restoring from the panel
 
@@ -82,7 +87,11 @@ and a download only ever streams a file already written there.
 
 Every backup in `DBS_BACKUP_DIR` has a **restore** link. The page opens with *Dry run*
 ticked; a real restore needs the file name typed out. *Replace instead of merge* clears the
-backed-up rows first. [Restoring](restoring.md) explains what a restore does.
+backed-up rows first. [Restoring](restoring.md) explains what a restore does. A
+[checkpoint](restoring.md#checkpoints) is in the list under its own name, such as
+`backup-before-migrate-…`; restoring it needs *Replace instead of merge*, and puts back the
+tables, the rows and the migration records it was taken with. Every real restore from the
+panel keeps a checkpoint of the database before and after it.
 
 ## Panel jobs run in a process of their own
 

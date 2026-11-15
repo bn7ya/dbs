@@ -69,10 +69,12 @@ separate environment and restore from there. Let a human decide.
 python manage.py dbs                      # overview
 python manage.py dbs backup OUTPUT [--allow-missing-files] [--database ALIAS]
 python manage.py dbs backup --stream [--prefix P] [--output-dir DIR] [--progress-seconds N]
-python manage.py dbs restore INPUT [--dry-run] [--flush]
+python manage.py dbs restore INPUT [--dry-run] [--flush] [--no-checkpoint]
+python manage.py dbs checkpoints [--database ALIAS] [--json]
+python manage.py migrate [--no-checkpoint]           # Django's migrate, with checkpoints
 python manage.py dbs validate INPUT [--passphrase | --passphrase-stdin]
 python manage.py dbs schedule [--once]               # follows the panel's schedule
-python manage.py dbs schedule --interval 6h --output-dir DIR --keep 5   # a fixed plan
+python manage.py dbs schedule --interval 6h --output-dir DIR --keep 5   # a fixed plan, 1 to DBS_MAX_BACKUPS
 python manage.py dbs health [--json]
 python manage.py dbs audit verify
 python manage.py dbs connection [--json]
@@ -141,6 +143,49 @@ passphrase they lose, and did not keep in `SECRET_KEY_FALLBACKS`, cannot be open
 - Backups record the applied migration per app. A restore onto a drifted target warns and
   names the apps; rows for unknown models and fields are discarded.
 - `--database` restores into that alias, and `dbs backup --database` reads from it.
+- A backup records the application it belongs to: `DBS_APPLICATION`, else the project's
+  package (the first part of `ROOT_URLCONF`). A restore, a dry run included, refuses another
+  application's backup with `ForeignBackup`, even when both projects share a `SECRET_KEY`.
+  `--another-application` (`another_application=True`) overrides it; pass it only when the
+  developer says the backup is meant for this project. A backup from before 0.9.0 records no
+  application and restores as before.
+
+## Checkpoints around migrations and restores
+
+Where `DBS_BACKUP_DIR` is set, DBS keeps the database as it was on both sides of every change
+to its tables:
+
+- `manage.py migrate` with something to apply writes a checkpoint before the first migration
+  and another after the last. **If the first cannot be written and verified, the migration
+  does not start.** A failed migration prints the checkpoint and the command that restores it.
+- `manage.py dbs restore`, the panel's restore and the manager's restore write the same pair.
+- `manage.py makemigrations` first checks that a checkpoint can be kept (the folder is
+  writable, a passphrase is there, there is room for two) and writes no migration otherwise.
+
+A checkpoint is a normal encrypted backup named `PREFIX-before-migrate-…`, `-after-migrate-`,
+`-before-restore-` or `-after-restore-`. It holds every table Django's migrations manage, read
+through the models as the applied migrations describe them, plus the list of applied
+migrations, and no files. DBS's own tables are not in it. Checkpoints are counted apart from
+scheduled backups: the newest before and the newest after are always kept, and older ones go
+once there are more than `DBS_MAX_BACKUPS`. `manage.py dbs checkpoints` lists them.
+
+**Going back to before a migration:** `manage.py dbs restore PATH --flush` on a checkpoint
+drops those tables, creates them again as the checkpoint's migrations describe them, loads its
+rows and sets `django_migrations` back. It never runs a migration backwards. Suggest
+`--dry-run` first: it reports the tables that would be rebuilt and the migrations that would
+no longer be applied, and changes nothing. One transaction on PostgreSQL and SQLite; MySQL
+cannot roll a table change back, so there the checkpoint written before the restore is the way
+back. Raw SQL a migration ran (`RunSQL`) is not repeated and is named. `--no-schema` loads a
+checkpoint's rows into the tables as they are. After going back, the faulty migration is still
+in the code: fix or remove it before the next `migrate`.
+
+None is written for `migrate --plan`, `--check` or nothing to apply, a database with no
+migration applied, a test database, a run of only DBS's own migrations, `--no-checkpoint`, or
+`DBS_MIGRATION_CHECKPOINTS = False`; without `DBS_BACKUP_DIR` one line says so. Never add
+`--no-checkpoint` or switch the setting off to make a command pass: a failing checkpoint means
+the backup folder is full, unwritable or has no passphrase, and that is what to fix. Every
+`migrate` and restore costs two backups of the database; on a large one, tell the developer
+before a deploy step that migrates.
 
 ## Choosing what to back up
 
@@ -208,9 +253,10 @@ keep their own `DBS_BACKUP_DIR`. `DBS_SCHEDULE_INTERVAL` and `DBS_SCHEDULE_KEEP`
 first schedule row; while that schedule is off, a set `DBS_SCHEDULE_INTERVAL` makes
 `dbs schedule` run that fixed plan instead.
 
-The server keeps **at most five** backups: the schedule keeps 1 to 5, `dbs schedule`
-refuses a larger `DBS_SCHEDULE_KEEP` or `--keep`, and the panel reads a larger
-`DBS_SCHEDULE_KEEP` as 5. Retention only touches this
+The server keeps **at most `DBS_MAX_BACKUPS`** backups, 5 unless the project sets it (1 to
+10,000): the schedule keeps 1 up to that, `dbs schedule` refuses a larger `DBS_SCHEDULE_KEEP`
+or `--keep`, and the panel reads a larger `DBS_SCHEDULE_KEEP` as the limit. Retention only
+touches this
 project's `PREFIX-YYYYMMDD-HHMMSSZ.dbs` files (`PREFIX-ALIAS-…` for a database other than
 `default`), orders them by recorded time, never counts links, future-stamped or non-DBS
 files, and always keeps the newest backup that passed verification.
@@ -265,9 +311,17 @@ in a project's `INSTALLED_APPS`.
   person types for that move.
 - It **pulls**: each run collects backups waiting on the server under its own name, streams
   a fresh one with `dbs backup --stream`, verifies it, and only then removes the server's
-  copies beyond `keep_remote` (0 to 5). A broken stream from a 0.8 server resumes where it
-  stopped. It keeps at most five good backups per application and plan, never deletes the
-  newest verified one, and quarantines a backup that fails verification.
+  copies beyond `keep_remote` (0 to the application's `DBS_MAX_BACKUPS`). A broken stream
+  from a 0.8 server resumes where it stopped. It keeps at most five good backups per
+  application and plan, or the number in `DBS_MANAGER_MAX_BACKUPS` (1 to 10,000), never
+  deletes the newest verified one, and quarantines a backup that fails verification.
+- **Updating DBS**: `django_dbs app update-dbs APP [--to X.Y.Z]` rehearses installing a
+  django-dbs release in a host application; `--real` asks the account password and the
+  application's name, takes a safety backup, installs, runs `dbs upgrade`, runs the
+  application's restart steps and checks the version. A container is refused
+  (`update_needs_rebuild`): the release goes in the image. `django_dbs update` updates the
+  manager itself, as does *Update DBS* on its About page for the master. There is no MCP tool
+  for either.
 - It stores each application's backup passphrase, sealed. It is captured once
   (`django_dbs app capture-passphrase APP`), while adding the application and before its
   first backup, and **must never be changed** afterwards.
@@ -318,7 +372,12 @@ data = create_backup(passphrase)   # the whole backup as bytes, for small projec
 
 `write_backup` takes a path that must not exist yet, or any binary file object, and keeps
 memory flat. `restore_backup` and `validate_backup` take bytes, a path or a seekable binary
-file. `result.files_refused` lists what a dry run would refuse.
+file. `result.files_refused` lists what a dry run would refuse. `restore_backup` also takes
+`another_application=True` and, for a checkpoint, `schema=False`; it raises
+`dbs.exceptions.ForeignBackup` for another application's backup. After a checkpoint the result
+holds `schema_rebuilt`, `tables_rebuilt`, `migrations_unapplied` and `migrations_recorded`.
+The checkpoints around a restore are written by the command, the panel and the manager, not
+by `restore_backup` itself.
 
 Transports: `from dbs.transports import SSHTarget, push_backup,
 pull_backup, open_session`.
@@ -327,7 +386,7 @@ pull_backup, open_session`.
 
 See `reference/settings.md`. The ones that change behaviour most: `DBS_EXCLUDE_MODELS`,
 `DBS_FILE_ROOTS`, `DBS_RESTORE_ROOTS`, `DBS_RESTORE_PATH_MAP`, `DBS_BACKUP_DIR`,
-`DBS_SCHEDULER`, `DBS_JOB_PROCESS`, `DBS_JOB_TIME_LIMIT`, `DBS_JOB_MEMORY_LIMIT`,
+`DBS_MAX_BACKUPS`, `DBS_MIGRATION_CHECKPOINTS`, `DBS_APPLICATION`, `DBS_SCHEDULER`, `DBS_JOB_PROCESS`, `DBS_JOB_TIME_LIMIT`, `DBS_JOB_MEMORY_LIMIT`,
 `DBS_JOB_PYTHON`, `DBS_ANOMALY_ENFORCE`, `DBS_TRUSTED_NETWORKS`, `DBS_TRUSTED_PROXIES`,
 `DBS_GEOLOCATION`.
 
@@ -345,6 +404,9 @@ deleting them where you find them, and the DBS manager for off-site copies.
 | `/admin/dbs/` returns 404 | Not a superuser, or `django.contrib.admin` is missing from `INSTALLED_APPS` |
 | `RestoreError` naming a path | File restores are confined to `DBS_RESTORE_ROOTS` (or `DBS_FILE_ROOTS`). Add the directory, or map the old root with `DBS_RESTORE_PATH_MAP` |
 | Restore merged instead of replacing | Pass `--flush`, or tick *Replace instead of merge* in the panel |
+| `migrate` stops: DBS could not keep a checkpoint | The backup folder is full or unwritable, or no passphrase is there; the message says which. Fix that. `migrate --no-checkpoint` only when the developer accepts migrating without a way back |
+| A migration turned out to be wrong | `manage.py dbs checkpoints`, then `manage.py dbs restore PATH --flush --dry-run` and the same without `--dry-run`; fix the migration before migrating again |
+| A restore says the backup belongs to another application | It records another project's name. `--another-application` only when the developer says it is meant for this one; `DBS_APPLICATION` names a project whose package was renamed |
 | Scheduler exits immediately | It needs `--output-dir` or `DBS_BACKUP_DIR` |
 | Scheduled backups never run | `dbs health` says the scheduler has not checked in: no request has reached a worker yet, or uWSGI runs without threads. Use `DBS_SCHEDULER = "command"` and `manage.py dbs schedule` |
 | `django-dbs` says the installation cannot import a package | `pip install --force-reinstall django-dbs` repairs it |

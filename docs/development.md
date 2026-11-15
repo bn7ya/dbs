@@ -19,6 +19,11 @@ ruff check .
 | `tests/load` | `tests.load.settings` | A backup while a Django site is under load |
 | `tests/scale` | `tests.scale.settings` | A thousand tables and a large table (`DBS_SCALE_TABLES`, 1,000; `DBS_SCALE_ROWS`, 1,000,000; `DBS_SCALE_MEMORY_MB`, 1024) |
 
+Inside the library suite, `tests/checkpoints` runs two real projects in child processes: a
+checkpoint around every `migrate`, going back two and three migrations, a restore's own
+checkpoints, and a project that refuses another project's backup although both share a
+`SECRET_KEY`. It runs on PostgreSQL and MySQL too, with `DBS_TEST_DB`.
+
 `scripts/test.sh` runs the load and scale suites short (`DBS_LOAD_BASELINE=5`,
 `DBS_LOAD_AFTER=3`, `DBS_SCALE_ROWS=20000`). Other switches:
 
@@ -31,27 +36,51 @@ ruff check .
 
 ## Against real servers
 
-The SSH and container tests run against real servers when they are named:
+The tests that need a real SSH server run against virtual machines. `scripts/vm.py` boots a
+guest with QEMU from a pinned Ubuntu 24.04 cloud image, with KVM where the machine has it and
+software emulation where it does not, and `scripts/vm_fixture.py` prepares guests for each
+suite and prints the variables its tests read:
 
 ```bash
-sudo scripts/openssh_test_server.sh /tmp/dbs-sshd 2222 > ssh.env           # DBS_TEST_SSH_*
-sudo scripts/container_fixture.sh docker /srv/dbs-live > containers.env     # or podman
-set -a; . ./ssh.env; . ./containers.env; set +a
+sudo apt-get install qemu-system-x86 qemu-utils                 # once
+
+python scripts/vm_fixture.py ssh > ssh.env                      # one guest
+set -a; . ./ssh.env; set +a
 python -m pytest tests/test_ssh_openssh.py
-python -m pytest tests/manager/live --ds=tests.manager.settings
+
+python scripts/vm_fixture.py move > move.env                    # an old server and a bare new one
+set -a; . ./move.env; set +a
+python -m pytest tests/manager/live/test_relocation.py --ds=tests.manager.settings
+
+python scripts/vm_fixture.py containers docker > containers.env # or podman
+set -a; . ./containers.env; set +a
+python -m pytest tests/manager/live/test_containers.py --ds=tests.manager.settings
+
+python scripts/vm_fixture.py down                               # stop every guest
 ```
 
-`container_fixture.sh` builds a small Django project into an image with this checkout's wheel
-and starts it with Compose as the SSH test account, rootless under Podman. The live tests add
-the server and the application by its folder, back it up, restore it, deploy it, open a
-terminal in its container, stream a backup from a read-only container, and rehearse moving the
-server. `DBS_TEST_MOVE_PROJECT` names a host project to move, and
-`DBS_TEST_MOVE_SUDO_PASSWORD` also moves it for real.
+- **`ssh`** is one guest with the account `dbs-ssh`, reached with a key or a password.
+- **`move`** is two guests. `old` runs a small Django project from this checkout's wheel; `new`
+  has nothing installed. The test rehearses the move, then moves for real: the manager installs
+  Python on `new` with `sudo`, carries the project, rebuilds its virtualenv, migrates and
+  restores. It passes when `new` holds the same rows and the same applied migrations, its
+  `.env` names the new folder, the application checks clean there, and `old` is as it was.
+- **`containers`** is a guest with Docker, or rootless Podman, running the same project built
+  into an image and started with Compose as the SSH account. The tests add the server and the
+  application by its folder, back it up, restore it, deploy it, open a terminal in its
+  container and stream a backup from a read-only container.
+
+A guest keeps its disk, key and console log in `~/.cache/dbs-vm/guests/NAME` (`DBS_VM_STATE`),
+beside the downloaded image (`DBS_VM_CACHE`). `python scripts/vm.py --help` lists the commands
+that run something in a guest or copy a folder into it, and the variables that size a guest or
+send it through a proxy. Without KVM a guest takes minutes to boot, and the move takes longer
+still.
 
 ## Scripts
 
 | Script | What it does |
 |---|---|
+| `scripts/vm.py` · `scripts/vm_fixture.py` | Boot virtual machines and prepare them for the tests [against real servers](#against-real-servers) |
 | `scripts/load_backup.py --report-dir .` | Serves a small Django app under steady load, takes a panel backup and a streamed backup while it runs, and writes `load-report.md` and `load-report.json` (requests per second, latency percentiles, errors and memory). `--p95-factor` (or `DBS_LOAD_P95_FACTOR`, 2) is how much slower the 95th percentile may get |
 | `scripts/upgrade_rehearsal.py` | Installs django-dbs 0.7.0 from PyPI in a new virtualenv, fills a project and a manager, upgrades both to this checkout and checks that nothing was lost; `--from-version` and `--keep` change where it starts and whether its folder stays |
 | `scripts/stress_roundtrip.py` | Damages backups at random and checks they still restore (`DBS_STRESS_FLIPS` sets how many bytes) |
@@ -97,15 +126,16 @@ the schedule, files and `.env`, deploys, two projects on one server, the console
 activity, a Compose project, and a server move, rehearsed and real.
 
 ```bash
-sudo scripts/openssh_test_server.sh /tmp/dbs-sshd 2222
-sudo E2E_FIXTURE_SUDO=1 scripts/e2e_fixture.sh /srv/e2e docker > e2e.env
+python scripts/vm_fixture.py e2e --mount /tmp/dbs-guest > e2e.env
 cd manager-ui && npm run build:package
 set -a; . ../e2e.env; set +a; npx playwright test
 ```
 
-`E2E_FIXTURE_SUDO=1` lets the test account use `sudo` with its password, which the real server
-move needs; without it, that one scenario is skipped. The **Interface journeys** workflow runs
-them on every push to `main` and every night.
+The servers of the journeys are one guest: it holds the two projects and the Compose service,
+and its account may use `sudo` with its password, which the real server move needs. `--mount`
+mounts the guest's files with `sshfs`, so a journey can read and change a file on the server;
+without it those checks are skipped. The **Interface journeys** workflow runs them on every
+push to `main` and every night.
 
 ## The menu
 

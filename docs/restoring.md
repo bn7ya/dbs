@@ -41,7 +41,8 @@ run.
   a warning; a foreign key it cannot find stops the restore and names the row.
 
 `--no-data` restores only the files, `--no-files` only the rows, and `--database ALIAS`
-restores into another database.
+restores into another database. A restore that loads rows writes a
+[checkpoint](#checkpoints) of the database before it starts and another when it has finished.
 
 ### A backup belongs to its application
 
@@ -88,6 +89,87 @@ verifies, and sparse damage is corrected with Reed-Solomon parity, even in both 
 `result.healed` (in the [Python API](reference/python-api.md)) and a `WARNING` on the `dbs`
 logger say when it did. If a block cannot be recovered from either copy, DBS refuses to restore
 and names the blocks. [How it works](how-it-works.md#how-it-heals) has the details.
+
+## Checkpoints
+
+A migration that looked right can turn out to be wrong days later, when its backup is long
+gone. So wherever `DBS_BACKUP_DIR` is set, DBS keeps the database as it was on both sides of
+every change to its tables:
+
+- **`python manage.py migrate`** with something to apply writes a checkpoint before the first
+  migration runs and another after the last one. A checkpoint that cannot be written and
+  verified stops the migration before it starts. When a migration fails, the message names the
+  checkpoint and the command that puts it back.
+- **`python manage.py dbs restore`**, the panel's restore and the DBS manager's restore write
+  the same pair around the restore.
+- **`python manage.py makemigrations`** first checks that the next migration can have its
+  checkpoint: the backup folder can be written, a passphrase is there and the folder has room
+  for two more. It writes no migration otherwise, and says what is missing.
+
+```
+$ python manage.py migrate
+Checkpoint before this migration: /var/backups/shop/shop-before-migrate-20261115-101500Z.dbs
+Operations to perform:
+  Apply all migrations: ledger
+Running migrations:
+  Applying ledger.0004_split_customer_name... OK
+Checkpoint after this migration: /var/backups/shop/shop-after-migrate-20261115-101502Z.dbs
+```
+
+A checkpoint is an ordinary backup file, encrypted under the project's passphrase and verified
+after it is written. It holds every table Django's migrations manage on that database, whole,
+together with the list of applied migrations, and no files: a migration does not touch them.
+It is read through the models as the applied migrations describe them, so it is right even
+while the code is already ahead of the database. DBS's own tables, the audit trail among them,
+are not in it and are never rolled back.
+
+**What is kept.** Checkpoints are counted apart from scheduled and manual backups, and neither
+removes the other. The newest *before* and the newest *after* are never removed; older ones go,
+oldest first, once there are more than `DBS_MAX_BACKUPS` (5 unless set, up to 10,000).
+`python manage.py dbs checkpoints` lists them with the migrations each one stands beside, and
+`--json` prints the same list for a script.
+
+**When none is written.** `migrate` with nothing to apply, `--plan` and `--check`; a database
+with no migration applied yet; a test database; a run that applies only DBS's own migrations;
+`migrate --no-checkpoint` and `dbs restore --no-checkpoint`; `DBS_MIGRATION_CHECKPOINTS = False`;
+and a project with no `DBS_BACKUP_DIR`, which gets one line saying so. A dry run of a restore
+and `--no-data` write none either.
+
+Each `migrate` and each restore therefore costs two backups of the database. On a large
+database give a deploy step that migrates the time for it, or switch checkpoints off for that
+run with `--no-checkpoint`.
+
+### Going back to before a migration
+
+Restoring a checkpoint puts back the tables, the rows and the migration records it was taken
+with, however many migrations ran since:
+
+```bash
+python manage.py dbs checkpoints                       # find the one before the migration
+python manage.py dbs restore PATH --flush --dry-run    # what would change; changes nothing
+python manage.py dbs restore PATH --flush              # put it back
+python manage.py showmigrations                        # the faulty migration is unapplied again
+```
+
+- **It rebuilds, it does not reverse.** DBS never runs a migration backwards, so a migration
+  that cannot be reversed, or whose reverse is wrong, is no obstacle. It drops the tables the
+  checkpoint carries, creates them again as the checkpoint's migrations describe them, loads
+  the rows and rewrites `django_migrations` to what was applied then.
+- **It needs `--flush`**, because it replaces tables. `--no-schema` loads the checkpoint's rows
+  into the tables as they are now, like any other backup.
+- **It checks before it changes anything.** The checkpoint must belong to this application, its
+  migrations must still be in the project, and the tables they describe must match the ones it
+  was taken from. The dry run reports the tables that would be rebuilt, the migrations that
+  would no longer be applied and the ones recorded again, and runs no statement that changes a
+  table.
+- **On PostgreSQL and SQLite it is one transaction**: a failure leaves the database as it was.
+  MySQL and MariaDB cannot roll a table change back, so there the file is checked whole first,
+  and the checkpoint written just before the restore is the way back.
+- **Raw SQL is not repeated.** A trigger, a view or an index a migration created with `RunSQL`
+  is not rebuilt; the dry run and the restore name those migrations.
+- **Keep the faulty migration unapplied until it is fixed.** The code still holds it, so the
+  next `migrate` would apply it again. Fix or remove it first, then migrate; that `migrate`
+  writes its own pair of checkpoints.
 
 ## Passphrases
 

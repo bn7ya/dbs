@@ -51,8 +51,10 @@ Two things matter from the start:
 - **`SECRET_KEY` must be stable.** DBS derives the backup passphrase from it, and a project's
   backup passphrase must never change: backups written with the old one would no longer
   open. If you ever rotate `SECRET_KEY`, keep the old value in `SECRET_KEY_FALLBACKS`.
-- **`DBS_BACKUP_DIR`** is where backups are kept, at most five. The user your project runs
-  as must be able to write there.
+- **`DBS_BACKUP_DIR`** is where backups are kept, at most five unless `DBS_MAX_BACKUPS` says
+  otherwise. The user your project runs as must be able to write there. With it set,
+  `migrate` also keeps a [checkpoint](restoring.md#checkpoints) of the database before and
+  after every migration.
 
 `DBSSecurityMiddleware` goes below `AuthenticationMiddleware`. It guards the panel; see
 [the session guard](session-guard.md).
@@ -91,7 +93,7 @@ On your first visit, a short wizard asks which networks you sign in from and how
 session guard should be. Then:
 
 1. **Schedule** → tick *enabled*, choose an interval (`6h`, `1d`) and how many backups to
-   keep (1 to 5). Backups now run on their own, inside your web workers.
+   keep (1 to 5, or up to `DBS_MAX_BACKUPS`). Backups now run on their own, inside your web workers.
 2. **Health** shows whether the last backup is recent, valid and still on disk.
 3. **Backups** lists every backup, with *download* and *restore*. A restore starts as a dry
    run; a real one needs the file's name typed out.
