@@ -223,8 +223,9 @@ jobs:
         run: python -m pytest tests/isolation --ds=tests.isolation.settings
 
   openssh:
-    name: SSH against a real OpenSSH server
-    runs-on: ubuntu-latest
+    name: SSH against OpenSSH in a virtual machine
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -235,21 +236,44 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -e ".[dev]"
-      - name: Start an OpenSSH server on 127.0.0.1:2222
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends openssh-server
-          sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
+      - uses: ./.github/actions/virtual-machines
+      - name: Boot a guest that runs OpenSSH
+        run: python scripts/vm_fixture.py ssh >> "$GITHUB_ENV"
       - name: SSH suites
         env:
           DBS_TEST_SSH_REQUIRED: "1"
         run: python -m pytest tests/test_ssh_live.py tests/test_ssh_openssh.py -rs
-      - name: Server log
+      - name: Guest console
         if: failure()
-        run: sudo cat "$RUNNER_TEMP/sshd/sshd.log"
+        run: cat ~/.cache/dbs-vm/guests/*/console.log || true
+
+  server-move:
+    name: A server move between two virtual machines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e ".[dev]"
+      - uses: ./.github/actions/virtual-machines
+      - name: Boot the old server with its project and a bare new one
+        run: python scripts/vm_fixture.py move >> "$GITHUB_ENV"
+      - name: Rehearse the move, then move for real
+        env:
+          DBS_TEST_MOVE_REQUIRED: "1"
+        run: python -m pytest tests/manager/live/test_relocation.py --ds=tests.manager.settings -rs
+      - name: Guest consoles
+        if: failure()
+        run: cat ~/.cache/dbs-vm/guests/*/console.log || true
 
   containers:
-    name: The manager against ${{ matrix.engine }} over OpenSSH
+    name: The manager against ${{ matrix.engine }} in a virtual machine
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -259,6 +283,8 @@ jobs:
       fail-fast: false
       matrix:
         engine: [docker, podman]
+    env:
+      DBS_VM_MEMORY: "3072"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -267,28 +293,18 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -e ".[dev]"
-      - name: Install OpenSSH and the Compose provider
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends openssh-server
-          if [ "${{ matrix.engine }}" = podman ]; then
-            sudo apt-get install -y --no-install-recommends podman podman-compose uidmap slirp4netns
-          fi
-      - name: Keep the runner's XDG folders to the runner
-        run: sudo sed -i '/^XDG_[A-Z_]*=/d' /etc/environment
-      - name: Start an OpenSSH server on 127.0.0.1:2222
-        run: sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
-      - name: Build and start the Compose project as the SSH account
-        run: sudo env "PATH=$PATH" scripts/container_fixture.sh ${{ matrix.engine }} /srv/dbs-live >> "$GITHUB_ENV"
+      - uses: ./.github/actions/virtual-machines
+      - name: Boot a guest that runs the Compose project as the SSH account
+        run: python scripts/vm_fixture.py containers ${{ matrix.engine }} >> "$GITHUB_ENV"
       - name: Discover, check, back up, restore, deploy and open a terminal
         env:
           DBS_TEST_CONTAINER_REQUIRED: "1"
-        run: python -m pytest tests/manager/live --ds=tests.manager.settings -rs
-      - name: Server and project logs
+        run: python -m pytest tests/manager/live/test_containers.py --ds=tests.manager.settings -rs
+      - name: Guest console and project logs
         if: failure()
         run: |
-          sudo cat "$RUNNER_TEMP/sshd/sshd.log"
-          sudo su dbs-ssh -s /bin/sh -c "export XDG_RUNTIME_DIR=/run/user/\$(id -u); cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
+          cat ~/.cache/dbs-vm/guests/*/console.log || true
+          python scripts/vm.py run ${{ matrix.engine }} -- sh -c "cd /srv/dbs-live/shop && ${{ matrix.engine }} compose logs" || true
 
   upgrade-from-0-7:
     name: Upgrade a project and a manager from 0.7.0

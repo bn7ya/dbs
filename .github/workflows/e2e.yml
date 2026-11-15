@@ -15,7 +15,7 @@ env:
 
 jobs:
   journeys:
-    name: Playwright journeys against a live manager over OpenSSH
+    name: Playwright journeys against a live manager and a virtual machine
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
@@ -40,23 +40,22 @@ jobs:
       - name: Build the interface into the package
         run: npm run build:package
         working-directory: manager-ui
-      - name: Install OpenSSH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends openssh-server
-      - name: Start an OpenSSH server on 127.0.0.1:2222
-        run: sudo scripts/openssh_test_server.sh "$RUNNER_TEMP/sshd" 2222 >> "$GITHUB_ENV"
-      - name: Prepare the projects and the Compose service the journeys use
-        run: sudo env "PATH=$PATH" E2E_FIXTURE_SUDO=1 scripts/e2e_fixture.sh /srv/e2e docker >> "$GITHUB_ENV"
+      - uses: ./.github/actions/virtual-machines
+      - name: Install sshfs
+        run: sudo apt-get install -y --no-install-recommends sshfs
+      - name: Boot a guest with the projects and the Compose service the journeys use
+        env:
+          DBS_VM_MEMORY: "4096"
+        run: python scripts/vm_fixture.py e2e --mount "$RUNNER_TEMP/guest" >> "$GITHUB_ENV"
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
         working-directory: manager-ui
       - name: Journeys, left to right and right to left
         working-directory: manager-ui
-        run: sudo -E env "PATH=$PATH" npx playwright test
-      - name: Server log
+        run: npx playwright test
+      - name: Guest console
         if: failure()
-        run: sudo cat "$RUNNER_TEMP/sshd/sshd.log"
+        run: cat ~/.cache/dbs-vm/guests/*/console.log || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
