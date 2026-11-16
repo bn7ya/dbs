@@ -540,7 +540,18 @@ jobs:
       - name: Python dependencies
         run: |
           python -m pip install "pip-audit>=2.7,<3" .
-          pip-audit --skip-editable
+          for attempt in 1 2 3; do
+            if pip-audit --skip-editable; then exit 0; fi
+            echo "pip-audit did not pass on attempt $attempt of 3."
+            if [ "$attempt" -lt 3 ]; then sleep 30; fi
+          done
+          exit 1
       - name: Interface dependencies
         working-directory: manager-ui
-        run: npm audit --omit=dev
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev; then exit 0; fi
+            echo "npm audit did not pass on attempt $attempt of 3."
+            if [ "$attempt" -lt 3 ]; then sleep 30; fi
+          done
+          exit 1
