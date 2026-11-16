@@ -3,7 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from dbs.manager.backups.models import (
-    PLAN_KEEP_MAX,
+    PLAN_KEEP_LIMIT,
     PLAN_KEEP_MIN,
     PLAN_KEEP_REMOTE_MIN,
     PLAN_PATH_MAX_LENGTH,
@@ -59,12 +59,12 @@ class PlanUpdateSerializer(serializers.Serializer):
     )
     keep = serializers.IntegerField(
         min_value=PLAN_KEEP_MIN,
-        max_value=PLAN_KEEP_MAX,
+        max_value=PLAN_KEEP_LIMIT,
         required=False,
     )
     keep_remote = serializers.IntegerField(
         min_value=PLAN_KEEP_REMOTE_MIN,
-        max_value=PLAN_KEEP_MAX,
+        max_value=PLAN_KEEP_LIMIT,
         required=False,
     )
     enabled = serializers.BooleanField(

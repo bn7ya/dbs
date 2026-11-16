@@ -28,6 +28,8 @@ KEYS = {
     "file_roots",
     "env_path",
     "dbs_version",
+    "max_backups",
+    "application",
     "host_keys",
 }
 

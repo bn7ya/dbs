@@ -78,16 +78,18 @@ inline comments. That includes `dbs/naming.py`, `dbs/retention.py`,
 `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`, `dbs/files.py`, everything under
 `dbs/security/`, `dbs/audit.py`, `dbs/leases.py`, `dbs/jobs.py`, `dbs/tee.py`,
 `dbs/extras.py`, `dbs/upgrade.py`, `dbs/schedule_runner.py`, `dbs/health.py`,
-`dbs/connection.py`, `dbs/job_process.py`, the internals of `dbs/engine/`, `dbs/container/`
-and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `stream.py`, `rs.py`,
-`sources.py`, `chunked.py`) and everything under `dbs/manager/`.
+`dbs/connection.py`, `dbs/job_process.py`, `dbs/checkpoints.py`, `dbs/identity.py`, the
+internals of `dbs/engine/`, `dbs/container/` and `dbs/crypto/` (`pipeline.py`, `frames.py`,
+`inputs.py`, `convert.py`, `schema.py`, `stream.py`, `rs.py`, `sources.py`, `chunked.py`) and
+everything under `dbs/manager/`.
 
 ## Layout
 
 - `dbs/engine/` — backup, restore, validate and the format 1 to 2 converter. `pipeline.py`
   runs a backup through its threads (snapshot reads in the caller, a deflate pool, the
   encoder, the writer) behind bounded queues; `frames.py` and `payload.py` are the framed
-  payload; `inputs.py` opens bytes, a path or a file for reading.
+  payload; `inputs.py` opens bytes, a path or a file for reading. `schema.py` reads the
+  models the applied migrations describe and rebuilds a checkpoint's tables from them.
 - `dbs/container/` — the on-disk format. `stream.py` is format 2 (`StreamWriter`,
   `StreamReader`, `FORMAT_VERSION`); `format.py` and `blocks.py` are format 1, still read;
   `rs.py` computes Reed-Solomon parity with numpy; `sources.py` reads a container from bytes
@@ -102,7 +104,14 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   `pyproject.toml`.
 - `dbs/management/commands/` — the `dbs` umbrella and its `django_dbs` and `django-dbs`
   aliases (real modules), plus `dbs_backup`, `dbs_restore`, `dbs_validate`, `dbs_schedule`, `dbs_connection`,
-  `dbs_health`, `dbs_audit`, `dbs_key`, `dbs_security`, `dbs_ai`, `dbs_upgrade`.
+  `dbs_health`, `dbs_audit`, `dbs_key`, `dbs_security`, `dbs_ai`, `dbs_upgrade`,
+  `dbs_checkpoints`. `migrate` and `makemigrations` here subclass whichever command the
+  project would run without DBS (`dbs/management/underlying.py`) and add `--no-checkpoint`.
+- `dbs/checkpoints.py` — the backup of the database kept before and after every `migrate`
+  and every restore: `pre_migrate` and `post_migrate` receivers connected in `dbs/apps.py`,
+  its own retention group, the readiness check of `makemigrations`, and the restore every
+  entry point calls. `dbs/identity.py` — the application a backup records and the refusal of
+  another application's backup.
 - `dbs/models.py`, `dbs/admin.py`, `dbs/views.py`, `dbs/forms.py`,
   `dbs/templates/admin/dbs/`, `dbs/static/dbs/` — the control panel mounted at
   `/admin/dbs/`. Superusers only, enforced in `dbs/security/decorators.py` and in
@@ -115,8 +124,8 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   `manage.py dbs ai`.
 - `dbs/naming.py`, `dbs/retention.py`, `dbs/scheduling.py`, `dbs/io.py`,
   `dbs/conf.py` — Django-free helpers shared by the server and the manager: backup names,
-  safe retention (at most five, the newest verified one always kept), intervals, files
-  written privately and never over another.
+  safe retention (at most `DBS_MAX_BACKUPS`, five unless set, the newest verified one always
+  kept), intervals, files written privately and never over another.
 - `dbs/audit.py`, `dbs/leases.py`, `dbs/jobs.py`, `dbs/schedule_runner.py`,
   `dbs/health.py`, `dbs/connection.py` — the sourceless, hash-chained audit trail, database
   leases, the runner lease and heartbeat every panel and scheduled job holds, the panel's
@@ -169,7 +178,12 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   `dbs/static/dbs/logo.svg`.
 - `dbs/manager/redeploy/` — moving an application onto another, deploying one in place from
   the step catalogue (`catalogue.py`, `deploy.py`), and putting either back from its safety
-  backup; `restoring.py` holds the migrate and restore steps a server move shares.
+  backup; `restoring.py` holds the migrate and restore steps a server move shares, and
+  `updating.py` the steps that install a django-dbs release in an application.
+- `dbs/manager/selfupdate.py` — `django_dbs update` and the About page's update: the pinned
+  `pip install` for the manager's own environment, then a restart of `django_dbs run` in place.
+  `dbs/manager/backups/limits.py` — how many backups a plan may keep in the manager
+  (`DBS_MANAGER_MAX_BACKUPS`) and on its server (the application's `DBS_MAX_BACKUPS`).
 - `dbs/manager/relocation/` — moving a server's applications onto another server that may have
   nothing installed: `systems.py` (os-release), `packages.py` (the package table per family,
   Docker's repository and pinned key), `catalogue.py` (every command, as fixed argument lists),
@@ -200,10 +214,14 @@ and `dbs/crypto/` (`pipeline.py`, `frames.py`, `inputs.py`, `convert.py`, `strea
   failing backups, several instances on one database), `tests/scaling/` (many applications on
   one manager, a file database), `tests/scale/` (a thousand tables and a large table) and
   `tests/load/` (a backup under web load; `scripts/load_backup.py` writes `load-report.md`)
-  each run as their own session with their own settings. `tests/manager/live/` drives a real
-  Docker or Podman Compose project (`tests/containers/project/`, built by
-  `scripts/container_fixture.sh ENGINE DIR`) over OpenSSH when `DBS_TEST_CONTAINER_ENGINE`
-  names an engine. `scripts/upgrade_rehearsal.py` installs 0.7.0 from PyPI, fills a project and
+  each run as their own session with their own settings. `tests/checkpoints/` runs two real
+  projects in child processes (`project/` and `other/`, which share a `SECRET_KEY`), migrating
+  through `stages/` and going back. The tests that need a real SSH server run against virtual
+  machines: `scripts/vm.py` boots QEMU guests from a pinned Ubuntu cloud image and
+  `scripts/vm_fixture.py ssh|move|containers ENGINE|e2e` prepares them and prints the
+  variables the tests read. `tests/manager/live/` drives a real Docker or Podman Compose
+  project (`tests/containers/project/`, built inside a guest by `scripts/container_fixture.sh`)
+  and moves a host project from one guest to a bare second one. `scripts/upgrade_rehearsal.py` installs 0.7.0 from PyPI, fills a project and
   a manager, upgrades both to the checkout and checks that nothing was lost.
 - `tests/stability/` — what each release promised: `<version>/library.json` and `manager.json`
   (the Python API, commands, terminal, REST routes, MCP tools, settings, migrations, JSON keys,
@@ -274,6 +292,25 @@ flag, not with confirmation. Abandoning unreadable backups stays behind an inter
 confirmation with no programmatic bypass, and the message offers installing the older
 version to read them before it offers giving them up.
 
+## Checkpoint constraints
+
+- A checkpoint is written before `migrate` applies anything and before a restore loads
+  anything. If it cannot be written and verified, the migration or the restore does not
+  start. The checkpoint afterwards never fails the command that succeeded.
+- Checkpoints are on wherever `DBS_BACKUP_DIR` is set. That default was decided for 0.9.0 as
+  the one new setting that changes what an upgraded project does; `DBS_MIGRATION_CHECKPOINTS`
+  and `--no-checkpoint` stay as the ways out, and no later setting may do the same.
+- A checkpoint never carries DBS's own tables, and restoring one never touches them: the
+  audit chain and DBS's migration records are not rolled back.
+- Restoring a checkpoint rebuilds tables from the recorded migrations and never runs a
+  migration backwards. It needs `flush=True`, checks everything before it changes anything,
+  and is one transaction where the database can roll back schema changes.
+- Checkpoints are their own retention group, limited by `DBS_MAX_BACKUPS`: the newest before
+  and the newest after are never removed, and scheduled or manual backups are never counted
+  with them or removed for them.
+- A restore refuses a backup that records another application, in a dry run too.
+  `another_application` is the only way past, and nothing sets it on a developer's behalf.
+
 ## Manager constraints
 
 - `dbs.manager` is never in a host project's `INSTALLED_APPS`. The core never imports
@@ -295,19 +332,25 @@ version to read them before it offers giving them up.
   (`found_by_discovery`), so the REST API never does. `python_path` names a Python and
   `manage_path` a `manage.py`, never an option.
 - The manager pulls; a server never pushes. It removes a server's copy only after its own
-  copy is verified, keeps at most five good backups per application and plan, and never
-  deletes the newest one that passed verification.
+  copy is verified, keeps at most `DBS_MANAGER_MAX_BACKUPS` good backups per application and
+  plan (five unless set, 10,000 at most), and never deletes the newest one that passed
+  verification. A plan leaves on a server no more than that application's `DBS_MAX_BACKUPS`.
 - Application ids are the ids of the 0.7 servers they came from, so the hash-chained audit
   rows keep pointing at the right thing. Never rewrite an audit row's subject or data.
 - Every service method that acts names its capability with `@requires`. The interface hides
   what a role cannot do, but the service is the boundary.
 - The MCP server never accepts the account password, never returns a secret, and offers no
-  tool that restores, deploys, redeploys or reverts for real, changes deploy steps, pauses a
+  tool that restores, deploys, redeploys, updates or reverts for real, changes deploy steps, pauses a
   plan, removes, deletes, pushes a `.env` or re-pins a host key, and none whose name holds
   `shell`, `terminal`, `console`, `exec` or `pty`. It pins a new server's host key only after a
   person confirmed it, cannot make a plan keep fewer backups, and cannot save a file the
   manager keeps encrypted.
   `tests/manager/mcp/test_tools.py` enforces the list; keep it when adding tools.
+- Updating django-dbs in an application (`redeploy/updating.py`) runs fixed argument lists
+  only, takes a safety backup first, refuses a container (the release belongs in its image)
+  and a downgrade, and needs an admin, the account password and the typed name; its rehearsal
+  only reads. The manager's own update is the master's, asks the account password, refuses
+  while a job runs or a terminal is open, and never runs through MCP or the console.
 - A deploy runs only steps from the fixed catalogue in `dbs/manager/redeploy/catalogue.py`,
   each a fixed argument list with validated names; never accept a command line or an argument
   list from a request. A deploy backs the application up first, and its rehearsal only reads.
@@ -356,8 +399,10 @@ scripts/test.sh          # pytest, then tests/manager, tests/isolation, tests/sc
 
 `DBS_TEST_DB=postgres|mysql` runs the library suite on another database and
 `DBS_MANAGER_DATABASE_URL` the manager suite; `DBS_TEST_SSH_*` points the OpenSSH tests at
-a server (`scripts/openssh_test_server.sh` starts one), `DBS_TEST_CONTAINER_ENGINE=docker|podman`
-with `DBS_TEST_CONTAINER_FOLDER` the live container tests, `DBS_TEST_FULL_DISK` a small tmpfs
+a server (`scripts/vm_fixture.py ssh` boots one in a virtual machine), `DBS_TEST_MOVE_TARGET_*`
+with `DBS_TEST_MOVE_PROJECT` and `DBS_TEST_MOVE_SUDO_PASSWORD` the two-machine server move,
+`DBS_TEST_CONTAINER_ENGINE=docker|podman` with `DBS_TEST_CONTAINER_FOLDER` the live container
+tests, `DBS_VM_*` how a guest is sized and reached, `DBS_TEST_FULL_DISK` a small tmpfs
 for the full-disk backup, `DBS_SCALE_TABLES` and `DBS_SCALE_ROWS` the scale suite, and
 `DBS_STRESS_FLIPS` how many bytes `scripts/stress_roundtrip.py` damages.
 

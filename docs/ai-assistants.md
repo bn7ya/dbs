@@ -59,8 +59,8 @@ shop.example.com, user deploy, find the application in /srv/shop and back it up"
 
 ### What Claude cannot do
 
-Reveal a passphrase or a `.env` value; restore, move an application or a server, deploy or
-revert for real; give a `sudo` password; choose deploy steps; push a `.env`; make a plan keep
+Reveal a passphrase or a `.env` value; restore, move an application or a server, deploy,
+update DBS or revert for real; give a `sudo` password; choose deploy steps; push a `.env`; make a plan keep
 fewer backups; save a file the manager keeps encrypted; remove a server or an application;
 delete backups or files; open a console or a terminal; or pin or re-pin a host key you did not
 confirm.

@@ -64,6 +64,21 @@ export interface PlanCreate extends PlanSettings, PlanPassword {
 
 export type PlanUpdate = Partial<PlanSettings> & PlanPassword;
 
+export interface KeepRange {
+  readonly min: number;
+  readonly max: number;
+}
+
+export interface PlanLimits {
+  readonly keep: KeepRange;
+  readonly keep_remote: KeepRange;
+}
+
+export const DEFAULT_PLAN_LIMITS: PlanLimits = {
+  keep: { min: 1, max: 5 },
+  keep_remote: { min: 0, max: 5 },
+};
+
 export interface PlanListQuery {
   readonly application: string;
   readonly page: number;

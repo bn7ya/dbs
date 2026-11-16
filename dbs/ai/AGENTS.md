@@ -8,7 +8,7 @@ This project uses django-dbs for backups.
   `dbs.security.middleware.DBSSecurityMiddleware` in `MIDDLEWARE` below
   `AuthenticationMiddleware` for the guard, `DBS_BACKUP_DIR`, then `manage.py migrate`.
   Upgrading from 0.2.x requires that migrate.
-- Commands: `python manage.py dbs backup|restore|validate|schedule|connection|health|audit|key|security|ai|upgrade`.
+- Commands: `python manage.py dbs backup|restore|validate|schedule|connection|health|audit|key|security|ai|upgrade|checkpoints`.
   `manage.py django_dbs`, `manage.py django-dbs` and the older `dbs_backup`/`dbs_restore`/
   `dbs_validate`/`dbs_schedule` names also work. `dbs backup PATH` refuses a path that exists.
 - The backup passphrase is derived from `settings.SECRET_KEY` and **must never change**:
@@ -25,8 +25,18 @@ This project uses django-dbs for backups.
   (`python -m dbs.job_process`) stopped at `DBS_JOB_TIME_LIMIT` (6h) or
   `DBS_JOB_MEMORY_LIMIT` (2G); `DBS_JOB_PYTHON` names its interpreter when the web server
   embeds Python. `dbs.contrib` was removed in 0.8.0.
-- The server keeps at most five backups and pushes nothing; the DBS manager pulls them over
-  SSH. The panel has no SFTP targets and no console, and there is no `dbs-client`.
+- The server keeps at most `DBS_MAX_BACKUPS` backups (5 unless set) and pushes nothing; the DBS
+  manager pulls them over SSH. The panel has no SFTP targets and no console, and there is no
+  `dbs-client`.
+- Where `DBS_BACKUP_DIR` is set, `manage.py migrate` keeps a checkpoint of the database before
+  and after the migrations it applies, and stops when the first cannot be written. When a
+  migration turns out to be wrong, `manage.py dbs checkpoints` lists them and
+  `manage.py dbs restore PATH --flush` puts the tables, rows and migration records back; run it
+  with `--dry-run` first. Do not add `--no-checkpoint` or set `DBS_MIGRATION_CHECKPOINTS = False`
+  unless the developer asks.
+- A backup records the application it belongs to, and a restore refuses another application's.
+  Do not pass `--another-application` unless the developer says the backup is meant for this
+  project.
 - The manager (`django_dbs run`) keeps servers (SSH machines) apart from applications (one
   Django project each, on the server, in a Compose service or a container, Docker or
   Podman), added from a folder with `django_dbs app add NAME --server S --folder F`. An

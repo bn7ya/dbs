@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <strong>0.8.3 is out:</strong>
-  <a href="#whats-new-in-080">what's new</a> ·
-  <a href="https://github.com/bn7ya/dbs/blob/v0.8.3/RELEASE_NOTES.md">release notes</a> ·
+  <strong>0.9.0 is out:</strong>
+  <a href="#whats-new-in-090">what's new</a> ·
+  <a href="https://github.com/bn7ya/dbs/blob/v0.9.0/RELEASE_NOTES.md">release notes</a> ·
   <a href="https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md">upgrading</a>
 </p>
 
@@ -33,6 +33,8 @@
 - **It repairs itself.** Every backup stores two copies of your data plus Reed-Solomon parity,
   so damage to the file is found and repaired when you restore, instead of quietly breaking
   the data you rely on.
+- **A way back from a bad migration.** `migrate` keeps the database as it was before and after
+  every migration, and a restore puts the tables, the rows and the migration records back.
 - **A panel in your admin.** `/admin/dbs/` schedules backups, restores them, reports their
   health and keeps a tamper-evident audit trail, behind a session guard.
 - **A manager for your servers.** `django_dbs run` starts a local application that finds the
@@ -90,6 +92,32 @@ takes a first backup.
 The [getting started guide](https://github.com/bn7ya/dbs/blob/main/docs/getting-started.md)
 walks through each step.
 
+## What's new in 0.9.0
+
+- **Checkpoints around every migration.** Where `DBS_BACKUP_DIR` is set, `python manage.py
+  migrate` keeps a backup of the database before and after the migrations it applies, and does
+  not start when the first cannot be written. `python manage.py dbs restore` does the same
+  around a restore, and `makemigrations` checks first that a checkpoint can be kept.
+- **Back to before a faulty migration.** `python manage.py dbs restore CHECKPOINT --flush`
+  rebuilds the tables as they were, loads their rows and sets the migration records back,
+  however many migrations ran since. `python manage.py dbs checkpoints` lists them.
+- **A backup belongs to its application.** A project refuses to restore another project's
+  backup, even when both share a `SECRET_KEY`.
+- **More than five backups.** `DBS_MAX_BACKUPS` in a project and `DBS_MANAGER_MAX_BACKUPS` in
+  the manager raise the limit, up to 10,000.
+- **The manager updates DBS**, in an application on its server and for itself.
+
+The [0.9.0 release notes](https://github.com/bn7ya/dbs/blob/v0.9.0/RELEASE_NOTES.md) say what
+changes for a project that upgrades: `migrate` now writes two backups of the database, and
+`DBS_MIGRATION_CHECKPOINTS = False` or `migrate --no-checkpoint` switches that off.
+
+**Upgrading from 0.8.x:**
+
+```bash
+pip install --upgrade django-dbs
+python manage.py dbs upgrade
+```
+
 ## What's new in 0.8.0
 
 - **Servers and applications.** A server is an SSH machine, and each Django project on it is an
@@ -141,8 +169,9 @@ On the manager's machine, `pipx upgrade django-dbs`; it migrates itself the next
 - **Redundancy:** every block is stored twice, 64 blocks apart, with Reed-Solomon parity and a
   keyed tag, so a backup survives a burst of damage and scattered damage in both copies.
 - **Verification:** every new backup is read back and checked before it counts.
-- **Pulling, never pushing:** servers keep at most five backups each. The manager pulls them
-  over SSH, verifies them and keeps at most five per application; a server never contacts it.
+- **Pulling, never pushing:** servers keep at most five backups each, or as many as you set.
+  The manager pulls them over SSH, verifies them and keeps at most five per application and
+  plan unless you allow more; a server never contacts it.
 
 More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.md).
 
@@ -173,7 +202,7 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 
 ## Status
 
-0.8.3 is the current release. DBS is in active development, and stable from 0.8.0: new releases
+0.9.0 is the current release. DBS is in active development, and stable from 0.8.0: new releases
 add, and nothing you use breaks.
 
 - **Your backups keep opening.** Every backup written by 0.8.0 or later restores, with the same

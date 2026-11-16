@@ -10,8 +10,8 @@ RESTORE_MODES = ("merge", "replace")
 PLAN_KINDS = ("dbs", "archive", "collect")
 ACTIVITY_STATUSES = ("queued", "running", "succeeded", "failed")
 ACTIVITY_LIMIT = 20
-KEEP_CHOICES = range(1, 6)
-KEEP_REMOTE_CHOICES = range(0, 6)
+KEEP_LIMIT = 10000
+DEFAULT_SSH_PORT = 22
 
 LOCAL_HANDLERS = frozenset(
     {
@@ -25,6 +25,21 @@ LOCAL_HANDLERS = frozenset(
         "terminal.envfiles:reveal",
     }
 )
+
+
+def _within(low: int) -> Callable[[str], int]:
+    def count(text: str) -> int:
+        try:
+            value = int(text)
+        except ValueError:
+            value = low - 1
+        if not low <= value <= KEEP_LIMIT:
+            raise argparse.ArgumentTypeError(
+                f"{text!r} is not a number from {low} to {KEEP_LIMIT}"
+            )
+        return value
+
+    return count
 
 
 def _nothing(parser: argparse.ArgumentParser) -> None:
@@ -232,7 +247,12 @@ def servers(commands, surface: Surface) -> None:
     )
     add.add_argument("name", help="A name for this server.")
     add.add_argument("--host", required=True, help="Its address.")
-    add.add_argument("--port", type=int, default=None, help="Its SSH port.")
+    add.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_SSH_PORT,
+        help=f"Its SSH port, {DEFAULT_SSH_PORT} unless given.",
+    )
     add.add_argument("--user", dest="username", required=True, help="The SSH account.")
     _ssh_auth(add).add_argument(
         "--generate-key",
@@ -463,6 +483,26 @@ def applications(commands, surface: Surface) -> None:
         "--confirm-name", help="The application's name, instead of typing it."
     )
 
+    update = _verb(
+        verbs,
+        "update-dbs",
+        "Update django-dbs in an application on its server: check it, back it up, "
+        "install the release, finish the upgrade, restart it and check it again. "
+        "Rehearses unless --real.",
+        "terminal.redeploy:update_dbs",
+        surface,
+    )
+    update.add_argument("application", help="The application's name or id.")
+    update.add_argument(
+        "--to",
+        metavar="VERSION",
+        help="The django-dbs release to install, instead of this manager's own.",
+    )
+    update.add_argument("--real", action="store_true", help="Update for real.")
+    update.add_argument(
+        "--confirm-name", help="The application's name, instead of typing it."
+    )
+
     steps = _verb(
         verbs,
         "deploy-steps",
@@ -585,18 +625,17 @@ def _plan_fields(parser) -> None:
     parser.add_argument("--manual", action="store_true", help="Run only when asked.")
     parser.add_argument(
         "--keep",
-        type=int,
-        choices=KEEP_CHOICES,
+        type=_within(1),
         metavar="N",
-        help="How many to keep here, 1 to 5. Keeping fewer asks for your password.",
+        help="How many to keep here, from 1 to the manager's limit (5 unless "
+        "DBS_MANAGER_MAX_BACKUPS is set). Keeping fewer asks for your password.",
     )
     parser.add_argument(
         "--keep-remote",
-        type=int,
-        choices=KEEP_REMOTE_CHOICES,
+        type=_within(0),
         metavar="N",
-        help="How many to leave on the server, 0 to 5. Keeping fewer asks for your "
-        "password.",
+        help="How many to leave on the server, from 0 to the server's limit (5 unless "
+        "its DBS_MAX_BACKUPS is set). Keeping fewer asks for your password.",
     )
     parser.add_argument(
         "--first-run",

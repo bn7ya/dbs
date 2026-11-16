@@ -17,6 +17,7 @@ from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerConnectionService
 from dbs.models import AuditEvent
 from tests.manager.relocation.conftest import SOURCE, SUDO_PASSWORD, TARGET
+from tests.manager.relocation.hosts import unwrap
 from tests.manager.servers.support import BACKUP_PASSPHRASE, PASSWORD
 
 
@@ -147,6 +148,20 @@ def test_a_move_for_real_carries_the_application_and_restores_its_data(
         world["project"]
     )
     assert (world["project"] / "db.sqlite3").exists()
+
+
+@pytest.mark.django_db
+def test_a_new_virtualenv_gets_the_time_a_slow_server_needs(api, world, run_jobs, settings):
+    moved_for_real(api, world, run_jobs)
+
+    made = [
+        run
+        for run in world["hosts"].runs(TARGET)
+        if unwrap(run["argv"])[1:3] == ["-m", "venv"]
+    ]
+
+    assert [run["timeout"] for run in made] == [settings.BACKUP_EXEC_TIMEOUT]
+    assert settings.BACKUP_EXEC_TIMEOUT > settings.SSH_COMMAND_TIMEOUT
 
 
 def moved_for_real(api, world, run_jobs):

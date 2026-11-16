@@ -4,8 +4,11 @@ import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { ApplicationRef } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { MatButtonHarness } from '@angular/material/button/testing';
+import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AuthStore } from '@core/auth/state/auth.store';
+import { OPERATOR } from '@core/auth/testing/identity.fixtures';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import type { About } from '../../data/about.types';
@@ -33,7 +36,12 @@ describe('AboutPage', () => {
     vi.setSystemTime(NOW);
     localStorage.setItem('locale', 'en');
     TestBed.configureTestingModule({
-      providers: [AboutStore, provideHttpClient(withInterceptors([errorInterceptor])), provideHttpClientTesting()],
+      providers: [
+        AboutStore,
+        provideHttpClient(withInterceptors([errorInterceptor])),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
     });
     TestBed.inject(LocaleStore).register({ en, ar });
     http = TestBed.inject(HttpTestingController);
@@ -78,10 +86,21 @@ describe('AboutPage', () => {
     ]);
     const buttons = await TestbedHarnessEnvironment.loader(fixture).getAllHarnesses(MatButtonHarness);
     expect(await Promise.all(buttons.map((button) => button.getText()))).toEqual([
+      'Look for a newer release',
       'Copy the export command',
       'Copy the export command with backups',
       'Copy the import command',
     ]);
+  });
+
+  it('offers the update to the master only', async () => {
+    const restoring = TestBed.inject(AuthStore).restore();
+    http.expectOne('/api/auth/me/').flush(OPERATOR);
+    await restoring;
+
+    const page = await show(ABOUT);
+
+    expect(page.querySelector('app-manager-update')).toBeNull();
   });
 
   it('says why it could not load and tries again', async () => {

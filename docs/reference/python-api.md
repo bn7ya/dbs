@@ -52,16 +52,25 @@ projects, or writes it with `output=PATH`; it takes the same options but `worker
 | `flush` | `False` | Delete the rows the backup covers first |
 | `load_data` · `write_files` | `True` | Load the rows; write the files |
 | `registry` | `backup_registry` | The registry that decides file roots |
+| `another_application` | `False` | Load a backup that records another application; otherwise it raises `dbs.exceptions.ForeignBackup`, a `RestoreError`, in a dry run too |
+| `schema` | `None` | For a [checkpoint](../restoring.md#checkpoints): `None` rebuilds the tables it was taken from and needs `flush=True`; `False` loads its rows into the tables as they are. `True` on any other backup raises `RestoreError` |
 
 `RestoreResult` holds `records_loaded`, `files_written`, `records_would_load` and
 `files_would_write` (for a dry run), `records_flushed`, `preexisting_models`, `models`,
-`files_refused` and `repair_report`, and `healed` says whether damage was repaired.
+`files_refused` and `repair_report`, and `healed` says whether damage was repaired. After a
+checkpoint, or its dry run, it also holds `schema_rebuilt`, `tables_rebuilt`,
+`migrations_unapplied`, `migrations_recorded` and `raw_sql_migrations`.
+
+`restore_backup` restores and nothing more. The checkpoints before and after a restore are
+written by `manage.py dbs restore`, the panel and the DBS manager.
 
 ### `validate_backup(data, passphrase=None) -> ValidationResult`
 
 Checks the structure and every block, and decrypts when a passphrase is given.
 `ValidationResult` has `ok`, `decrypted_ok`, `messages`, `stats`, `repair_report` and
-`summary()`.
+`summary()`. With a passphrase it also has `application`, the application the backup records
+(empty for one written before 0.9.0), and `checkpoint`, its `role` and `plan` when the backup is
+a checkpoint.
 
 ### Choosing what to back up
 

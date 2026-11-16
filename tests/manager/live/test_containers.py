@@ -1,4 +1,4 @@
-"""The manager against a real Docker or Podman Compose project over a real OpenSSH server."""
+"""The manager against a real Docker or Podman Compose project on a machine reached over OpenSSH."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 import dbs
-from dbs import audit, validate_backup
+from dbs import audit, checkpoints, validate_backup
 from dbs.manager.applications.services import ApplicationService, DiscoveryService
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository
@@ -42,8 +42,9 @@ VOLUME = "shop_data"
 
 CONFIGURED = bool(ENGINE and FOLDER and HOST and USER and KEY and KNOWN_HOSTS)
 SETUP = (
-    "Start scripts/openssh_test_server.sh and scripts/container_fixture.sh, then set "
-    "DBS_TEST_CONTAINER_ENGINE, DBS_TEST_CONTAINER_FOLDER and DBS_TEST_SSH_*."
+    "python scripts/vm_fixture.py containers docker (or podman) boots a guest that runs the "
+    "Compose project and prints DBS_TEST_CONTAINER_ENGINE, DBS_TEST_CONTAINER_FOLDER and "
+    "DBS_TEST_SSH_*."
 )
 
 if os.environ.get("DBS_TEST_CONTAINER_REQUIRED") and not CONFIGURED:
@@ -77,6 +78,10 @@ def in_application(python: str) -> str:
     found = on_server(f"{ENGINE} compose exec -T web python -c {shlex.quote(code)}")
     assert found.ok, found.stderr
     return found.stdout.strip()
+
+
+def is_checkpoint(name: str) -> bool:
+    return any(f"-{role}-" in name for role in checkpoints.ROLES)
 
 
 def notes() -> list[str]:
@@ -186,7 +191,8 @@ def test_a_backup_arrives_verified_and_leaves_nothing_in_the_container(
     with BackupStorage().open_read(backup.storage_path) as handle:
         assert validate_backup(handle, PASSPHRASE).ok
     kept = on_server(f"{ENGINE} compose exec -T web ls -A /var/backups/dbs")
-    assert kept.ok and kept.stdout.strip() == "", kept.stderr
+    assert kept.ok, kept.stderr
+    assert [name for name in kept.stdout.split() if not is_checkpoint(name)] == []
     leftovers = on_server(
         f"{ENGINE} compose exec -T web sh -c "
         "'ls -A /var/backups/dbs /tmp | grep -E \"part-|dbs-restore\" || true'"

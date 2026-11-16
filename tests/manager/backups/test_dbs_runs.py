@@ -11,7 +11,7 @@ from dbs.manager.activity.services import ActivityService
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.repositories import BackupFileRepository, BackupPlanRepository
 from dbs.manager.backups.services import BackupService
-from dbs.manager.backups.services.backup_run_service import KEEP_MAX, TAKE_KEEP
+from dbs.manager.conf import backup_keep_max
 from dbs.manager.backups.services.dbs_runs import QUARANTINE_SUFFIX, Progress
 from dbs.manager.backups.storage import BackupStorage
 from dbs.naming import backup_filename
@@ -271,12 +271,12 @@ def test_retention_keeps_at_most_five_good_backups_and_never_counts_quarantined(
     hosting(monkeypatch, server_root, sent=b"broken")
     take()
     host = hosting(monkeypatch, server_root)
-    for _ in range(TAKE_KEEP + 2):
+    for _ in range(backup_keep_max() + 2):
         take()
 
     good = [file for file in files(application) if not file.failure]
     quarantined = [file for file in files(application) if file.failure]
-    assert len(good) == TAKE_KEEP
+    assert len(good) == backup_keep_max()
     assert len(quarantined) == 1
     assert host.remote_names() == []
 
@@ -286,23 +286,25 @@ def test_quarantined_arrivals_are_kept_five_at_most_apart_from_the_good_ones(
 ):
     hosting(monkeypatch, server_root)
     take()
-    for attempt in range(KEEP_MAX + 2):
+    for attempt in range(backup_keep_max() + 2):
         hosting(monkeypatch, server_root, content=f"not a backup {attempt}".encode())
         take()
 
     good = [file for file in files(application) if not file.failure]
     quarantined = [file for file in files(application) if file.failure]
     assert len(good) == 1
-    assert len(quarantined) == KEEP_MAX
+    assert len(quarantined) == backup_keep_max()
 
 
-def test_a_plan_never_keeps_more_than_five(application, host, make_plan, ran):
-    plan = make_plan(keep=7, keep_remote=0)
+def test_a_plan_never_keeps_more_than_the_manager_allows(application, host, make_plan, ran):
+    plan = make_plan(keep=5, keep_remote=0)
+    BackupPlanRepository().model.objects.filter(pk=plan.pk).update(keep=7)
+    plan.refresh_from_db()
 
-    for _ in range(KEEP_MAX + 2):
+    for _ in range(backup_keep_max() + 2):
         ran(plan)
 
-    assert BackupFileRepository().alive_for_plan(plan.pk).count() == KEEP_MAX
+    assert BackupFileRepository().alive_for_plan(plan.pk).count() == backup_keep_max()
 
 
 def test_a_quarantined_arrival_never_pushes_out_a_good_backup(
@@ -322,7 +324,7 @@ def test_a_quarantined_arrival_never_pushes_out_a_good_backup(
 def test_retention_keeps_the_newest_by_the_moment_in_the_name(
     application, host, take
 ):
-    for ordinal in range(1, TAKE_KEEP + 2):
+    for ordinal in range(1, backup_keep_max() + 2):
         host.keep_on_server(
             f"web-1-2020010{ordinal}-000000Z.dbs", dbs_backup(BACKUP_PASSPHRASE)
         )
@@ -333,7 +335,7 @@ def test_retention_keeps_the_newest_by_the_moment_in_the_name(
     assert stored_name(job) in kept
     assert "web-1-20200101-000000Z.dbs" not in kept
     assert "web-1-20200102-000000Z.dbs" not in kept
-    assert len(kept) == TAKE_KEEP
+    assert len(kept) == backup_keep_max()
 
 
 def test_stale_partials_on_the_manager_are_swept_before_a_run(

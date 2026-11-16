@@ -1,15 +1,18 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatButton } from '@angular/material/button';
 
+import { Can } from '@core/auth/directives/can';
 import { ErrorTextPipe } from '@core/i18n/error-text.pipe';
 import { TranslatePipe } from '@core/i18n/translate.pipe';
 import { AppDatePipe } from '@shared/app-date/app-date.pipe';
 import { BrandMark } from '@shared/brand-mark/brand-mark';
 import { CopyButton } from '@shared/copy-button/copy-button';
+import { Dialogs } from '@shared/dialogs/dialogs';
 import { Notice } from '@shared/notice/notice';
 import { Skeleton } from '@shared/skeleton/skeleton';
 import { TimeAgoPipe } from '@shared/time-ago/time-ago.pipe';
 import { uniqueId } from '@shared/unique-id';
+import { ManagerUpdate } from '../../components/manager-update/manager-update';
 import { AboutStore } from '../../state/about.store';
 import type { AboutCommand } from './about.types';
 
@@ -22,9 +25,11 @@ const COMMANDS: readonly AboutCommand[] = [
 @Component({
   selector: 'app-about-page',
   imports: [
+    Can,
     MatButton,
     BrandMark,
     CopyButton,
+    ManagerUpdate,
     Notice,
     Skeleton,
     AppDatePipe,
@@ -32,6 +37,7 @@ const COMMANDS: readonly AboutCommand[] = [
     ErrorTextPipe,
     TranslatePipe,
   ],
+  providers: [Dialogs],
   templateUrl: './about.html',
   styleUrl: './about.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

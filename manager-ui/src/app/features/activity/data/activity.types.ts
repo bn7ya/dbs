@@ -123,6 +123,13 @@ export const ACTIVITY_ACTIONS: readonly string[] = [
   'deploy.migrate',
   'deploy.collectstatic',
   'deploy.final_check',
+  'application.dbs_update',
+  'dbs_update.check',
+  'dbs_update.safety_backup',
+  'dbs_update.install',
+  'dbs_update.upgrade',
+  'dbs_update.restart',
+  'dbs_update.final_check',
 ];
 
 export interface ActivityEntry {

@@ -924,25 +924,27 @@ class KeepAtMostFive(Step):
         from django.db import DatabaseError
 
         from .models import BackupSchedule
-        from .retention import MAXIMUM_KEEP
+        from .retention import maximum_keep
 
+        maximum = maximum_keep()
         problems = []
         configured = setting("DBS_SCHEDULE_KEEP", None)
-        if configured is not None and not self._within(configured, MAXIMUM_KEEP):
+        if configured is not None and not self._within(configured, maximum):
             problems.append(f"DBS_SCHEDULE_KEEP is {configured}")
         try:
             kept = BackupSchedule.objects.order_by("pk").values_list("keep", flat=True).first()
         except DatabaseError:
             kept = None
-        if kept is not None and kept > MAXIMUM_KEEP:
-            problems.append(f"the panel's schedule keeps {kept}, which migrate lowers to 5")
+        if kept is not None and kept > maximum:
+            problems.append(f"the panel's schedule keeps {kept}, which runs as {maximum}")
         if problems:
             return self.warn(
-                f"the server now keeps at most {MAXIMUM_KEEP} backups in DBS_BACKUP_DIR, but "
+                f"the server keeps at most {maximum} backups in DBS_BACKUP_DIR, but "
                 + "; ".join(problems),
-                f"DBS_SCHEDULE_KEEP = {MAXIMUM_KEEP}  # dbs schedule refuses larger values",
+                f"DBS_SCHEDULE_KEEP = {maximum}  # dbs schedule refuses larger values; "
+                "DBS_MAX_BACKUPS raises the limit",
             )
-        return self.ok(f"the server keeps at most {MAXIMUM_KEEP} backups")
+        return self.ok(f"the server keeps at most {maximum} backups")
 
     @staticmethod
     def _within(value, maximum):
@@ -950,6 +952,89 @@ class KeepAtMostFive(Step):
             return 1 <= int(value) <= maximum
         except (TypeError, ValueError):
             return False
+
+
+class MaximumBackups(Step):
+    name = "maximum backups"
+    since = "0.9.0"
+
+    def check(self):
+        from .retention import KEEP_LIMIT, MAXIMUM_KEEP, MAXIMUM_SETTING, is_valid_maximum
+
+        configured = setting(MAXIMUM_SETTING, None)
+        if configured is None:
+            return self.ok(
+                f"the backup folder keeps at most {MAXIMUM_KEEP} backups; "
+                f"{MAXIMUM_SETTING} sets another limit, up to {KEEP_LIMIT}"
+            )
+        if is_valid_maximum(configured):
+            return self.ok(f"{MAXIMUM_SETTING} keeps at most {int(configured)} backups")
+        return self.warn(
+            f"{MAXIMUM_SETTING} is {configured!r}, which is not a number from 1 to {KEEP_LIMIT}",
+            f"{MAXIMUM_SETTING} = {MAXIMUM_KEEP}",
+        )
+
+
+class ApplicationName(Step):
+    name = "application name"
+    since = "0.9.0"
+
+    def check(self):
+        from .identity import SETTING, SHARED_NAMES, application_name, is_named_by_setting
+
+        name = application_name()
+        if not name:
+            return self.warn(
+                "backups cannot record which application they belong to, because this "
+                "project has no ROOT_URLCONF or settings module to name it after",
+                f'{SETTING} = "a-name-of-its-own"',
+            )
+        if not is_named_by_setting() and name.lower() in SHARED_NAMES:
+            return self.warn(
+                f"backups record the application {name!r}, after the project's package, "
+                "a name other projects share; a backup of one of them would not be told "
+                "apart by its name",
+                f'{SETTING} = "a-name-of-its-own"  # before the next backup: a restore '
+                "refuses a backup that records another name",
+            )
+        return self.ok(
+            f"backups record the application {name!r}, and a restore refuses a backup "
+            "that records another"
+        )
+
+
+class MigrationCheckpoints(Step):
+    name = "migration checkpoints"
+    since = "0.9.0"
+
+    def check(self):
+        from django.core.management import get_commands
+
+        from . import checkpoints
+        from .retention import maximum_keep
+
+        if not checkpoints.enabled():
+            return self.ok(
+                f"migrate and dbs restore keep no checkpoints ({checkpoints.SETTING} is off)"
+            )
+        if not checkpoints.directory():
+            return self.warn(
+                "migrate and dbs restore keep no checkpoint of the database before and "
+                "after they change it, because DBS_BACKUP_DIR is not set",
+                'DBS_BACKUP_DIR = BASE_DIR / "backups"  # or '
+                f"{checkpoints.SETTING} = False to say none is wanted",
+            )
+        owner = get_commands().get("migrate")
+        flag = (
+            "migrate --no-checkpoint skips one"
+            if owner == checkpoints.OWN_APP
+            else f"{owner} provides migrate, so only the setting skips them"
+        )
+        return self.ok(
+            "migrate and dbs restore keep a checkpoint of the database before and after "
+            f"they change it, {maximum_keep()} at most; {flag}, and "
+            f"{checkpoints.SETTING} = False switches them off"
+        )
 
 
 STEPS = (
@@ -976,6 +1061,9 @@ STEPS = (
     ClientRetired,
     PulledBackups,
     KeepAtMostFive,
+    MaximumBackups,
+    ApplicationName,
+    MigrationCheckpoints,
     AuditChain,
     ContribViewsRemoved,
     CommandNames,

@@ -92,6 +92,7 @@ def test_only_the_slices_commands_run_inside_the_menu():
         "export",
         "import",
         "menu",
+        "update",
     }
 
 

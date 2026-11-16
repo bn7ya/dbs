@@ -5,6 +5,7 @@ import getpass
 import ipaddress
 import json
 import os
+import shlex
 import signal
 import sys
 import webbrowser
@@ -12,7 +13,7 @@ import webbrowser
 from dbs import extras
 
 from . import keystore, paths
-from .processes import abandoned
+from .processes import abandoned, pid_running
 from .terminal import CommandFailed, parsers
 from .conf import (
     DATABASE_URL_ENV,
@@ -228,6 +229,32 @@ def build_parser(parser_class=argparse.ArgumentParser):
     database_option(restore)
     restore.set_defaults(handler=command_import)
 
+    update = commands.add_parser(
+        "update",
+        help="Install a newer django-dbs for this manager, while it is stopped.",
+    )
+    update.add_argument(
+        "--check",
+        action="store_true",
+        help="Say which release is installed and which is the newest; change nothing.",
+    )
+    update.add_argument(
+        "--to", metavar="VERSION", help="The release to install, instead of the newest."
+    )
+    update.add_argument("--yes", action="store_true", help="Install without asking.")
+    update.add_argument(
+        "--system-python",
+        action="store_true",
+        help="Let the update change a Python outside a virtual environment.",
+    )
+    update.add_argument(
+        "--offline",
+        action="store_true",
+        help="Do not ask PyPI for the newest release; name one with --to.",
+    )
+    data_dir_option(update)
+    update.set_defaults(handler=command_update)
+
     menu = commands.add_parser(
         "menu",
         help="Work with the manager from menus, with the arrow keys. Typing "
@@ -340,6 +367,54 @@ def setup_django(data_dir, database_url=None, host=None, proxies=None):
             file=sys.stderr,
         )
     call_command("migrate", interactive=False, verbosity=0)
+
+
+def command_update(args):
+    from . import selfupdate
+
+    if args.check:
+        found = selfupdate.status(offline=args.offline)
+        print(f"django-dbs {found['current']} is installed.")
+        if found["latest"] is None:
+            print("The newest release is not known: PyPI was not asked or did not answer.")
+        elif found["newer"]:
+            print(f"django-dbs {found['latest']} is the newest. Install it with: {prog()} update")
+        else:
+            print("It is the newest release.")
+        return 0
+    try:
+        planned = selfupdate.plan(
+            args.to or "", offline=args.offline, system_python=args.system_python
+        )
+    except selfupdate.Refused as refused:
+        raise CommandFailed(str(refused)) from refused
+    if not planned.needed:
+        print(f"django-dbs {planned.current} is already installed.")
+        return 0
+    running = read_instance(paths.resolve_data_dir(args.data_dir)).get("pid")
+    if isinstance(running, int) and running != os.getpid() and pid_running(running):
+        raise CommandFailed(
+            f"the manager is running (process {running}). Stop it first, or update it "
+            "from its About page, which restarts it."
+        )
+    print(f"django-dbs {planned.target} replaces {planned.current} with:")
+    print(f"  {shlex.join(planned.command)}")
+    if not args.yes and not confirmed_install():
+        raise CommandFailed(
+            "nothing was installed. Answer at a terminal, or add --yes to install."
+        )
+    try:
+        selfupdate.install(planned)
+    except selfupdate.Refused as refused:
+        raise CommandFailed(str(refused)) from refused
+    print(f"Installed django-dbs {planned.target}. Start the manager with: {prog()} run")
+    return 0
+
+
+def confirmed_install():
+    if not sys.stdin.isatty():
+        return False
+    return input("Install it? [y/N] ").strip().lower() in ("y", "yes")
 
 
 def command_paths(args):
@@ -758,6 +833,7 @@ def command_run(args):
     setup_django(data_dir, args.database_url, args.host, proxies)
     from dbs import leases
 
+    from . import selfupdate
     from .recovery import recover
     from .runner import get_runner
     from .scheduler import Scheduler
@@ -775,6 +851,7 @@ def command_run(args):
         runner.start()
         scheduler.start()
         server = create_server(args.host, args.port)
+        selfupdate.RESTART.arm(selfupdate.run_arguments(args, server.effective_port, data_dir))
         base = f"http://{browser_host(args.host)}:{server.effective_port}"
         paths.write_private(
             paths.instance_path(data_dir),
@@ -809,6 +886,7 @@ def command_run(args):
             paths.instance_path(data_dir).unlink()
         except FileNotFoundError:
             pass
+    selfupdate.RESTART.follow()
     return 0
 
 

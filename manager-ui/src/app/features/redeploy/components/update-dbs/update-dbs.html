@@ -1,0 +1,60 @@
+@if (application(); as current) {
+  <mat-card appearance="outlined" role="region" [attr.aria-labelledby]="headingId">
+    <mat-card-content class="update-dbs">
+      <div class="update-dbs__intro">
+        <h2 [id]="headingId">{{ 'redeploy.update.title' | t }}</h2>
+        <p class="text-secondary">{{ 'redeploy.update.body' | t }}</p>
+      </div>
+
+      @if (current.kind === 'host') {
+        <p class="text-sm text-secondary">{{ 'redeploy.update.how' | t }}</p>
+
+        <app-confirmed-run
+          prefix="redeploy.update.run"
+          runCapability="applications.update"
+          rehearseCapability="applications.check"
+          [expectedName]="current.name"
+          [busy]="updating.busy()"
+          [rehearsing]="updating.rehearsal()"
+          [error]="updating.error()"
+          (run)="update($event)"
+          (edited)="clearRunError()"
+        >
+          <p class="text-sm text-secondary">{{ 'redeploy.update.rehearsalHow' | t }}</p>
+        </app-confirmed-run>
+
+        @if (updating.job(); as job) {
+          <app-job-progress [job]="job" prefix="redeploy.update.progress" labels="redeploy.update.steps">
+            @if (outcome().alreadyCurrent) {
+              <app-notice severity="info">
+                {{ 'redeploy.update.alreadyCurrent' | t: { version: outcome().version } }}
+              </app-notice>
+            } @else if (outcome().from !== '') {
+              <p class="text-sm text-secondary">
+                {{ 'redeploy.update.versions' | t: { from: outcome().from, to: outcome().version } }}
+              </p>
+            }
+            @if (job.status === 'succeeded' && outcome().restartNeeded) {
+              <app-notice severity="warning">{{ 'redeploy.update.restartNeeded' | t }}</app-notice>
+            }
+          </app-job-progress>
+
+          @if (outcome().revertable) {
+            <app-revert-panel
+              prefix="redeploy.update.revert"
+              [expectedName]="current.name"
+              [busy]="undoing.busy()"
+              [rehearsing]="undoing.rehearsal()"
+              [error]="undoing.error()"
+              [job]="undoing.job()"
+              (run)="restore($event)"
+              (edited)="clearRevertError()"
+            />
+          }
+        }
+      } @else {
+        <app-notice severity="info">{{ 'redeploy.update.container' | t }}</app-notice>
+      }
+    </mat-card-content>
+  </mat-card>
+}

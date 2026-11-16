@@ -1,0 +1,14 @@
+name: Virtual machines
+description: Lets the runner boot the guests scripts/vm.py starts, with KVM where the runner has it.
+runs:
+  using: composite
+  steps:
+    - name: Open KVM to the runner and install QEMU
+      shell: bash
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+          | sudo tee /etc/udev/rules.d/99-kvm4all.rules > /dev/null
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils

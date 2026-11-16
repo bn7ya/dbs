@@ -16,6 +16,8 @@ export const DEPLOY_ID = 7;
 
 export const MOVE_ID = 9;
 
+export const UPDATE_ID = 11;
+
 export const REVERT_ID = 10;
 
 export const PULL: DeployStep = { kind: 'git_pull', options: { remote: 'origin', branch: 'main' }, timeout_minutes: 5 };
@@ -199,3 +201,69 @@ export const REVERTED: Job = {
 export function pageOf<T>(results: readonly T[]): Page<T> {
   return { count: results.length, next: null, previous: null, results };
 }
+
+export const UPDATED: Job = {
+  id: UPDATE_ID,
+  action: 'application.dbs_update',
+  status: 'succeeded',
+  detail: {
+    rehearsal: false,
+    version: '0.9.0',
+    from_version: '0.8.1',
+    to_version: '0.9.0',
+    already_current: false,
+    restart_needed: true,
+    steps: [
+      { step: 'check', status: 'succeeded' },
+      { step: 'safety_backup', status: 'succeeded' },
+      { step: 'install', status: 'succeeded' },
+      { step: 'upgrade', status: 'succeeded' },
+      { step: 'restart', status: 'skipped' },
+      { step: 'final_check', status: 'succeeded' },
+    ],
+  },
+  error_code: '',
+  finished_at: '2026-11-15T09:04:00Z',
+  connection: null,
+};
+
+export const UPDATE_STOPPED: Job = {
+  ...UPDATED,
+  status: 'failed',
+  detail: {
+    rehearsal: false,
+    version: '0.9.0',
+    from_version: '0.8.1',
+    already_current: false,
+    failed_step: 'final_check',
+    revertable: true,
+    safety_backup: 'b-safety',
+    steps: [
+      { step: 'check', status: 'succeeded' },
+      { step: 'safety_backup', status: 'succeeded' },
+      { step: 'install', status: 'succeeded' },
+      { step: 'upgrade', status: 'succeeded' },
+      { step: 'restart', status: 'skipped' },
+      { step: 'final_check', status: 'failed' },
+    ],
+  },
+  error_code: 'update_not_applied',
+};
+
+export const ALREADY_CURRENT: Job = {
+  ...UPDATED,
+  detail: {
+    rehearsal: false,
+    version: '0.9.0',
+    from_version: '0.9.0',
+    already_current: true,
+    steps: [
+      { step: 'check', status: 'succeeded' },
+      { step: 'safety_backup', status: 'skipped' },
+      { step: 'install', status: 'skipped' },
+      { step: 'upgrade', status: 'skipped' },
+      { step: 'restart', status: 'skipped' },
+      { step: 'final_check', status: 'skipped' },
+    ],
+  },
+};

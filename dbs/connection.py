@@ -92,6 +92,8 @@ def in_container(markers=CONTAINER_MARKERS, cgroup="/proc/1/cgroup") -> bool:
 
 def details():
     from . import __version__
+    from .identity import application_name
+    from .retention import maximum_keep
     from .schedule_runner import backup_directory
 
     directory = project_dir()
@@ -109,5 +111,7 @@ def details():
         "file_roots": [str(root) for root in setting("DBS_FILE_ROOTS", None) or ()],
         "env_path": env_path(directory),
         "dbs_version": __version__,
+        "max_backups": maximum_keep(),
+        "application": application_name(),
         "host_keys": [] if contained else host_keys(),
     }

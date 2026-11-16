@@ -16,8 +16,10 @@ from dbs.manager.redeploy.serializers import (
     DeployStepsSerializer,
     RedeploySerializer,
     RevertSerializer,
+    UpdateDbsSerializer,
 )
 from dbs.manager.redeploy.services import RUN, RedeployService
+from dbs.manager.redeploy.updating import UPDATE
 from dbs.manager.terminal import CommandFailed
 from dbs.manager.terminal.progress import reported
 from dbs.manager.terminal.session import TerminalSession
@@ -57,8 +59,8 @@ def revert(session: TerminalSession) -> int:
     args = session.args
     move = references.number(args.move, "move")
     found = ActivityService(session.user).get(move)
-    if found.action not in (RUN, DEPLOY):
-        raise CommandFailed(f"{move} is not a move or a deploy.")
+    if found.action not in (RUN, DEPLOY, UPDATE):
+        raise CommandFailed(f"{move} is not a move, a deploy or an update.")
     target = references.application(session.user, found.subject)
     body: dict[str, Any] = {"rehearsal": not args.real, **_confirmed(session, target)}
     data = validated(RevertSerializer, body)
@@ -91,6 +93,39 @@ def deploy(session: TerminalSession) -> int:
         )
     done = "Deployed" if args.real else "Rehearsed deploying"
     return session.outcome(entry, f"{done} {target.name}.")
+
+
+def update_dbs(session: TerminalSession) -> int:
+    args = session.args
+    target = references.application(session.user, args.application)
+    body: dict[str, Any] = {"rehearsal": not args.real, **_confirmed(session, target)}
+    if args.to:
+        body["to"] = args.to
+    data = validated(UpdateDbsSerializer, body)
+    _say(session, f"Updating django-dbs in {target.name}...")
+    with reported(session):
+        entry = jobs.finished(
+            session.user, RedeployService(session.user).update_dbs(target.pk, **data)
+        )
+    _steps(session, entry)
+    detail = entry.data or {}
+    version = detail.get("version", "")
+    if detail.get("already_current"):
+        return session.outcome(entry, f"{target.name} already runs django-dbs {version}.")
+    if jobs.succeeded(entry) and detail.get("restart_needed"):
+        _say(
+            session,
+            f"Restart {target.name}'s web process so it loads django-dbs {version}: "
+            "it has no restart step among its deploy steps.",
+        )
+    if not jobs.succeeded(entry) and detail.get("revertable"):
+        _say(
+            session,
+            f"{target.name}'s data can be put back from its safety backup: "
+            f"django_dbs redeploy revert {entry.pk} --real",
+        )
+    done = "Updated" if args.real else "Rehearsed updating"
+    return session.outcome(entry, f"{done} django-dbs in {target.name} to {version}.")
 
 
 def deploy_steps(session: TerminalSession) -> int:

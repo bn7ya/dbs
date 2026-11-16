@@ -11,7 +11,15 @@ import { Toaster } from '@shared/toaster/toaster';
 import type { ToastMessage } from '@shared/toaster/toaster.types';
 import type { UnfinishedJob } from '../data/backups.types';
 import { PlansApi } from '../data/plans.api';
-import type { BackupPlan, PlanKind, PlanListQuery, PlanPassword, PlanSettings } from '../data/plans.types';
+import {
+  DEFAULT_PLAN_LIMITS,
+  type BackupPlan,
+  type PlanKind,
+  type PlanLimits,
+  type PlanListQuery,
+  type PlanPassword,
+  type PlanSettings,
+} from '../data/plans.types';
 import { backedUpToast, failureToast, refusalToast, toast } from './backup-toasts';
 import type { LiveJob } from './backups.store.types';
 import type { PlanChange, PlanRun } from './plans.store.types';
@@ -78,8 +86,20 @@ export class PlansStore {
   readonly saving = signal(false);
   readonly saveError = signal<ApiError | null>(null);
 
+  private readonly limited = signal<string | undefined>(undefined);
+
+  private readonly limitsResource = rxResource({
+    params: () => this.limited(),
+    stream: ({ params }) => this.api.limits(params),
+  });
+
+  readonly limits = computed<PlanLimits>(() =>
+    this.limitsResource.hasValue() ? this.limitsResource.value() : DEFAULT_PLAN_LIMITS,
+  );
+
   resetPlanForm(): void {
     this.saveError.set(null);
+    this.limited.set(this.application() ?? undefined);
   }
 
   async createPlan(kind: PlanKind, settings: PlanSettings, password: PlanPassword = {}): Promise<BackupPlan | null> {

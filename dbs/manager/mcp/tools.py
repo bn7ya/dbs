@@ -110,6 +110,7 @@ FOLDER = {
     "description": "The application's folder on the server, such as /srv/shop.",
 }
 PORT = {"type": "integer", "minimum": 1, "maximum": 65535}
+NEW_PORT = {**PORT, "default": DEFAULT_PORT, "description": "Its SSH port, 22 unless given."}
 SETTINGS = {
     "remote_backup_dir": {
         "type": "string",
@@ -153,14 +154,16 @@ PLAN_FIELDS = {
     "keep": {
         "type": "integer",
         "minimum": 1,
-        "maximum": 5,
-        "description": "How many to keep here, 1 to 5.",
+        "maximum": 10000,
+        "description": "How many to keep here, from 1 to the manager's limit: 5 unless "
+        "DBS_MANAGER_MAX_BACKUPS is set.",
     },
     "keep_remote": {
         "type": "integer",
         "minimum": 0,
-        "maximum": 5,
-        "description": "How many to keep on the server, 0 to 5.",
+        "maximum": 10000,
+        "description": "How many to keep on the server, from 0 to the server's limit: 5 "
+        "unless its DBS_MAX_BACKUPS is set.",
     },
     "enabled": {"type": "boolean"},
     "anchor_at": {
@@ -268,7 +271,7 @@ class Toolbox:
                 "confirm. Show them the fingerprint and ask them to confirm it on the "
                 "manager's Servers page, or by running the confirm_with command in a "
                 "terminal. Only their confirmation lets add_server pin it.",
-                dict(host=TEXT, port=PORT),
+                dict(host=TEXT, port=NEW_PORT),
                 self.fingerprint_host,
                 required=("host",),
             ),
@@ -285,7 +288,7 @@ class Toolbox:
                 dict(
                     name={"type": "string", "description": "A name for the server."},
                     host=TEXT,
-                    port=PORT,
+                    port=NEW_PORT,
                     username={"type": "string", "description": "The SSH account."},
                     confirmation={
                         "type": "string",

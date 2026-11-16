@@ -14,6 +14,7 @@ import {
   PULL,
   SOURCE,
   TARGET,
+  UPDATE_ID,
   pageOf,
 } from '../testing/redeploy.fixtures';
 import { RedeployApi } from './redeploy.api';
@@ -62,6 +63,17 @@ describe('RedeployApi', () => {
     request.flush({ ...COMPOSE_APPLICATION, deploy_steps: [PULL, MIGRATE] });
 
     await expect(saving).resolves.toMatchObject({ deploy_steps: [PULL, MIGRATE] });
+  });
+
+  it('starts an update of django-dbs in an application, answering with the job to follow', async () => {
+    const run = { rehearsal: false, password: 'hunter2', confirm_name: 'Shop' };
+    const updating = firstValueFrom(api.updateDbs(SOURCE, run));
+    const update = http.expectOne(`/api/applications/${SOURCE}/update-dbs/`);
+    expect(update.request.method).toBe('POST');
+    expect(update.request.body).toEqual(run);
+    update.flush({ activity: UPDATE_ID }, { status: 202, statusText: 'Accepted' });
+
+    await expect(updating).resolves.toEqual({ activity: UPDATE_ID });
   });
 
   it('starts a deploy in place, a move and a revert, each answering with the job to follow', async () => {

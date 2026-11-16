@@ -212,7 +212,7 @@ def _json_string(value) -> list:
     return [json.dumps(value, ensure_ascii=False).encode("utf-8")]
 
 
-def decode_large_binaries(records: list) -> None:
+def decode_large_binaries(records: list, registry=apps) -> None:
     for record in records:
         fields = record.get("fields")
         if not isinstance(fields, dict):
@@ -225,7 +225,7 @@ def decode_large_binaries(records: list) -> None:
         if not large:
             continue
         try:
-            model = apps.get_model(record["model"])
+            model = registry.get_model(record["model"])
         except (KeyError, LookupError, ValueError):
             continue
         for name in large:

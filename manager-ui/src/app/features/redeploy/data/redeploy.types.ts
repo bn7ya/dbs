@@ -101,3 +101,11 @@ export interface DeployOutcome {
   readonly before: Revisions;
   readonly after: Revisions;
 }
+
+export interface UpdateOutcome {
+  readonly revertable: boolean;
+  readonly alreadyCurrent: boolean;
+  readonly restartNeeded: boolean;
+  readonly version: string;
+  readonly from: string;
+}

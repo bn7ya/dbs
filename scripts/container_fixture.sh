@@ -20,7 +20,7 @@ if [ -z "$directory" ]; then
     exit 2
 fi
 if ! id "$account" >/dev/null 2>&1; then
-    echo "$account does not exist; start scripts/openssh_test_server.sh first." >&2
+    echo "$account does not exist; scripts/vm_fixture.py prepares a guest that has it." >&2
     exit 2
 fi
 
@@ -44,12 +44,16 @@ fi
 cp -R "$repository/tests/containers/project" "$project"
 sed "s|localhost/dbs-live-shop|$image|" "$repository/tests/containers/project/compose.yaml" > "$project/compose.yaml"
 mv "$project/env.example" "$project/.env"
-python3 -m pip wheel --quiet --no-deps --wheel-dir "$project/wheelhouse" "$repository"
-python3 -m pip download --quiet --dest "$project/wheelhouse" --only-binary=:all: \
-    --python-version 3.12 --implementation cp --abi cp312 --abi abi3 --abi none \
-    --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64 \
-    --platform manylinux_2_27_x86_64 --platform manylinux_2_28_x86_64 \
-    "$project"/wheelhouse/django_dbs-*.whl
+if [ -n "${DBS_FIXTURE_WHEELHOUSE:-}" ]; then
+    cp -R "$DBS_FIXTURE_WHEELHOUSE" "$project/wheelhouse"
+else
+    python3 -m pip wheel --quiet --no-deps --wheel-dir "$project/wheelhouse" "$repository"
+    python3 -m pip download --quiet --dest "$project/wheelhouse" --only-binary=:all: \
+        --python-version 3.12 --implementation cp --abi cp312 --abi abi3 --abi none \
+        --platform manylinux2014_x86_64 --platform manylinux_2_17_x86_64 \
+        --platform manylinux_2_27_x86_64 --platform manylinux_2_28_x86_64 \
+        "$project"/wheelhouse/django_dbs-*.whl
+fi
 chown -R "$account:" "$project"
 install -d -o "$account" -g "$(id -g "$account")" -m 0700 "$project/backups"
 

@@ -44,6 +44,7 @@ from dbs.manager.servers.services.server_service import (
 )
 from dbs.manager.vault import seal_text
 from dbs.manager.permissions import Capability, requires
+from dbs.retention import is_valid_maximum
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
@@ -401,6 +402,11 @@ class ApplicationService:
                 else _python_suggestion(application, remote, profile)
             ),
             "backup_command": backup_command,
+            "max_backups": (
+                _max_backups(remote, profile)
+                if backup_command and versions.at_least(dbs_version, versions.LIMITS_FROM)
+                else None
+            ),
             "env_file": (
                 _present(application, remote, profile, application.env_path, IS_FILE)
                 if application.env_path
@@ -594,6 +600,21 @@ def _succeeds(remote: RemoteHost, profile: DbsProfile, arguments: list[str]) -> 
         return ok
     except RemoteCommandFailed:
         return False
+
+
+def _max_backups(remote: RemoteHost, profile: DbsProfile) -> int | None:
+    try:
+        result = remote.run_manage(profile, ["dbs", "connection", "--json"])
+    except RemoteCommandFailed:
+        return None
+    if not result.ok:
+        return None
+    try:
+        details = json.loads(result.stdout.strip() or "null")
+    except ValueError:
+        return None
+    reported = details.get("max_backups") if isinstance(details, dict) else None
+    return int(reported) if is_valid_maximum(reported) else None
 
 
 def _container_report(remote: RemoteHost, profile: DbsProfile) -> dict[str, Any]:

@@ -208,6 +208,60 @@
         "env": "Push the recorded .env file back",
         "restore": "Restore the safety backup"
       }
+    },
+    "update": {
+      "title": "Update django-dbs",
+      "body": "Install a django-dbs release in this application, where it runs.",
+      "how": "An update checks the application, takes a safety backup, installs the release this manager runs, finishes the upgrade with dbs upgrade, runs the application's own restart steps and checks it again. It stops at the first step that fails.",
+      "rehearsalHow": "A rehearsal needs no password and changes nothing. It checks the application and that its Python can install packages.",
+      "container": "This application runs in a container, where an installed package is gone when the container is created again. Put the django-dbs release in the image's requirements and build the image again.",
+      "alreadyCurrent": "This application already runs django-dbs {version}.",
+      "versions": "From django-dbs {from} to {to}.",
+      "restartNeeded": "Restart the application's web process so it loads the new release. It keeps no restart step among its deploy steps.",
+      "run": {
+        "rehearse": "Rehearse",
+        "rehearsing": "Rehearsing…",
+        "run": "Update django-dbs",
+        "running": "Updating…",
+        "passwordHint": "Needed to update for real. A rehearsal needs no password.",
+        "confirmName": "Name of this application",
+        "confirmNameHint": "Type {name} to update for real."
+      },
+      "progress": {
+        "title": "Updating django-dbs",
+        "rehearsal": "Rehearsal",
+        "done": "The update finished.",
+        "rehearsed": "The rehearsal finished. Nothing was changed.",
+        "stoppedAt": "The update stopped at: {step}."
+      },
+      "steps": {
+        "check": "Check the application",
+        "safety_backup": "Take a safety backup",
+        "install": "Install the release",
+        "upgrade": "Finish the upgrade",
+        "restart": "Restart the application",
+        "final_check": "Check the application again"
+      },
+      "revert": {
+        "title": "Restore the safety backup",
+        "body": "Restore the backup taken before this update began. It puts the data back only: the installed release stays as the update left it.",
+        "run": {
+          "rehearse": "Rehearse the restore",
+          "rehearsing": "Rehearsing…",
+          "run": "Restore the safety backup",
+          "running": "Restoring…",
+          "passwordHint": "Needed to restore for real. A rehearsal needs no password.",
+          "confirmName": "Name of this application",
+          "confirmNameHint": "Type {name} to restore for real."
+        },
+        "progress": {
+          "title": "Restoring",
+          "rehearsal": "Restore rehearsal",
+          "done": "The data is back as it was before the update. The installed release is as the update left it.",
+          "rehearsed": "The restore rehearsal finished. Nothing was changed.",
+          "stoppedAt": "The restore stopped at: {step}."
+        }
+      }
     }
   },
   "errors": {
@@ -216,6 +270,10 @@
     "source_unreachable": "This application did not answer and no backup of it was chosen.",
     "no_backup_to_rehearse": "There is no backup of this application here for the rehearsal to restore. Take one first.",
     "move_not_revertable": "Only a move or a deploy that stopped after it changed the application can be reverted.",
-    "no_deploy_steps": "This application has no deploy steps yet. Choose them first."
+    "no_deploy_steps": "This application has no deploy steps yet. Choose them first.",
+    "update_needs_rebuild": "This application runs in a container. Put the django-dbs release in the image's requirements and build the image again.",
+    "update_would_downgrade": "This application already runs a newer django-dbs than the one named.",
+    "update_not_applied": "The application still runs the django-dbs it had. A source checkout is updated with git, and a Python outside a virtual environment is not changed.",
+    "invalid_version": "Name a release as three numbers, such as 0.9.0."
   }
 }

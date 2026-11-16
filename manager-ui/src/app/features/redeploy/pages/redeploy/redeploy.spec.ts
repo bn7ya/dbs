@@ -39,6 +39,10 @@ import {
   REVERT_ID,
   SOURCE,
   TARGET,
+  UPDATED,
+  UPDATE_ID,
+  UPDATE_STOPPED,
+  ALREADY_CURRENT,
   pageOf,
 } from '../../testing/redeploy.fixtures';
 import { RedeployPage } from './redeploy';
@@ -52,6 +56,7 @@ const ROUTES: Routes = [
 
 const DEPLOY = 'app-deploy-here';
 const MOVE = 'app-move-application';
+const UPDATE = 'app-update-dbs';
 
 describe('RedeployPage', () => {
   let http: HttpTestingController;
@@ -138,7 +143,7 @@ describe('RedeployPage', () => {
       return root.querySelector(`#${labelledBy}`)?.textContent?.trim();
     });
 
-    expect(regions).toEqual(['Deploy here', 'Move to another application']);
+    expect(regions).toEqual(['Deploy here', 'Update django-dbs', 'Move to another application']);
   });
 
   describe('deploy here', () => {
@@ -338,6 +343,64 @@ describe('RedeployPage', () => {
       expect(section(DEPLOY).querySelector('app-deploy-steps-editor')).not.toBeNull();
       buttonIn(section(DEPLOY), 'Cancel')?.click();
       expect(section(DEPLOY).querySelector('app-deploy-steps-editor')).toBeNull();
+    });
+  });
+
+  describe('update django-dbs', () => {
+    const FOR_REAL = { rehearsal: false, password: 'hunter2', confirm_name: 'Shop on the host' };
+
+    it('updates an application on a host, lists the steps and says a restart is still owed', async () => {
+      watched.set(UPDATE_ID, UPDATED);
+      await show(HOST_APPLICATION);
+
+      const [run] = runs(UPDATE);
+      run.run.emit({ ...FOR_REAL, confirm_name: HOST_APPLICATION.name });
+      started(`/api/applications/${SOURCE}/update-dbs/`, UPDATE_ID);
+
+      const update = section(UPDATE);
+      expect(stepsOf(update)).toEqual([
+        ['Check the application', 'Done'],
+        ['Take a safety backup', 'Done'],
+        ['Install the release', 'Done'],
+        ['Finish the upgrade', 'Done'],
+        ['Restart the application', 'Skipped'],
+        ['Check the application again', 'Done'],
+      ]);
+      expect(update.textContent).toContain('From django-dbs 0.8.1 to 0.9.0.');
+      expect(update.textContent).toContain("Restart the application's web process so it loads the new release.");
+      expect(update.textContent).toContain('The update finished.');
+      expect(update.querySelector('app-revert-panel')).toBeNull();
+    });
+
+    it('says when the application already runs the release', async () => {
+      watched.set(UPDATE_ID, ALREADY_CURRENT);
+      await show(HOST_APPLICATION);
+
+      runs(UPDATE)[0].run.emit({ rehearsal: true, password: '', confirm_name: '' });
+      started(`/api/applications/${SOURCE}/update-dbs/`, UPDATE_ID);
+
+      expect(section(UPDATE).textContent).toContain('This application already runs django-dbs 0.9.0.');
+    });
+
+    it('offers the safety backup of an update that stopped, and says where it stopped', async () => {
+      watched.set(UPDATE_ID, UPDATE_STOPPED);
+      await show(HOST_APPLICATION);
+
+      runs(UPDATE)[0].run.emit({ ...FOR_REAL, confirm_name: HOST_APPLICATION.name });
+      started(`/api/applications/${SOURCE}/update-dbs/`, UPDATE_ID);
+
+      const update = section(UPDATE);
+      expect(update.textContent).toContain('The update stopped at: Check the application again.');
+      expect(update.textContent).toContain('The application still runs the django-dbs it had.');
+      expect(update.querySelector('app-revert-panel')?.textContent).toContain('Restore the safety backup');
+    });
+
+    it('tells an application in a container to build its image again, and offers nothing to run', async () => {
+      await show(COMPOSE_APPLICATION);
+
+      const update = section(UPDATE);
+      expect(update.textContent).toContain('Put the django-dbs release in the image');
+      expect(update.querySelector('app-confirmed-run')).toBeNull();
     });
   });
 

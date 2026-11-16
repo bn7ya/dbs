@@ -51,3 +51,10 @@ class DashboardSerializer(serializers.BaseSerializer):
             "recent_failures": failures,
             "key_store": instance["key_store"],
         }
+
+
+class ManagerUpdateSerializer(serializers.Serializer):
+    password = serializers.CharField(
+        allow_blank=True, write_only=True, trim_whitespace=False, max_length=128
+    )
+    to = serializers.CharField(required=False, allow_blank=True, max_length=20)

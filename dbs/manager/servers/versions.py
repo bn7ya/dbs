@@ -6,6 +6,8 @@ import dbs
 
 MINIMUM_REMOTE = "0.7.0"
 PROGRESS_FROM = "0.8.0"
+LIMITS_FROM = "0.9.0"
+SELF_UPDATE_FROM = "0.8.0"
 NUMBER = re.compile(r"\d+")
 
 

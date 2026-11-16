@@ -195,13 +195,13 @@
         dir="ltr"
         inputmode="numeric"
         step="1"
-        [min]="keepMin"
-        [max]="keepMax"
+        [min]="limits().keep.min"
+        [max]="limits().keep.max"
         [appFieldError]="errorFor('keep')"
         [ngModel]="draft().keep"
         (ngModelChange)="update('keep', $event)"
       />
-      <mat-hint>{{ 'backups.plans.form.keepHint' | t }}</mat-hint>
+      <mat-hint>{{ 'backups.plans.form.keepHint' | t: { max: limits().keep.max } }}</mat-hint>
       @if (errorFor('keep'); as message) {
         <mat-error>{{ message }}</mat-error>
       }
@@ -217,13 +217,13 @@
           dir="ltr"
           inputmode="numeric"
           step="1"
-          [min]="keepRemoteMin"
-          [max]="keepMax"
+          [min]="limits().keep_remote.min"
+          [max]="limits().keep_remote.max"
           [appFieldError]="errorFor('keep_remote')"
           [ngModel]="draft().keep_remote"
           (ngModelChange)="update('keep_remote', $event)"
         />
-        <mat-hint>{{ 'backups.plans.form.keepRemoteHint' | t }}</mat-hint>
+        <mat-hint>{{ 'backups.plans.form.keepRemoteHint' | t: { max: limits().keep_remote.max } }}</mat-hint>
         @if (errorFor('keep_remote'); as message) {
           <mat-error>{{ message }}</mat-error>
         }

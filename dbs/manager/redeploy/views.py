@@ -10,6 +10,7 @@ from dbs.manager.redeploy.serializers import (
     DeploySerializer,
     RedeploySerializer,
     RevertSerializer,
+    UpdateDbsSerializer,
 )
 from dbs.manager.redeploy.services import RedeployService
 
@@ -41,4 +42,14 @@ class DeployView(APIView):
         payload = DeploySerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         job = RedeployService(request.user).deploy(pk, **payload.validated_data)
+        return Response(JobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+
+class UpdateDbsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        payload = UpdateDbsSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        job = RedeployService(request.user).update_dbs(pk, **payload.validated_data)
         return Response(JobSerializer(job).data, status=status.HTTP_202_ACCEPTED)

@@ -1,5 +1,12 @@
 import type { StepStatus } from '@shared/steps-list/steps-list.types';
-import type { DeployOutcome, JobDetail as Detail, JobStep, MoveOutcome, Revisions } from './redeploy.types';
+import type {
+  DeployOutcome,
+  JobDetail as Detail,
+  JobStep,
+  MoveOutcome,
+  Revisions,
+  UpdateOutcome,
+} from './redeploy.types';
 
 const STEP_STATUSES: ReadonlySet<string> = new Set<StepStatus>(['pending', 'running', 'succeeded', 'failed', 'skipped']);
 
@@ -35,6 +42,18 @@ export function deployOutcomeOf(detail: Detail): DeployOutcome {
     revertable: detail['revertable'] === true,
     before: revisionsOf(detail['before']),
     after: revisionsOf(detail['after']),
+  };
+}
+
+export function updateOutcomeOf(detail: Detail): UpdateOutcome {
+  const version = detail['version'];
+  const from = detail['from_version'];
+  return {
+    revertable: detail['revertable'] === true,
+    alreadyCurrent: detail['already_current'] === true,
+    restartNeeded: detail['restart_needed'] === true,
+    version: typeof version === 'string' ? version : '',
+    from: typeof from === 'string' ? from : '',
   };
 }
 

@@ -51,6 +51,16 @@ def test_an_empty_field_says_what_the_command_uses_instead(menu):
     assert "if left empty" not in menu.line_with("Limit")
 
 
+def test_the_port_of_a_new_server_says_it_is_22_when_left_empty(menu):
+    form(menu, "server", "add")
+
+    assert "22 if left empty" in menu.line_with("Port")
+
+    form(menu, "server", "edit")
+
+    assert "if left empty" not in menu.line_with("Port")
+
+
 def test_a_field_is_edited_in_place(menu):
     screen = form(menu, "server", "add")
 

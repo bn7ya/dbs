@@ -443,7 +443,8 @@ role cannot take are left out with `*appCan`.
   broke says the backup is kept on the server and collected next time, one that resumed after it
   broke says so; a quarantined file shows its reason and is never offered for restore. The schedule
   tab lists the plans (django-dbs, folders, or files collected from one folder): how often or
-  manual, keeping 1 to 5 here and 0 to 5 on the server, on or paused, the next run in the plan's
+  manual, keeping here up to the manager's limit and on the server up to the server's (`GET
+  /api/backups/plans/limits/`, 5 each unless raised), on or paused, the next run in the plan's
   time zone with the reader's own time beside it when it differs (`NextRun`), and the last run. Run
   now needs `plans.run`; the row's menu (Pause or Resume, Reschedule, Edit, Delete) needs
   `plans.manage`. `PlanForm` adds a first run (`MomentFields`: a `mat-datepicker` and a
@@ -482,7 +483,12 @@ role cannot take are left out with `*appCan`.
   Deploy needs the password and the application's name typed out. `JobProgress` lists the job's
   steps with `StepsList` and `JobConnection`, and the git HEAD and image before and after. A deploy
   that stopped after a step ran offers "Restore the safety backup", rehearsed or real, saying it
-  puts the data back only. *Move to another application* picks the target from every other
+  puts the data back only. *Update django-dbs* (`UpdateDbs`, the same store) installs the
+  release this manager runs in an application on a host: Rehearse with `applications.check`, the
+  real run with `applications.update`, the password and the typed name; it lists the job's steps,
+  says when the application already runs the release or still needs a restart, and offers the
+  safety backup of an update that stopped. An application in a container is told to build its
+  image again. *Move to another application* picks the target from every other
   application, the backup to restore if this one does not answer (the newest, or none), the `.env`
   version and whether to replace the data; a real move types the target's name, and a move that
   stopped after changing the target offers "Revert the new application".
@@ -519,7 +525,11 @@ role cannot take are left out with `*appCan`.
   an increasing `seq` a retry reuses; resizes are debounced and clamped to 20–500 × 5–200. Close,
   and leaving the page, `DELETE` it.
 - **about** (`/about`, from the account menu) — the version, data folder, database, backups folder
-  and last export, then the export, export with backups and import commands with copy buttons.
+  and last export, then the export, export with backups and import commands with copy buttons. For the
+  master (`manager.update`), `ManagerUpdate` looks for a newer django-dbs only when asked (`GET
+  /api/about/update/`), says when PyPI did not answer, why this manager cannot be updated from here
+  (`refusal`, or a running job or open terminal), and installs the release behind `PasswordPrompt`;
+  the manager then restarts, and the card offers to reload the page.
 
 ## API the interface calls
 
@@ -545,6 +555,8 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/accounts/{id}/master/` | `{password, code}` → `Account`, the new master |
 | GET | `/api/dashboard/` | → `{servers: [{id, name, host, check_status, checked_at, connection_state, last_seen_at, applications: [{id, name, kind, engine, check_status, checked_at, last_backup: {id, name, size, created_at, validation} \| null, next_plan_run, failures_7d, storage_bytes, health}]}], storage_bytes, disk: {total_bytes, free_bytes, low} \| null, last_export_at, recent_failures, key_store}` |
 | GET | `/api/about/` | → `{version, data_dir, database, backups_dir, last_export_at, key_store}` |
+| GET | `/api/about/update/` | → `{current, latest \| null, newer, refusal \| null, busy}`; master only. `refusal` is `update_source_checkout`, `update_system_python` or `update_from_terminal` |
+| POST | `/api/about/update/` | `{password, to?}` → `{version, updated, restarting}`; `update_busy` (409) while a job runs or a terminal is open; the manager restarts after answering |
 | GET | `/api/servers/?search=&page=&page_size=` | → page of `ServerSummary` (`id, name, host, port, username, engines, application_count, last_check_status, last_checked_at, connection_state, last_seen_at, last_connection_error`) |
 | POST | `/api/servers/` | `{name, host, port?, username, host_key, auth_method?: key\|password, private_key?, key_passphrase?, password?, generate_key?}` → `Server`, plus `public_key` and `authorized_keys_hint` when the key was generated |
 | GET/PATCH | `/api/servers/{id}/` | `{name, host, port?, username, auth_method, private_key?, key_passphrase?, password?, account_password?}` → `Server` (`…ServerSummary`, `auth_method, has_private_key, has_key_passphrase, has_password, host_key, host_key_type, host_key_fingerprint, last_check_error, last_check_report, timeout_on_host, created_at, updated_at`) |
@@ -568,6 +580,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/applications/{id}/passphrase/capture/` | `{}` → `{captured}` |
 | PUT | `/api/applications/{id}/deploy-steps/` | `{steps: DeployStep[], account_password}` → `Application`; field errors under `steps.N` |
 | POST | `/api/applications/{id}/deploy/` | `{rehearsal, password?, confirm_name?}` → 202 `{activity}`; `no_deploy_steps` (409) without steps |
+| POST | `/api/applications/{id}/update-dbs/` | `{rehearsal, to?, password?, confirm_name?}` → 202 `{activity}`; the job's `detail` holds `version`, `from_version`, `to_version`, `already_current`, `restart_needed`; `update_needs_rebuild` (409) for an application in a container |
 | GET | `/api/backups/?application=&page=&page_size=` | → page of `BackupFile` (`id, application, application_name, server, server_name, kind, name, size, sha256, validation, validated_at, failure, remote_path, taken_by, plan, plan_name, created_at`); without `application` every application's |
 | POST | `/api/backups/take/` | `{application}` → 202 `{activity}` |
 | POST | `/api/backups/upload/` | multipart `application`, `file` → 201 `BackupFile` |
@@ -577,7 +590,7 @@ All JSON unless marked; lists are `{count, next, previous, results}` with one-ba
 | POST | `/api/backups/{id}/restore/` | `{mode, rehearse, account_password?, application_name?, target_application?}` → 202 `{activity}` |
 | DELETE | `/api/backups/{id}/` | `{account_password}` → 204 |
 | POST | `/api/backups/{id}/undo-delete/` | → `BackupFile` |
-| GET/POST | `/api/backups/plans/?application=` | `PlanCreate` (`application, name, kind, paths?, pattern?, interval_minutes\|null, keep 1–5, keep_remote 0–5, enabled?, anchor_at?, time_zone?, account_password?`) → `BackupPlan` (`…, anchor_at, time_zone, next_run_at, last_run_at, last_status, last_error_code`) |
+| GET/POST | `/api/backups/plans/?application=` | `PlanCreate` (`application, name, kind, paths?, pattern?, interval_minutes\|null, keep, keep_remote (within `/api/backups/plans/limits/?application=` → `{keep: {min, max}, keep_remote: {min, max}}`), enabled?, anchor_at?, time_zone?, account_password?`) → `BackupPlan` (`…, anchor_at, time_zone, next_run_at, last_run_at, last_status, last_error_code`) |
 | PATCH/DELETE | `/api/backups/plans/{id}/` | `PlanUpdate` (`account_password` when it keeps fewer; `anchor_at` and `time_zone` move the beat) → `BackupPlan` |
 | POST | `/api/backups/plans/{id}/run/` | → 202 `{activity}` |
 | POST | `/api/backups/plans/{id}/reschedule/` | `{next_run_at}` (within a year) → `BackupPlan`; later runs follow from it |
@@ -655,23 +668,26 @@ page and enrolls it in two-factor sign-in, keeping the key in the data dir (`E2E
 supplies it for a manager set up beforehand). The `ltr` (`en-US`) and `rtl` (`ar`) projects depend on
 it and run the same scenarios, two workers side by side.
 
-**The fixture.** `scripts/openssh_test_server.sh` starts OpenSSH on 127.0.0.1:2222 for the account
-`dbs-ssh`; `scripts/e2e_fixture.sh DIRECTORY [docker|podman]` (as root) then prepares, for that
-account, two host projects copied from `tests/containers/project` — `DIRECTORY/app` and
-`DIRECTORY/target`, each with its `.venv` holding the checkout's django-dbs, a migrated SQLite
-database, a `.env` (which the settings read: database path, backup folder), `media/uploads` with
-`a.txt` and `b.bin`, and a `backups` folder — plus `DIRECTORY/existing` with two `.sql.gz` dumps for a
-collect plan and, with an engine, the Compose project `DIRECTORY/e2e-shop` (service `web`) from
-`scripts/container_fixture.sh`. It prints the variables `e2e/support/config.ts` reads, so
-`scripts/e2e_fixture.sh /srv/e2e docker > e2e.env` and `set -a; . ./e2e.env` before
-`npx playwright test` is the whole setup; the defaults already match `/srv/e2e`. With
-`E2E_FIXTURE_SUDO=1` the fixture also lets the account use `sudo` with its password
-(`/etc/sudoers.d/dbs-e2e`) and prints `E2E_SSH_SUDO_PASSWORD`, which the real server move needs;
-it is off by default, so a developer's own machine never gives the test account `sudo` unasked.
+**The fixture.** The journeys' servers are one virtual machine. `python scripts/vm_fixture.py e2e`
+boots the guest `e2e` with `scripts/vm.py` (QEMU, a pinned Ubuntu 24.04 cloud image, the account
+`dbs-ssh` with a key, a password and `sudo` that asks for it, its SSH forwarded to 127.0.0.1),
+installs Docker in it, carries the checkout's wheel and runs
+`scripts/e2e_fixture.sh /srv/e2e docker` inside it. That prepares, for the account, two host
+projects copied from `tests/containers/project` — `/srv/e2e/app` and `/srv/e2e/target`, each with
+its `.venv` holding the checkout's django-dbs, a migrated SQLite database, a `.env` (which the
+settings read: database path, backup folder), `media/uploads` with `a.txt` and `b.bin`, and a
+`backups` folder — plus `/srv/e2e/existing` with two `.sql.gz` dumps for a collect plan and the
+Compose project `/srv/e2e/e2e-shop` (service `web`) from `scripts/container_fixture.sh`. It prints
+the variables `e2e/support/config.ts` reads, so `python scripts/vm_fixture.py e2e --mount DIR >
+e2e.env` and `set -a; . ./e2e.env` before `npx playwright test` is the whole setup. `--mount DIR`
+mounts the guest's files there with `sshfs` and prints `E2E_SSH_FS=DIR`; without it `E2E_SSH_FS`
+is empty and the checks that read a server file are skipped. The journeys run as the developer,
+never as root: every server file is read and changed through the mount, as `dbs-ssh`.
+`python scripts/vm_fixture.py down` stops the guest.
 
 | Variable | Default | What |
 |---|---|---|
-| `E2E_SSH_HOST`, `E2E_SSH_PORT`, `E2E_SSH_USER`, `E2E_SSH_PASSWORD` | `127.0.0.1`, `2222`, `dbs-ssh`, `dbs-ssh-password` | the SSH account; journeys sign in with its password |
+| `E2E_SSH_HOST`, `E2E_SSH_PORT`, `E2E_SSH_USER`, `E2E_SSH_PASSWORD` | `127.0.0.1`, `2222`, `dbs-ssh`, `dbs-ssh-password` | the SSH account; journeys sign in with its password. The fixture prints the guest's forwarded port |
 | `E2E_SSH_FINGERPRINT` | any `SHA256:` | the host key the wizard must show |
 | `E2E_SSH_PROJECT_DIR`, `E2E_SSH_PYTHON` | `/srv/e2e/app`, its `.venv/bin/python` | the main application |
 | `E2E_SSH_REMOTE_BACKUP_DIR`, `E2E_SSH_ENV_PATH`, `E2E_SSH_MEDIA_DIR` | its `backups`, `.env`, `media` | what discovery and the tabs find |
@@ -679,7 +695,7 @@ it is off by default, so a developer's own machine never gives the test account 
 | `E2E_SSH_TARGET_PROJECT_DIR`, `E2E_SSH_TARGET_PYTHON`, `E2E_SSH_TARGET_REMOTE_BACKUP_DIR` | `/srv/e2e/target`, … | the second application; empty skips `06` and `07` |
 | `E2E_CONTAINER_ENGINE`, `E2E_CONTAINER_FOLDER` | empty | the Compose project; empty skips `09` |
 | `E2E_SSH_SUDO_PASSWORD` | empty | the account's `sudo` password; empty skips the real move in `10` |
-| `E2E_SSH_FS` | `/` | where the SSH server's files are reachable from the runner; empty skips the checks that read them |
+| `E2E_SSH_FS` | `/` | where the SSH server's files are reachable from the runner (the `sshfs` mount of the guest); empty skips the checks that read them |
 | `E2E_SCREENSHOT_DIR` | `test-results/journeys` | a full-page screenshot of each step worth seeing, per project |
 
 **Scenarios.** Each file follows a developer through one piece of real work, start to end:
@@ -709,5 +725,6 @@ shared file or hold a scarce resource take a lock (`acquireLock('envfile')`, `ac
 `tsconfig.e2e.json` type-checks the journeys during `npm run lint`.
 
 **CI.** `.github/workflows/e2e.yml` runs on a push to `main`, on demand and nightly: it builds the
-interface, starts OpenSSH, runs the fixture with Docker and `E2E_FIXTURE_SUDO=1` and then the scenarios as root, so `E2E_SSH_FS`
-can read and restore the SSH account's files, and uploads the HTML report and `test-results/`.
+interface, boots the guest with `scripts/vm_fixture.py e2e --mount`, runs the scenarios against it,
+so `E2E_SSH_FS` can read and restore the SSH account's files through the mount, and uploads the
+HTML report and `test-results/`.

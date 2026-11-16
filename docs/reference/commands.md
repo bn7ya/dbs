@@ -12,7 +12,7 @@ There are two commands:
 `manage.py dbs` with no subcommand prints an overview. `manage.py django_dbs` and
 `manage.py django-dbs` are the same command, and every subcommand also exists on its own as
 `dbs_backup`, `dbs_restore`, `dbs_validate`, `dbs_schedule`, `dbs_connection`, `dbs_health`,
-`dbs_audit`, `dbs_key`, `dbs_security`, `dbs_ai` and `dbs_upgrade`.
+`dbs_audit`, `dbs_key`, `dbs_security`, `dbs_ai`, `dbs_upgrade` and `dbs_checkpoints`.
 
 ### `dbs backup OUTPUT`
 
@@ -52,8 +52,34 @@ These three work only with `--stream`. See [A backup on standard output](../proj
 | `--no-data` · `--no-files` | Restore only the files, or only the rows |
 | `--database ALIAS` | Restore into this database |
 | `--passphrase P` · `--passphrase-stdin` | The passphrase, instead of the one DBS finds |
+| `--another-application` | Load a backup that records another application than this project, which is refused otherwise |
+| `--no-schema` | Load a checkpoint's rows into the tables as they are, instead of rebuilding the tables it was taken from |
+| `--no-checkpoint` | Restore without the checkpoints DBS keeps before and after a restore |
 
-See [Restoring](../restoring.md).
+A checkpoint is restored with `--flush`: it puts back the tables, the rows and the migration
+records it was taken with. See [Restoring](../restoring.md) and
+[Checkpoints](../restoring.md#checkpoints).
+
+### `dbs checkpoints`
+
+Lists the checkpoints in `DBS_BACKUP_DIR`, oldest first: when each was taken, whether it stands
+before or after a migration or a restore, the migrations it stands beside, its path and its
+size. `--database ALIAS` lists one database's, and `--json` prints the list as JSON (`name`,
+`path`, `role`, `database`, `taken_at`, `size`, `migrations`).
+
+### `migrate` and `makemigrations`
+
+With `dbs` in `INSTALLED_APPS`, Django's own `migrate` writes a checkpoint before and after the
+migrations it applies, and `makemigrations` checks that DBS can keep one before it writes a
+migration. Both keep every option they had, and each takes one more:
+
+| Option | |
+|---|---|
+| `migrate --no-checkpoint` | Migrate without the checkpoints |
+| `makemigrations --no-checkpoint` | Write the migration without checking that a checkpoint can be kept |
+
+When another app in the project replaces `migrate` or `makemigrations`, that command still
+runs, with the checkpoints around it.
 
 ### `dbs validate INPUT`
 
@@ -68,7 +94,7 @@ Runs backups on a schedule, in its own process (use it with `DBS_SCHEDULER = "co
 | Option | |
 |---|---|
 | `--once` | Take one backup now and exit |
-| `--interval 6h` · `--output-dir DIR` · `--prefix P` · `--keep 1-5` | Run this plan instead of the panel's |
+| `--interval 6h` · `--output-dir DIR` · `--prefix P` · `--keep N` | Run this plan instead of the panel's; `--keep` takes 1 to `DBS_MAX_BACKUPS` |
 | `--database ALIAS` · `--no-compress` · `--no-verify` · `--block-size` · `--kdf-time` · `--kdf-memory` | As for `dbs backup` |
 
 With none of `--interval`, `--output-dir`, `--prefix` or `--keep`, it follows the panel's
@@ -83,7 +109,7 @@ and backs up only while the panel's schedule is on. With any of them it runs tha
 |---|---|
 | `dbs health [--json]` | Grades the last backup's age, the last validation, the newest file, the backup folder, disk space, the passphrase, panel jobs and the scheduler, each `ok`, `info`, `warn` or `error` |
 | `dbs audit [verify]` | Walks the audit trail's hash chain and prints the first broken link, or the head of the chain |
-| `dbs connection [--json]` | What the DBS manager reads from this project: folders, Python, `manage.py`, settings module, backup folder, file roots, `.env` path (the `.env` beside `manage.py`, else beside the settings module, else in the folder above the project), version and, on a server, its host, SSH user and host key fingerprints. In a container (`"container": true`) those last three come back empty. Never a passphrase |
+| `dbs connection [--json]` | What the DBS manager reads from this project: the application's name, folders, Python, `manage.py`, settings module, backup folder, the most backups it keeps, file roots, `.env` path (the `.env` beside `manage.py`, else beside the settings module, else in the folder above the project), version and, on a server, its host, SSH user and host key fingerprints. In a container (`"container": true`) those last three come back empty. Never a passphrase |
 | `dbs key [--show]` | Where the passphrase comes from; `--show` prints it |
 | `dbs security [ACTION] [USER]` | `status` (the default), `unlock USER`, `policy`, `retrain`, `reset-baseline USER`, `events`, `purge`. `purge` removes telemetry only, never audit rows |
 | `dbs ai` | `--agents`, `--check`, `--print`, `--root DIR`; see [AI assistants](../ai-assistants.md) |
@@ -126,6 +152,7 @@ options.
 | `account list` · `role NAME ROLE` · `disable NAME` · `enable NAME` · `reset-2fa NAME` | Manage accounts; giving `master` hands the role over |
 | `export [FILE] [--with-backups] [--passphrase-stdin]` | The database and keys in one encrypted file |
 | `import FILE [--replace] [--yes] [--passphrase-stdin]` | Install an export; see [Moving the manager](../manager.md#moving-the-manager-itself) |
+| `update [--check] [--to X.Y.Z] [--yes] [--system-python] [--offline]` | Install the newest release of DBS for the manager, or `--to` one, after showing the pinned `pip install` and asking; `--check` only says whether one is there. See [Updating DBS](../manager.md#updating-dbs) |
 | `mcp [--as NAME]` | The MCP server for Claude; see [AI assistants](../ai-assistants.md) |
 | `--version` | The installed version |
 
@@ -168,6 +195,7 @@ plan or a `.env` version by the id `list` prints.
 | `capture-passphrase` | `APP`: read it from the application, once, before the first backup |
 | `deploy` | `APP [--real] [--confirm-name NAME]` |
 | `deploy-steps` | `APP [--set FILE]` |
+| `update-dbs` | `APP [--to X.Y.Z] [--real] [--confirm-name NAME]`: install a release of DBS in the application; see [Updating DBS](../manager.md#updating-dbs) |
 
 The settings `app add` and `app edit` take: `--kind host|compose|container`,
 `--engine docker|podman`, `--compose-project`, `--compose-service`, `--compose-file PATH`
@@ -194,11 +222,13 @@ PATH` (repeat). The `--deployment` keys and their answers are listed under
 |---|---|
 | `list` | `[--app APP]` |
 | `show` · `remove` · `run` · `pause` · `resume` | `PLAN` |
-| `add` | `APP NAME --kind dbs\|archive\|collect [--path PATH]… [--pattern GLOB] (--every MINUTES \| --manual) [--keep 1-5] [--keep-remote 0-5] [--first-run WHEN] [--time-zone ZONE] [--disabled]` |
+| `add` | `APP NAME --kind dbs\|archive\|collect [--path PATH]… [--pattern GLOB] (--every MINUTES \| --manual) [--keep N] [--keep-remote N] [--first-run WHEN] [--time-zone ZONE] [--disabled]` |
 | `edit` | `PLAN` with the options of `add` (but `--kind`), `--name`, and `--enable` or `--disable` |
 | `reschedule` | `PLAN --at WHEN` |
 
-`--every` takes 60, 180, 360, 720, 1440 or 10080 minutes.
+`--every` takes 60, 180, 360, 720, 1440 or 10080 minutes. `--keep` takes 1 to the manager's
+limit (`DBS_MANAGER_MAX_BACKUPS`, 5 unless set), and `--keep-remote` 0 to the application's
+`DBS_MAX_BACKUPS`.
 
 **`activity`, `env`, `files` and `redeploy`**
 
@@ -218,6 +248,6 @@ PATH` (repeat). The `--deployment` keys and their answers are listed under
 | `redeploy revert` | `JOB [--real] [--confirm-name NAME]` |
 
 **From a script.** Secrets are typed at a prompt or read from standard input, never passed as
-arguments. A confirmation takes `--yes`; a real `backup restore`, `app deploy`, `server move`,
-`redeploy start` or `redeploy revert` takes `--confirm-name NAME` instead, the name a person
-would type.
+arguments. A confirmation takes `--yes`; a real `backup restore`, `app deploy`,
+`app update-dbs`, `server move`, `redeploy start` or `redeploy revert` takes
+`--confirm-name NAME` instead, the name a person would type.

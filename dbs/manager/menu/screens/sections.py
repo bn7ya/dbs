@@ -143,6 +143,13 @@ LISTINGS = {
                 needs=Capability.APPLICATIONS_MANAGE,
             ),
             Action(
+                "Update django-dbs",
+                ("app", "update-dbs"),
+                APPLICATION,
+                needs=Capability.APPLICATIONS_CHECK,
+                detail="Rehearses by default.",
+            ),
+            Action(
                 "Move it onto another application",
                 ("redeploy", "start"),
                 {"--from": REFERENCE},

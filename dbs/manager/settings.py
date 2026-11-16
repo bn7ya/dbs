@@ -7,11 +7,13 @@ from dbs.manager.conf import (
     DATABASE_URL_ENV,
     HOST_ENV,
     LOCAL_HOSTS,
+    MAX_BACKUPS_ENV,
     TERMINAL_ENV,
     TRUSTED_PROXY_ENV,
 )
 from dbs.manager.database import parse_database_url, sqlite_database
 from dbs.manager.middleware import trusted_networks
+from dbs.retention import keep_limit
 
 DBS_MANAGER_DATA_DIR = str(paths.ensure_data_dir(paths.resolve_data_dir()))
 SEALING_KEY = keystore.load(DBS_MANAGER_DATA_DIR)
@@ -133,6 +135,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 DBS_SCHEDULER = "off"
+DBS_APPLICATION = "dbs-manager"
+DBS_MIGRATION_CHECKPOINTS = False
 DBS_EXCLUDE_MODELS = ["-dbs.auditevent", "-dbs.backuprecord"]
 DBS_MANAGER_JOBS_INLINE = False
 DBS_MANAGER_TERMINAL = os.environ.get(TERMINAL_ENV, "").strip().lower() or "admins"
@@ -150,6 +154,7 @@ BACKUP_QUIET_TIMEOUT = 1800.0
 BACKUP_PROGRESS_SECONDS = 30
 BACKUP_TASK_TIME_LIMIT = 25 * 60 * 60
 BACKUP_GRACE_DAYS = 7
+BACKUP_KEEP_MAX = keep_limit(os.environ.get(MAX_BACKUPS_ENV, "").strip() or None)
 BACKUP_UPLOAD_MAX_BYTES = 5 * 1024**3
 FILES_UPLOAD_MAX_BYTES = 2 * 1024**3
 ENV_MAX_BYTES = 256 * 1024

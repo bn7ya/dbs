@@ -7,6 +7,7 @@ export const EVERY_CAPABILITY: readonly Capability[] = [
   'applications.manage',
   'applications.check',
   'applications.passphrase',
+  'applications.update',
   'backups.take',
   'backups.verify',
   'backups.download',
@@ -27,6 +28,7 @@ export const EVERY_CAPABILITY: readonly Capability[] = [
   'relocation.run',
   'shell.open',
   'console.run',
+  'manager.update',
 ];
 
 export const OPERATOR_CAPABILITIES: readonly Capability[] = [

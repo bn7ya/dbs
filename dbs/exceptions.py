@@ -40,6 +40,10 @@ class RestoreError(DBSError):
     pass
 
 
+class ForeignBackup(RestoreError):
+    pass
+
+
 class BackupError(DBSError):
     pass
 

@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { errorInterceptor } from '@core/http/error.interceptor';
 import { LocaleStore } from '@core/i18n/locale.store';
 import { Toaster } from '@shared/toaster/toaster';
+import { DEFAULT_PLAN_LIMITS, type PlanLimits } from '../../data/plans.types';
 import { LOCAL_TIME_ZONE } from '../../data/zoned-time';
 import ar from '../../i18n/ar.json';
 import en from '../../i18n/en.json';
@@ -25,12 +26,14 @@ const PASSWORD = 'correct-horse-battery-staple';
 
 const BROWSER_ZONE = 'Europe/Berlin';
 
+const LIMITS_URL = '/api/backups/plans/limits/';
+
 describe('PlanForm', () => {
   let http: HttpTestingController;
   let close: ReturnType<typeof vi.fn>;
   let fixture: ComponentFixture<PlanForm>;
 
-  const open = (data: PlanFormData): PlanForm => {
+  const open = (data: PlanFormData, limits: PlanLimits = DEFAULT_PLAN_LIMITS): PlanForm => {
     close = vi.fn();
     localStorage.setItem('locale', 'en');
     // Only the clock is fixed, so a first run "after now" stays after now.
@@ -53,6 +56,8 @@ describe('PlanForm', () => {
     vi.spyOn(TestBed.inject(Toaster), 'add').mockReturnValue(undefined);
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(PlanForm);
+    TestBed.tick();
+    http.expectOne((request) => request.url === LIMITS_URL).flush(limits);
     return fixture.componentInstance;
   };
 
@@ -129,6 +134,58 @@ describe('PlanForm', () => {
     expect(form.error('keep')).toBe('keep_range');
     form.update('keep', 5);
     expect(form.error('keep')).toBeNull();
+  });
+
+  it("takes the manager's limit here and the server's limit there, and says both ranges", async () => {
+    const form = open({ plan: null }, { keep: { min: 1, max: 40 }, keep_remote: { min: 0, max: 12 } });
+    await fixture.whenStable();
+    const view = rendered();
+
+    expect(input(view, 'keep')?.max).toBe('40');
+    expect(input(view, 'keep_remote')?.max).toBe('12');
+    expect(view.textContent).toContain("Up to 40 of this plan's newest backups stay here.");
+    expect(view.textContent).toContain('This server keeps up to 12.');
+
+    form.update('keep', 40);
+    form.update('keep_remote', 12);
+    expect(form.error('keep')).toBeNull();
+    expect(form.error('keep_remote')).toBeNull();
+
+    form.update('keep', 41);
+    form.update('keep_remote', 13);
+    await form.save();
+
+    http.expectNone('/api/backups/plans/');
+    expect(form.errorFor('keep')).toBe('Enter a number from 1 to 40.');
+    expect(form.errorFor('keep_remote')).toBe('Enter a number from 0 to 12.');
+  });
+
+  it('holds a new plan to a limit lower than five', async () => {
+    const form = open({ plan: null }, { keep: { min: 1, max: 3 }, keep_remote: { min: 0, max: 3 } });
+    await fixture.whenStable();
+    form.update('name', 'nightly');
+
+    await form.save();
+
+    http.expectNone('/api/backups/plans/');
+    expect(form.errorFor('keep')).toBe('Enter a number from 1 to 3.');
+    expect(input(rendered(), 'keep')?.max).toBe('3');
+  });
+
+  it('lets a plan saved under a wider limit keep its number, and no larger one', async () => {
+    const form = open({ plan: { ...PLAN, keep: 20 } }, { keep: { min: 1, max: 5 }, keep_remote: { min: 0, max: 5 } });
+
+    await fixture.whenStable();
+    form.update('name', 'renamed');
+    const saving = form.save();
+    http.expectOne(`/api/backups/plans/${PLAN.id}/`).flush({ ...PLAN, keep: 20, name: 'renamed' });
+    await saving;
+
+    form.update('keep', 21);
+    await form.save();
+
+    http.expectNone(`/api/backups/plans/${PLAN.id}/`);
+    expect(form.errorFor('keep')).toBe('Enter a number from 1 to 20.');
   });
 
   it('sends the interval of the schedule chosen and the time zone, without a first run, then closes', async () => {

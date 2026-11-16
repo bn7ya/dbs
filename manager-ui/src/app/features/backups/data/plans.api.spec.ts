@@ -33,6 +33,16 @@ describe('PlansApi', () => {
     await expect(listing).resolves.toEqual(pageOf([PLAN]));
   });
 
+  it("asks how many backups a plan of an application may keep here and on its server", async () => {
+    const limits = { keep: { min: 1, max: 40 }, keep_remote: { min: 0, max: 12 } };
+    const asked = firstValueFrom(api.limits(APPLICATION_ID));
+    const request = http.expectOne(`/api/backups/plans/limits/?application=${APPLICATION_ID}`);
+    expect(request.request.method).toBe('GET');
+    request.flush(limits);
+
+    await expect(asked).resolves.toEqual(limits);
+  });
+
   it('adds a plan to an application, with its first run and time zone', async () => {
     const plan = {
       application: APPLICATION_ID,

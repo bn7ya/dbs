@@ -311,6 +311,7 @@ def test_about_names_the_version_and_where_the_data_lives(api, data_dir, setting
         "backups_dir": settings.BACKUP_STORAGE_DIR,
         "last_export_at": None,
         "key_store": "file",
+        "max_backups": 5,
     }
     assert body["database"].startswith(f"{connection.vendor}:")
 

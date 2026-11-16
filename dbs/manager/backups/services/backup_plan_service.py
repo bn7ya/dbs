@@ -13,7 +13,13 @@ from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.services import ApplicationService
-from dbs.manager.backups.models import PLAN_PATTERN_MAX_LENGTH, BackupPlan
+from dbs.manager.backups.models import (
+    PLAN_KEEP_MIN,
+    PLAN_KEEP_REMOTE_MIN,
+    PLAN_PATTERN_MAX_LENGTH,
+    BackupPlan,
+)
+from dbs.manager.backups.limits import keep_max, keep_remote_max
 from dbs.manager.backups.repositories import BackupPlanRepository
 from dbs.manager.backups.services.actions import Action
 from dbs.manager.backups.services.backup_run_service import BackupRunService
@@ -69,6 +75,12 @@ ACCOUNT_PASSWORD_REQUIRED = (
 RETENTION_PASSWORD_REQUIRED = (
     "Enter your own password to keep fewer backups: the next run deletes the oldest."
 )
+KEEP_BEYOND_MANAGER = (
+    "The manager keeps at most {maximum} backups of a plan (DBS_MANAGER_MAX_BACKUPS)."
+)
+KEEP_BEYOND_SERVER = (
+    "This application's server keeps at most {maximum} backups (its DBS_MAX_BACKUPS)."
+)
 
 Errors = dict[str, list[ErrorDetail]]
 
@@ -84,6 +96,10 @@ def _require_password(
         raise ValidationError(
             {"account_password": [ErrorDetail(message, code="required")]}
         )
+
+
+def _raises(plan: BackupPlan | None, name: str, value: int) -> bool:
+    return plan is None or value > getattr(plan, name)
 
 
 def _keeps_fewer(plan: BackupPlan, changes: Mapping[str, Any]) -> bool:
@@ -117,6 +133,16 @@ class BackupPlanService:
         if plan is None:
             raise NotFound()
         return plan
+
+    def limits(self, application_id: UUID) -> dict[str, dict[str, int]]:
+        application = self.applications.get(application_id)
+        return {
+            "keep": {"min": PLAN_KEEP_MIN, "max": keep_max()},
+            "keep_remote": {
+                "min": PLAN_KEEP_REMOTE_MIN,
+                "max": keep_remote_max(application),
+            },
+        }
 
     @requires(Capability.PLANS_MANAGE)
     def create(
@@ -272,6 +298,7 @@ class BackupPlanService:
             _add(errors, "time_zone", INVALID_TIME_ZONE, "invalid_time_zone")
         if data.get("anchor_at") is not None and not within_reach(data["anchor_at"]):
             _add(errors, "anchor_at", INVALID_MOMENT, "invalid_moment")
+        self._check_keeps(application_id, kind, data, plan, errors)
         validated = dict(data)
         if kind == BackupPlan.Kind.DBS:
             if data.get("paths"):
@@ -301,6 +328,29 @@ class BackupPlanService:
         if errors:
             raise ValidationError(errors)
         return validated
+
+    def _check_keeps(
+        self,
+        application_id: UUID,
+        kind: str,
+        data: Mapping[str, Any],
+        plan: BackupPlan | None,
+        errors: Errors,
+    ) -> None:
+        keep, keep_remote = data.get("keep"), data.get("keep_remote")
+        here = keep_max()
+        if keep is not None and keep > here and _raises(plan, "keep", keep):
+            _add(errors, "keep", KEEP_BEYOND_MANAGER.format(maximum=here), "max_value")
+        if keep_remote is None or kind == BackupPlan.Kind.COLLECT:
+            return
+        there = keep_remote_max(self.applications.get(application_id))
+        if keep_remote > there and _raises(plan, "keep_remote", keep_remote):
+            _add(
+                errors,
+                "keep_remote",
+                KEEP_BEYOND_SERVER.format(maximum=there),
+                "max_value",
+            )
 
     def _check_name(
         self, application_id: UUID, name: str, excluding: UUID | None, errors: Errors

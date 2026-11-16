@@ -16,8 +16,9 @@ from ..container.blocks import BlockPlan, RepairReport
 from ..container.format import STREAM_FORMAT_VERSION, read_container
 from ..crypto import decrypt_payload
 from ..crypto.envelope import EnvelopeMaterial
-from ..exceptions import ContainerError, CorruptionError, RestoreError
+from ..exceptions import ContainerError, CorruptionError, ForeignBackup, RestoreError
 from ..files import StagedFiles, plan_entries, plan_restore, refusal_message
+from ..identity import foreign_reason
 from ..introspect import backup_plan, excluded_fields, topological_order
 from ..registry import ModelBackup, backup_registry
 from ..serialize import (
@@ -27,6 +28,7 @@ from ..serialize import (
     resolve_natural_keys,
     save_records,
 )
+from . import schema as schema_engine
 from .backup import migration_state
 from .frames import KNOWN_FLAGS, PayloadReader
 from .inputs import opened, stream_source, whole
@@ -36,6 +38,11 @@ from .pipeline import decoding
 logger = logging.getLogger("dbs")
 
 SUPPORTED_MANIFEST_VERSION = 1
+
+NOT_A_CHECKPOINT = (
+    "Only a checkpoint, the backup DBS keeps around a migration or a restore, carries "
+    "the migrations to rebuild tables from; this backup restores its rows."
+)
 
 DEFAULT_MAX_PAYLOAD_BYTES = 4 * 1024 ** 3
 
@@ -77,6 +84,11 @@ class RestoreResult:
     records_flushed: int = 0
     preexisting_models: list = field(default_factory=list)
     files_refused: list = field(default_factory=list)
+    schema_rebuilt: bool = False
+    tables_rebuilt: list = field(default_factory=list)
+    migrations_unapplied: list = field(default_factory=list)
+    migrations_recorded: list = field(default_factory=list)
+    raw_sql_migrations: list = field(default_factory=list)
 
     @property
     def healed(self) -> bool:
@@ -166,6 +178,15 @@ def open_stream(handle, passphrase: str, *, check_spares: bool = False):
         yield reader, payload
 
 
+def refuse_foreign(header: dict, labels: list) -> None:
+    reason = foreign_reason(header, labels)
+    if reason:
+        raise ForeignBackup(
+            f"{reason} Restore it in the application it was taken from, or pass "
+            "another_application=True (--another-application) to load it here."
+        )
+
+
 def _decompress_bounded(body: bytes) -> bytes:
     limit = setting("DBS_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES)
     decompressor = zlib.decompressobj()
@@ -190,6 +211,8 @@ def restore_backup(
     dry_run: bool = False,
     flush: bool = False,
     registry=None,
+    another_application: bool = False,
+    schema: bool | None = None,
 ) -> RestoreResult:
     """Restore database rows and files from the backup in ``data``.
 
@@ -204,7 +227,18 @@ def restore_backup(
     any row loads; files are staged beside their targets and moved into place
     when the rows commit. ``dry_run`` runs the same checks, lists refused files
     in ``files_refused`` and rehearses the load in a transaction it rolls back,
-    changing nothing.
+    changing nothing. A backup that records another application than this
+    project raises ``ForeignBackup`` before anything is read further, in a dry
+    run too, unless ``another_application`` is true.
+
+    A checkpoint, the backup DBS keeps around a migration or a restore, also
+    carries the migrations that were applied when it was taken. Restoring one
+    needs ``flush``: the tables Django's migrations manage are dropped and built
+    again as those migrations describe them, its rows are loaded and the
+    migration records are set back, in one transaction where the database can
+    roll back schema changes. ``dry_run`` reports what would be rebuilt and
+    changes nothing. ``schema=False`` loads a checkpoint's rows into the tables
+    as they are; ``schema=True`` on any other backup raises ``RestoreError``.
     """
     return restore_translated(
         data,
@@ -216,6 +250,8 @@ def restore_backup(
         dry_run=dry_run,
         flush=flush,
         registry=registry,
+        another_application=another_application,
+        schema=schema,
     )
 
 
@@ -230,6 +266,8 @@ def restore_translated(
     dry_run: bool = False,
     flush: bool = False,
     registry=None,
+    another_application: bool = False,
+    schema: bool | None = None,
 ) -> RestoreResult:
     options = {
         "using": using,
@@ -239,11 +277,62 @@ def restore_translated(
         "flush": flush,
         "registry": registry or backup_registry,
         "translation": translation,
+        "another_application": another_application,
     }
     with opened(data) as handle:
         if read_format_version(handle) == STREAM_FORMAT_VERSION:
-            return _restore_stream(handle, passphrase, **options)
+            return _restore_stream(handle, passphrase, schema=schema, **options)
+        if schema:
+            raise RestoreError(NOT_A_CHECKPOINT)
         return _restore_v1(whole(handle), passphrase, **options)
+
+
+def preflight(
+    data,
+    passphrase: str,
+    *,
+    using: str = "default",
+    load_data: bool = True,
+    flush: bool = False,
+    another_application: bool = False,
+    schema: bool | None = None,
+    **_options,
+) -> None:
+    with opened(data) as handle:
+        if read_format_version(handle) != STREAM_FORMAT_VERSION:
+            return
+        with open_stream(handle, passphrase) as (_reader, payload):
+            header = payload.read_header()
+            if not another_application:
+                refuse_foreign(header, header["order"])
+            if rebuilds_schema(header, schema=schema, flush=flush, load_data=load_data):
+                schema_engine.plan_rebuild(connections[using], header)
+            payload.read_manifest()
+            _drain_files(payload)
+            _finish_stream(payload, RestoreResult(), records=False)
+
+
+def is_checkpoint(header: dict) -> bool:
+    return isinstance(header.get("checkpoint"), dict) and isinstance(
+        header.get("applied"), list
+    )
+
+
+def rebuilds_schema(header: dict, *, schema, flush: bool, load_data: bool) -> bool:
+    if not is_checkpoint(header):
+        if schema:
+            raise RestoreError(NOT_A_CHECKPOINT)
+        return False
+    if schema is False or not load_data:
+        return False
+    if not flush:
+        raise RestoreError(
+            "This is a checkpoint: restoring it drops the tables Django's migrations "
+            "manage and builds them again as they were when it was taken. Pass "
+            "flush=True (--flush) to do that, or schema=False (--no-schema) to load its "
+            "rows into the tables as they are."
+        )
+    return True
 
 
 def _restore_v1(
@@ -257,6 +346,7 @@ def _restore_v1(
     flush: bool,
     registry,
     translation,
+    another_application: bool,
 ) -> RestoreResult:
     result = _read_v1_payload(data, passphrase)
     out = RestoreResult(repair_report=result.repair_report)
@@ -266,6 +356,8 @@ def _restore_v1(
         **result.document,
         "order": translation.labels(result.document.get("order") or []),
     }
+    if not another_application:
+        refuse_foreign(result.document, document["order"])
     translated = [
         found for record in result.records for found in translation.records(record)
     ]
@@ -341,62 +433,177 @@ def _restore_stream(
     flush: bool,
     registry,
     translation,
+    another_application: bool,
+    schema: bool | None = None,
 ) -> RestoreResult:
     out = RestoreResult()
+    connection = connections[using]
+    plan = None
     with open_stream(handle, passphrase) as (reader, payload):
         header = payload.read_header()
-        _warn_on_environment_drift(header, connections[using])
         order = translation.labels(header["order"])
-        backup_models = _models_named(order)
-        out.preexisting_models = [
-            model._meta.label_lower
-            for model in backup_models
-            if model._base_manager.db_manager(using).exists()
-        ]
-        entries = payload.read_manifest()
-        logger.info("restore started: %d files", len(entries))
-        placements = plan_entries(entries, registry=registry) if write_files else []
-        out.files_refused = [placement.problem for placement in placements if placement.problem]
-        rows = _StreamedRows(payload, order, placements, using, translation)
-
-        if dry_run:
-            out.files_would_write = len(placements) - len(out.files_refused)
-            _drain_files(payload)
-            if load_data:
-                _rehearse_stream(rows, out, backup_models, using=using, flush=flush, registry=registry)
+        if not another_application:
+            refuse_foreign(header, order)
+        if translation is UNTRANSLATED and rebuilds_schema(
+            header, schema=schema, flush=flush, load_data=load_data
+        ):
+            plan = schema_engine.plan_rebuild(connection, header)
+            _describe_rebuild(out, plan)
+            if dry_run or not connection.features.can_rollback_ddl:
+                _rehearse_rebuild(payload, plan, out, using)
             else:
-                _finish_stream(payload, out, records=False)
-            out.repair_report = reader.report
-            logger.info(
-                "dry run complete: %d records would load, %d files would be written, "
-                "%d files would be refused; nothing was changed",
-                out.records_would_load,
-                out.files_would_write,
-                len(out.files_refused),
+                _rebuild(payload, plan, out, connection)
+        else:
+            _load_into_tables(
+                payload,
+                header,
+                order,
+                out,
+                using=using,
+                load_data=load_data,
+                write_files=write_files,
+                dry_run=dry_run,
+                flush=flush,
+                registry=registry,
+                translation=translation,
             )
-            return out
-
-        if out.files_refused:
-            raise RestoreError(refusal_message(out.files_refused))
-
-        staged = StagedFiles()
-        try:
-            _stage_files(payload, placements, staged)
-            if load_data:
-                _load_stream(rows, out, backup_models, staged, using=using, flush=flush, registry=registry)
-            else:
-                _finish_stream(payload, out, records=False)
-                _publish(staged, out)
-        except BaseException:
-            staged.discard()
-            raise
     out.repair_report = reader.report
-    logger.info(
-        "restore complete: %d records loaded, %d files written",
-        out.records_loaded,
-        out.files_written,
-    )
+    if plan is None:
+        if not dry_run:
+            logger.info(
+                "restore complete: %d records loaded, %d files written",
+                out.records_loaded,
+                out.files_written,
+            )
+        return out
+    if not dry_run and not out.schema_rebuilt:
+        handle.seek(0)
+        with open_stream(handle, passphrase) as (reader, payload):
+            payload.read_header()
+            _rebuild(payload, plan, out, connection)
+        out.repair_report = reader.report
+    _report_rebuild(out, dry_run)
     return out
+
+
+def _load_into_tables(
+    payload,
+    header: dict,
+    order: list,
+    out: RestoreResult,
+    *,
+    using: str,
+    load_data: bool,
+    write_files: bool,
+    dry_run: bool,
+    flush: bool,
+    registry,
+    translation,
+) -> None:
+    _warn_on_environment_drift(header, connections[using])
+    backup_models = _models_named(order)
+    out.preexisting_models = [
+        model._meta.label_lower
+        for model in backup_models
+        if model._base_manager.db_manager(using).exists()
+    ]
+    entries = payload.read_manifest()
+    logger.info("restore started: %d files", len(entries))
+    placements = plan_entries(entries, registry=registry) if write_files else []
+    out.files_refused = [placement.problem for placement in placements if placement.problem]
+    rows = _StreamedRows(payload, order, placements, using, translation)
+
+    if dry_run:
+        out.files_would_write = len(placements) - len(out.files_refused)
+        _drain_files(payload)
+        if load_data:
+            _rehearse_stream(rows, out, backup_models, using=using, flush=flush, registry=registry)
+        else:
+            _finish_stream(payload, out, records=False)
+        logger.info(
+            "dry run complete: %d records would load, %d files would be written, "
+            "%d files would be refused; nothing was changed",
+            out.records_would_load,
+            out.files_would_write,
+            len(out.files_refused),
+        )
+        return
+
+    if out.files_refused:
+        raise RestoreError(refusal_message(out.files_refused))
+
+    staged = StagedFiles()
+    try:
+        _stage_files(payload, placements, staged)
+        if load_data:
+            _load_stream(rows, out, backup_models, staged, using=using, flush=flush, registry=registry)
+        else:
+            _finish_stream(payload, out, records=False)
+            _publish(staged, out)
+    except BaseException:
+        staged.discard()
+        raise
+
+
+def _describe_rebuild(out: RestoreResult, plan) -> None:
+    out.tables_rebuilt = plan.tables
+    out.migrations_unapplied = list(plan.unapplied)
+    out.migrations_recorded = list(plan.recorded)
+    out.raw_sql_migrations = list(plan.target.raw_sql)
+
+
+def _checkpoint_rows(payload, plan, using: str):
+    payload.read_manifest()
+    _drain_files(payload)
+    rows = schema_engine.HistoricalRows(plan.target.state.apps, using)
+    for batch in payload.record_batches():
+        decode_large_binaries(batch, plan.target.state.apps)
+        yield rows, batch
+
+
+def _rehearse_rebuild(payload, plan, out: RestoreResult, using: str) -> None:
+    seen = 0
+    for rows, batch in _checkpoint_rows(payload, plan, using):
+        rows.check(batch)
+        seen = rows.seen
+    _finish_stream(payload, out, records=True)
+    out.records_would_load = seen
+
+
+def _rebuild(payload, plan, out: RestoreResult, connection) -> None:
+    def load() -> int:
+        loaded = 0
+        for rows, batch in _checkpoint_rows(payload, plan, connection.alias):
+            rows.save(batch)
+            loaded = rows.saved
+        _finish_stream(payload, out, records=True)
+        return loaded
+
+    logger.info("restore started: rebuilding %d tables", len(plan.tables))
+    out.records_loaded = schema_engine.rebuild(connection, plan, load)
+    out.records_flushed = 0
+    out.schema_rebuilt = True
+
+
+def _report_rebuild(out: RestoreResult, dry_run: bool) -> None:
+    if out.raw_sql_migrations:
+        logger.warning(
+            "these migrations ran raw SQL, which rebuilding the tables does not repeat: %s",
+            ", ".join(out.raw_sql_migrations),
+        )
+    if dry_run:
+        logger.info(
+            "dry run complete: %d tables would be rebuilt and %d records loaded; "
+            "nothing was changed",
+            len(out.tables_rebuilt),
+            out.records_would_load,
+        )
+        return
+    logger.info(
+        "restore complete: %d tables rebuilt, %d records loaded",
+        len(out.tables_rebuilt),
+        out.records_loaded,
+    )
 
 
 class _StreamedRows:

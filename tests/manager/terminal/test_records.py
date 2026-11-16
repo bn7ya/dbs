@@ -5,6 +5,7 @@ import pytest
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.envfiles.models import EnvVersion
 from tests.manager.deploy.test_deploy import AFTER, ready_to_deploy
+from tests.manager.deploy.test_update_dbs import ready_to_update
 from tests.manager.servers.support import PASSWORD
 from tests.manager.support import logged
 from tests.manager.test_redeploy import (  # noqa: F401
@@ -168,7 +169,7 @@ def test_only_a_move_or_a_deploy_can_be_reverted(terminal, admin, world):  # noq
 
     entry = ActivityService(admin).record("auth.sign_in", target="sara")
     ran = terminal("redeploy", "revert", entry.pk)
-    assert ran.code == 1 and f"{entry.pk} is not a move or a deploy." in ran.err
+    assert ran.code == 1 and f"{entry.pk} is not a move, a deploy or an update." in ran.err
 
 
 @pytest.mark.django_db
@@ -225,6 +226,62 @@ def test_a_real_app_deploy_needs_the_name_and_the_password(terminal, admin, worl
     assert "Deployed web-2." in ran.out
     [job] = logged("redeploy.deploy")
     assert job.data["after"] == {"git_head": AFTER}
+
+
+@pytest.mark.django_db(transaction=True)
+def test_app_update_dbs_rehearses_and_prints_each_step(terminal, admin, world):  # noqa: F811
+    ready_to_update(world, installed="0.8.1")
+
+    ran = terminal("app", "update-dbs", "web-2")
+
+    assert ran.code == 0, ran.out + ran.err
+    assert "install" in ran.out and "final_check" in ran.out
+    assert "Rehearsed updating django-dbs in web-2 to" in ran.out
+    assert world["sent"]["events"] == []
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_real_app_update_dbs_needs_the_name_and_the_password(terminal, admin, world):  # noqa: F811
+    ready_to_update(world, installed="0.8.1")
+
+    refused = terminal("app", "update-dbs", "web-2", "--real")
+    ran = terminal(
+        "app",
+        "update-dbs",
+        "web-2",
+        "--real",
+        "--confirm-name",
+        "web-2",
+        "--password-stdin",
+        stdin=f"{PASSWORD}\n",
+    )
+
+    assert refused.code == 1
+    assert ran.code == 0, ran.out + ran.err
+    assert "Updated django-dbs in web-2 to" in ran.out
+    assert "Restart web-2's web process so it loads django-dbs" in ran.out
+    [job] = logged("application.dbs_update")
+    assert job.data["to_version"] == job.data["version"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_app_update_dbs_says_when_there_is_nothing_to_update(terminal, admin, world):  # noqa: F811
+    import dbs
+
+    ready_to_update(world, installed=dbs.__version__)
+
+    ran = terminal("app", "update-dbs", "web-2")
+
+    assert ran.code == 0, ran.out + ran.err
+    assert f"web-2 already runs django-dbs {dbs.__version__}." in ran.out
+
+
+@pytest.mark.django_db
+def test_app_update_dbs_refuses_a_release_that_is_not_three_numbers(terminal, admin, world):  # noqa: F811
+    ran = terminal("app", "update-dbs", "web-2", "--to", "latest")
+
+    assert ran.code == 1
+    assert "0.9.0" in ran.err or "three numbers" in ran.err
 
 
 @pytest.mark.django_db
