@@ -43,6 +43,15 @@ TASKS = {
 LOCAL_TASKS = ("dbs.manager.shell.service.sweep_terminals",)
 
 
+def handlers():
+    return [handler for _, handler in TASKS.values()] + list(LOCAL_TASKS)
+
+
+def load():
+    for handler in handlers():
+        import_string(handler)
+
+
 def owner():
     return leases.process_owner()
 

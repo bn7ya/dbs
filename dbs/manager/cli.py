@@ -745,6 +745,17 @@ def open_running(data_dir, no_browser):
     return 0
 
 
+def load_before_threads():
+    from importlib import import_module
+
+    from django.conf import settings
+
+    from . import scheduler
+
+    import_module(settings.ROOT_URLCONF)
+    scheduler.load()
+
+
 def create_server(host, port):
     from django.core.wsgi import get_wsgi_application
     from waitress.server import create_server as waitress_server
@@ -847,6 +858,7 @@ def command_run(args):
     scheduler = Scheduler()
     server = None
     try:
+        load_before_threads()
         recover()
         runner.start()
         scheduler.start()

@@ -115,6 +115,11 @@ once. A project with no `DBS_BACKUP_DIR` migrates as before.
 - A server move gives the new server as long to create the application's virtualenv as it
   gives the package install. It had the 20 seconds every short command gets, which a slow
   server could exceed, stopping the move with `remote_command_timed_out`.
+- `django_dbs run` loads the interface's views and its scheduled tasks before it starts a
+  thread. They were imported on first use, by the first request and the first scheduled tasks
+  at the same moment, and Python could refuse one of those imports: now and then the first
+  request after the manager started answered 500, or a first scheduled task failed and waited
+  for its next turn.
 
 ### Security
 
