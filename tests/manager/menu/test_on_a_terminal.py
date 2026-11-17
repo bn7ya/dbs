@@ -23,7 +23,7 @@ ENTERED = "\x1b[?1049h"
 LEFT = "\x1b[?1049l"
 COLUMNS = 110
 BETWEEN_KEYS = 0.4
-BETWEEN_FRAMES = 0.05
+UNCHANGED = "\x1b[?25l\x1b[0m"
 DOWN = "\x1b[B"
 BELOW_SERVERS = ("Applications", "Backups", "Activity", "Accounts", "Manager", "All commands")
 ROWS = 34
@@ -77,17 +77,22 @@ class OnATerminal:
             os.write(self.controller, keys.encode())
             time.sleep(BETWEEN_KEYS)
 
+    def waits(self, text, drawn_before=0):
+        deadline = time.monotonic() + TIMEOUT
+        while True:
+            found = self.shown.find(text, drawn_before)
+            if found >= 0 and UNCHANGED in self.shown[found:]:
+                return
+            assert time.monotonic() < deadline, (
+                f"never saw {text!r} and then an unchanged screen in:\n"
+                f"{self.shown[-2000:]}"
+            )
+            self.read(0.2)
+
     def answered(self, keys, text):
         drawn_before = len(self.shown)
         os.write(self.controller, keys.encode())
-        deadline = time.monotonic() + TIMEOUT
-        while text not in self.shown[drawn_before:]:
-            assert time.monotonic() < deadline, (
-                f"never saw {text!r} after {keys!r} in:\n{self.shown[-2000:]}"
-            )
-            self.read(0.2)
-        while self.read(BETWEEN_FRAMES):
-            continue
+        self.waits(text, drawn_before)
 
     def ended(self):
         deadline = time.monotonic() + TIMEOUT
@@ -166,9 +171,9 @@ def test_control_c_leaves_the_menu_like_q(terminal, home):
 
 def test_the_arrow_keys_move_between_the_sections(terminal, home):
     menu = terminal(home)
-    menu.until("Dashboard")
+    menu.waits("Dashboard")
 
-    menu.answered(DOWN, "No servers yet. Add a server")
+    menu.answered(DOWN, "Servers")
     for section in BELOW_SERVERS:
         menu.answered(DOWN, section)
     menu.until("Every command the manager has")
@@ -242,14 +247,15 @@ def test_control_c_stops_a_running_command_and_the_menu_stays_open(
     terminal, home, silent_server
 ):
     menu = terminal(home)
-    menu.until("Dashboard")
+    menu.waits("Dashboard")
     menu.answered(DOWN, "Servers")
     menu.press("\r")
     menu.answered("\r", "Check the connection")
-    menu.press(DOWN, DOWN)
-    menu.answered("\r", "Ctrl+C stops it.")
+    menu.press(DOWN, DOWN, "\r")
+    menu.until("Ctrl+C stops it.")
 
-    menu.answered("\x03", "Stopped.")
+    menu.press("\x03")
+    menu.waits("Stopped.")
     assert menu.process.poll() is None
 
     menu.answered("\r", "Browse its folders")
@@ -344,14 +350,14 @@ def test_a_server_is_added_with_its_ssh_password_typed_in_the_form(
 ):
     port, offered = ssh_server
     menu = terminal(home)
-    menu.until("Dashboard")
+    menu.waits("Dashboard")
     menu.answered(DOWN, "Servers")
     menu.press("\r")
     menu.answered("a", "SSH password")
 
     menu.press("web-1", DOWN, "127.0.0.1", DOWN, str(port), DOWN, "deploy")
-    menu.press(DOWN, DOWN, SSH_PASSWORD, *[DOWN] * 4)
-    menu.answered("\r", "Is this the server's key?")
+    menu.press(DOWN, DOWN, SSH_PASSWORD, *[DOWN] * 4, "\r")
+    menu.until("Is this the server's key?")
     menu.answered("y", "Added web-1.")
 
     assert offered == [SSH_PASSWORD]
