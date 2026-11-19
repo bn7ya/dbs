@@ -31,6 +31,7 @@ HANDED_TO_DJANGO = (
     os.path.join("django", "contrib", "sessions") + os.sep,
 )
 GENERIC_VIEW_BODIES = os.path.join("rest_framework", "mixins.py")
+SCHEMA_EDITORS = os.path.join("django", "db", "backends") + os.sep
 NOT_A_QUERY = frozenset(
     {"SAVEPOINT", "RELEASE", "ROLLBACK", "BEGIN", "COMMIT", "PRAGMA", "SET", "SHOW", "START"}
 )
@@ -148,12 +149,18 @@ def described(frame):
     return f"{path[len(ROOT):]}:{frame.f_lineno} in {frame.f_code.co_name}"
 
 
-def issuer(frame):
+def changes_a_table(path):
+    return SCHEMA_EDITORS in path and path.endswith("schema.py")
+
+
+def issuer(frame, connection):
     while frame is not None:
         path = frame.f_code.co_filename
         if path.startswith(PACKAGE):
             return None if MIGRATIONS in path else described(frame)
         if any(part in path for part in HANDED_TO_DJANGO):
+            return None
+        if changes_a_table(path) and not connection.features.can_rollback_ddl:
             return None
         if path.endswith(GENERIC_VIEW_BODIES):
             view = type(frame.f_locals.get("self"))
@@ -182,7 +189,7 @@ class Guard:
         if watch.active and not in_transaction(self.connection):
             verb = verb_of(sql)
             if verb and verb not in NOT_A_QUERY and self.can_be_rolled_back(verb):
-                site = issuer(sys._getframe(1))
+                site = issuer(sys._getframe(1), self.connection)
                 if site is not None:
                     watch.note(
                         Outside(

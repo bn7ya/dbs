@@ -326,11 +326,16 @@ def rebuild(connection, plan: RebuildPlan, load) -> int:
             rewrite_records(connection, plan.applied)
             relink(connection, editor, plan)
             raise_sequences(connection, plan.carried)
-        connection.check_constraints()
+        check_constraints(connection)
     if not connection.features.can_rollback_ddl:
-        connection.check_constraints()
+        check_constraints(connection)
     forget_cached_rows()
     return loaded
+
+
+@transactions.reads_connection
+def check_constraints(connection) -> None:
+    connection.check_constraints()
 
 
 def forget_cached_rows() -> None:
