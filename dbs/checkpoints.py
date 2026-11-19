@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from django.core.management.base import CommandError
 from django.db import DatabaseError, connections
 
-from . import audit, retention
+from . import audit, retention, transactions
 from .conf import setting
 from .exceptions import BackupError, DBSError
 from .io import can_write_into, nearest_existing
@@ -117,7 +117,7 @@ def plan_steps(plan) -> list:
 
 def take(role: str, *, using: str = "default", plan=(), protect=()) -> Checkpoint:
     from .engine import schema
-    from .engine.backup import write_selection
+    from .engine.backup import one_snapshot, write_selection
     from .schedule_runner import (
         discard_reservation,
         reserve,
@@ -133,28 +133,26 @@ def take(role: str, *, using: str = "default", plan=(), protect=()) -> Checkpoin
         raise CheckpointError(
             "No passphrase encrypts a checkpoint: set SECRET_KEY or DBS_PASSPHRASE."
         )
-    connection = connections[using]
-    found = schema.snapshot(connection)
-    carried = found.carried
-    selection = [(model, ModelBackup()) for model in carried]
-    header = {
-        "applied": [list(key) for key in found.applied],
-        "checkpoint": {"role": role, "plan": list(plan)},
-        "schema": schema.schema_digest(carried),
-    }
     os.makedirs(folder, exist_ok=True)
     name = reserve(folder, stem(role, using))
     output = os.path.join(folder, name)
     data = {"file": name, "database": using, "role": role, "migrations": list(plan)}
+
+    def write(fh):
+        with one_snapshot(using) as connection:
+            found = schema.snapshot(connection)
+            carried = found.carried
+            header = {
+                "applied": [list(key) for key in found.applied],
+                "checkpoint": {"role": role, "plan": list(plan)},
+                "schema": schema.schema_digest(carried),
+            }
+            selection = [(model, ModelBackup()) for model in carried]
+            return write_selection(fh, passphrase, selection, using=using, header=header)
+
     try:
         with audit.track(ACTION, target=name, data=data) as entry:
-            summary = write_reserved(
-                output,
-                passphrase,
-                writer=lambda fh: write_selection(
-                    fh, passphrase, selection, using=using, header=header
-                ),
-            )
+            summary = write_reserved(output, passphrase, writer=write)
             entry.data.update(
                 size=summary.bytes_written,
                 sha256=summary.sha256,
@@ -227,15 +225,16 @@ def listing(databases=None) -> list:
                 }
             )
     try:
-        recorded = dict(
-            AuditEvent.objects.filter(
-                action=ACTION,
-                status=audit.SUCCEEDED,
-                target_name__in=[entry["name"] for entry in found],
+        with transactions.reading():
+            recorded = dict(
+                AuditEvent.objects.filter(
+                    action=ACTION,
+                    status=audit.SUCCEEDED,
+                    target_name__in=[entry["name"] for entry in found],
+                )
+                .order_by("created_at", "pk")
+                .values_list("target_name", "data")
             )
-            .order_by("created_at", "pk")
-            .values_list("target_name", "data")
-        )
     except DatabaseError:
         recorded = {}
     for entry in found:
@@ -250,12 +249,15 @@ def restore_running() -> bool:
     from .models import AuditEvent
 
     try:
-        running = list(
-            AuditEvent.objects.filter(
-                action=jobs.RESTORE, status__in=audit.UNFINISHED
-            ).values_list("pk", flat=True)
-        )
-        return any(leases.holder(jobs.job_lease(event_id)) is not None for event_id in running)
+        with transactions.reading():
+            running = list(
+                AuditEvent.objects.filter(
+                    action=jobs.RESTORE, status__in=audit.UNFINISHED
+                ).values_list("pk", flat=True)
+            )
+            return any(
+                leases.holder(jobs.job_lease(event_id)) is not None for event_id in running
+            )
     except DatabaseError:
         return False
 

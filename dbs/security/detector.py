@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from django.utils.module_loading import import_string
 
+from .. import transactions
 from ..conf import setting
 from .baseline import base_calibration, base_model, calibrate, load_corpus
 from .features import to_vector
@@ -91,6 +92,7 @@ def _clock() -> float:
     return time.monotonic()
 
 
+@transactions.reads
 def personal_model(user):
     newest = (
         requests_for(user).order_by("-created_at").values_list("id", flat=True).first()
@@ -183,11 +185,12 @@ def refit(user_pk, generation=None):
 
 
 def _fit(user_pk) -> PersonalFit:
-    window = list(
-        requests_for(user_pk)
-        .order_by("-created_at")
-        .values_list("id", "features")[:WINDOW_ROWS]
-    )
+    with transactions.reading():
+        window = list(
+            requests_for(user_pk)
+            .order_by("-created_at")
+            .values_list("id", "features")[:WINDOW_ROWS]
+        )
     newest = window[0][0] if window else None
     vectors = [to_vector(features) for _, features in window if isinstance(features, dict)]
     if len(vectors) < minimum_rows():

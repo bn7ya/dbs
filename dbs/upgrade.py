@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import extras
+from . import extras, transactions
 from .conf import setting
 from .container import FORMAT_VERSION, read_format_version
 from .container.format import container_version
@@ -114,9 +114,10 @@ class Migrations(Step):
         from django.db import DEFAULT_DB_ALIAS, connections
         from django.db.migrations.executor import MigrationExecutor
 
-        executor = MigrationExecutor(connections[DEFAULT_DB_ALIAS])
-        targets = executor.loader.graph.leaf_nodes("dbs")
-        return executor.migration_plan(targets)
+        with transactions.reading_on(DEFAULT_DB_ALIAS):
+            executor = MigrationExecutor(connections[DEFAULT_DB_ALIAS])
+            targets = executor.loader.graph.leaf_nodes("dbs")
+            return executor.migration_plan(targets)
 
     def check(self):
         try:
@@ -151,7 +152,8 @@ class ScheduleInDatabase(Step):
         from .schedule_runner import COMMAND, mode
 
         try:
-            schedule = BackupSchedule.objects.order_by("pk").first()
+            with transactions.reading():
+                schedule = BackupSchedule.objects.order_by("pk").first()
         except DatabaseError:
             return self.warn("the backup schedule table is not migrated yet")
         if schedule is not None and schedule.enabled:
@@ -640,12 +642,15 @@ class PulledBackups(Step):
 
         connection = connections[DEFAULT_DB_ALIAS]
         try:
-            if "dbs_backuptarget" not in connection.introspection.table_names():
-                return None
-            table = connection.ops.quote_name("dbs_backuptarget")
-            with connection.cursor() as cursor:
-                cursor.execute(f"SELECT name, username, host, port FROM {table} ORDER BY name")
-                rows = cursor.fetchall()
+            with transactions.reading_on(DEFAULT_DB_ALIAS):
+                if "dbs_backuptarget" not in connection.introspection.table_names():
+                    return None
+                table = connection.ops.quote_name("dbs_backuptarget")
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        f"SELECT name, username, host, port FROM {table} ORDER BY name"
+                    )
+                    rows = cursor.fetchall()
         except DatabaseError:
             return None
         return [f"{name} ({username}@{host}:{port})" for name, username, host, port in rows]
@@ -657,12 +662,15 @@ class PulledBackups(Step):
         from .models import AuditEvent
 
         try:
-            events = AuditEvent.objects.filter(action="target.remove").order_by("target_name")
-            return [
-                f"{event.target_name} ({event.data.get('username')}@{event.data.get('host')}"
-                f":{event.data.get('port')})"
-                for event in events
-            ]
+            with transactions.reading():
+                events = AuditEvent.objects.filter(action="target.remove").order_by(
+                    "target_name"
+                )
+                return [
+                    f"{event.target_name} ({event.data.get('username')}@"
+                    f"{event.data.get('host')}:{event.data.get('port')})"
+                    for event in events
+                ]
         except DatabaseError:
             return []
 
@@ -678,7 +686,8 @@ class AuditChain(Step):
         from django.db.migrations.recorder import MigrationRecorder
 
         try:
-            applied = MigrationRecorder(connections[DEFAULT_DB_ALIAS]).applied_migrations()
+            with transactions.reading_on(DEFAULT_DB_ALIAS):
+                applied = MigrationRecorder(connections[DEFAULT_DB_ALIAS]).applied_migrations()
         except DatabaseError as exc:
             return self.warn(f"could not read migration state: {exc}")
         if self.migration in applied:
@@ -836,7 +845,7 @@ class MySQLReads(Step):
         if connection.vendor != "mysql":
             return self.ok("the database is not MySQL, so nothing here changes")
         try:
-            with connection.cursor() as cursor:
+            with transactions.reading_on(DEFAULT_DB_ALIAS), connection.cursor() as cursor:
                 cursor.execute("SELECT @@max_allowed_packet")
                 packet = int(cursor.fetchone()[0])
         except (DatabaseError, TypeError, ValueError) as exc:
@@ -932,7 +941,10 @@ class KeepAtMostFive(Step):
         if configured is not None and not self._within(configured, maximum):
             problems.append(f"DBS_SCHEDULE_KEEP is {configured}")
         try:
-            kept = BackupSchedule.objects.order_by("pk").values_list("keep", flat=True).first()
+            with transactions.reading():
+                kept = (
+                    BackupSchedule.objects.order_by("pk").values_list("keep", flat=True).first()
+                )
         except DatabaseError:
             kept = None
         if kept is not None and kept > maximum:

@@ -5,14 +5,15 @@ import hashlib
 import io
 import logging
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import django
 from django.conf import settings
-from django.db import connections, transaction
+from django.db import connections
 from django.db.migrations.recorder import MigrationRecorder
 
-from .. import introspect
+from .. import introspect, transactions
 from ..container import (
     DEFAULT_BLOCK_SIZE,
     DEFAULT_INTERLEAVE,
@@ -339,11 +340,7 @@ def _produce(
     files: bool = True,
     header: dict | None = None,
 ) -> dict:
-    connection = connections[using]
-    pin_snapshot = connection.vendor in SNAPSHOT_VENDORS and not connection.in_atomic_block
-    with transaction.atomic(using=using):
-        if pin_snapshot:
-            read_from_one_snapshot(connection)
+    with one_snapshot(using) as connection:
         emit(frames.PAYLOAD_MAGIC)
         emit(frames.json_frame(frames.HEADER, {**_header(connection, selection), **(header or {})}))
         sources = _listed_files(selection, using, skipped) if files else []
@@ -467,6 +464,16 @@ def _missing_files_message(skipped: list[str]) -> str:
     )
 
 
+@contextmanager
+def one_snapshot(using: str):
+    connection = connections[using]
+    pinned = connection.vendor in SNAPSHOT_VENDORS and not connection.in_atomic_block
+    with transactions.reading_on(using):
+        if pinned:
+            read_from_one_snapshot(connection)
+        yield connection
+
+
 def read_from_one_snapshot(connection) -> None:
     with connection.cursor() as cursor:
         cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
@@ -474,6 +481,7 @@ def read_from_one_snapshot(connection) -> None:
             cursor.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
 
 
+@transactions.reads_connection
 def migration_state(connection) -> dict[str, str]:
     recorder = MigrationRecorder(connection)
     if not recorder.has_table():

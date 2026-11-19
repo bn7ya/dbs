@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from django.db import connections
 from django.utils import timezone
 
-from . import audit, leases
+from . import audit, leases, transactions
 from .exceptions import ConfigurationError, DBSError
 
 logger = logging.getLogger("dbs")
@@ -70,19 +70,22 @@ class Job:
     def adopt(cls, event_id, owner, hold=()):
         from .models import AuditEvent
 
-        return cls(AuditEvent.objects.get(pk=event_id), owner, hold)
+        with transactions.reading():
+            event = AuditEvent.objects.get(pk=event_id)
+        return cls(event, owner, hold)
 
     @classmethod
     def begin(cls, action, *, target, data, owner, hold=(), actor=None, remote_addr=""):
-        event = audit.record(
-            action,
-            actor=actor,
-            target=target,
-            data=data,
-            status=audit.RUNNING,
-            remote_addr=remote_addr,
-        )
-        leases.acquire(job_lease(event.pk), owner, LEASE_SECONDS)
+        with transactions.atomic():
+            event = audit.record(
+                action,
+                actor=actor,
+                target=target,
+                data=data,
+                status=audit.RUNNING,
+                remote_addr=remote_addr,
+            )
+            leases.acquire(job_lease(event.pk), owner, LEASE_SECONDS)
         return cls(event, owner, hold)
 
     def heartbeat(self):
@@ -102,18 +105,23 @@ class Job:
     def close(self):
         leases.drop(self.lease, self.owner)
 
+    def end(self, exc=None):
+        with transactions.atomic():
+            if exc is None:
+                self.succeed()
+            else:
+                self.fail(exc)
+            self.close()
+
     @contextmanager
     def tracked(self):
         try:
             with self.heartbeat():
                 yield self
         except BaseException as exc:
-            self.fail(exc)
+            self.end(exc)
             raise
-        else:
-            self.succeed()
-        finally:
-            self.close()
+        self.end()
 
 
 def refused(action, exc, *, target, data, actor=None, remote_addr=""):
@@ -133,11 +141,12 @@ def recover(now=None):
     from .models import Lease
 
     now = now or timezone.now()
-    expired = list(
-        Lease.objects.filter(
-            name__startswith=JOB_LEASE_PREFIX, expires_at__lte=now
-        ).values_list("name", flat=True)
-    )
+    with transactions.reading():
+        expired = list(
+            Lease.objects.filter(
+                name__startswith=JOB_LEASE_PREFIX, expires_at__lte=now
+            ).values_list("name", flat=True)
+        )
     if not expired:
         return 0
     events = [
@@ -145,8 +154,9 @@ def recover(now=None):
         for name in expired
         if name[len(JOB_LEASE_PREFIX):].isdigit()
     ]
-    interrupted = audit.interrupt(events=events) if events else 0
-    Lease.objects.filter(name__in=expired, expires_at__lte=now).delete()
+    with transactions.atomic():
+        interrupted = audit.interrupt(events=events) if events else 0
+        Lease.objects.filter(name__in=expired, expires_at__lte=now).delete()
     if interrupted:
         logger.warning("%d DBS job(s) stopped before they finished", interrupted)
     return interrupted
@@ -287,8 +297,7 @@ def _start(job, runner, work, cleanup=None, spec=None):
         else:
             launch(work)
     except BaseException as exc:
-        job.fail(exc)
-        job.close()
+        job.end(exc)
         if cleanup is not None:
             cleanup()
         runner.release()

@@ -7,9 +7,11 @@ import threading
 import uuid
 from datetime import timedelta
 
-from django.db import DatabaseError, connections
+from django.db import DatabaseError, IntegrityError, connections
 from django.db.models import Q
 from django.utils import timezone
+
+from . import transactions
 
 logger = logging.getLogger("dbs")
 
@@ -25,10 +27,33 @@ def unique_owner():
 
 
 def acquire(name, owner, ttl_seconds):
+    now = timezone.now()
+    if not _known(name):
+        _open(name, now)
+    return _take(name, owner, now, ttl_seconds)
+
+
+@transactions.reads
+def _known(name):
     from .models import Lease
 
-    now = timezone.now()
-    Lease.objects.get_or_create(name=name, defaults={"owner": "", "expires_at": now})
+    return Lease.objects.filter(name=name).exists()
+
+
+def _open(name, now):
+    from .models import Lease
+
+    try:
+        with transactions.atomic():
+            Lease.objects.create(name=name, owner="", expires_at=now)
+    except IntegrityError:
+        pass
+
+
+@transactions.atomically
+def _take(name, owner, now, ttl_seconds):
+    from .models import Lease
+
     taken = (
         Lease.objects.filter(name=name)
         .filter(Q(expires_at__lte=now) | Q(owner=owner))
@@ -41,6 +66,7 @@ def acquire(name, owner, ttl_seconds):
     return taken == 1
 
 
+@transactions.atomically
 def renew(name, owner, ttl_seconds):
     from .models import Lease
 
@@ -51,6 +77,7 @@ def renew(name, owner, ttl_seconds):
     return renewed == 1
 
 
+@transactions.atomically
 def release(name, owner):
     from .models import Lease
 
@@ -59,12 +86,14 @@ def release(name, owner):
     )
 
 
+@transactions.atomically
 def drop(name, owner):
     from .models import Lease
 
     Lease.objects.filter(name=name, owner=owner).delete()
 
 
+@transactions.reads
 def holder(name):
     from .models import Lease
 
@@ -73,6 +102,7 @@ def holder(name):
     ).exclude(owner="").first()
 
 
+@transactions.reads
 def last_renewed(name):
     from .models import Lease
 

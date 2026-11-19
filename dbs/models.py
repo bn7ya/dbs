@@ -4,8 +4,9 @@ import os
 
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import IntegrityError, models
 
+from . import transactions
 from .crypto.secrets import encrypt_secret, is_encrypted, looks_sealed
 from .naming import DEFAULT_PREFIX
 from .retention import KEEP_LIMIT, MAXIMUM_KEEP, bounded_keep, default_keep
@@ -195,17 +196,20 @@ class BackupSchedule(models.Model):
     def load(cls):
         from .conf import setting
 
-        schedule = cls.objects.order_by("pk").first()
+        with transactions.reading():
+            schedule = cls.objects.order_by("pk").first()
         if schedule is not None:
             return schedule
-        schedule, _ = cls.objects.get_or_create(
-            pk=1,
-            defaults={
-                "interval": str(setting("DBS_SCHEDULE_INTERVAL", "24h")),
-                "keep": cls.seed_keep(setting("DBS_SCHEDULE_KEEP", default_keep())),
-            },
-        )
-        return schedule
+        try:
+            with transactions.atomic():
+                return cls.objects.create(
+                    pk=1,
+                    interval=str(setting("DBS_SCHEDULE_INTERVAL", "24h")),
+                    keep=cls.seed_keep(setting("DBS_SCHEDULE_KEEP", default_keep())),
+                )
+        except IntegrityError:
+            with transactions.reading():
+                return cls.objects.get(pk=1)
 
     @staticmethod
     def seed_keep(value):
@@ -245,9 +249,11 @@ class SecurityPolicy(models.Model):
 
     @classmethod
     def load(cls):
-        policy = cls.objects.order_by("pk").first()
+        with transactions.reading():
+            policy = cls.objects.order_by("pk").first()
         if policy is None:
-            policy = cls.objects.create()
+            with transactions.atomic():
+                policy = cls.objects.create()
         return policy
 
     def apply_level(self, level):

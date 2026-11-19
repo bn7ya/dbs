@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from . import transactions
 from .io import can_write_into, nearest_existing
 
 OK = "ok"
@@ -73,20 +74,24 @@ def report(now=None):
 
     now = now or timezone.now()
     schedule = BackupSchedule.load()
-    last_backup = _last_success("backup.create")
+    with transactions.reading():
+        last_backup = _last_success("backup.create")
+        validation = _last_validation()
+        newest = _newest_file()
+        scheduler = _scheduler(schedule, now)
+        failure = _recent_failure(now)
     result = HealthReport(
         last_backup_at=last_backup.created_at if last_backup else None,
         generated_at=now,
         schedule=_schedule_facts(schedule),
     )
     result.checks.append(_backup_age(schedule, last_backup, now))
-    result.checks.append(_last_validation())
-    result.checks.append(_newest_file())
+    result.checks.append(validation)
+    result.checks.append(newest)
     result.checks.extend(_backup_directory(last_backup))
     result.checks.append(_passphrase())
-    result.checks.append(_scheduler(schedule, now))
+    result.checks.append(scheduler)
     result.checks.append(_job_process())
-    failure = _recent_failure(now)
     if failure is not None:
         result.checks.append(failure)
     return result

@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from .. import transactions
 from ..conf import setting
 from . import networks, telemetry
 
@@ -106,6 +107,7 @@ class Observation:
         self.travel_kmh = values.get("travel_kmh", 0.0)
 
 
+@transactions.reads
 def observe_request(user, request, action, location=None):
     from ..models import KnownLocation
 

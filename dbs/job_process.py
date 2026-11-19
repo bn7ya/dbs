@@ -214,25 +214,39 @@ def reason_of(returncode: int) -> str:
 
 
 def settle(owner: str, returncode: int, detail: str, *, outputs=()) -> None:
-    from . import audit, leases
-    from .jobs import JOB_LEASE_PREFIX, RUNNER_LEASE
-    from .models import Lease
+    from . import audit, leases, transactions
+    from .jobs import RUNNER_LEASE
 
+    stopped = _held_events(owner) if returncode != 0 else []
     if returncode != 0:
-        reason = reason_of(returncode)
-        held = Lease.objects.filter(owner=owner, name__startswith=JOB_LEASE_PREFIX)
-        for name in held.values_list("name", flat=True):
-            event_id = name[len(JOB_LEASE_PREFIX):]
-            if event_id.isdigit():
-                audit.fail(
-                    int(event_id),
-                    reason,
-                    detail=_explained(reason, returncode, detail),
-                )
         for output in outputs:
             remove_partials(output)
-    Lease.objects.filter(owner=owner, name__startswith=JOB_LEASE_PREFIX).delete()
-    leases.release(RUNNER_LEASE, owner)
+    reason = reason_of(returncode)
+    with transactions.atomic():
+        for event_id in stopped:
+            audit.fail(event_id, reason, detail=_explained(reason, returncode, detail))
+        _held_leases(owner).delete()
+        leases.release(RUNNER_LEASE, owner)
+
+
+def _held_leases(owner: str):
+    from .jobs import JOB_LEASE_PREFIX
+    from .models import Lease
+
+    return Lease.objects.filter(owner=owner, name__startswith=JOB_LEASE_PREFIX)
+
+
+def _held_events(owner: str) -> list:
+    from . import transactions
+    from .jobs import JOB_LEASE_PREFIX
+
+    with transactions.reading():
+        names = list(_held_leases(owner).values_list("name", flat=True))
+    return [
+        int(name[len(JOB_LEASE_PREFIX):])
+        for name in names
+        if name[len(JOB_LEASE_PREFIX):].isdigit()
+    ]
 
 
 def _explained(reason: str, returncode: int, detail: str) -> str:
@@ -355,17 +369,14 @@ class Limits:
 
 
 def _breach(spec: dict, reason: str) -> None:
-    from . import audit
-    from .jobs import JOB_LEASE_PREFIX
-    from .models import Lease
+    from . import audit, transactions
 
     try:
-        for name in Lease.objects.filter(
-            owner=spec["owner"], name__startswith=JOB_LEASE_PREFIX
-        ).values_list("name", flat=True):
-            event_id = name[len(JOB_LEASE_PREFIX):]
-            if event_id.isdigit() and reason != LEASE_LOST:
-                audit.fail(int(event_id), reason, detail=_explained(reason, 0, ""))
+        stopped = _held_events(spec["owner"])
+        if reason != LEASE_LOST:
+            with transactions.atomic():
+                for event_id in stopped:
+                    audit.fail(event_id, reason, detail=_explained(reason, 0, ""))
         for output in spec.get("outputs", ()):
             remove_partials(output)
     finally:
@@ -442,7 +453,11 @@ def _actor(actor_id):
         return None
     from django.contrib.auth import get_user_model
 
-    return get_user_model()._default_manager.filter(pk=actor_id).first()
+    from . import transactions
+
+    accounts = get_user_model()
+    with transactions.reading_for(accounts):
+        return accounts._default_manager.filter(pk=actor_id).first()
 
 
 def main(stream=None) -> int:
