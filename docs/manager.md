@@ -61,9 +61,9 @@ The data folder holds the database, the backups the manager pulled and its log,
 | Windows | `%LOCALAPPDATA%\django-dbs` |
 
 `django_dbs paths` prints these, and where the sealing key is. The SQLite database runs in WAL
-mode with a 30-second busy timeout and, on Django 5.1 or later, starts every write
-transaction at once and every read without the write lock, so the interface, the scheduler
-and terminal commands share it without "database is locked". The manager serves on 16 threads.
+mode with a 30-second busy timeout, and starts every write transaction with the write lock
+and every read without it, so the interface, the scheduler and terminal commands share it
+without "database is locked". The manager serves on 16 threads.
 
 ## The sealing key
 
@@ -426,7 +426,7 @@ Type `django_dbs` alone in a terminal, or `django-dbs` or `dbs`, and the manager
 as a menu. There is no browser to open and no command line to remember:
 
 ```text
- DBS manager 0.9.0                                                             sara · admin
+ DBS manager 0.9.1                                                             sara · admin
 ┌────────────────────┬─────────────────────────────────────────────────────────────────────┐
 │▸ Dashboard         │ Dashboard                                                           │
 │  Servers           │                                                                     │

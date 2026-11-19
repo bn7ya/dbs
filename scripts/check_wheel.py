@@ -16,6 +16,7 @@ REQUIRED = (
     re.compile(r"dbs/manager/menu/entry\.py$"),
     re.compile(r"dbs/manager/menu/kit/terminal\.py$"),
     re.compile(r"dbs/manager/menu/screens/sections\.py$"),
+    re.compile(r"dbs/manager/sqlite/base\.py$"),
     re.compile(r"dbs/static/dbs/logo\.svg$"),
 )
 COMMANDS = ("django-dbs", "django_dbs", "dbs")
