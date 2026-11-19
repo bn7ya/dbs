@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <strong>0.9.0 is out:</strong>
+  <strong>0.9.1 is out:</strong>
   <a href="#whats-new-in-090">what's new</a> ·
-  <a href="https://github.com/bn7ya/dbs/blob/v0.9.0/RELEASE_NOTES.md">release notes</a> ·
+  <a href="https://github.com/bn7ya/dbs/blob/v0.9.1/RELEASE_NOTES.md">release notes</a> ·
   <a href="https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md">upgrading</a>
 </p>
 
@@ -114,6 +114,11 @@ The [0.9.0 release notes](https://github.com/bn7ya/dbs/blob/v0.9.0/RELEASE_NOTES
 changes for a project that upgrades: `migrate` now writes two backups of the database, and
 `DBS_MIGRATION_CHECKPOINTS = False` or `migrate --no-checkpoint` switches that off.
 
+**0.9.1** fixes the manager where it runs on Django 4.2 or 5.0: a write to its own SQLite
+database could be dropped, without an error, while another was in progress. The
+[0.9.1 release notes](https://github.com/bn7ya/dbs/blob/v0.9.1/RELEASE_NOTES.md) say which
+installations that is.
+
 **Upgrading from 0.8.x:**
 
 ```bash
@@ -205,7 +210,7 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 
 ## Status
 
-0.9.0 is the current release. DBS is in active development, and stable from 0.8.0: new releases
+0.9.1 is the current release. DBS is in active development, and stable from 0.8.0: new releases
 add, and nothing you use breaks.
 
 - **Your backups keep opening.** Every backup written by 0.8.0 or later restores, with the same

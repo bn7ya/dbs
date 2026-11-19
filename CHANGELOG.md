@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-19
+
+On Django 4.2 and 5.0 the manager no longer drops a write to its own database while another
+is in progress. Upgrade the machine the manager runs on; a server may stay on 0.9.0, and a
+project has nothing to do.
+
 ### Fixed
 
 - On Django 4.2 and 5.0 the manager's SQLite transactions began without the write lock, so a
