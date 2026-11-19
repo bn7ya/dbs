@@ -139,6 +139,11 @@ everything under `dbs/manager/`.
   the parent settles whatever a killed child left. `DBS_JOB_PROCESS = False` keeps the thread.
 - `dbs/files.py` — the files a backup reads and a restore stages, checks and places, within
   the restore roots and `DBS_RESTORE_PATH_MAP`.
+- `dbs/transactions.py` — the transactions every statement DBS sends to a database runs in:
+  `reading()` around statements that only read, `atomic()` around ones that write, both on the
+  database that holds DBS's own tables; `reading_on` and `atomic_on` name other databases,
+  `reading_for` and `atomic_for` take models, and `reads`, `atomically`, `reads_connection` and
+  `atomically_on_connection` are the same as decorators.
 - `dbs/manager/` — the standalone DBS manager (`django_dbs run`): its
   own Django project (`dbs/manager/settings.py`), one app labelled `dbs_manager` with a
   subpackage per slice, the job runner and scheduler that replace Celery, and the built
@@ -223,6 +228,10 @@ everything under `dbs/manager/`.
   project (`tests/containers/project/`, built inside a guest by `scripts/container_fixture.sh`)
   and moves a host project from one guest to a bare second one. `scripts/upgrade_rehearsal.py` installs 0.7.0 from PyPI, fills a project and
   a manager, upgrades both to the checkout and checks that nothing was lost.
+- `tests/transactions.py` — the guard every test of every suite runs under
+  (`tests/conftest.py`): it fails a test in which DBS sent a statement outside a transaction or
+  reached a server inside one. `tests/test_transactions.py` tests the guard, and
+  `tests/isolation/test_read_transactions.py` that a read leaves SQLite's write lock alone.
 - `tests/stability/` — what each release promised: `<version>/library.json` and `manager.json`
   (the Python API, commands, terminal, REST routes, MCP tools, settings, migrations, JSON keys,
   console scripts, extras, and vectors for the passphrase, credentials, audit chain and the
@@ -310,6 +319,32 @@ version to read them before it offers giving them up.
   with them or removed for them.
 - A restore refuses a backup that records another application, in a dry run too.
   `another_application` is the only way past, and nothing sets it on a developer's behalf.
+
+## Transaction constraints
+
+- Every statement DBS sends to a database runs inside a transaction: `transactions.reading()`
+  where it only reads, `transactions.atomic()` (in the manager, `transaction.atomic()` too)
+  where it writes. The guard in `tests/transactions.py` fails the test that breaks this; never
+  weaken it to pass. What Django's own request handler, management commands, authentication,
+  sessions and cache send is Django's, and a released migration is never edited for it.
+- One transaction holds what must be true together: a job's last status and its lease, a
+  password and its audit row, a lockout and its anomaly. An audit row that records a failure
+  or a refusal is written outside the transaction it describes, so the rollback keeps it, and
+  `dbs security unlock` deletes the lockout before, and apart from, its audit row.
+- A transaction never waits for a server. Read what the command needs, leave the transaction,
+  run the command, then write what it found. The guard fails a test that reaches a server
+  through `SSHSession` or `RemoteHost` while a transaction is open.
+- Statements that only read use `reading()`. Where SQLite begins transactions with
+  `IMMEDIATE`, which `dbs upgrade` recommends and the manager sets, `atomic()` takes the
+  database's one write lock as it begins and `reading()` does not: a backup, which reads for
+  as long as it runs, must leave the site writing. Never write inside `reading()`.
+- A compare-and-set stays one statement in a transaction of its own: a lease taken, a
+  schedule's status moved, a task claimed. Do not join it to the reads before it. On SQLite a
+  transaction that read first fails at once with "database is locked" when it then writes
+  while another connection does, and on MySQL an update that matched no row, followed by an
+  insert, deadlocks against its twin.
+- A nested block keeps its savepoint, so code that catches a database error inside a
+  transaction can go on using it.
 
 ## Manager constraints
 

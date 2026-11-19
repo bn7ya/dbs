@@ -123,6 +123,21 @@ projects share, such as `config`, and prints the line to add.
   master and restarts the manager on the same address. In a terminal, `django_dbs update` does
   the same with the manager stopped; `django_dbs update --check` only looks.
 
+## Every statement in a transaction
+
+Every statement DBS sends to a database, in a project and in the manager, now runs inside a
+transaction, and what belongs together is one transaction: a job with its audit row and its
+lease, a password with its audit row, a lockout with the anomaly behind it. A transaction is
+never left open while the manager waits for a server. Nothing changes in what you call or
+configure.
+
+- **SQLite keeps writing during a backup.** With `"transaction_mode": "IMMEDIATE"`, the setting
+  `manage.py dbs upgrade` recommends, a backup used to hold the database's write lock for as
+  long as it read. A backup, a checkpoint and everything else that only reads now begin
+  without that lock, and still read from one snapshot.
+- **A checkpoint is one snapshot.** The migrations it records and the rows it carries are read
+  together.
+
 ## Smaller things
 
 - `django_dbs server add` says its SSH port is 22 unless `--port` names another; the menu's
