@@ -8,6 +8,7 @@ import pytest
 from django.core.management import call_command
 
 from dbs import ModelBackup, restore_backup, validate_backup, write_backup
+from dbs.engine.backup import one_snapshot
 from dbs.registry import BackupRegistry
 from dbs.serialize import Pages, serialize_batches
 from tests.conftest import FAST_KDF
@@ -137,9 +138,12 @@ def test_batches_stay_under_their_byte_budget():
     for index in range(40):
         Blob.objects.create(name=f"row {index}", text="z" * 4096)
 
-    batches = list(
-        serialize_batches(Blob, ModelBackup(), set(), frozenset(), "default", budget=20_000)
-    )
+    with one_snapshot("default"):
+        batches = list(
+            serialize_batches(
+                Blob, ModelBackup(), set(), frozenset(), "default", budget=20_000
+            )
+        )
 
     assert sum(count for _pieces, count in batches) == 40
     assert len(batches) > 1
@@ -154,9 +158,10 @@ def test_heavy_models_start_with_small_pages_and_grow():
     pages = Pages(Blob.objects.all(), 500)
 
     sizes = []
-    for chunk in pages:
-        sizes.append(len(chunk))
-        pages.measured(100 * len(chunk), len(chunk))
+    with one_snapshot("default"):
+        for chunk in pages:
+            sizes.append(len(chunk))
+            pages.measured(100 * len(chunk), len(chunk))
 
     assert sizes[0] == 1
     assert sizes[1] == 2
@@ -176,15 +181,23 @@ def test_pages_follow_uuid_keys_and_custom_querysets():
         for index in range(7)
     ]
 
-    seen = [item.pk for chunk in Pages(Publisher.objects.all(), 3, adaptive=False) for item in chunk]
+    with one_snapshot("default"):
+        seen = [
+            item.pk
+            for chunk in Pages(Publisher.objects.all(), 3, adaptive=False)
+            for item in chunk
+        ]
 
     assert seen == sorted(item.pk for item in created)
 
-    chosen = [
-        item.name_en
-        for chunk in Pages(Publisher.objects.filter(name_en__endswith="3"), 1, adaptive=False)
-        for item in chunk
-    ]
+    with one_snapshot("default"):
+        chosen = [
+            item.name_en
+            for chunk in Pages(
+                Publisher.objects.filter(name_en__endswith="3"), 1, adaptive=False
+            )
+            for item in chunk
+        ]
     assert chosen == ["house 3"]
 
 
@@ -194,6 +207,7 @@ def test_a_sliced_queryset_is_read_in_its_own_order():
         Blob.objects.create(name=f"row {index}", text="t")
 
     sliced = Blob.objects.order_by("-pk")[:2]
-    seen = [item.name for chunk in Pages(sliced, 500) for item in chunk]
+    with one_snapshot("default"):
+        seen = [item.name for chunk in Pages(sliced, 500) for item in chunk]
 
     assert seen == ["row 4", "row 3"]

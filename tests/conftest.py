@@ -9,6 +9,7 @@ import pytest
 from django.utils import timezone
 
 from dbs.crypto.kdf import KDFParams
+from tests import transactions
 from tests.fake_ssh import FakeParamiko
 
 CLOCK_ENV = "DBS_TEST_HOUR"
@@ -28,6 +29,19 @@ def pytest_ignore_collect(collection_path, config):
         if path == folder or folder in path.parents:
             return None if active == settings_module else True
     return None
+
+def pytest_configure(config):
+    transactions.install()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    transactions.watch.start()
+    outcome = yield
+    found = transactions.watch.stop()
+    if found and outcome.excinfo is None:
+        transactions.fail(outcome, found)
+
 
 # Fast KDF parameters so the suite isn't dominated by Argon2 cost. Real backups
 # use the much stronger defaults in ``KDFParams``.

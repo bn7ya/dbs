@@ -464,17 +464,22 @@ def test_a_large_block_size_narrows_the_interleave_to_fit(library):
 
 
 def test_batched_many_to_many_members_match_the_one_row_path(library):
-    batched = [
-        record
-        for pieces, _count in serialize_batches(Book, ModelBackup(), set(), frozenset(), "default", rows=4)
-        for record in json.loads(b"".join(pieces))
-    ]
-    one_by_one = json.loads(
-        json.dumps(
-            AllRowsSerializer().serialize(Book.objects.order_by("pk"), use_natural_foreign_keys=False),
-            cls=DjangoJSONEncoder,
+    with backup_engine.one_snapshot("default"):
+        batched = [
+            record
+            for pieces, _count in serialize_batches(
+                Book, ModelBackup(), set(), frozenset(), "default", rows=4
+            )
+            for record in json.loads(b"".join(pieces))
+        ]
+        one_by_one = json.loads(
+            json.dumps(
+                AllRowsSerializer().serialize(
+                    Book.objects.order_by("pk"), use_natural_foreign_keys=False
+                ),
+                cls=DjangoJSONEncoder,
+            )
         )
-    )
 
     assert batched == one_by_one
     assert any(len(record["fields"]["tags"]) > 1 for record in batched)
@@ -484,12 +489,20 @@ def test_a_row_too_large_for_a_frame_is_refused_and_batches_split(db):
     Author.objects.create(name="a" * 150)
     Author.objects.create(name="b" * 150)
 
-    split = list(serialize_batches(Author, ModelBackup(), set(), frozenset(), "default", limit=240))
+    with backup_engine.one_snapshot("default"):
+        split = list(
+            serialize_batches(Author, ModelBackup(), set(), frozenset(), "default", limit=240)
+        )
     assert [count for _body, count in split] == [1, 1]
 
     Author.objects.create(name="c" * 200)
     with pytest.raises(BackupError, match="above the 240 byte limit"):
-        list(serialize_batches(Author, ModelBackup(), set(), frozenset(), "default", limit=240))
+        with backup_engine.one_snapshot("default"):
+            list(
+                serialize_batches(
+                    Author, ModelBackup(), set(), frozenset(), "default", limit=240
+                )
+            )
 
 
 def _payload(*parts, magic=frames.PAYLOAD_MAGIC):
