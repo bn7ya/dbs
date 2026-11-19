@@ -161,6 +161,10 @@ everything under `dbs/manager/`.
 - `dbs/manager/legacy.py` — reads a 0.7 export into the 0.8 shape (each old server becomes a
   server and an application with the old id) and keeps a copy of a SQLite database before
   the 0.8.0 migrations split it.
+- `dbs/manager/database.py` and `dbs/manager/sqlite/` — the manager's own database: a URL
+  read into Django's settings, and the SQLite backend used below Django 5.1, which reads
+  `transaction_mode` as Django 5.1 does, so a write begins with `BEGIN IMMEDIATE` on every
+  Django the manager supports.
 - `dbs/manager/permissions.py` — the one role policy: each capability names the least role
   (viewer, operator, admin, master) that may use it, and `@requires` on a service method
   enforces it for the REST views, the terminal and the MCP server alike.

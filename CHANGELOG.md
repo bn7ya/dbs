@@ -6,6 +6,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- On Django 4.2 and 5.0 the manager's SQLite transactions began without the write lock, so a
+  write that read first failed at once, and without an error, whenever another connection was
+  writing. Every write to the manager's cache is such a write: a backup lock, a sign-in limit
+  or a ticket kept there could be lost, and `/api/health/` answered 503 now and then right
+  after a start. The manager now takes the write lock as a write begins on every Django it
+  supports, as it already did from Django 5.1, and such a write waits its turn.
+
 ## [0.9.0] - 2026-11-19
 
 `migrate` keeps a backup of the database before and after the migrations it applies, and a

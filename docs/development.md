@@ -85,7 +85,7 @@ still.
 | `scripts/upgrade_rehearsal.py` | Installs django-dbs 0.7.0 from PyPI in a new virtualenv, fills a project and a manager, upgrades both to this checkout and checks that nothing was lost; `--from-version` and `--keep` change where it starts and whether its folder stays |
 | `scripts/stress_roundtrip.py` | Damages backups at random and checks they still restore (`DBS_STRESS_FLIPS` sets how many bytes) |
 | `scripts/minimum_requirements.py` | Prints the lowest version of every dependency, for the lowest-dependencies CI job |
-| `scripts/check_wheel.py dist/*.whl` | Checks a built wheel holds the manager's interface, its templates, the menu and the logo it draws, the migrations and the console scripts |
+| `scripts/check_wheel.py dist/*.whl` | Checks a built wheel holds the manager's interface, its templates, its SQLite backend, the menu and the logo it draws, the migrations and the console scripts |
 | `scripts/train_base_model.py` | Regenerates the synthetic corpus behind the session guard's base model |
 | `scripts/stability_snapshot.py X.Y.Z` | Records a release in `tests/stability/X.Y.Z`: its API, commands, terminal, REST routes, MCP tools, settings, migrations and `--json` keys, a golden backup and sealed values. It refuses a release already recorded |
 

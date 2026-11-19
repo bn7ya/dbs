@@ -5,8 +5,9 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 import django
 
 SQLITE_TIMEOUT = 30
-SQLITE_WRITES_FIRST = (
-    {"transaction_mode": "IMMEDIATE"} if django.VERSION >= (5, 1) else {}
+SQLITE_WRITES_FIRST = {"transaction_mode": "IMMEDIATE"}
+SQLITE_ENGINE = (
+    "django.db.backends.sqlite3" if django.VERSION >= (5, 1) else "dbs.manager.sqlite"
 )
 ENGINES = {
     "sqlite": "django.db.backends.sqlite3",
@@ -28,7 +29,7 @@ class DatabaseURLError(ValueError):
 
 def sqlite_database(path):
     return {
-        "ENGINE": ENGINES["sqlite"],
+        "ENGINE": SQLITE_ENGINE,
         "NAME": str(path),
         "OPTIONS": {"timeout": SQLITE_TIMEOUT, **SQLITE_WRITES_FIRST},
     }
