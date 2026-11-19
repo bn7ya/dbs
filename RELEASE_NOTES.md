@@ -39,7 +39,7 @@ your backups restore with the same passphrase.
 [Stability](https://github.com/bn7ya/dbs/blob/main/docs/stability.md) says what is covered.
 
 The full list is in the
-[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#090---2026-11-15). Coming from
+[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#090---2026-11-19). Coming from
 0.7.x, read the [0.8.0 release notes](https://github.com/bn7ya/dbs/blob/v0.8.0/RELEASE_NOTES.md)
 first.
 

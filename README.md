@@ -106,6 +106,9 @@ walks through each step.
 - **More than five backups.** `DBS_MAX_BACKUPS` in a project and `DBS_MANAGER_MAX_BACKUPS` in
   the manager raise the limit, up to 10,000.
 - **The manager updates DBS**, in an application on its server and for itself.
+- **Every statement in a transaction.** Everything DBS sends to a database, in a project and
+  in the manager, runs inside a transaction, and on SQLite a backup no longer holds the write
+  lock while it reads.
 
 The [0.9.0 release notes](https://github.com/bn7ya/dbs/blob/v0.9.0/RELEASE_NOTES.md) say what
 changes for a project that upgrades: `migrate` now writes two backups of the database, and

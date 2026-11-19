@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-11-15
+## [0.9.0] - 2026-11-19
 
 `migrate` keeps a backup of the database before and after the migrations it applies, and a
 restore can put the database back as it was before a migration: tables, rows and migration
