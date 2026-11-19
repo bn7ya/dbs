@@ -4,6 +4,7 @@ from uuid import UUID
 
 from django.db.models import QuerySet
 
+from dbs import transactions
 from dbs.manager.common.repositories import BaseRepository
 from dbs.manager.envfiles.models import EnvVersion
 
@@ -12,7 +13,7 @@ class EnvVersionRepository(BaseRepository):
     model = EnvVersion
 
     def active(self) -> QuerySet[EnvVersion]:
-        return super().active().select_related("created_by")
+        return super().active().select_related("created_by", "application__server")
 
     def for_application(self, application_id: UUID) -> QuerySet[EnvVersion]:
         return (
@@ -21,5 +22,6 @@ class EnvVersionRepository(BaseRepository):
             .order_by("-created_at", "-id")
         )
 
+    @transactions.reads
     def newest_for(self, application_id: UUID) -> EnvVersion | None:
         return self.for_application(application_id).first()

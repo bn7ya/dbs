@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional
 
+from dbs import transactions
 from dbs.manager.terminal.output import text
 
 from . import commands, meanings, running
@@ -150,10 +151,11 @@ def _activity(app, argument, values, owner):
 def _account(app, argument, values, owner):
     from dbs.manager.accounts.services import AccountManagementService
 
-    choices = [
-        Choice(account.user.get_username(), account.user.get_username(), account.role)
-        for account in AccountManagementService(None).list()
-    ]
+    with transactions.reading():
+        choices = [
+            Choice(account.user.get_username(), account.user.get_username(), account.role)
+            for account in AccountManagementService(None).list()
+        ]
     return _one(app, "Choose an account", choices, values.get(argument.key))
 
 

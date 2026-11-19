@@ -8,6 +8,7 @@ from django.contrib.auth import logout
 from django.contrib.auth.models import AnonymousUser, User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed, ErrorDetail, ValidationError
 from rest_framework.request import Request
@@ -101,8 +102,9 @@ class AccountService:
             validate_password(new_password, user=user)
         except DjangoValidationError as exc:
             raise ValidationError({"new_password": password_errors(exc)}) from exc
-        self.users.set_password(user, new_password)
-        ActivityService(user).record(Action.PASSWORD, target=user.get_username())
+        with transaction.atomic():
+            self.users.set_password(user, new_password)
+            ActivityService(user).record(Action.PASSWORD, target=user.get_username())
         return user
 
     def new_recovery_codes(self, password: str) -> list[str]:

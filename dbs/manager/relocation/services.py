@@ -8,7 +8,7 @@ from django.db import transaction
 from django.views.decorators.debug import sensitive_variables
 from rest_framework.exceptions import APIException, ErrorDetail, ValidationError
 
-from dbs import audit
+from dbs import audit, transactions
 from dbs.manager.accounts.exceptions import InvalidPassword, TooManyAttempts
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.repositories import ActivityRepository
@@ -113,7 +113,8 @@ class RelocationService:
         self, source: Server, target: Server, applications: Iterable[Mapping[str, Any]]
     ) -> list[Detail]:
         given = {str(choice["application"]): choice for choice in applications}
-        on_source = list(self.applications.list(server=source.pk))
+        with transactions.reading():
+            on_source = list(self.applications.list(server=source.pk))
         chosen = [app for app in on_source if not given or str(app.pk) in given]
         unknown = set(given) - {str(app.pk) for app in on_source}
         if unknown:

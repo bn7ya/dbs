@@ -9,12 +9,12 @@ from django.http import FileResponse
 from django.urls import reverse
 from django.utils.http import content_disposition_header
 from rest_framework import status
-from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from dbs.manager.common.views import ListView
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.backups.serializers import (
     AccountPasswordSerializer,
@@ -26,7 +26,7 @@ from dbs.manager.backups.serializers import (
 from dbs.manager.backups.services import BackupService
 
 
-class BackupListView(ListAPIView):
+class BackupListView(ListView):
     permission_classes = [IsAuthenticated]
     serializer_class = BackupFileSerializer
 

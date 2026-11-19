@@ -4,6 +4,7 @@ from datetime import datetime
 
 from django.db.models import Count, QuerySet
 
+from dbs import transactions
 from dbs.audit import FAILED, RUNNING, SUCCEEDED, UNFINISHED
 from dbs.models import AuditEvent
 
@@ -28,12 +29,15 @@ class ActivityRepository:
             entries = entries.filter(status=status)
         return entries.order_by("-created_at", "-id")
 
+    @transactions.reads
     def find_joined(self, entry_id: int) -> AuditEvent | None:
         return self.joined().filter(pk=entry_id).first()
 
+    @transactions.reads
     def get(self, entry_id: int) -> AuditEvent:
         return self.joined().get(pk=entry_id)
 
+    @transactions.reads
     def unfinished_ids(self) -> set[int]:
         return set(
             AuditEvent.objects.filter(status__in=UNFINISHED).values_list(
@@ -41,9 +45,11 @@ class ActivityRepository:
             )
         )
 
+    @transactions.atomically
     def set_running_data(self, entry_id: int, data: dict) -> int:
         return AuditEvent.objects.filter(pk=entry_id, status=RUNNING).update(data=data)
 
+    @transactions.reads
     def failures_by_subject(
         self, subjects: list[str], since: datetime
     ) -> dict[str, int]:
@@ -56,11 +62,13 @@ class ActivityRepository:
         )
         return {row["subject"]: row["failures"] for row in rows}
 
+    @transactions.reads
     def recent_failures(self, limit: int) -> list[AuditEvent]:
         return list(
             self.joined().filter(status=FAILED).order_by("-created_at", "-id")[:limit]
         )
 
+    @transactions.reads
     def latest_success(self, action: str) -> AuditEvent | None:
         return (
             AuditEvent.objects.filter(action=action, status=SUCCEEDED)

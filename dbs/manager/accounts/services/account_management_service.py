@@ -8,6 +8,7 @@ from django.db import transaction
 from django.db.models import QuerySet
 from rest_framework.exceptions import ErrorDetail, ValidationError
 
+from dbs import transactions
 from dbs.manager.accounts.exceptions import (
     AccountInactive,
     AccountNotFound,
@@ -53,7 +54,8 @@ class AccountManagementService:
 
     @requires(Capability.ACCOUNTS_MANAGE)
     def get(self, account_id: Any) -> Account:
-        found = self.accounts.listed().filter(pk=account_id).first()
+        with transactions.reading():
+            found = self.accounts.listed().filter(pk=account_id).first()
         if found is None:
             raise AccountNotFound()
         return found
@@ -178,7 +180,8 @@ class AccountManagementService:
                 target=successor.user.get_username(),
                 detail={"from": current.user.get_username()},
             )
-        return self.accounts.listed().get(pk=successor.pk)
+        with transactions.reading():
+            return self.accounts.listed().get(pk=successor.pk)
 
     def _found(self, account_id: Any) -> Account:
         account = self.accounts.find(account_id)

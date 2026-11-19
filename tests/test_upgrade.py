@@ -1229,16 +1229,18 @@ def test_a_small_mysql_packet_is_warned(monkeypatch):
             return False
 
         def execute(self, sql):
-            assert "max_allowed_packet" in sql
+            statements.append(sql)
 
         def fetchone(self):
             return (16 * 1024 * 1024,)
 
+    statements = []
     monkeypatch.setattr(connection, "vendor", "mysql")
     monkeypatch.setattr(connection, "cursor", lambda: Cursor())
 
     finding = upgrade.MySQLReads().check()
 
+    assert any("max_allowed_packet" in sql for sql in statements)
     assert finding.level == WARN
     assert "16 MiB" in finding.message
     assert "max_allowed_packet = 256M" in finding.remedy

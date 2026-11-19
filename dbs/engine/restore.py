@@ -10,6 +10,7 @@ import django
 from django.apps import apps
 from django.db import connections, transaction
 
+from .. import transactions
 from ..conf import setting
 from ..container import StreamReader, read_format_version, repair_copies
 from ..container.blocks import BlockPlan, RepairReport
@@ -363,11 +364,7 @@ def _restore_v1(
     ]
 
     backup_models = _backup_models(document, translated)
-    out.preexisting_models = [
-        model._meta.label_lower
-        for model in backup_models
-        if model._base_manager.db_manager(using).exists()
-    ]
+    out.preexisting_models = _holding_rows(backup_models, using)
 
     logger.info(
         "restore started: %d records, %d files",
@@ -502,11 +499,7 @@ def _load_into_tables(
 ) -> None:
     _warn_on_environment_drift(header, connections[using])
     backup_models = _models_named(order)
-    out.preexisting_models = [
-        model._meta.label_lower
-        for model in backup_models
-        if model._base_manager.db_manager(using).exists()
-    ]
+    out.preexisting_models = _holding_rows(backup_models, using)
     entries = payload.read_manifest()
     logger.info("restore started: %d files", len(entries))
     placements = plan_entries(entries, registry=registry) if write_files else []
@@ -698,6 +691,15 @@ def _rehearse_stream(rows: _StreamedRows, out, backup_models, *, using, flush, r
             raise _DryRunRollback
     except _DryRunRollback:
         pass
+
+
+def _holding_rows(backup_models, using: str) -> list:
+    with transactions.reading_on(using):
+        return [
+            model._meta.label_lower
+            for model in backup_models
+            if model._base_manager.db_manager(using).exists()
+        ]
 
 
 def _models_named(labels) -> list:

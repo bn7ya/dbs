@@ -6,6 +6,7 @@ from uuid import UUID
 
 from django.db.models import F, QuerySet, Sum
 
+from dbs import transactions
 from dbs.manager.backups.models import BackupFile
 from dbs.manager.common.repositories import BaseRepository
 
@@ -96,6 +97,7 @@ class BackupFileRepository(BaseRepository):
             .exclude(failure="")
         )
 
+    @transactions.reads
     def find_including_deleted(self, file_id: UUID) -> BackupFile | None:
         return (
             self.all_including_deleted()
@@ -111,6 +113,7 @@ class BackupFileRepository(BaseRepository):
             .order_by("deleted_at", "id")
         )
 
+    @transactions.reads
     def latest_of_kind(self, application_id: UUID, kind: str) -> BackupFile | None:
         return (
             self.alive_for_application(application_id)
@@ -119,6 +122,7 @@ class BackupFileRepository(BaseRepository):
             .first()
         )
 
+    @transactions.reads
     def stored_bytes_by_application(self) -> dict[UUID, int]:
         rows = (
             self.all_including_deleted()

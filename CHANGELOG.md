@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-11-15
+## [0.9.0] - 2026-11-19
 
 `migrate` keeps a backup of the database before and after the migrations it applies, and a
 restore can put the database back as it was before a migration: tables, rows and migration
@@ -109,12 +109,38 @@ once. A project with no `DBS_BACKUP_DIR` migrates as before.
 - The tests that need a real SSH server run against virtual machines that `scripts/vm.py`
   boots, and a server move is tested from one machine to a second, bare one.
   `scripts/openssh_test_server.sh` is gone; `scripts/vm_fixture.py` prepares the guests.
+- **Every statement DBS sends to a database runs inside a transaction**, in a project and in
+  the DBS manager: the audit trail, leases, the schedule, the session guard, the panel, the
+  checks a restore makes before it loads, and every list, lookup and change the manager makes.
+  What belongs together is one transaction: a panel job starts with its audit row and its
+  lease, and ends with its last status and its lease dropped; a killed job is settled in one;
+  the manager's jobs start and end the same way; a password is set with its audit row; the
+  guard writes a lockout with the anomaly behind it. A transaction is never left open while
+  the manager waits for a server. The test suites run under a guard that fails any test in
+  which DBS sends a statement outside a transaction or reaches a server inside one.
+- A checkpoint reads the migrations it records and the rows it carries from one snapshot of
+  the database. The list of applied migrations was read just before the rows were.
 
 ### Fixed
 
+- On SQLite with `"transaction_mode": "IMMEDIATE"`, the setting `manage.py dbs upgrade`
+  recommends and the DBS manager uses, a backup held the database's write lock for as long as
+  it read, so the site's writes waited for it and failed with "database is locked" on a large
+  database. A backup, a checkpoint and everything else that only reads now begin without that
+  lock, and still read from one snapshot.
+- A panel backup or restore whose process died between writing its audit row and taking its
+  lease stayed "running" for good, because only a lease that ran out marks a job as stopped.
+  The row and the lease are written together.
+- Deleting several rows at once from the DBS pages of the admin could delete them and stop
+  before their audit rows were written. Both happen together now.
 - A server move gives the new server as long to create the application's virtualenv as it
   gives the package install. It had the 20 seconds every short command gets, which a slow
   server could exceed, stopping the move with `remote_command_timed_out`.
+- `django_dbs run` loads the interface's views and its scheduled tasks before it starts a
+  thread. They were imported on first use, by the first request and the first scheduled tasks
+  at the same moment, and Python could refuse one of those imports: now and then the first
+  request after the manager started answered 500, or a first scheduled task failed and waited
+  for its next turn.
 
 ### Security
 

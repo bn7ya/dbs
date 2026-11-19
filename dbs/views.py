@@ -10,7 +10,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
-from . import audit, jobs
+from . import audit, jobs, transactions
 from .conf import setting
 from .exceptions import DBSError
 from .forms import CreateBackupForm, RestoreRecordForm, RestoreUploadForm, SetupForm
@@ -46,9 +46,10 @@ def _audit(request, action, target="", detail="", succeeded=True, data=None, err
 def _page(request, template, context):
     from django.contrib import admin
 
-    merged = dict(admin.site.each_context(request))
-    merged.update(context)
-    return render(request, template, merged)
+    with transactions.reading():
+        merged = dict(admin.site.each_context(request))
+        merged.update(context)
+        return render(request, template, merged)
 
 
 @superuser_required
@@ -67,27 +68,28 @@ def setup(request):
             policy.collect_location = bool(data["collect_location"]) and geo.enabled()
             policy.configured = True
             policy.configured_by = request.user
-            policy.save()
             located = policy.collect_location and data.get("latitude") is not None
-            if located:
-                KnownLocation.objects.update_or_create(
-                    user=request.user,
-                    label="usual",
-                    defaults={
-                        "latitude": round(data["latitude"], geo.COORDINATE_PRECISION),
-                        "longitude": round(data["longitude"], geo.COORDINATE_PRECISION),
+            with transactions.atomic():
+                policy.save()
+                if located:
+                    KnownLocation.objects.update_or_create(
+                        user=request.user,
+                        label="usual",
+                        defaults={
+                            "latitude": round(data["latitude"], geo.COORDINATE_PRECISION),
+                            "longitude": round(data["longitude"], geo.COORDINATE_PRECISION),
+                        },
+                    )
+                _audit(
+                    request,
+                    "security.setup",
+                    detail=f"level={policy.level}",
+                    data={
+                        "level": policy.level,
+                        "collect_location": policy.collect_location,
+                        "known_location": bool(located),
                     },
                 )
-            _audit(
-                request,
-                "security.setup",
-                detail=f"level={policy.level}",
-                data={
-                    "level": policy.level,
-                    "collect_location": policy.collect_location,
-                    "known_location": bool(located),
-                },
-            )
             messages.success(request, "DBS security is configured.")
             return redirect("admin:app_list", app_label="dbs")
     else:
@@ -163,6 +165,32 @@ def _actor(request):
     return {"actor": request.user, "remote_addr": client_address(request)}
 
 
+@transactions.reads
+def _record(pk):
+    return BackupRecord.objects.filter(pk=pk).first()
+
+
+@transactions.reads
+def _stored_record(filename):
+    return next(
+        (
+            candidate
+            for candidate in BackupRecord.objects.filter(filename=filename)
+            if candidate.local_path() is not None
+        ),
+        None,
+    )
+
+
+@transactions.reads
+def _panel_job(pk):
+    return (
+        AuditEvent.objects.filter(pk=pk, action__in=jobs.PANEL_ACTIONS)
+        .select_related("actor")
+        .first()
+    )
+
+
 @superuser_required
 @never_cache
 @require_http_methods(["GET", "POST"])
@@ -206,7 +234,7 @@ def restore_view(request):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def restore_record(request, pk):
-    record = BackupRecord.objects.filter(pk=pk).first()
+    record = _record(pk)
     path = record.local_path() if record is not None else None
     if path is None:
         raise Http404
@@ -235,27 +263,18 @@ def restore_record(request, pk):
 @superuser_required
 @never_cache
 def job(request, pk):
-    event = (
-        AuditEvent.objects.filter(pk=pk, action__in=jobs.PANEL_ACTIONS)
-        .select_related("actor")
-        .first()
-    )
+    event = _panel_job(pk)
     if event is None:
         raise Http404
     if event.status in audit.UNFINISHED:
         jobs.recover()
-        event.refresh_from_db()
+        event = _panel_job(pk)
+        if event is None:
+            raise Http404
     running = event.status in audit.UNFINISHED
     record = None
     if event.action == jobs.BACKUP and event.status == audit.SUCCEEDED:
-        record = next(
-            (
-                candidate
-                for candidate in BackupRecord.objects.filter(filename=event.target_name)
-                if candidate.local_path() is not None
-            ),
-            None,
-        )
+        record = _stored_record(event.target_name)
     return _page(
         request,
         "admin/dbs/job.html",
@@ -298,7 +317,7 @@ def connection(request):
 @superuser_required
 @never_cache
 def download(request, pk):
-    record = BackupRecord.objects.filter(pk=pk).first()
+    record = _record(pk)
     if record is None:
         raise Http404
     path = record.local_path()

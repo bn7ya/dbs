@@ -109,7 +109,8 @@ about three times its size, on top of the database driver's own copies. One row 
   writing. A table holding values larger than MySQL's `max_allowed_packet` cannot be restored
   there; `dbs upgrade` warns when it is below 64 MiB.
 - **SQLite.** WAL mode lets the site keep writing while a backup reads. `dbs upgrade` prints
-  the `OPTIONS` that turn it on.
+  the `OPTIONS` that turn it on. A backup begins its transaction without the write lock,
+  also where `"transaction_mode": "IMMEDIATE"` makes the project's own transactions take it.
 
 ## A backup on standard output
 

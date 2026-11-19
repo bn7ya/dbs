@@ -39,7 +39,7 @@ your backups restore with the same passphrase.
 [Stability](https://github.com/bn7ya/dbs/blob/main/docs/stability.md) says what is covered.
 
 The full list is in the
-[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#090---2026-11-15). Coming from
+[changelog](https://github.com/bn7ya/dbs/blob/main/CHANGELOG.md#090---2026-11-19). Coming from
 0.7.x, read the [0.8.0 release notes](https://github.com/bn7ya/dbs/blob/v0.8.0/RELEASE_NOTES.md)
 first.
 
@@ -122,6 +122,21 @@ projects share, such as `config`, and prints the line to add.
 - **The manager itself.** *Update DBS* on the **About** page installs a newer release for the
   master and restarts the manager on the same address. In a terminal, `django_dbs update` does
   the same with the manager stopped; `django_dbs update --check` only looks.
+
+## Every statement in a transaction
+
+Every statement DBS sends to a database, in a project and in the manager, now runs inside a
+transaction, and what belongs together is one transaction: a job with its audit row and its
+lease, a password with its audit row, a lockout with the anomaly behind it. A transaction is
+never left open while the manager waits for a server. Nothing changes in what you call or
+configure.
+
+- **SQLite keeps writing during a backup.** With `"transaction_mode": "IMMEDIATE"`, the setting
+  `manage.py dbs upgrade` recommends, a backup used to hold the database's write lock for as
+  long as it read. A backup, a checkpoint and everything else that only reads now begin
+  without that lock, and still read from one snapshot.
+- **A checkpoint is one snapshot.** The migrations it records and the rows it carries are read
+  together.
 
 ## Smaller things
 

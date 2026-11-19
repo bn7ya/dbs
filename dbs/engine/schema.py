@@ -14,6 +14,7 @@ from django.db.migrations.operations import RunSQL, SeparateDatabaseAndState
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.state import ProjectState
 
+from .. import transactions
 from ..exceptions import RestoreError
 from ..introspect import _configured_exclusions, topological_order
 from ..serialize import raise_sequences
@@ -58,6 +59,7 @@ def explicit_exclusions() -> set:
     return {entry for entry in _configured_exclusions() if not entry.startswith("-")}
 
 
+@transactions.reads_connection
 def applied_rows(connection) -> list:
     recorder = MigrationRecorder(connection)
     if not recorder.has_table():
@@ -69,6 +71,7 @@ def has_applied_migrations(connection) -> bool:
     return bool(applied_rows(connection))
 
 
+@transactions.reads_connection
 def snapshot(connection) -> Snapshot:
     executor = MigrationExecutor(connection)
     loader = executor.loader
@@ -103,6 +106,7 @@ def snapshot(connection) -> Snapshot:
     )
 
 
+@transactions.reads_connection
 def newest_tables(connection) -> set:
     loader = MigrationExecutor(connection).loader
     return {
@@ -132,6 +136,7 @@ def rebuildable(state, loader, connection) -> list:
     return topological_order(found)
 
 
+@transactions.reads_connection
 def unmigrated_models(connection) -> list:
     loader = MigrationExecutor(connection).loader
     from django.apps import apps
@@ -209,6 +214,7 @@ class RebuildPlan:
         return sorted(self.created)
 
 
+@transactions.atomically_on_connection
 def plan_rebuild(connection, header: dict) -> RebuildPlan:
     if connection.vendor not in REBUILT_VENDORS:
         raise RestoreError(
@@ -320,11 +326,16 @@ def rebuild(connection, plan: RebuildPlan, load) -> int:
             rewrite_records(connection, plan.applied)
             relink(connection, editor, plan)
             raise_sequences(connection, plan.carried)
-        connection.check_constraints()
+        check_constraints(connection)
     if not connection.features.can_rollback_ddl:
-        connection.check_constraints()
+        check_constraints(connection)
     forget_cached_rows()
     return loaded
+
+
+@transactions.reads_connection
+def check_constraints(connection) -> None:
+    connection.check_constraints()
 
 
 def forget_cached_rows() -> None:

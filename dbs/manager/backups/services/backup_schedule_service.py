@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from dbs import transactions
 from dbs.manager.activity.services import ActivityService, sweep_stale_jobs
 from dbs.manager.backups.exceptions import BackupRunning
 from dbs.manager.backups.locks import TakeLock
@@ -60,9 +61,10 @@ class BackupScheduleService:
     def remove_expired(self) -> None:
         now = timezone.now()
         self.storage.remove_stale_uploads(before=now - STALE_UPLOAD_AFTER)
-        expired = list(
-            self.files.deleted_before(now - timedelta(days=settings.BACKUP_GRACE_DAYS))
-        )
+        with transactions.reading():
+            expired = list(
+                self.files.deleted_before(now - timedelta(days=settings.BACKUP_GRACE_DAYS))
+            )
         for file in expired:
             self.storage.remove(file.storage_path)
             self.files.update(file, removed_at=now)
@@ -74,8 +76,9 @@ class BackupScheduleService:
 
     def _start(self, job: AuditEvent, plan: BackupPlan) -> None:
         if not self.locks.acquire(plan.application_id, job.pk):
-            self.activity.fail(job.pk, BackupRunning())
-            self.plans.update(plan, **last_run(self.activity.get(job.pk)))
+            with transaction.atomic():
+                self.activity.fail(job.pk, BackupRunning())
+                self.plans.update(plan, **last_run(self.activity.get(job.pk)))
             return
         self.jobs.send(
             job,

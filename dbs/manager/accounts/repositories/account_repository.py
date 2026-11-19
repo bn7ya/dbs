@@ -7,20 +7,26 @@ from django.db import transaction
 from django.db.models import Count, Q, QuerySet
 from django.utils import timezone
 
+from dbs import transactions
 from dbs.manager.accounts.models import Account, RecoveryCode
 from dbs.manager.permissions import Role
 
 
 class AccountRepository:
     def of(self, user: Any) -> Account:
-        account, _ = Account.objects.select_related("user").get_or_create(
-            user=user, defaults={"role": Role.VIEWER}
-        )
+        accounts = Account.objects.select_related("user")
+        with transactions.reading():
+            account = accounts.filter(user=user).first()
+        if account is None:
+            with transactions.atomic():
+                account, _ = accounts.get_or_create(user=user, defaults={"role": Role.VIEWER})
         return account
 
+    @transactions.reads
     def find(self, user_id: Any) -> Account | None:
         return Account.objects.select_related("user").filter(user_id=user_id).first()
 
+    @transactions.reads
     def find_by_username(self, username: str) -> Account | None:
         return (
             Account.objects.select_related("user")
@@ -28,15 +34,20 @@ class AccountRepository:
             .first()
         )
 
+    @transactions.reads
     def master(self) -> Account | None:
         return Account.objects.select_related("user").filter(role=Role.MASTER).first()
 
     def adopt_orphans(self) -> None:
-        orphans = get_user_model().objects.filter(manager_account__isnull=True)
-        Account.objects.bulk_create(
-            [Account(user=user, role=Role.VIEWER) for user in orphans],
-            ignore_conflicts=True,
-        )
+        with transactions.reading():
+            orphans = list(get_user_model().objects.filter(manager_account__isnull=True))
+        if not orphans:
+            return
+        with transactions.atomic():
+            Account.objects.bulk_create(
+                [Account(user=user, role=Role.VIEWER) for user in orphans],
+                ignore_conflicts=True,
+            )
 
     def listed(self) -> QuerySet[Account]:
         return (
@@ -49,12 +60,14 @@ class AccountRepository:
             .order_by("user__username")
         )
 
+    @transactions.atomically
     def update(self, account: Account, **fields: Any) -> Account:
         for name, value in fields.items():
             setattr(account, name, value)
         account.save(update_fields=list(fields))
         return account
 
+    @transactions.atomically
     def claim_step(self, account: Account, step: int) -> bool:
         claimed = (
             Account.objects.filter(pk=account.pk)
@@ -72,6 +85,7 @@ class AccountRepository:
                 [RecoveryCode(account=account, digest=digest) for digest in digests]
             )
 
+    @transactions.atomically
     def use_recovery_code(self, account: Account, digest: str) -> bool:
         return (
             RecoveryCode.objects.filter(
@@ -80,6 +94,7 @@ class AccountRepository:
             == 1
         )
 
+    @transactions.reads
     def recovery_codes_left(self, account: Account) -> int:
         return RecoveryCode.objects.filter(
             account=account, used_at__isnull=True

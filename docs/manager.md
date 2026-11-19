@@ -62,8 +62,8 @@ The data folder holds the database, the backups the manager pulled and its log,
 
 `django_dbs paths` prints these, and where the sealing key is. The SQLite database runs in WAL
 mode with a 30-second busy timeout and, on Django 5.1 or later, starts every write
-transaction at once, so the interface, the scheduler and terminal commands share it without
-"database is locked". The manager serves on 16 threads.
+transaction at once and every read without the write lock, so the interface, the scheduler
+and terminal commands share it without "database is locked". The manager serves on 16 threads.
 
 ## The sealing key
 

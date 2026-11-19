@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework.exceptions import APIException, NotFound
 
-from dbs import validate_backup
+from dbs import transactions, validate_backup
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.backups.exceptions import (
     ArchiveMismatch,
@@ -276,9 +276,10 @@ class BackupRunService:
                 for found in remote.list_files(plan.paths[0])
                 if fnmatchcase(found.name, plan.pattern)
             ]
-            seen = set(
-                self.files.collected_from(plan.pk, (found.path for found in matching))
-            )
+            with transactions.reading():
+                seen = set(
+                    self.files.collected_from(plan.pk, (found.path for found in matching))
+                )
             for found in sorted(
                 matching, key=lambda found: (found.mtime or NO_MTIME, found.name)
             ):
@@ -362,7 +363,8 @@ class BackupRunService:
             raise
 
     def _retain(self, job: AuditEvent, plan: BackupPlan) -> None:
-        stale = list(self.files.alive_for_plan(plan.pk)[min(plan.keep, keep_max()) :])
+        with transactions.reading():
+            stale = list(self.files.alive_for_plan(plan.pk)[min(plan.keep, keep_max()) :])
         self._expire(job, plan.application, plan, stale)
 
     def _retain_dbs(
@@ -375,14 +377,17 @@ class BackupRunService:
     ) -> None:
         plan_id = plan and plan.pk
         arrived = outcome.streamed and outcome.streamed.pk
-        good = sorted(
-            self.files.good_backups(application.pk, plan_id),
-            key=lambda file: (file.pk == arrived, moment_of(file)),
-            reverse=True,
-        )
-        quarantined = sorted(
-            self.files.quarantined(application.pk, plan_id), key=moment_of, reverse=True
-        )
+        with transactions.reading():
+            good = sorted(
+                self.files.good_backups(application.pk, plan_id),
+                key=lambda file: (file.pk == arrived, moment_of(file)),
+                reverse=True,
+            )
+            quarantined = sorted(
+                self.files.quarantined(application.pk, plan_id),
+                key=moment_of,
+                reverse=True,
+            )
         beyond = quarantined[keep_max() :]
         self._expire(job, application, plan, [*good[max(keep, 1) :], *beyond])
 

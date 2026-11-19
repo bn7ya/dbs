@@ -8,6 +8,7 @@ from typing import Any, Optional
 from django.db import close_old_connections, connection
 from rest_framework.exceptions import APIException
 
+from dbs import transactions
 from dbs.manager.activity import heartbeat
 from dbs.manager.adapters.problems import problem
 from dbs.manager.conf import inline_jobs
@@ -135,7 +136,8 @@ def progress() -> list[str]:
 
 
 def _described(pulse: heartbeat.Pulse) -> str:
-    entry = AuditEvent.objects.filter(pk=pulse.activity_id).first()
+    with transactions.reading():
+        entry = AuditEvent.objects.filter(pk=pulse.activity_id).first()
     parts = []
     if entry is not None:
         parts.append(entry.target_name or entry.action)

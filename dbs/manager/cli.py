@@ -520,19 +520,22 @@ def managed(args, change):
 
 def command_account_list(args):
     setup_django(resolve(args), args.database_url)
+    from dbs import transactions
+
     from .accounts.services import AccountManagementService
     from .accounts.services.account_service import password_max_age
 
-    rows = [
-        (
-            account.user.get_username(),
-            account.role,
-            "yes" if account.user.is_active else "no",
-            "yes" if account.has_two_factor else "no",
-            f"{account.password_changed_at + password_max_age():%Y-%m-%d}",
-        )
-        for account in AccountManagementService(None).list()
-    ]
+    with transactions.reading():
+        rows = [
+            (
+                account.user.get_username(),
+                account.role,
+                "yes" if account.user.is_active else "no",
+                "yes" if account.has_two_factor else "no",
+                f"{account.password_changed_at + password_max_age():%Y-%m-%d}",
+            )
+            for account in AccountManagementService(None).list()
+        ]
     headers = ("NAME", "ROLE", "ACTIVE", "TWO-FACTOR", "PASSWORD EXPIRES")
     widths = [max(len(row[index]) for row in (headers, *rows)) for index in range(5)]
     for row in (headers, *rows):
@@ -745,6 +748,17 @@ def open_running(data_dir, no_browser):
     return 0
 
 
+def load_before_threads():
+    from importlib import import_module
+
+    from django.conf import settings
+
+    from . import scheduler
+
+    import_module(settings.ROOT_URLCONF)
+    scheduler.load()
+
+
 def create_server(host, port):
     from django.core.wsgi import get_wsgi_application
     from waitress.server import create_server as waitress_server
@@ -847,6 +861,7 @@ def command_run(args):
     scheduler = Scheduler()
     server = None
     try:
+        load_before_threads()
         recover()
         runner.start()
         scheduler.start()

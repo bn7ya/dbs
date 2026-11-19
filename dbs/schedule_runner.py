@@ -8,7 +8,7 @@ from datetime import timedelta, timezone as dt_timezone
 from django.db import DatabaseError, close_old_connections
 from django.utils import timezone
 
-from . import audit, jobs, leases, retention
+from . import audit, jobs, leases, retention, transactions
 from .conf import setting
 from .exceptions import BackupError, DBSError
 from .io import create_new_file
@@ -218,8 +218,9 @@ def stored_backups(directory, stem):
     except OSError:
         return []
     names = retention.current_backup_names(listed, stem)
-    moments = recorded_moments(directory, names)
-    states = verification_states(names)
+    with transactions.reading():
+        moments = recorded_moments(directory, names)
+        states = verification_states(names)
     stored = []
     for name in names:
         path = os.path.join(directory, name)
@@ -301,7 +302,8 @@ def run_due(*, force=False, now=None):
     except jobs.Busy:
         return None
     try:
-        schedule.refresh_from_db()
+        with transactions.reading():
+            schedule.refresh_from_db()
         if not _resume(schedule, now) and not force:
             return None
         if not force and not is_due(schedule, now):
@@ -322,19 +324,25 @@ def _run_isolated(schedule, runner, now):
     return result.get("output")
 
 
-def _resume(schedule, now):
+@transactions.atomically
+def _mark(schedule, **changes):
     from .models import BackupSchedule
 
+    BackupSchedule.objects.filter(pk=schedule.pk).update(**changes)
+
+
+def _resume(schedule, now):
     if schedule.last_status == RUNNING:
-        BackupSchedule.objects.filter(pk=schedule.pk).update(
-            last_status=INTERRUPTED, last_error=INTERRUPTED_ONCE
-        )
+        _mark(schedule, last_status=INTERRUPTED, last_error=INTERRUPTED_ONCE)
         schedule.last_status = INTERRUPTED
         return True
     if schedule.last_status == RETRYING:
         following = now + timedelta(seconds=schedule.interval_seconds)
-        BackupSchedule.objects.filter(pk=schedule.pk).update(
-            last_status=audit.FAILED, last_error=INTERRUPTED_TWICE, next_run_at=following
+        _mark(
+            schedule,
+            last_status=audit.FAILED,
+            last_error=INTERRUPTED_TWICE,
+            next_run_at=following,
         )
         schedule.last_status = audit.FAILED
         schedule.next_run_at = following
@@ -343,13 +351,9 @@ def _resume(schedule, now):
 
 
 def _run(schedule, runner, now):
-    from .models import BackupSchedule
-
     attempt = RETRYING if schedule.last_status == INTERRUPTED else RUNNING
     following = now + timedelta(seconds=schedule.interval_seconds)
-    BackupSchedule.objects.filter(pk=schedule.pk).update(
-        last_status=attempt, last_run_at=timezone.now()
-    )
+    _mark(schedule, last_status=attempt, last_run_at=timezone.now())
     try:
         passphrase = unattended_passphrase()
         if passphrase is None:
@@ -358,14 +362,16 @@ def _run(schedule, runner, now):
             )
         output = run_cycle(passphrase, schedule_plan(schedule), runner)
     except Exception as exc:
-        BackupSchedule.objects.filter(pk=schedule.pk).update(
+        _mark(
+            schedule,
             last_run_at=timezone.now(),
             last_status=audit.FAILED,
             last_error=str(exc)[:4000],
             next_run_at=following,
         )
         raise
-    BackupSchedule.objects.filter(pk=schedule.pk).update(
+    _mark(
+        schedule,
         last_run_at=timezone.now(),
         last_status=audit.SUCCEEDED,
         last_error="",

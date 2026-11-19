@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from dbs import transactions
 from dbs.manager.adapters import AdapterError
 from dbs.manager.applications.models import Application
 from dbs.manager.applications.services import ApplicationService
@@ -29,7 +30,8 @@ def server(user: Any, reference: str) -> Server:
         return service.get(UUID(reference))
     except ValueError:
         pass
-    found = service.list().filter(name=reference).first()
+    with transactions.reading():
+        found = service.list().filter(name=reference).first()
     if found is None:
         raise AdapterError(f"there is no server named {reference!r}.")
     return found
@@ -39,7 +41,8 @@ def servers(user: Any, references: list[str], every: bool) -> list[Server]:
     if every and references:
         raise AdapterError("name servers or choose all of them, not both.")
     if every:
-        chosen = list(ServerService(user).list().order_by("name"))
+        with transactions.reading():
+            chosen = list(ServerService(user).list().order_by("name"))
         if not chosen:
             raise AdapterError("there are no servers yet.")
         return chosen
@@ -58,7 +61,8 @@ def application(user: Any, reference: str) -> Application:
         return service.get(UUID(reference))
     except ValueError:
         pass
-    found = service.list().filter(name=reference).first()
+    with transactions.reading():
+        found = service.list().filter(name=reference).first()
     if found is None:
         raise AdapterError(f"there is no application named {reference!r}.")
     return found
@@ -68,7 +72,8 @@ def applications(user: Any, references: list[str], every: bool) -> list[Applicat
     if every and references:
         raise AdapterError("name applications or choose all of them, not both.")
     if every:
-        chosen = list(ApplicationService(user).list())
+        with transactions.reading():
+            chosen = list(ApplicationService(user).list())
         if not chosen:
             raise AdapterError("there are no applications yet.")
         return chosen

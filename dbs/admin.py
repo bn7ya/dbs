@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from . import views
+from . import transactions, views
 from .forms import BackupScheduleForm
 from .models import (
     AnomalyEvent,
@@ -44,11 +44,13 @@ class SuperuserOnlyAdmin(admin.ModelAdmin):
             views._audit(request, f"{self.audit_as}.delete", target=target)
 
     def delete_queryset(self, request, queryset):
-        targets = [self.audit_target(obj) for obj in queryset]
-        super().delete_queryset(request, queryset)
-        if self.audit_as:
-            for target in targets:
-                views._audit(request, f"{self.audit_as}.delete", target=target)
+        with transactions.reading():
+            targets = [self.audit_target(obj) for obj in queryset]
+        with transactions.atomic():
+            if self.audit_as:
+                for target in targets:
+                    views._audit(request, f"{self.audit_as}.delete", target=target)
+            super().delete_queryset(request, queryset)
 
     def has_module_permission(self, request):
         return self._allowed(request)
@@ -171,7 +173,11 @@ class SecurityPolicyAdmin(SuperuserOnlyAdmin):
     list_display = ("level", "configured", "warn_threshold", "logout_threshold", "updated_at")
 
     def has_add_permission(self, request):
-        return not SecurityPolicy.objects.exists() and self._allowed(request)
+        return self._allowed(request) and not self._configured()
+
+    @transactions.reads
+    def _configured(self):
+        return SecurityPolicy.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False

@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from dbs import audit
+from dbs import audit, transactions
 from dbs.conf import setting
 from dbs.models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
 from dbs.security import detector, telemetry
@@ -37,9 +37,12 @@ class Command(BaseCommand):
         self.stdout.write(f"enforcement          {setting('DBS_ANOMALY_ENFORCE', True)}")
         self.stdout.write(f"anomaly model        {self._model_state()}")
         self.stdout.write(f"browser location     {setting('DBS_GEOLOCATION', False)}")
-        self.stdout.write(f"recorded events      {telemetry.recorded_requests().count()}")
-        self.stdout.write(f"anomalies            {AnomalyEvent.objects.count()}")
-        locked = list(Lockout.objects.select_related("user"))
+        with transactions.reading():
+            events = telemetry.recorded_requests().count()
+            anomalies = AnomalyEvent.objects.count()
+            locked = list(Lockout.objects.select_related("user"))
+        self.stdout.write(f"recorded events      {events}")
+        self.stdout.write(f"anomalies            {anomalies}")
         if locked:
             names = ", ".join(entry.user.get_username() for entry in locked)
             self.stdout.write(self.style.WARNING(f"locked out           {names}"))
@@ -48,7 +51,8 @@ class Command(BaseCommand):
 
     def _unlock(self, options):
         user = self._user(options)
-        removed, _ = Lockout.objects.filter(user=user).delete()
+        with transactions.atomic():
+            removed, _ = Lockout.objects.filter(user=user).delete()
         detector.forget(user.pk)
         audit.record(
             "security.unlock",
@@ -91,12 +95,15 @@ class Command(BaseCommand):
 
     def _reset_baseline(self, options):
         user = self._user(options)
-        removed, _ = SessionEvent.objects.filter(user=user).delete()
+        with transactions.atomic():
+            removed, _ = SessionEvent.objects.filter(user=user).delete()
         detector.forget(user.pk)
         self.stdout.write(f"Dropped {removed} recorded events for {user.get_username()}.")
 
     def _events(self, options):
-        for event in AnomalyEvent.objects.select_related("user")[:20]:
+        with transactions.reading():
+            recent = list(AnomalyEvent.objects.select_related("user")[:20])
+        for event in recent:
             reasons = "; ".join(event.reasons) or "model score"
             self.stdout.write(
                 f"{event.created_at:%Y-%m-%d %H:%M}  {event.user.get_username():<16} "
@@ -125,6 +132,7 @@ class Command(BaseCommand):
             raise CommandError("Name the account, for example: dbs security unlock alice")
         model = get_user_model()
         try:
-            return model._default_manager.get(**{model.USERNAME_FIELD: username})
+            with transactions.reading_for(model):
+                return model._default_manager.get(**{model.USERNAME_FIELD: username})
         except model.DoesNotExist:
             raise CommandError(f"No account named {username!r}.") from None

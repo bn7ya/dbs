@@ -10,6 +10,7 @@ from django.db.models import QuerySet
 from django.utils.text import slugify
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
+from dbs import transactions
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.services import ApplicationService
@@ -359,7 +360,10 @@ class BackupPlanService:
             _add(errors, "name", NAME_TAKEN, "name_taken")
             return
         slug = slugify(name)
-        others = self.plans.names_for_application(application_id, excluding=excluding)
+        with transactions.reading():
+            others = list(
+                self.plans.names_for_application(application_id, excluding=excluding)
+            )
         if slug and any(slugify(other) == slug for other in others):
             _add(errors, "name", SIMILAR_NAME_TAKEN, "name_taken")
 

@@ -84,6 +84,18 @@ def test_a_tick_renews_the_instance_lease(test_task):
     assert leases.holder(INSTANCE_LEASE).owner == leases.process_owner()
 
 
+def test_load_imports_every_handler_a_thread_would_import(monkeypatch):
+    imported = []
+    monkeypatch.setattr(scheduler, "import_string", imported.append)
+
+    scheduler.load()
+
+    assert imported == [handler for _, handler in TASKS.values()] + list(
+        scheduler.LOCAL_TASKS
+    )
+    assert imported == scheduler.handlers()
+
+
 def test_the_thread_ticks_until_stopped(monkeypatch):
     ticks = []
     monkeypatch.setattr(scheduler, "tick", lambda: ticks.append(1) or [])

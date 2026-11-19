@@ -13,6 +13,8 @@ from django.db import DatabaseError, IntegrityError, router, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from . import transactions
+
 logger = logging.getLogger("dbs.audit")
 
 QUEUED = "queued"
@@ -75,6 +77,7 @@ def with_actor(data, actor):
     return merged
 
 
+@transactions.atomically
 def record(
     action,
     *,
@@ -115,7 +118,7 @@ def record(
 
 def safe_record(action, **fields):
     try:
-        with transaction.atomic():
+        with transactions.atomic():
             return record(action, **fields)
     except DatabaseError as exc:
         logger.warning("Could not write the %s audit entry: %s", action, exc)
@@ -181,7 +184,7 @@ def record_backup(output, size, digest, database, *, created_by=None, note=""):
     from .models import BackupRecord
 
     try:
-        with transaction.atomic():
+        with transactions.atomic():
             return BackupRecord.objects.create(
                 filename=os.path.basename(output),
                 size_bytes=size,
@@ -196,6 +199,7 @@ def record_backup(output, size, digest, database, *, created_by=None, note=""):
         return None
 
 
+@transactions.atomically
 def queue(action, *, actor=None, target="", data=None, subject="", remote_addr=""):
     from .models import AuditEvent
 
@@ -211,6 +215,7 @@ def queue(action, *, actor=None, target="", data=None, subject="", remote_addr="
     )
 
 
+@transactions.atomically
 def start(event_id):
     from .models import AuditEvent
 
@@ -230,6 +235,7 @@ def fail(event_id, error_code, *, data=None, detail=""):
     return _close(event_id, FAILED, data=data, error_code=error_code, detail=detail)
 
 
+@transactions.atomically
 def _close(event_id, status, *, data=None, error_code="", detail=""):
     from .models import AuditEvent
 
@@ -249,6 +255,7 @@ def _close(event_id, status, *, data=None, error_code="", detail=""):
     return closed
 
 
+@transactions.atomically
 def interrupt(*, idle_since=None, keep=(), events=None):
     from .models import AuditEvent
 
@@ -361,6 +368,7 @@ class ChainCheck:
         return self.broken_at is None
 
 
+@transactions.reads
 def verify_chain():
     from .models import AuditEvent
 

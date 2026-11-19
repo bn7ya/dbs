@@ -5,10 +5,10 @@ import threading
 import time
 from datetime import timedelta
 
-from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from .. import transactions
 from ..conf import setting
 from .networks import address_digest, stored_prefix
 
@@ -43,6 +43,7 @@ def recorded_requests():
     return SessionEvent.objects.exclude(kind=SESSION_COUNT)
 
 
+@transactions.reads
 def sessions_seen(user) -> int:
     from ..models import SessionEvent
 
@@ -69,7 +70,7 @@ def purge(days=None):
 
     days = retention_days() if days is None else int(days)
     cutoff = timezone.now() - timedelta(days=days)
-    with transaction.atomic():
+    with transactions.atomic():
         _carry_session_counts(cutoff)
         events, _ = recorded_requests().filter(created_at__lt=cutoff).delete()
         anomalies, _ = AnomalyEvent.objects.filter(created_at__lt=cutoff).delete()

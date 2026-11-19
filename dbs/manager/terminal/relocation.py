@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from dbs import transactions
 from dbs.manager.adapters import jobs, references
 from dbs.manager.adapters.forms import validated
 from dbs.manager.applications.services import ApplicationService
@@ -56,10 +57,11 @@ def _choices(session: TerminalSession, source: Server) -> list[dict[str, Any]]:
     if given:
         chosen = [(references.application(session.user, name), folder) for name, _, folder in given]
     else:
-        chosen = [
-            (application, "")
-            for application in ApplicationService(session.user).list(server=source.pk)
-        ]
+        with transactions.reading():
+            chosen = [
+                (application, "")
+                for application in ApplicationService(session.user).list(server=source.pk)
+            ]
     for application, _ in chosen:
         if application.server_id != source.pk:
             raise CommandFailed(f"{application.name} does not run on {source.name}.")

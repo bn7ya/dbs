@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dbs import transactions
 from dbs.manager.envfiles.serializers import (
     EnvComparisonSerializer,
     EnvPulledSerializer,
@@ -23,8 +24,9 @@ LIST_COLUMNS = (
 
 def list_versions(session: TerminalSession) -> int:
     application = references.application(session.user, session.args.application)
-    versions = EnvFileService(session.user).list(application.pk)
-    rows = EnvVersionSerializer(versions, many=True).data
+    with transactions.reading():
+        versions = EnvFileService(session.user).list(application.pk)
+        rows = EnvVersionSerializer(versions, many=True).data
     session.out.table(rows, LIST_COLUMNS, empty=f"No versions kept for {application.name}.")
     return 0
 

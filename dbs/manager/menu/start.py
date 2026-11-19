@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from django.contrib.auth import get_user_model
 
+from dbs import transactions
 from dbs.manager import permissions
 from dbs.manager.adapters import accounts
 
@@ -74,6 +75,7 @@ def act_as(app: App, user: Any) -> None:
         app.say(warning.replace("Warning: ", ""), "warning")
 
 
+@transactions.reads
 def active() -> list:
     return list(get_user_model().objects.filter(is_active=True).order_by("username"))
 

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from django.conf import settings
 
+from dbs import transactions
 from dbs.manager.activity import job_leases
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.models import Application
@@ -946,7 +947,9 @@ class Move:
         target = self.target_application(phase)
         service = BackupPlanService(self.actor)
         copied, left = [], []
-        for plan in service.list(source.pk):
+        with transactions.reading():
+            plans = list(service.list(source.pk))
+        for plan in plans:
             if plan.kind != BackupPlan.Kind.DBS:
                 left.append(plan.name)
                 continue

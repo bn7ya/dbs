@@ -9,6 +9,7 @@ from django.conf import settings
 from django.db import connection
 from django.utils import timezone
 
+from dbs import transactions
 from dbs.manager import conf, selfupdate
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.repositories import ActivityRepository
@@ -41,8 +42,9 @@ class DashboardService:
         self.activity = ActivityService(user)
 
     def summary(self) -> dict[str, Any]:
-        servers = list(self.servers.list())
-        applications = list(self.applications.list())
+        with transactions.reading():
+            servers = list(self.servers.list())
+            applications = list(self.applications.list())
         stored = self.files.stored_bytes_by_application()
         following = self.plans.next_runs_by_application()
         failures = self.entries.failures_by_subject(

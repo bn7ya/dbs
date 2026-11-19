@@ -18,6 +18,7 @@ from dbs.manager import cli, paths, processes
 ROOT = Path(__file__).resolve().parents[2]
 URL = re.compile(r"running at (http://\S+)")
 BOOT_SECONDS = 60
+LOG_TAIL = 4000
 
 
 def clean_env(**extra):
@@ -42,6 +43,13 @@ def fetch(url):
             return response.status, response.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read()
+
+
+def logged(data_dir):
+    log = paths.log_path(data_dir)
+    if not log.is_file():
+        return "the manager wrote no log"
+    return "the manager's log ends:\n" + log.read_text(encoding="utf-8", errors="replace")[-LOG_TAIL:]
 
 
 class Running:
@@ -311,10 +319,10 @@ def test_run_boots_answers_and_refuses_a_second_instance(tmp_path):
         assert (home / "setup.token").read_text() == token
 
         status, body = fetch(f"{first.base}/api/health/")
-        assert status == 200 and json.loads(body)["status"] == "ok"
-        assert fetch(f"{first.base}/")[0] == 200
-        assert fetch(f"{first.base}/api/setup/") == (200, b'{"needed":true}')
-        assert fetch(f"{first.base}/api/nope/")[0] == 404
+        assert status == 200 and json.loads(body)["status"] == "ok", logged(home)
+        assert fetch(f"{first.base}/")[0] == 200, logged(home)
+        assert fetch(f"{first.base}/api/setup/") == (200, b'{"needed":true}'), logged(home)
+        assert fetch(f"{first.base}/api/nope/")[0] == 404, logged(home)
 
         instance = json.loads((home / "manager.json").read_text())
         assert instance["pid"] == first.process.pid
@@ -426,6 +434,86 @@ def test_run_hands_the_terminal_switch_to_the_manager_before_it_starts(
         cli.command_run(args)
 
     assert seen["terminal"] == policy
+
+
+LOADED_FIRST = """
+import json
+import sys
+
+from dbs.manager import cli
+
+cli.setup_django(sys.argv[1])
+
+from django.conf import settings
+
+from dbs.manager import scheduler
+
+wanted = {settings.ROOT_URLCONF}
+wanted.update(handler.rsplit(".", 1)[0] for handler in scheduler.handlers())
+before = sorted(wanted.intersection(sys.modules))
+cli.load_before_threads()
+missing = sorted(wanted.difference(sys.modules))
+print(json.dumps({"before": before, "missing": missing}))
+"""
+
+
+def test_everything_a_thread_would_import_is_loaded_before_any_starts(tmp_path):
+    ran = subprocess.run(
+        [sys.executable, "-c", LOADED_FIRST, str(tmp_path / "home")],
+        cwd=ROOT,
+        env=clean_env(),
+        capture_output=True,
+        text=True,
+        timeout=BOOT_SECONDS,
+    )
+
+    assert ran.returncode == 0, ran.stderr
+    found = json.loads(ran.stdout.strip().splitlines()[-1])
+    assert found["missing"] == []
+    assert "dbs.manager.urls" not in found["before"]
+
+
+class Started:
+    def __init__(self, name, order):
+        self.name = name
+        self.order = order
+
+    def start(self):
+        self.order.append(self.name)
+
+    def stop(self):
+        return None
+
+    def shutdown(self, wait=False):
+        return None
+
+
+@pytest.mark.django_db
+def test_run_loads_everything_before_it_starts_a_thread(tmp_path, monkeypatch):
+    order = []
+
+    def interrupted(host, port):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "setup_django", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "take_instance_lease", lambda owner: True)
+    monkeypatch.setattr(cli, "load_before_threads", lambda: order.append("loaded"))
+    monkeypatch.setattr(cli, "create_server", interrupted)
+    monkeypatch.setattr(
+        "dbs.manager.recovery.recover", lambda: order.append("recovered")
+    )
+    monkeypatch.setattr(
+        "dbs.manager.runner.get_runner", lambda: Started("runner", order)
+    )
+    monkeypatch.setattr(
+        "dbs.manager.scheduler.Scheduler", lambda: Started("scheduler", order)
+    )
+    args = cli.build_parser().parse_args(
+        ["run", "--no-browser", "--data-dir", str(tmp_path)]
+    )
+
+    assert cli.command_run(args) == 0
+    assert order == ["loaded", "recovered", "runner", "scheduler"]
 
 
 def test_run_refuses_an_unknown_terminal_switch(capsys):

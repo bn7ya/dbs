@@ -3,9 +3,10 @@ from __future__ import annotations
 from uuid import uuid4
 
 from django.conf import settings
-from django.db import models
+from django.db import models, router
 from django.utils import timezone
 
+from dbs import transactions
 from dbs.manager.common.managers import AllObjectsManager, SoftDeleteManager
 
 
@@ -37,12 +38,14 @@ class BaseModel(models.Model):
         self, using: str | None = None, keep_parents: bool = False
     ) -> tuple[int, dict[str, int]]:
         self.deleted_at = timezone.now()
-        self.save(using=using, update_fields=["deleted_at", "updated_at"])
+        with transactions.atomic_on(using or router.db_for_write(type(self))):
+            self.save(using=using, update_fields=["deleted_at", "updated_at"])
         return (1, {self._meta.label: 1})
 
     def restore(self, using: str | None = None) -> None:
         self.deleted_at = None
-        self.save(using=using, update_fields=["deleted_at", "updated_at"])
+        with transactions.atomic_on(using or router.db_for_write(type(self))):
+            self.save(using=using, update_fields=["deleted_at", "updated_at"])
 
     def purge(
         self, using: str | None = None, keep_parents: bool = False

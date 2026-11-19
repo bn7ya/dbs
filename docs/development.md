@@ -99,6 +99,37 @@ restore each golden backup, whole and damaged. A failure there names what was re
 changed: put it back, or add the new way beside it. A recorded release is never edited,
 regenerated or deleted.
 
+## Transactions
+
+Every statement DBS sends to a database runs inside a transaction, and a transaction is never
+left open while the manager waits for a server. `dbs/transactions.py` holds the two blocks:
+
+```python
+from dbs import transactions
+
+with transactions.reading():      # statements that only read
+    waiting = list(Lease.objects.filter(expires_at__lte=now))
+
+with transactions.atomic():       # statements that write, and what must be true together
+    audit.interrupt(events=stopped)
+    Lease.objects.filter(name__in=expired).delete()
+```
+
+`reads` and `atomically` are the same as decorators, `reading_on("alias")` and
+`atomic_on("alias")` name another database, and the manager also uses Django's
+`transaction.atomic()` where it writes. Use `reading()` for anything that only reads: where
+SQLite begins transactions with `IMMEDIATE`, as `dbs upgrade` recommends and the manager sets,
+`atomic()` takes the database's write lock as it begins, and `reading()` does not.
+
+`tests/transactions.py` is the guard, switched on for every test of every suite in
+`tests/conftest.py`. A test fails with `TransactionRuleBroken`, naming the file and line, when
+DBS sends a statement outside a transaction, or reaches a server through `SSHSession` or
+`RemoteHost` while one is open. It does not count what Django's request handler, management
+commands, authentication, sessions and cache send, what a released migration sends, what a
+test or a project's own code sends, or a table change on a database that cannot roll one
+back. A test that calls a piece of the backup on its own does it
+as a backup does, inside `dbs.engine.backup.one_snapshot("default")`.
+
 ## The manager's interface
 
 The interface lives in `manager-ui/` (Angular and Angular Material); `manager-ui/CLAUDE.md`

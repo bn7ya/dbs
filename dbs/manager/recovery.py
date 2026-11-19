@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 
+from dbs import transactions
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.activity.services import ActivityService, sweep_stale_jobs
 from dbs.manager.applications.repositories import ApplicationRepository
@@ -25,11 +26,14 @@ def sweep() -> int:
 
 
 def release_abandoned_locks() -> int:
-    applications = (
-        ApplicationRepository().all_including_deleted().values_list("pk", flat=True)
-    )
-    servers = ServerRepository().all_including_deleted().values_list("pk", flat=True)
-    unfinished = {str(entry) for entry in ActivityRepository().unfinished_ids()}
+    with transactions.reading():
+        applications = list(
+            ApplicationRepository().all_including_deleted().values_list("pk", flat=True)
+        )
+        servers = list(
+            ServerRepository().all_including_deleted().values_list("pk", flat=True)
+        )
+        unfinished = {str(entry) for entry in ActivityRepository().unfinished_ids()}
     released = TakeLock().release_abandoned(applications, unfinished)
     moves = ServerMoveLock().release_abandoned(servers, unfinished)
     sweep_spools(unfinished)

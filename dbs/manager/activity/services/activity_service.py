@@ -11,7 +11,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
-from dbs import audit
+from dbs import audit, transactions
 from dbs.manager.activity import heartbeat, job_leases
 from dbs.manager.activity.repositories import ActivityRepository
 from dbs.manager.common.exceptions import error_code_of
@@ -47,7 +47,9 @@ def scope(server: Any = None, application: Any = None) -> list[str] | None:
     if server is None:
         return None
     applications = ApplicationRepository().all_including_deleted().filter(server_id=server)
-    return [str(server), *(str(pk) for pk in applications.values_list("pk", flat=True))]
+    with transactions.reading():
+        found = list(applications.values_list("pk", flat=True))
+    return [str(server), *(str(pk) for pk in found)]
 
 
 class Entry:
@@ -157,15 +159,18 @@ class ActivityService:
         return entry
 
     def start(self, activity_id: int) -> AuditEvent | None:
-        started = audit.start(activity_id)
+        with transactions.atomic():
+            started = audit.start(activity_id)
+            if started is not None:
+                job_leases.hold(activity_id)
         if started is not None:
-            job_leases.hold(activity_id)
             heartbeat.begin(activity_id)
         return started
 
     def succeed(self, activity_id: int, detail: dict[str, Any] | None = None) -> None:
-        audit.finish(activity_id, data=detail)
-        job_leases.let_go(activity_id)
+        with transactions.atomic():
+            audit.finish(activity_id, data=detail)
+            job_leases.let_go(activity_id)
         heartbeat.end(activity_id)
 
     def fail(
@@ -174,8 +179,9 @@ class ActivityService:
         error: BaseException,
         detail: dict[str, Any] | None = None,
     ) -> None:
-        audit.fail(activity_id, error_code_of(error), data=detail)
-        job_leases.let_go(activity_id)
+        with transactions.atomic():
+            audit.fail(activity_id, error_code_of(error), data=detail)
+            job_leases.let_go(activity_id)
         heartbeat.end(activity_id)
 
     def progress(self, activity_id: int, detail: dict[str, Any]) -> None:

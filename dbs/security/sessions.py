@@ -5,6 +5,8 @@ from importlib import import_module
 from django.conf import settings
 from django.contrib.auth import SESSION_KEY
 
+from .. import transactions
+
 REAUTH_FLAG = "dbs_must_reauthenticate"
 
 LAST_ACTIVE = "dbs_last_active"
@@ -20,13 +22,18 @@ def terminate(user) -> int:
     from django.contrib.sessions.models import Session
     from django.utils import timezone
 
-    ended = 0
-    if settings.SESSION_ENGINE == "django.contrib.sessions.backends.db":
-        for session in Session.objects.filter(expire_date__gte=timezone.now()):
-            if str(session.get_decoded().get(SESSION_KEY)) == str(user.pk):
-                session.delete()
-                ended += 1
-        return ended
+    if settings.SESSION_ENGINE != "django.contrib.sessions.backends.db":
+        return 0
+    with transactions.reading_for(Session):
+        keys = [
+            session.pk
+            for session in Session.objects.filter(expire_date__gte=timezone.now())
+            if str(session.get_decoded().get(SESSION_KEY)) == str(user.pk)
+        ]
+    if not keys:
+        return 0
+    with transactions.atomic_for(Session):
+        ended, _ = Session.objects.filter(pk__in=keys).delete()
     return ended
 
 

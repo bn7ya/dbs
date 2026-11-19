@@ -4,6 +4,7 @@ from uuid import UUID
 
 from django.db.models import Q, QuerySet
 
+from dbs import transactions
 from dbs.manager.applications.models import Application
 from dbs.manager.common.repositories import BaseRepository
 
@@ -34,6 +35,7 @@ class ApplicationRepository(BaseRepository):
     def with_env_path(self) -> QuerySet[Application]:
         return self.active().exclude(env_path="").order_by("name")
 
+    @transactions.reads
     def by_subject(self, subjects: set[str]) -> dict[str, Application]:
         ids = []
         for subject in subjects:
@@ -44,6 +46,7 @@ class ApplicationRepository(BaseRepository):
         found = self.all_including_deleted().select_related("server").filter(pk__in=ids)
         return {str(application.pk): application for application in found}
 
+    @transactions.reads
     def name_in_use(self, name: str, *, excluding: UUID | None = None) -> bool:
         applications = self.active().filter(name=name)
         if excluding is not None:

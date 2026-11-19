@@ -6,6 +6,7 @@ from typing import Any
 
 from django.core.files.uploadedfile import UploadedFile
 
+from dbs import transactions
 from dbs.manager.backups.serializers import (
     BackupFileSerializer,
     RestoreSerializer,
@@ -41,8 +42,9 @@ def list_backups(session: TerminalSession) -> int:
         if session.args.application
         else None
     )
-    found = service.list(None if application is None else application.pk)
-    rows = BackupFileSerializer(found, many=True).data
+    with transactions.reading():
+        found = service.list(None if application is None else application.pk)
+        rows = BackupFileSerializer(found, many=True).data
     session.out.table(rows, LIST_COLUMNS, empty="No backups yet.")
     return 0
 

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from django.db.models import Count, Q, QuerySet
 
+from dbs import transactions
 from dbs.manager.common.repositories import BaseRepository
 from dbs.manager.servers.models import Server
 
@@ -24,6 +25,7 @@ class ServerRepository(BaseRepository):
             )
         return servers.order_by("name")
 
+    @transactions.reads
     def by_subject(self, subjects: set[str]) -> dict[str, Server]:
         ids = []
         for subject in subjects:
@@ -34,6 +36,7 @@ class ServerRepository(BaseRepository):
         found = self.all_including_deleted().filter(pk__in=ids)
         return {str(server.pk): server for server in found}
 
+    @transactions.atomically
     def record_connection(
         self,
         server: Server,
@@ -52,6 +55,7 @@ class ServerRepository(BaseRepository):
         for name, value in fields.items():
             setattr(server, name, value)
 
+    @transactions.reads
     def name_in_use(self, name: str, *, excluding: UUID | None = None) -> bool:
         servers = self.active().filter(name=name)
         if excluding is not None:

@@ -11,7 +11,7 @@ from django.db import transaction
 from django.test.utils import override_settings
 from django.utils import timezone
 
-from dbs import audit
+from dbs import audit, transactions
 from dbs.exceptions import DBSError
 from dbs.models import AuditEvent
 
@@ -111,6 +111,7 @@ def exported_key(source, passphrase):
     return found
 
 
+@transactions.reads
 def manages_servers():
     from .servers.models import Server
 
@@ -184,9 +185,10 @@ def mark_missing_backups():
     files = BackupFileRepository()
     storage = BackupStorage()
     now = timezone.now()
-    removed = 0
-    for file in files.still_stored():
-        if not storage.exists(file.storage_path):
+    with transactions.reading():
+        stored = list(files.still_stored())
+    missing = [file for file in stored if not storage.exists(file.storage_path)]
+    with transaction.atomic():
+        for file in missing:
             files.update(file, removed_at=now)
-            removed += 1
-    return removed
+    return len(missing)

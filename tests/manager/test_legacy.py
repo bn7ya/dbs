@@ -8,7 +8,7 @@ import uuid
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.db import connection
+from django.db import DEFAULT_DB_ALIAS, connection, connections
 from django.db.migrations.executor import MigrationExecutor
 from django.db.utils import ConnectionHandler
 from django.test.utils import override_settings
@@ -421,16 +421,18 @@ def snapshot(path):
 
 
 @pytest.fixture
-def opened(monkeypatch):
+def opened():
     held = []
+    usual = connections[DEFAULT_DB_ALIAS]
 
     def open_database(path):
         database = database_at(path)
         held.append(database)
-        monkeypatch.setattr("django.db.connection", database)
+        connections[DEFAULT_DB_ALIAS] = database
         return database
 
     yield open_database
+    connections[DEFAULT_DB_ALIAS] = usual
     for database in held:
         database.close()
 

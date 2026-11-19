@@ -6,6 +6,7 @@ import logging
 
 from django.utils import timezone
 
+from .. import transactions
 from ..conf import setting
 from ..models import AnomalyEvent, Lockout, SecurityPolicy, SessionEvent
 from . import detector, features, geo, networks, sessions, telemetry
@@ -48,6 +49,7 @@ def is_trusted(address: str, policy) -> bool:
     return networks.contains(trusted, address)
 
 
+@transactions.reads
 def is_locked_out(user) -> bool:
     return Lockout.objects.filter(user=user).exists()
 
@@ -56,13 +58,13 @@ def evaluate(request, action="view", location=None, policy=None) -> Verdict:
     user = request.user
     policy = policy or SecurityPolicy.load()
     location = geo.clean(location)
-    observation, address, prefix, agent = features.observe_request(
-        user, request, action, location
-    )
-    values = features.build(observation)
-
-    learning = _still_learning(user, policy)
-    model_score = detector.model_score(user, values, learning=learning)
+    with transactions.reading():
+        observation, address, prefix, agent = features.observe_request(
+            user, request, action, location
+        )
+        values = features.build(observation)
+        learning = _still_learning(user, policy)
+        model_score = detector.model_score(user, values, learning=learning)
     rules, reasons = detector.rule_score(values)
     if not address:
         reasons.append("the client address could not be determined")
@@ -96,6 +98,7 @@ def _level(score, policy, trusted) -> str:
     return OK
 
 
+@transactions.atomically
 def _record(user, request, values, address, prefix, agent, location, score, level):
     SessionEvent.objects.create(
         user=user,
@@ -117,26 +120,28 @@ def apply(verdict, request) -> None:
     user = request.user
     network = networks.stored_prefix(features.client_address(request))
     if verdict.level == BLOCK:
-        AnomalyEvent.objects.create(
-            user=user,
-            score=verdict.score,
-            reasons=verdict.reasons,
-            action_taken="logout",
-            remote_addr=network,
-        )
-        Lockout.objects.get_or_create(
-            user=user, defaults={"reason": "; ".join(verdict.reasons)}
-        )
+        with transactions.atomic():
+            AnomalyEvent.objects.create(
+                user=user,
+                score=verdict.score,
+                reasons=verdict.reasons,
+                action_taken="logout",
+                remote_addr=network,
+            )
+            Lockout.objects.get_or_create(
+                user=user, defaults={"reason": "; ".join(verdict.reasons)}
+            )
         sessions.terminate(user)
         notify(user, verdict)
     elif verdict.level == WARN:
-        AnomalyEvent.objects.create(
-            user=user,
-            score=verdict.score,
-            reasons=verdict.reasons,
-            action_taken="warn",
-            remote_addr=network,
-        )
+        with transactions.atomic():
+            AnomalyEvent.objects.create(
+                user=user,
+                score=verdict.score,
+                reasons=verdict.reasons,
+                action_taken="warn",
+                remote_addr=network,
+            )
         sessions.mark_for_reauthentication(request)
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 
+from dbs import transactions
 from dbs.manager.applications.services import ApplicationService
 from dbs.manager.envfiles.services.env_file_service import EnvFileService
 
@@ -12,7 +13,9 @@ class EnvSnapshotService:
         self.envfiles = EnvFileService(None)
 
     def snapshot_all(self) -> None:
-        for application in self.applications.with_env_path():
+        with transactions.reading():
+            applications = list(self.applications.with_env_path())
+        for application in applications:
             with suppress(Exception):
                 self.envfiles.snapshot(application)
 

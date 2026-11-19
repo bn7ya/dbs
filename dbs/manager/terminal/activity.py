@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dbs import transactions
 from dbs.manager.activity.serializers import (
     ActivityFilterSerializer,
     ActivitySerializer,
@@ -54,11 +55,14 @@ def list_activity(session: TerminalSession) -> int:
             session.user, args.application
         ).pk
     service = ActivityService(session.user)
-    entries = list(
-        service.list(**validated(ActivityFilterSerializer, body))[: args.limit]
-    )
-    subjects = service.subjects_for(entries)
-    rows = ActivitySerializer(entries, many=True, context={"subjects": subjects}).data
+    with transactions.reading():
+        entries = list(
+            service.list(**validated(ActivityFilterSerializer, body))[: args.limit]
+        )
+        subjects = service.subjects_for(entries)
+        rows = ActivitySerializer(
+            entries, many=True, context={"subjects": subjects}
+        ).data
     session.out.table(rows, LIST_COLUMNS, empty="Nothing has happened yet.")
     return 0
 
