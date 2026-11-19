@@ -3,12 +3,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from django.db.models import QuerySet
-from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from dbs.manager.common.views import ListView
 from dbs.manager.envfiles.models import EnvVersion
 from dbs.manager.envfiles.serializers import (
     EnvCompareQuerySerializer,
@@ -19,7 +19,7 @@ from dbs.manager.envfiles.serializers import (
 from dbs.manager.envfiles.services import EnvFileService
 
 
-class EnvVersionListView(ListAPIView):
+class EnvVersionListView(ListView):
     permission_classes = [IsAuthenticated]
     serializer_class = EnvVersionSerializer
 

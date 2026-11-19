@@ -4,12 +4,12 @@ from uuid import UUID
 
 from django.db.models import QuerySet
 from rest_framework import status
-from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from dbs.manager.common.views import ListView
 from dbs.manager.activity.serializers import JobSerializer
 from dbs.manager.backups.models import BackupPlan
 from dbs.manager.backups.serializers import (
@@ -22,7 +22,7 @@ from dbs.manager.backups.serializers import (
 from dbs.manager.backups.services import BackupPlanService
 
 
-class PlanListView(ListAPIView):
+class PlanListView(ListView):
     permission_classes = [IsAuthenticated]
     serializer_class = BackupPlanSerializer
 

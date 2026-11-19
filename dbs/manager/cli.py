@@ -520,19 +520,22 @@ def managed(args, change):
 
 def command_account_list(args):
     setup_django(resolve(args), args.database_url)
+    from dbs import transactions
+
     from .accounts.services import AccountManagementService
     from .accounts.services.account_service import password_max_age
 
-    rows = [
-        (
-            account.user.get_username(),
-            account.role,
-            "yes" if account.user.is_active else "no",
-            "yes" if account.has_two_factor else "no",
-            f"{account.password_changed_at + password_max_age():%Y-%m-%d}",
-        )
-        for account in AccountManagementService(None).list()
-    ]
+    with transactions.reading():
+        rows = [
+            (
+                account.user.get_username(),
+                account.role,
+                "yes" if account.user.is_active else "no",
+                "yes" if account.has_two_factor else "no",
+                f"{account.password_changed_at + password_max_age():%Y-%m-%d}",
+            )
+            for account in AccountManagementService(None).list()
+        ]
     headers = ("NAME", "ROLE", "ACTIVE", "TWO-FACTOR", "PASSWORD EXPIRES")
     widths = [max(len(row[index]) for row in (headers, *rows)) for index in range(5)]
     for row in (headers, *rows):

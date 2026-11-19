@@ -10,6 +10,7 @@ from uuid import UUID
 from django.utils import timezone
 from rest_framework.exceptions import APIException, NotFound
 
+from dbs import transactions
 from dbs.manager.activity import heartbeat
 from dbs.manager.servers import settling
 from dbs.manager.servers.exceptions import (
@@ -207,7 +208,6 @@ def container_of(application: Application) -> ContainerTarget | None:
 
 def probe_servers() -> int:
     connections = ServerConnectionService(None)
-    return sum(
-        connections.probe(server)
-        for server in ServerRepository().active().order_by("name")
-    )
+    with transactions.reading():
+        servers = list(ServerRepository().active().order_by("name"))
+    return sum(connections.probe(server) for server in servers)

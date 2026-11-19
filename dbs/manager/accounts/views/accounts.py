@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from dbs.manager.common.views import ListView
 from dbs.manager.accounts.serializers import (
     AccountCreateSerializer,
     AccountSerializer,
@@ -15,7 +15,7 @@ from dbs.manager.accounts.serializers import (
 from dbs.manager.accounts.services import AccountManagementService
 
 
-class AccountListView(ListAPIView):
+class AccountListView(ListView):
     permission_classes = [IsAuthenticated]
     serializer_class = AccountSerializer
     pagination_class = None

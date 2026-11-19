@@ -5,6 +5,7 @@ from typing import Any, NoReturn
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.db import transaction
 from rest_framework.exceptions import AuthenticationFailed
 
 from dbs import audit
@@ -95,13 +96,16 @@ class SignInService:
         self._count_code(user)
         two_factor = TwoFactorService(account)
         if recovery_code:
-            accepted = two_factor.use_recovery_code(recovery_code)
+            with transaction.atomic():
+                accepted = two_factor.use_recovery_code(recovery_code)
+                if accepted:
+                    ActivityService(user).record(
+                        RECOVERY_CODE_USED, target=user.get_username()
+                    )
         else:
             accepted = two_factor.verify(code)
         if not accepted:
             self._refuse(user.get_username(), InvalidCode())
-        if recovery_code:
-            ActivityService(user).record(RECOVERY_CODE_USED, target=user.get_username())
         return self._complete(user)
 
     def enrollment(self) -> Enrollment:

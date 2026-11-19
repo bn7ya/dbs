@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from dbs import transactions
 from dbs.manager.adapters import applications, references
 from dbs.manager.adapters.forms import validated
 from dbs.manager.applications.deployment import QUESTIONS
@@ -96,10 +97,11 @@ def runs_in(row: dict[str, Any]) -> str:
 def list_applications(session: TerminalSession) -> int:
     args = session.args
     server = references.server(session.user, args.server) if args.server else None
-    found = ApplicationService(session.user).list(
-        args.search, None if server is None else server.pk
-    )
-    rows = ApplicationListSerializer(found, many=True).data
+    with transactions.reading():
+        found = ApplicationService(session.user).list(
+            args.search, None if server is None else server.pk
+        )
+        rows = ApplicationListSerializer(found, many=True).data
     session.out.table(
         rows,
         LIST_COLUMNS,

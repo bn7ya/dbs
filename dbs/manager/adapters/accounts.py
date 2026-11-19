@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
-from dbs import audit
+from dbs import audit, transactions
 from dbs.manager.accounts.repositories import UserRepository
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.adapters import AdapterError
@@ -19,7 +19,10 @@ def acting(name: str | None) -> Any:
         if user is None or not user.is_active:
             raise AdapterError(f"there is no account named {name!r}.")
         return user
-    active = list(get_user_model().objects.filter(is_active=True).order_by("username"))
+    with transactions.reading():
+        active = list(
+            get_user_model().objects.filter(is_active=True).order_by("username")
+        )
     if not active:
         raise AdapterError(
             "the manager has no account yet. Add one with: django_dbs createuser NAME"
@@ -44,8 +47,9 @@ def set_password(user: Any, password: str) -> None:
         raise AdapterError(" ".join(exc.messages)) from exc
     if user.check_password(password):
         raise AdapterError("choose a password the account has not been using.")
-    UserRepository().set_password(user, password)
-    audit.record("account.password", target=user.get_username())
+    with transactions.atomic():
+        UserRepository().set_password(user, password)
+        audit.record("account.password", target=user.get_username())
 
 
 def expiry_warning(user: Any) -> str:

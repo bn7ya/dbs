@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from rest_framework.exceptions import APIException
 
+from dbs import transactions
 from dbs.manager.accounts.services import AccountManagementService
 from dbs.manager.accounts.services.account_service import password_max_age
 from dbs.manager.adapters import AdapterError, accounts
@@ -106,7 +107,9 @@ class AccountsScreen(Screen):
 
     def load(self) -> None:
         rows = []
-        for account in self.service.list():
+        with transactions.reading():
+            accounts = list(self.service.list())
+        for account in accounts:
             expires = account.password_changed_at + password_max_age()
             rows.append(
                 Row(

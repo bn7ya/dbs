@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from dbs import transactions
 from dbs.manager.adapters import references, servers
 from dbs.manager.adapters.checks import engines_label
 from dbs.manager.adapters.forms import validated
@@ -73,8 +74,9 @@ BROWSE_COLUMNS = (
 
 
 def list_servers(session: TerminalSession) -> int:
-    found = ServerService(session.user).list(session.args.search).order_by("name")
-    rows = ServerListSerializer(found, many=True).data
+    with transactions.reading():
+        found = ServerService(session.user).list(session.args.search).order_by("name")
+        rows = ServerListSerializer(found, many=True).data
     session.out.table(
         rows, LIST_COLUMNS, empty="No servers yet. Add one with: django_dbs server add"
     )

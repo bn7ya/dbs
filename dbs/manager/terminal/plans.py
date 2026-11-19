@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from dbs import transactions
 from dbs.manager.backups.serializers import (
     BackupPlanSerializer,
     PlanCreateSerializer,
@@ -56,15 +57,16 @@ FIELDS = (
 
 def list_plans(session: TerminalSession) -> int:
     service = BackupPlanService(session.user)
-    if session.args.application:
-        chosen = [references.application(session.user, session.args.application)]
-    else:
-        chosen = list(ApplicationService(session.user).list())
-    rows = [
-        {**row, "application_name": application.name}
-        for application in chosen
-        for row in BackupPlanSerializer(service.list(application.pk), many=True).data
-    ]
+    with transactions.reading():
+        if session.args.application:
+            chosen = [references.application(session.user, session.args.application)]
+        else:
+            chosen = list(ApplicationService(session.user).list())
+        rows = [
+            {**row, "application_name": application.name}
+            for application in chosen
+            for row in BackupPlanSerializer(service.list(application.pk), many=True).data
+        ]
     columns = (("APPLICATION", "application_name"), *LIST_COLUMNS)
     session.out.table(rows, columns, empty="No plans yet.")
     return 0

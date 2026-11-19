@@ -4,11 +4,20 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 from rest_framework import status
+from rest_framework.generics import ListAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from dbs import transactions
+
 PROBE_KEY = "health:probe"
+
+
+class ListView(ListAPIView):
+    @transactions.reads
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
 
 
 class HealthView(APIView):

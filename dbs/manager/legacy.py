@@ -85,10 +85,13 @@ def preserve_before_split() -> Path | None:
     from django.db import connection
     from django.db.migrations.recorder import MigrationRecorder
 
-    recorder = MigrationRecorder(connection)
-    if not recorder.has_table():
-        return None
-    applied = set(recorder.applied_migrations())
+    from dbs import transactions
+
+    with transactions.reading():
+        recorder = MigrationRecorder(connection)
+        if not recorder.has_table():
+            return None
+        applied = set(recorder.applied_migrations())
     if SPLIT_MIGRATION in applied or not any(
         app == SPLIT_MIGRATION[0] for app, _ in applied
     ):

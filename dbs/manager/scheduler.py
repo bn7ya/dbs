@@ -8,7 +8,7 @@ from django.db import close_old_connections
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
-from dbs import leases
+from dbs import leases, transactions
 
 from .conf import INSTANCE_LEASE, LEASE_SECONDS
 from .runner import get_runner
@@ -69,6 +69,7 @@ def housekeep():
             logger.exception("%s failed: %s", handler, exc)
 
 
+@transactions.atomically
 def claim(name, scheduled, following):
     from .models import ScheduledTask
 
@@ -87,7 +88,9 @@ def tick(now=None):
     if not leases.acquire(INSTANCE_LEASE, owner(), LEASE_SECONDS):
         return []
     dispatched = []
-    for task in ScheduledTask.objects.filter(next_run_at__lte=now):
+    with transactions.reading():
+        due = list(ScheduledTask.objects.filter(next_run_at__lte=now))
+    for task in due:
         if task.name not in TASKS:
             continue
         interval, _ = TASKS[task.name]

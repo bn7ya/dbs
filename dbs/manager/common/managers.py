@@ -3,8 +3,11 @@ from __future__ import annotations
 from django.db import models
 from django.utils import timezone
 
+from dbs import transactions
+
 
 class SoftDeleteQuerySet(models.QuerySet):
+    @transactions.atomically
     def delete(self) -> tuple[int, dict[str, int]]:
         marked: int = self.update(deleted_at=timezone.now())
         return marked, {self.model._meta.label: marked}

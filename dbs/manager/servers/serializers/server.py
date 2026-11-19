@@ -4,6 +4,7 @@ from django.core.validators import RegexValidator
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 
+from dbs import transactions
 from dbs.manager.servers.models import Server
 
 HOST = RegexValidator(
@@ -88,6 +89,7 @@ class ServerSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @transactions.reads
     def get_application_count(self, server: Server) -> int:
         return server.applications.filter(deleted_at__isnull=True).count()
 

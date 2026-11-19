@@ -5,6 +5,7 @@ from uuid import UUID
 
 from django.db.models import Min, QuerySet
 
+from dbs import transactions
 from dbs.manager.backups.limits import keep_max, keep_remote_max
 from dbs.manager.backups.models import PLAN_KEEP_MIN, BackupPlan
 from dbs.retention import MAXIMUM_KEEP
@@ -14,9 +15,13 @@ from dbs.manager.common.repositories import BaseRepository
 class BackupPlanRepository(BaseRepository):
     model = BackupPlan
 
+    def active(self) -> QuerySet[BackupPlan]:
+        return super().active().select_related("application__server")
+
     def alive_for_application(self, application_id: UUID) -> QuerySet[BackupPlan]:
         return self.active().filter(application_id=application_id).order_by("name", "id")
 
+    @transactions.reads
     def name_in_use(
         self, application_id: UUID, name: str, *, excluding: UUID | None = None
     ) -> bool:
@@ -33,6 +38,7 @@ class BackupPlanRepository(BaseRepository):
             plans = plans.exclude(pk=excluding)
         return plans.values_list("name", flat=True)
 
+    @transactions.atomically
     def keep_within_limits(self) -> None:
         plans = self.all_including_deleted()
         plans.filter(keep__gt=keep_max()).update(keep=keep_max())
@@ -57,6 +63,7 @@ class BackupPlanRepository(BaseRepository):
             .order_by("next_run_at", "id")
         )
 
+    @transactions.reads
     def next_runs_by_application(self) -> dict[UUID, datetime]:
         rows = (
             self.active()

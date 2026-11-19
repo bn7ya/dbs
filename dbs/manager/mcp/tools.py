@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from dbs import transactions
 from dbs.manager.activity.serializers import (
     ActivityFilterSerializer,
     ActivitySerializer,
@@ -691,8 +692,9 @@ class Toolbox:
         return DashboardSerializer(DashboardService(self.user).summary()).data
 
     def list_servers(self, arguments: Arguments) -> dict[str, Any]:
-        found = ServerService(self.user).list(arguments.get("search"))
-        return {"results": ServerListSerializer(found, many=True).data}
+        with transactions.reading():
+            found = ServerService(self.user).list(arguments.get("search"))
+            return {"results": ServerListSerializer(found, many=True).data}
 
     def get_server(self, arguments: Arguments) -> dict[str, Any]:
         return ServerSerializer(self._server(arguments["server"])).data
@@ -764,10 +766,11 @@ class Toolbox:
 
     def list_applications(self, arguments: Arguments) -> dict[str, Any]:
         server = self._server(arguments["server"]) if arguments.get("server") else None
-        found = ApplicationService(self.user).list(
-            arguments.get("search"), None if server is None else server.pk
-        )
-        return {"results": ApplicationListSerializer(found, many=True).data}
+        with transactions.reading():
+            found = ApplicationService(self.user).list(
+                arguments.get("search"), None if server is None else server.pk
+            )
+            return {"results": ApplicationListSerializer(found, many=True).data}
 
     def get_application(self, arguments: Arguments) -> dict[str, Any]:
         return ApplicationSerializer(self._application(arguments["application"])).data
@@ -843,10 +846,11 @@ class Toolbox:
             if arguments.get("application")
             else None
         )
-        found = BackupService(self.user).list(
-            None if application is None else application.pk
-        )
-        return {"results": BackupFileSerializer(found, many=True).data}
+        with transactions.reading():
+            found = BackupService(self.user).list(
+                None if application is None else application.pk
+            )
+            return {"results": BackupFileSerializer(found, many=True).data}
 
     def take_backups(self, arguments: Arguments) -> dict[str, Any]:
         taken = backups.take(self.user, self._applications(arguments))
@@ -878,15 +882,16 @@ class Toolbox:
 
     def list_plans(self, arguments: Arguments) -> dict[str, Any]:
         service = BackupPlanService(self.user)
-        return {
-            "results": [
-                {**row, "application_name": application.name}
-                for application in self._listed(arguments)
-                for row in BackupPlanSerializer(
-                    service.list(application.pk), many=True
-                ).data
-            ]
-        }
+        with transactions.reading():
+            return {
+                "results": [
+                    {**row, "application_name": application.name}
+                    for application in self._listed(arguments)
+                    for row in BackupPlanSerializer(
+                        service.list(application.pk), many=True
+                    ).data
+                ]
+            }
 
     def get_plan(self, arguments: Arguments) -> dict[str, Any]:
         plan_id = references.identifier(arguments["plan"], "plan")
@@ -923,11 +928,14 @@ class Toolbox:
             body["application"] = self._application(arguments["application"]).pk
         limit = arguments.get("limit") or ACTIVITY_LIMIT
         service = ActivityService(self.user)
-        entries = list(
-            service.list(**validated(ActivityFilterSerializer, body))[:limit]
-        )
-        context = {"subjects": service.subjects_for(entries)}
-        return {"results": ActivitySerializer(entries, many=True, context=context).data}
+        with transactions.reading():
+            entries = list(
+                service.list(**validated(ActivityFilterSerializer, body))[:limit]
+            )
+            context = {"subjects": service.subjects_for(entries)}
+            return {
+                "results": ActivitySerializer(entries, many=True, context=context).data
+            }
 
     def get_activity(self, arguments: Arguments) -> dict[str, Any]:
         entry = ActivityService(self.user).get(int(arguments["entry"]))
@@ -935,8 +943,9 @@ class Toolbox:
 
     def list_env_versions(self, arguments: Arguments) -> dict[str, Any]:
         application = self._application(arguments["application"])
-        versions = EnvFileService(self.user).list(application.pk)
-        return {"results": EnvVersionSerializer(versions, many=True).data}
+        with transactions.reading():
+            versions = EnvFileService(self.user).list(application.pk)
+            return {"results": EnvVersionSerializer(versions, many=True).data}
 
     def pull_env(self, arguments: Arguments) -> dict[str, Any]:
         application = self._application(arguments["application"])
@@ -1033,7 +1042,8 @@ class Toolbox:
     def _listed(self, arguments: Arguments) -> list[Application]:
         if arguments.get("application"):
             return [self._application(arguments["application"])]
-        return list(ApplicationService(self.user).list())
+        with transactions.reading():
+            return list(ApplicationService(self.user).list())
 
     def _job(self, job: Any) -> dict[str, Any]:
         entry = jobs.finished(self.user, job)

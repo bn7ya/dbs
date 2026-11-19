@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from dbs.manager.common.views import ListView
 from dbs.manager.activity.serializers import (
     ActivityFilterSerializer,
     ActivitySerializer,
@@ -12,7 +12,7 @@ from dbs.manager.activity.serializers import (
 from dbs.manager.activity.services import ActivityService
 
 
-class ActivityListView(ListAPIView):
+class ActivityListView(ListView):
     permission_classes = [IsAuthenticated]
     serializer_class = ActivitySerializer
 

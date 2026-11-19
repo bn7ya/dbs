@@ -9,6 +9,8 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.exceptions import APIException
 
+from dbs import transactions
+
 Method = TypeVar("Method", bound=Callable[..., Any])
 
 
@@ -122,6 +124,7 @@ def refusal(needed: str, held: str | None) -> str:
     return f"{wanted}; your account is {Role.NAMED.get(held, 'without a role')}."
 
 
+@transactions.reads
 def role_of(user: Any) -> str | None:
     if user is None or not getattr(user, "is_authenticated", False):
         return None

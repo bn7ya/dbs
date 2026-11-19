@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.utils import timezone
 
-from dbs import leases
+from dbs import leases, transactions
 from dbs.manager.processes import abandoned
 from dbs.models import Lease
 
@@ -20,10 +20,12 @@ def hold(activity_id: int) -> None:
     )
 
 
+@transactions.atomically
 def let_go(activity_id: int) -> None:
     Lease.objects.filter(name=_name(activity_id)).delete()
 
 
+@transactions.reads
 def renewed_since(moment) -> list[int]:
     held = Lease.objects.filter(
         name__startswith=PREFIX, renewed_at__gt=moment, expires_at__gt=timezone.now()
@@ -35,6 +37,7 @@ def renewed_since(moment) -> list[int]:
     ]
 
 
+@transactions.reads
 def live() -> list[int]:
     held = Lease.objects.filter(
         name__startswith=PREFIX, expires_at__gt=timezone.now()

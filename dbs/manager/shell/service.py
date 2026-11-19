@@ -11,7 +11,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework.exceptions import ErrorDetail, ValidationError
 
-from dbs import audit
+from dbs import audit, transactions
 from dbs.exceptions import DBSError
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
@@ -257,14 +257,15 @@ class ShellService:
 def still_allowed(session: ShellSession, session_key: str | None = None) -> bool:
     if session_key is not None and session_key != session.owner.session_key:
         return False
-    user = (
-        get_user_model()
-        ._default_manager.filter(pk=session.owner.user_id, is_active=True)
-        .first()
-    )
+    with transactions.reading():
+        user = (
+            get_user_model()
+            ._default_manager.filter(pk=session.owner.user_id, is_active=True)
+            .first()
+        )
+        role = None if user is None else role_of(user)
     if user is None or user.password != session.owner.password:
         return False
-    role = role_of(user)
     policy = terminal_policy()
     return (
         role == session.owner.role

@@ -12,7 +12,7 @@ from typing import Any, cast
 from django.conf import settings
 from django.utils import timezone
 
-from dbs import validate_backup
+from dbs import transactions, validate_backup
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.applications.models import Application
 from dbs.manager.backups.exceptions import BackupLostOnServer
@@ -156,7 +156,7 @@ class DbsRun:
     def _collect(self, folder: str) -> list[BackupFile]:
         waiting = self.remote.waiting_backups(self.profile, folder, self.prefix)
         recorded: dict[str, list[BackupFile]] = {}
-        for file in self.files.recorded_at(self.application.pk, (b.path for b in waiting)):
+        for file in self._recorded_at(waiting):
             recorded.setdefault(file.remote_path, []).append(file)
         pulled = []
         for found in waiting:
@@ -275,12 +275,7 @@ class DbsRun:
     def _installed(
         self, listed: list[ServerBackup], name: str, moment: datetime | None
     ) -> ServerBackup:
-        recorded = {
-            file.remote_path
-            for file in self.files.recorded_at(
-                self.application.pk, (found.path for found in listed)
-            )
-        }
+        recorded = {file.remote_path for file in self._recorded_at(listed)}
         candidates = [
             found
             for found in listed
@@ -347,12 +342,22 @@ class DbsRun:
             self.storage.remove(stored.relative_path)
             raise
 
+    @transactions.reads
+    def _recorded_at(self, found: list[ServerBackup]) -> list[BackupFile]:
+        return list(
+            self.files.recorded_at(self.application.pk, (backup.path for backup in found))
+        )
+
+    @transactions.reads
+    def _server_copies(self) -> list[BackupFile]:
+        return list(
+            self.files.server_copies(self.application.pk, self.plan and self.plan.pk)
+        )
+
     def _release(self, folder: str) -> list[str]:
-        copies = sorted(
-            self.files.server_copies(self.application.pk, self.plan and self.plan.pk),
-            key=moment_of,
-            reverse=True,
-        )[self.keep_remote :]
+        copies = sorted(self._server_copies(), key=moment_of, reverse=True)[
+            self.keep_remote :
+        ]
         if not copies:
             return []
         listed = {

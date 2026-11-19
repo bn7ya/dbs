@@ -11,6 +11,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
+from dbs import transactions
 from dbs.manager.accounts.services import AccountService
 from dbs.manager.activity.services import ActivityService
 from dbs.manager.common.exceptions import error_code_of
@@ -243,7 +244,9 @@ class ServerService:
 
         server = self.get(server_id)
         require_account_password(account_password, DELETE_PASSWORD_REQUIRED)
-        if ApplicationRepository().on_server(server.pk).exists():
+        with transactions.reading():
+            in_use = ApplicationRepository().on_server(server.pk).exists()
+        if in_use:
             raise ServerHasApplications()
         if ServerMoveLock().held(server.pk):
             raise ServerMoveRunning()

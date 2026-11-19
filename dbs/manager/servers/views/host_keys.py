@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from dbs.manager.common.views import ListView
 from dbs.manager.servers.serializers import HostKeyConfirmationSerializer
 from dbs.manager.servers.services import HostKeyConfirmationService
 from dbs.manager.servers.services.host_key_confirmation_service import (
@@ -13,7 +13,7 @@ from dbs.manager.servers.services.host_key_confirmation_service import (
 )
 
 
-class HostKeyConfirmationListView(ListAPIView):
+class HostKeyConfirmationListView(ListView):
     permission_classes = [IsAuthenticated]
     serializer_class = HostKeyConfirmationSerializer
 
