@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <strong>0.9.1 is out:</strong>
+  <strong>0.9.2 is out:</strong>
   <a href="#whats-new-in-090">what's new</a> ·
-  <a href="https://github.com/bn7ya/dbs/blob/v0.9.1/RELEASE_NOTES.md">release notes</a> ·
+  <a href="https://github.com/bn7ya/dbs/blob/v0.9.2/RELEASE_NOTES.md">release notes</a> ·
   <a href="https://github.com/bn7ya/dbs/blob/main/docs/upgrading.md">upgrading</a>
 </p>
 
@@ -119,6 +119,11 @@ database could be dropped, without an error, while another was in progress. The
 [0.9.1 release notes](https://github.com/bn7ya/dbs/blob/v0.9.1/RELEASE_NOTES.md) say which
 installations that is.
 
+**0.9.2** fixes the manager's server move onto a server whose SSH user is not root: large
+images and Docker volumes are carried, and the check finds folders kept in named volumes. The
+[0.9.2 release notes](https://github.com/bn7ya/dbs/blob/v0.9.2/RELEASE_NOTES.md) say what
+stopped before.
+
 **Upgrading from 0.8.x:**
 
 ```bash
@@ -210,7 +215,7 @@ More in [How it works](https://github.com/bn7ya/dbs/blob/main/docs/how-it-works.
 
 ## Status
 
-0.9.1 is the current release. DBS is in active development, and stable from 0.8.0: new releases
+0.9.2 is the current release. DBS is in active development, and stable from 0.8.0: new releases
 add, and nothing you use breaks.
 
 - **Your backups keep opening.** Every backup written by 0.8.0 or later restores, with the same

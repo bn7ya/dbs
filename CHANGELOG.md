@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-21
+
+A server move onto a server whose SSH user is not root carries large images and Docker volumes,
+and the check of an application in a container finds folders kept in named volumes. Upgrade
+the machine the manager runs on; a server may stay on 0.9.x, and a project has nothing to do.
+
 ### Fixed
 
 - A server move onto a server whose SSH user is not root no longer stops at a large image or
