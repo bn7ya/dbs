@@ -1,0 +1,49 @@
+name: Documentation
+description: Something in the documentation is wrong, missing or unclear.
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every fact in the documentation is meant to match the code. When DBS does something
+        other than what the documentation says, that is a
+        [bug report](https://github.com/bn7ya/dbs/issues/new?template=1-bug.yml): a fix makes
+        DBS do what its documentation says.
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: A link, or the file and heading.
+      placeholder: "docs/restoring.md, Passphrases"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong
+      options:
+        - "It is wrong"
+        - "Something is missing"
+        - "It is unclear"
+        - "A link or an example is broken"
+    validations:
+      required: true
+  - type: textarea
+    id: detail
+    attributes:
+      label: Details
+      description: What it says now, and what you expected to find.
+    validations:
+      required: true
+  - type: textarea
+    id: wording
+    attributes:
+      label: Suggested wording
+      description: Optional.
+  - type: input
+    id: dbs-version
+    attributes:
+      label: django-dbs version
+      description: The version you are using, if the page is about something it does.
+      placeholder: "0.9.1"

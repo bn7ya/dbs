@@ -1,0 +1,120 @@
+name: A backup does not open or restore
+description: A backup fails to validate, decrypt or restore.
+title: "[Backup]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every backup written by 0.8.0 or later validates and restores, with the same passphrase,
+        in every later release. One that does not is the most serious bug DBS can have, and we
+        treat it first.
+
+        **Keep the file exactly as it is.** Do not overwrite, re-save or delete it: a fix may
+        open it. A backup in an older format is converted by
+        `python manage.py dbs upgrade --backups DIR`, which writes a new file beside the original.
+
+        **Never attach the backup or its passphrase**: the backup holds your data. If we need a
+        file, we will ask for a throwaway one that fails the same way.
+  - type: dropdown
+    id: failure
+    attributes:
+      label: What fails
+      options:
+        - "dbs validate reports damage it could not repair"
+        - "dbs validate passes, but the restore fails"
+        - "The passphrase is reported wrong, though it did not change"
+        - "\"Not a DBS container\", or a format version DBS does not read"
+        - "The restore refuses it as another application's backup"
+        - "Restoring a checkpoint taken around migrate or a restore"
+        - "The DBS manager's verification or restore"
+        - "Something else"
+    validations:
+      required: true
+  - type: dropdown
+    id: made-by
+    attributes:
+      label: How the backup was made
+      multiple: true
+      options:
+        - "python manage.py dbs backup"
+        - "python manage.py dbs backup --stream"
+        - "The control panel at /admin/dbs/"
+        - "A schedule: the panel's, or dbs schedule"
+        - "A checkpoint around migrate or a restore"
+        - "The DBS manager"
+        - "The Python API: create_backup or write_backup"
+        - "I do not know"
+    validations:
+      required: true
+  - type: input
+    id: written-by
+    attributes:
+      label: django-dbs version that wrote the backup
+      description: The version installed when the backup was made, if you know it.
+      placeholder: "0.8.1"
+  - type: input
+    id: read-by
+    attributes:
+      label: django-dbs version reading it now
+      description: "`python -m pip show django-dbs`"
+      placeholder: "0.9.1"
+    validations:
+      required: true
+  - type: textarea
+    id: passphrase-source
+    attributes:
+      label: Where the passphrase comes from
+      description: |
+        The output of `python manage.py dbs key`, **without** `--show`, and whether `SECRET_KEY`
+        or `DBS_PASSPHRASE` changed since the backup was made.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: validate
+    attributes:
+      label: Validation
+      description: The output of `python manage.py dbs validate FILE --passphrase`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: restore
+    attributes:
+      label: Restore output
+      description: The command you ran and its full output or traceback, if a restore failed.
+      render: text
+  - type: textarea
+    id: journey
+    attributes:
+      label: Where the file has been
+      description: How it was copied, downloaded, pulled by the manager or stored since it was written.
+  - type: input
+    id: python-django
+    attributes:
+      label: Python and Django versions
+      placeholder: "Python 3.12.7, Django 5.2.8"
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - SQLite
+        - PostgreSQL
+        - MySQL
+        - MariaDB
+        - Other, named in the description
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: The backup file is kept exactly as it was.
+          required: true
+        - label: Nothing here is a real backup, passphrase, `SECRET_KEY`, `.env` value or credential.
+          required: true

@@ -7,9 +7,12 @@ and repaired on restore. Created by Sudum Technology — Research and Developmen
 This project is under active development; treat it as our very tiny contribution to
 this world.
 
-These rules apply to every contributor, person or AI assistant. `AGENTS.md` and
+These rules apply to every contributor, person or AI assistant. `AGENTS.md`, `GEMINI.md` and
 `.github/copilot-instructions.md` are exact copies of this file; edit this one and copy it.
 Before changing anything in `manager-ui/`, read `manager-ui/CLAUDE.md`: the interface's rules.
+An AI assistant works as *How a change is made* says: plan and wait for approval, ask rather
+than assume, change only the functions a request targets, and leave the backup and block code
+alone unless the request names it.
 
 ## Stability: nothing breaks after 0.8.0
 
@@ -47,6 +50,38 @@ Messages, help text and the interface's look may change; what code and scripts r
   `tests/test_stability.py` and `tests/manager/test_stability.py` fail on any removal or
   change. Never edit, regenerate or delete a recorded release, and never weaken those tests to
   pass. Record each new release with `python scripts/stability_snapshot.py X.Y.Z`.
+
+## How a change is made
+
+Every AI assistant works this way here: Claude Code, Codex, opencode, GitHub Copilot, Gemini
+CLI and any other harness that reads this file. Work as a senior developer who owns what they
+ship: understand it before you build it, and build only what was asked.
+
+- **Understand the request first.** Read it until you can say in one sentence what it asks
+  for and why. Then read the code it touches: the functions, what calls them, their tests and
+  the documentation that describes them.
+- **Find the target.** A change belongs in a specific function, or a few. Name them before
+  you change anything. Enhance what is there: do not rewrite, move, rename or reorganise code
+  the request did not name, and do not tidy what you pass on the way.
+- **Plan, then wait.** Before the first edit, show the developer the plan: the functions you
+  will change and how, the tests you will add, and what stays untouched. Edit nothing until
+  the developer approves it. When the plan turns out wrong as you work, stop and bring the new
+  one back.
+- **Ask, never assume.** When the request leaves a gap (which behaviour, which name, which
+  default, which part of DBS, what happens when it fails), ask the developer and wait. A guess
+  that looks right is still a guess. When the request and the code disagree, say so.
+- **Keep the architecture.** The module layout, the threads and queues of a backup, the
+  manager's slices, its role policy, and the adapters the terminal, REST and MCP share stay as
+  they are. A change works within them.
+- **The backup and block code changes only when the request names it.** The architecture and
+  logic of `dbs/engine/`, `dbs/container/` and `dbs/crypto/` (how a backup is read, framed,
+  compressed, encrypted, written in blocks with two copies and Reed-Solomon parity, validated,
+  repaired and restored) change only when the developer's request asks for that change by
+  name, and only after the plan is approved. A request about something else never reaches into
+  them: not to tidy, to speed up or to reuse.
+- **Finish what you start.** A change comes with its tests, a bug fix with one that fails
+  without it. Run the suites it touches, keep every rule in this file, and report what changed,
+  what was checked and what was not.
 
 ## Coding criteria
 
@@ -245,10 +280,16 @@ everything under `dbs/manager/`.
   `tests/manager/test_stability.py` run it for every recorded release.
 - `CONTRIBUTING.md` — how a person contributes, and the stability promise in short.
   `docs/stability.md` is the promise to developers. `.github/pull_request_template.md` asks
-  every pull request about it. `AGENTS.md` (Codex, opencode, Copilot's agent) and
+  every pull request about it and about its scope. `AGENTS.md` (Codex, opencode, Copilot's
+  agent and the other harnesses that read it), `GEMINI.md` (Gemini CLI) and
   `.github/copilot-instructions.md` (Copilot) are copies of this file;
-  `tests/test_agent_instructions.py` keeps them identical and the Stability section within
-  the first 4,000 characters, which is all Copilot's code review reads.
+  `tests/test_agent_instructions.py` keeps them identical, the Stability section within the
+  first 4,000 characters, which is all Copilot's code review reads, and *How a change is made*
+  right after it.
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SUPPORT.md` (where to ask, report and
+  propose), `.github/ISSUE_TEMPLATE/` (the issue forms: a bug, a backup that does not open or
+  restore, an enhancement, the documentation; blank issues are off and security reports go
+  privately) and `.github/CODEOWNERS`.
 - `README.md` — the short front page, also PyPI's: what DBS does, a quick start, links. Its images
   and links are absolute URLs so they work on PyPI. `docs/` holds the guides and the reference
   (`docs/README.md` is the index); links between them are relative, and every fact in them is

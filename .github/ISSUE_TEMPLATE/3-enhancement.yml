@@ -1,0 +1,65 @@
+name: Enhancement
+description: Propose something DBS could do, or do better.
+title: "[Enhancement]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        DBS grows by adding. From 0.8.0 on, a release never removes, renames or changes what an
+        earlier one offers: backups keep opening, and the Python API, commands, options,
+        settings and their defaults, `--json` keys, REST routes and MCP tools stay
+        ([the stability promise](https://github.com/bn7ya/dbs/blob/main/docs/stability.md)).
+        A proposal works within that: anything new is optional, and what works today keeps
+        working.
+
+        An idea still taking shape fits [Discussions](https://github.com/bn7ya/dbs/discussions/categories/ideas) better.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part of DBS
+      options:
+        - "Backups and restores in a project"
+        - "Checkpoints around migrate and restore"
+        - "The control panel at /admin/dbs/"
+        - "The session guard"
+        - "The dbs.transports SSH and SFTP API"
+        - "The DBS manager: web interface or REST API"
+        - "The DBS manager: terminal commands, menu or console"
+        - "The DBS manager: MCP server"
+        - "Installing or upgrading"
+        - "The documentation"
+        - "Something else"
+    validations:
+      required: true
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need to do
+      description: The situation and the job you cannot do today, or cannot do well.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: The command, option, setting, screen or behaviour you would like, and how you would use it.
+    validations:
+      required: true
+  - type: textarea
+    id: stays
+    attributes:
+      label: What stays the same
+      description: How existing projects, scripts and backups keep working as they do, if you have thought about it.
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: How you work around it today, examples, or sketches.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I searched the existing issues and discussions.
+          required: true

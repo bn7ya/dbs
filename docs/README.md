@@ -30,4 +30,4 @@ the details; the reference is for looking things up.
 | [Development](development.md) | Tests, the interface, the journeys, and releasing |
 
 Security reports: [SECURITY.md](../SECURITY.md). Every change: [CHANGELOG.md](../CHANGELOG.md).
-Contributing: [CONTRIBUTING.md](../CONTRIBUTING.md).
+Contributing: [CONTRIBUTING.md](../CONTRIBUTING.md). Getting help: [SUPPORT.md](../SUPPORT.md).
