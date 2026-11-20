@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from django.conf import settings
+
 from dbs.manager.paths import private_directory
 from dbs.manager.relocation import catalogue
 from dbs.manager.relocation.catalogue import Command
@@ -22,6 +24,7 @@ from dbs.manager.relocation.exceptions import (
 from dbs.manager.relocation.privileged import Privileged
 from dbs.manager.servers.exceptions import RemoteCommandFailed
 from dbs.manager.servers.gateways import EntryKind
+from dbs.transports import RemoteResult
 
 FOLDER = "folder"
 FILE = "file"
@@ -175,8 +178,16 @@ class Carrier:
         else:
             self.target.remote.ensure_folder(folder)
 
+    def work(self, command: Command, *, check: bool = True) -> RemoteResult:
+        return self.target.run(command, timeout=settings.BACKUP_EXEC_TIMEOUT, check=check)
+
+    def holds_anything(self, folder: str) -> bool:
+        if self.as_root:
+            return bool(self.target.run(catalogue.first_entry(folder, root=True)).stdout.strip())
+        return bool(self.target.remote.listdir(folder))
+
     def extract(self, staged: str, into: str, numeric: bool) -> None:
-        self.target.run(catalogue.tar_extract(staged, into, numeric=numeric, root=self.as_root))
+        self.work(catalogue.tar_extract(staged, into, numeric=numeric, root=self.as_root))
 
     def remap(self, folder: str) -> None:
         if not self.as_root:
@@ -184,11 +195,11 @@ class Carrier:
         source_uid, source_gid = self.source_ids
         target_uid, target_gid = self.target_ids
         if source_uid and target_uid and source_uid != target_uid:
-            self.target.run(catalogue.own_user(folder, source_uid, target_uid))
+            self.work(catalogue.own_user(folder, source_uid, target_uid))
         if source_gid and target_gid and source_gid != target_gid:
-            self.target.run(catalogue.own_group(folder, source_gid, target_gid))
+            self.work(catalogue.own_group(folder, source_gid, target_gid))
         if self.selinux:
-            self.target.run(catalogue.restore_contexts(folder), check=False)
+            self.work(catalogue.restore_contexts(folder), check=False)
 
     def settle(self, incoming: str, destination: str) -> None:
         remote = self.target.remote
@@ -220,8 +231,8 @@ class Carrier:
             return
         uid, gid, mode = owner
         if self.as_root:
-            self.target.run(catalogue.own_folder(folder, uid, gid))
-        self.target.run(catalogue.folder_mode(folder, mode, root=self.as_root))
+            self.work(catalogue.own_folder(folder, uid, gid))
+        self.work(catalogue.folder_mode(folder, mode, root=self.as_root))
 
     def place_file(self, item: Item, staged: str) -> dict[str, Any]:
         remote = self.target.remote
@@ -247,7 +258,7 @@ class Carrier:
         return {"placed": item.target}
 
     def load_image(self, item: Item, staged: str) -> dict[str, Any]:
-        self.target.run(catalogue.image_load(item.engine, staged))
+        self.work(catalogue.image_load(item.engine, staged))
         loaded = self.target.run(catalogue.image_facts(item.engine, item.target), check=False)
         found = loaded.stdout.strip().split()[0] if loaded.ok and loaded.stdout.strip() else ""
         outcome: dict[str, Any] = {"loaded": item.target, "id": found}
@@ -259,12 +270,12 @@ class Carrier:
         self.target.run(catalogue.volume_create(item.engine, item.target, dict(item.labels)))
         found = self.target.run(catalogue.volume_mountpoint(item.engine, item.target))
         mountpoint = found.stdout.strip()
-        if self.target.remote.listdir(mountpoint):
+        if self.holds_anything(mountpoint):
             raise TargetFolderNotEmpty()
         self.extract(staged, mountpoint, True)
         return {"volume": item.target}
 
     def import_volume(self, item: Item, staged: str) -> dict[str, Any]:
         self.target.run(catalogue.volume_create("podman", item.target, dict(item.labels)))
-        self.target.run(catalogue.volume_import(item.target, staged))
+        self.work(catalogue.volume_import(item.target, staged))
         return {"volume": item.target}

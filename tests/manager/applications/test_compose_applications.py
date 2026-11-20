@@ -326,3 +326,37 @@ def test_the_check_finds_settings_where_compose_names_them_as_discovery_does(
     assert report["detected"]["settings_from"] == settings_from
     disagreements = [m["found"] for m in report["mismatches"] if m["field"] == "settings_from"]
     assert disagreements == ([] if settings_from == "compose_env_file" else ["folder_env"])
+
+
+@pytest.mark.django_db
+def test_a_mounted_folder_the_ssh_user_cannot_see_on_the_host_is_looked_for_inside(
+    api, compose_application, monkeypatch, tmp_path
+):
+    host = connected_to(monkeypatch, ComposeHost(tmp_path / "container"))
+    for folder in ("/app/backups", "/app/media"):
+        host.inside(folder).mkdir(parents=True, exist_ok=True)
+    volumes = tmp_path / "var" / "lib" / "docker" / "volumes"
+    ApplicationRepository().update(
+        compose_application,
+        file_roots=["/app/media"],
+        mounts=[
+            {
+                "type": "volume",
+                "source": str(volumes / "shop_backups" / "_data"),
+                "destination": "/app/backups",
+                "rw": True,
+            },
+            {
+                "type": "volume",
+                "source": str(volumes / "shop_media" / "_data"),
+                "destination": "/app/media",
+                "rw": True,
+            },
+        ],
+    )
+
+    report = api.post(detail(compose_application, "check/")).json()["last_check_report"]
+
+    assert report["remote_backup_dir"] is True
+    assert report["roots"] == {"/app/media": True}
+    assert not {"root_missing", "backup_dir_missing"} & set(report["problems"])
