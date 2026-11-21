@@ -11,6 +11,15 @@
 - [ ] `tests/test_stability.py` and `tests/manager/test_stability.py` pass, and nothing under
       `tests/stability/` was edited.
 
+## Scope
+
+- [ ] The change stays in the functions the request targets; nothing else was rewritten, moved,
+      renamed or tidied.
+- [ ] The architecture, and the backup and block code in `dbs/engine/`, `dbs/container/` and
+      `dbs/crypto/`, are unchanged, or this pull request asks for that change by name and says
+      why.
+- [ ] Made with an AI assistant? Its plan was approved before its first edit.
+
 ## Checks
 
 - [ ] Tests come with the change, and `scripts/test.sh` and `ruff check .` pass.

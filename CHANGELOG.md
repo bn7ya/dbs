@@ -6,6 +6,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **How a change is made.** `CLAUDE.md`, and its copies for Codex, opencode, Copilot and the
+  other harnesses that read `AGENTS.md`, now say how every AI assistant approaches a change:
+  understand the request, change only the functions it targets, show a plan and wait for
+  approval, ask rather than assume, keep the architecture, and leave the backup and block code
+  in `dbs/engine/`, `dbs/container/` and `dbs/crypto/` alone unless the request names it.
+  `GEMINI.md` is a new copy for Gemini CLI, and the pull request template asks about scope.
+- **Community files.** Issue forms for a bug, a backup that does not open or restore, an
+  enhancement and the documentation, with blank issues off and security reports sent
+  privately; `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `SUPPORT.md` and
+  `.github/CODEOWNERS`.
+
+### Changed
+
+- `SECURITY.md` names 0.9.x as the line that receives security fixes; 0.8.x and older receive
+  none, so the first step for a report against them is to upgrade.
+
 ## [0.9.2] - 2026-11-21
 
 A server move onto a server whose SSH user is not root carries large images and Docker volumes,

@@ -1,0 +1,111 @@
+name: Bug report
+description: DBS does something other than what its documentation says.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time. A backup that does not validate, open or restore has
+        [its own form](https://github.com/bn7ya/dbs/issues/new?template=2-backup.yml), and a
+        security problem goes in [a private report](https://github.com/bn7ya/dbs/security/advisories/new),
+        never here.
+
+        Never paste a real backup, passphrase, `SECRET_KEY`, `.env` value or server credential.
+        A throwaway database and a throwaway passphrase show the same thing.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part of DBS
+      options:
+        - "Backups in a project: manage.py dbs backup, validate, schedule, health"
+        - "Restores in a project: manage.py dbs restore"
+        - "Checkpoints around migrate and restore"
+        - "The control panel at /admin/dbs/"
+        - "The session guard"
+        - "The dbs.transports SSH and SFTP API"
+        - "The DBS manager: web interface or REST API"
+        - "The DBS manager: terminal commands, menu or console"
+        - "The DBS manager: MCP server"
+        - "Installing or upgrading: pip, manage.py dbs upgrade, django_dbs update"
+        - "Something else"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what the documentation says should happen, and what DBS did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest project, script or list of commands that shows it.
+      placeholder: |
+        1. python manage.py dbs backup backup.dbs
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The full error, traceback or command output. Remove anything secret first.
+      render: text
+  - type: textarea
+    id: health
+    attributes:
+      label: Health report
+      description: In a project, the output of `python manage.py dbs health --json`, if it runs.
+      render: json
+  - type: input
+    id: dbs-version
+    attributes:
+      label: django-dbs version
+      description: "`python -m pip show django-dbs`, or `django_dbs --version` where the manager runs."
+      placeholder: "0.9.1"
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.12.7"
+    validations:
+      required: true
+  - type: input
+    id: django-version
+    attributes:
+      label: Django version
+      placeholder: "5.2.8"
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - SQLite
+        - PostgreSQL
+        - MySQL
+        - MariaDB
+        - Other, named in the description
+        - Not about a database
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Operating system, and how it runs
+      description: For example, Ubuntu 24.04 with the project in a Docker Compose service.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I searched the existing issues and read [Troubleshooting](https://github.com/bn7ya/dbs/blob/main/docs/troubleshooting.md).
+          required: true
+        - label: Nothing here is a real backup, passphrase, `SECRET_KEY`, `.env` value or credential.
+          required: true

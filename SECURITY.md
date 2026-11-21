@@ -4,10 +4,10 @@
 
 | Version | Security fixes |
 |---|---|
-| 0.8.x | Yes |
-| 0.7.x and older | No |
+| 0.9.x | Yes |
+| 0.8.x and older | No |
 
-Fixes ship as a new 0.8.x release on PyPI. Pin the fixed version in your requirements or lock
+Fixes ship as a new 0.9.x release on PyPI. Pin the fixed version in your requirements or lock
 file and reinstall; inside a virtual environment `python manage.py dbs upgrade --self --to
 VERSION` installs exactly that version and then `python manage.py dbs upgrade` finishes the
 upgrade. Older lines receive no fixes, so the first step for any report against them is to

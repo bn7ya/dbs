@@ -2,6 +2,15 @@
 
 Thank you for helping. DBS looks after other people's data, so every change is held to two
 promises: nothing a release offers breaks later, and nothing a developer backed up is lost.
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
+
+## Issues and questions
+
+Open an issue with one of its forms: a bug, a backup that does not validate, open or restore,
+an enhancement, or the documentation. Questions and ideas still taking shape go to
+[Discussions](https://github.com/bn7ya/dbs/discussions). [SUPPORT.md](SUPPORT.md) says where
+each belongs. Never put a real backup, passphrase, `SECRET_KEY`, `.env` value or credential in
+an issue.
 
 ## The stability promise
 
@@ -40,8 +49,20 @@ assistants alike: no comments outside the public API's docstrings, "developer" r
 user", no comparisons with other tools, Python 3.9 syntax, Django 4.2 to 6.x, the security
 invariants and the manager's constraints. [manager-ui/CLAUDE.md](manager-ui/CLAUDE.md) adds the
 interface's rules. AI assistants read the same file as `AGENTS.md` (Codex, opencode, Copilot's
-agent) and `.github/copilot-instructions.md` (Copilot); `CLAUDE.md` is the one to edit, and the
-other two are copied from it.
+agent and the other harnesses that read it), `GEMINI.md` (Gemini CLI) and
+`.github/copilot-instructions.md` (Copilot); `CLAUDE.md` is the one to edit, and the others are
+copied from it.
+
+Its section *How a change is made* is how every change is approached, by a person or an AI
+assistant:
+
+- Understand the request and the code it touches before changing anything.
+- Find the function, or the few functions, the change belongs in, and change only those:
+  enhance what is there, never rewrite, move or rename what the request did not name.
+- Plan first. An AI assistant shows its plan and waits for approval before its first edit.
+- Ask when the request leaves a gap; never fill it with an assumption.
+- Keep the architecture. The backup and block code in `dbs/engine/`, `dbs/container/` and
+  `dbs/crypto/` changes only when a request asks for that change by name.
 
 ## Making a change
 
