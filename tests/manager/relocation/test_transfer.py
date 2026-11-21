@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -12,8 +13,9 @@ from dbs.manager.relocation.exceptions import (
 )
 from dbs.manager.relocation.privileged import Privileged
 from dbs.manager.relocation.transfer import FILE, FOLDER, IMAGE, VOLUME, Carrier, Item
+from dbs.manager.servers.exceptions import RemotePermissionDenied
 from dbs.manager.servers.gateways import RemoteHost
-from tests.manager.relocation.hosts import LocalSource, LocalTarget
+from tests.manager.relocation.hosts import LocalSource, LocalTarget, unwrap
 from tests.manager.remote import ScriptedSession
 
 
@@ -224,3 +226,77 @@ def test_nothing_on_the_source_but_reads(world):
 
     for argv in world["source"].reads:
         assert argv[:2] == ["tar", "--create"] or argv[1:2] == ["save"]
+
+
+def image_item():
+    return Item(
+        key="image:shop-web",
+        kind=IMAGE,
+        read=catalogue.image_save("docker", "shop-web:latest"),
+        target="shop-web:latest",
+        engine="docker",
+    )
+
+
+def volume_item(world):
+    data = world["root"] / "source" / "volumes" / "shop_media"
+    data.mkdir(parents=True, exist_ok=True)
+    (data / "logo.png").write_bytes(b"\x89PNG")
+    return Item(
+        key="volume:shop_media",
+        kind=VOLUME,
+        read=catalogue.tar_create(str(data), root=True),
+        target="shop_media",
+        engine="docker",
+    )
+
+
+def unreadable_to_the_ssh_user(world, monkeypatch):
+    def denied(folder):
+        raise RemotePermissionDenied()
+
+    monkeypatch.setattr(world["carrier"].target.remote, "listdir", denied)
+
+
+def test_loading_extracting_and_owning_may_take_as_long_as_a_backup(world, settings):
+    world["carrier"].carry(image_item())
+    world["carrier"].carry(replace(folder_item(world), owner=("1001", "1001", "750")))
+
+    runs = [
+        (unwrap(run["argv"]), run["timeout"])
+        for run in world["carrier"].target.remote.session.runs
+    ]
+    slow = {
+        " ".join(argv[:2]): timeout
+        for argv, timeout in runs
+        if argv[:2] == ["docker", "load"] or argv[0] in ("tar", "chown", "chmod")
+    }
+    assert set(slow) == {"docker load", "tar --extract", "chown -h", "chown -R", "chmod 750"}
+    assert set(slow.values()) == {settings.BACKUP_EXEC_TIMEOUT}
+    assert settings.BACKUP_EXEC_TIMEOUT > settings.SSH_COMMAND_TIMEOUT
+
+
+def test_a_volume_only_root_can_read_is_looked_into_through_sudo_and_filled(world, monkeypatch):
+    unreadable_to_the_ssh_user(world, monkeypatch)
+
+    world["carrier"].carry(volume_item(world))
+
+    volume = world["target"].volumes["shop_media"]
+    assert (volume / "logo.png").read_bytes() == b"\x89PNG"
+    [looked] = [run for run in world["target"].ran if run["argv"][0] == "find"]
+    assert looked["sudo"] and looked["argv"][1] == str(volume)
+
+
+def test_a_volume_only_root_can_read_that_holds_something_is_never_written_over(
+    world, monkeypatch
+):
+    unreadable_to_the_ssh_user(world, monkeypatch)
+    existing = Path(world["target"].root) / "volumes" / "shop_media"
+    existing.mkdir(parents=True)
+    (existing / "keep.txt").write_text("mine\n")
+
+    with pytest.raises(TargetFolderNotEmpty):
+        world["carrier"].carry(volume_item(world))
+
+    assert [path.name for path in existing.iterdir()] == ["keep.txt"]
+    assert not any(run["argv"][:2] == ["tar", "--extract"] for run in world["target"].ran)

@@ -253,6 +253,29 @@ def test_a_container_with_an_invalid_part_is_refused(changes):
         catalogue.container_run(spec)
 
 
+def test_a_folder_is_looked_into_and_found_with_fixed_arguments():
+    looked = catalogue.first_entry("/var/lib/docker/volumes/shop_media/_data", root=True)
+    found = catalogue.is_folder("/var/lib/docker/volumes/shop_backups/_data", root=True)
+
+    assert looked.argv == (
+        "find",
+        "/var/lib/docker/volumes/shop_media/_data",
+        "-mindepth",
+        "1",
+        "-maxdepth",
+        "1",
+        "-print",
+        "-quit",
+    )
+    assert found.argv == ("test", "-d", "/var/lib/docker/volumes/shop_backups/_data")
+    assert looked.root and found.root
+    assert not catalogue.first_entry("/srv/shop").root
+    with pytest.raises(ValueError):
+        catalogue.first_entry("-delete")
+    with pytest.raises(ValueError):
+        catalogue.is_folder("relative/path")
+
+
 def test_no_builder_takes_a_command_line():
     for name, builder in inspect.getmembers(catalogue, inspect.isfunction):
         if builder.__module__ != catalogue.__name__:

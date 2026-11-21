@@ -569,8 +569,8 @@ def _present(
     if path == application.env_path and not application.env_in_container:
         return _exists(remote, path)
     on_host = host_path(application, path)
-    if on_host is not None:
-        return _exists(remote, on_host)
+    if on_host is not None and _exists(remote, on_host):
+        return True
     try:
         return bool(
             remote.run_python(profile, ["-c", probe, path], with_settings=False).ok

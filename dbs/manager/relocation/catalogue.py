@@ -206,6 +206,17 @@ def unreadable(folder: str) -> Command:
     return Command(("find", path(folder), "-xdev", "!", "-readable", "-print", "-quit"))
 
 
+def first_entry(folder: str, *, root: bool = False) -> Command:
+    return Command(
+        ("find", path(folder), "-mindepth", "1", "-maxdepth", "1", "-print", "-quit"),
+        root=root,
+    )
+
+
+def is_folder(folder: str, *, root: bool = False) -> Command:
+    return Command(("test", "-d", path(folder)), root=root)
+
+
 def listening() -> Command:
     return Command(("ss", "-H", "-t", "-l", "-n"))
 

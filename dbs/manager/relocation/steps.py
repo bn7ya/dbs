@@ -667,10 +667,16 @@ class Move:
     def step_backup_dir(self, phase: Detail, step: Detail) -> Detail:
         plan = self.plan_of(phase)
         target = plan["backup_dir"]["target"]
-        if self.target.remote.exists(target):
+        if self.target.remote.exists(target) or self.root_sees_folder(target):
             return {"exists": target}
         self.target_root.run(catalogue.make_folder(target, "0750", self.target.uid, self.target.gid))
         return {"created": target}
+
+    def root_sees_folder(self, folder: str) -> bool:
+        root = self.target_root
+        if root is None or not root.can_escalate:
+            return False
+        return root.run(catalogue.is_folder(folder, root=True), check=False).ok
 
     def target_application(self, phase: Detail, *, folder_only: bool = False) -> Application:
         if phase.get("target_application") and not folder_only:
