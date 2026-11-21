@@ -13,6 +13,7 @@ from dbs.manager.backups.repositories import BackupPlanRepository
 from dbs.manager.backups.services.backup_plan_service import BackupPlanService
 from dbs.manager.permissions import Role
 from dbs.manager.relocation.locks import ServerMoveLock
+from dbs.manager.servers.gateways import RemoteHost
 from dbs.manager.servers.models import Server
 from dbs.manager.servers.services import ServerConnectionService
 from dbs.models import AuditEvent
@@ -461,3 +462,26 @@ def test_a_server_that_a_move_holds_cannot_be_deleted(api, world, admin):
         ServerService(admin).delete(world["target_server"].pk, account_password=PASSWORD)
 
     assert getattr(refused.value, "default_code", "") == "server_move_running"
+
+
+@pytest.mark.django_db
+def test_a_backup_folder_only_root_can_see_on_the_new_server_is_left_as_it_is(
+    api, world, run_jobs, monkeypatch
+):
+    hidden = str(world["backups"])
+    seen = RemoteHost.exists
+
+    def exists(remote, path):
+        if remote.session.host == TARGET and path == hidden:
+            return False
+        return seen(remote, path)
+
+    monkeypatch.setattr(RemoteHost, "exists", exists)
+
+    job = moved_for_real(api, world, run_jobs)
+
+    assert job.status == audit.SUCCEEDED, (job.error_code, job.data.get("output"))
+    assert statuses(job, "shop")["backup_dir"] == "succeeded"
+    on_target = [unwrap(argv) for argv in every_argv(world, TARGET)]
+    assert ["test", "-d", hidden] in on_target
+    assert not any(argv[:2] == ["install", "-d"] and argv[-1] == hidden for argv in on_target)

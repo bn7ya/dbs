@@ -24,6 +24,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `SECURITY.md` names 0.9.x as the line that receives security fixes; 0.8.x and older receive
   none, so the first step for a report against them is to upgrade.
 
+## [0.9.2] - 2026-11-21
+
+A server move onto a server whose SSH user is not root carries large images and Docker volumes,
+and the check of an application in a container finds folders kept in named volumes. Upgrade
+the machine the manager runs on; a server may stay on 0.9.x, and a project has nothing to do.
+
+### Fixed
+
+- A server move onto a server whose SSH user is not root no longer stops at a large image or
+  volume. Loading an image, extracting a carried folder or volume, importing a Podman volume
+  and setting a carried folder's owner and mode ran with the 20-second limit of a quick remote
+  command, so `docker load` of a large image failed with `remote_command_timed_out` while
+  Docker went on and loaded it. They now have as long as a backup command
+  (`BACKUP_EXEC_TIMEOUT`). ([#35](https://github.com/bn7ya/dbs/issues/35))
+- A server move no longer stops at the first Docker volume when the new server's SSH user is
+  not root. The move checked that a new volume was empty by listing its folder under
+  `/var/lib/docker` as the SSH user, which only root may read, and failed with
+  `remote_permission_denied`. It now asks through `sudo`, and still never writes over a volume
+  that holds something.
+- A server move no longer changes the owner and mode of a backup folder it cannot see. When the
+  SSH user could not read a backup folder that was there, such as one in a Docker volume, the
+  move took it for missing and ran `install -d -m 0750` over it. It now asks through `sudo`
+  and leaves a folder that is there as it is.
+- The check of an application in a container no longer reports `root_missing` or
+  `backup_dir_missing` for a mounted folder that the SSH user cannot see on the host, such as
+  a named volume under `/var/lib/docker`. It asks the container when the host path cannot be
+  seen.
+
 ## [0.9.1] - 2026-11-19
 
 On Django 4.2 and 5.0 the manager no longer drops a write to its own database while another

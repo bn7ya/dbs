@@ -99,6 +99,11 @@ class LocalTarget:
         if name == "chmod":
             os.chmod(argv[-1], int(argv[1], 8))
             return 0, "", ""
+        if name == "find" and argv[2:] == ["-mindepth", "1", "-maxdepth", "1", "-print", "-quit"]:
+            entries = sorted(Path(argv[1]).iterdir())
+            return 0, f"{entries[0]}\n" if entries else "", ""
+        if name == "test" and argv[1] == "-d":
+            return (0 if os.path.isdir(argv[2]) else 1), "", ""
         if name in ("docker", "podman"):
             if argv[1] == "load":
                 self.loaded.append(Path(argv[-1]).read_bytes())
@@ -107,7 +112,7 @@ class LocalTarget:
                 return 0, f"{self.image_id} 1024 amd64\n", ""
             if argv[1:3] == ["volume", "create"]:
                 folder = Path(self.root) / "volumes" / argv[-1]
-                folder.mkdir(parents=True)
+                folder.mkdir(parents=True, exist_ok=True)
                 self.volumes[argv[-1]] = folder
                 return 0, f"{argv[-1]}\n", ""
             if argv[1:3] == ["volume", "inspect"]:
